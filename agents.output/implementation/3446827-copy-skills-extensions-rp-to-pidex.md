@@ -72,8 +72,8 @@ Executed JUNK 4 scoped migration.
 - Route to `rp-code-reviewer`.
 
 <!-- ROUTING
-verdict: IN_PROGRESS
+verdict: COMPLETE
 route_to: rp-code-reviewer
-reason: JUNK 4 copy/normalization complete and validated; ready for reviewer.
+reason: JUNK 4 scope completed, verified with grep-based migration checks, and final slice committed (`57bf9af`, `4a4a4d3`).
 context_file: agents.output/implementation/3446827-copy-skills-extensions-rp-to-pidex.md
 -->
