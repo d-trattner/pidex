@@ -17,7 +17,7 @@ Status: Active
 # Changelog
 | Date | Commit | Summary |
 | --- | --- | --- |
-| 2026-05-11 | b5b6c46 | Migrate dashboard + scripts assets from `/home/daniel/running-pi` into `/home/daniel/pidex`, PIDEX DB path + codex-first provider filters |
+| 2026-05-11 | e0433ed | Migrate dashboard + scripts assets from `/home/daniel/running-pi` into `/home/daniel/pidex`, PIDEX DB path + codex-first provider filters |
 
 # Implementation Summary
 Completed migration-only copy and provider-masking updates for pidex:
@@ -135,6 +135,6 @@ Output:
 <!-- ROUTING
 verdict: COMPLETE
 route_to: rp-code-reviewer
-reason: Migration slice committed in b5b6c46; no unresolved open questions; runtime services not started.
+reason: Migration slice committed in e0433ed; no unresolved open questions; runtime services not started.
 context_file: agents.output/implementation/3446827-junk-9-10-migration-only.md
 -->

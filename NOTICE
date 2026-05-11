@@ -1,5 +1,5 @@
-running-pi
-===============
+pidex
+=======
 
 Copyright (c) 2026 Daniel Trattner
 
@@ -24,23 +24,23 @@ License: MIT
 The following files in this project are derivative works adapted from
 vs-code-agents:
 
-  agents/rp-analyst.md
-  agents/rp-architect.md
-  agents/rp-code-reviewer.md
-  agents/rp-critic.md
-  agents/rp-devops.md
-  agents/rp-implementer.md
-  agents/rp-pi.md
-  agents/rp-planner.md
-  agents/rp-qa.md
-  agents/rp-retrospective.md
-  agents/rp-roadmap.md
-  agents/rp-security.md
-  agents/rp-uat.md
-  running-pi-instructions.md (incorporates rules and conventions)
+  agents/pidex-analyst.md
+  agents/pidex-architect.md
+  agents/pidex-code-reviewer.md
+  agents/pidex-critic.md
+  agents/pidex-devops.md
+  agents/pidex-implementer.md
+  agents/pidex-pi.md
+  agents/pidex-planner.md
+  agents/pidex-qa.md
+  agents/pidex-retrospective.md
+  agents/pidex-roadmap.md
+  agents/pidex-security.md
+  agents/pidex-uat.md
+  pidex-instructions.md (incorporates rules and conventions)
 
 These files were ported from the vs-code-agents Markdown agent format to
-Claude Code's native subagent format with the "rp-" prefix. The pipeline
+Claude Code's native subagent format with the "pidex-" prefix. The pipeline
 structure, agent contracts, document conventions, and ID inheritance rules
 are derived from vs-code-agents.
 

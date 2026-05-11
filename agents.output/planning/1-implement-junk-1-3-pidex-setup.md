@@ -2,7 +2,7 @@
 ID: 1
 Origin: 1
 UUID: a1b2c3d4
-Status: Completed
+Status: In Progress
 Target Release: v0.1.0
 Epic: JUNK 1-3
 ---
