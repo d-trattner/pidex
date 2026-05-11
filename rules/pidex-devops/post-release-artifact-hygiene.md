@@ -1,0 +1,80 @@
+# Post-release Artifact Hygiene
+
+## Trigger
+
+When release staging used selective staging and `git status --short` remains dirty after tag/push/final artifact commit, DevOps must perform a post-release artifact hygiene reconciliation before declaring the run complete.
+
+This is a narrow repository hygiene step, not a new feature epic.
+
+## Required classification
+
+Classify every remaining dirty path into exactly one bucket:
+
+| Bucket | Meaning | Allowed action |
+|---|---|---|
+| `COMMIT_NOW` | Legitimate artifact/docs bookkeeping from completed pipeline work | Stage and commit in a separate hygiene commit |
+| `DELETE_NOW` | Temporary, malformed, stub, duplicate, or spillover artifact with no durable value | Remove before final status |
+| `LEAVE_DIRTY` | Intentionally retained dirty state | Must name owner, reason, and next action |
+| `ASK_USER` | Ambiguous or outside automatic cleanup scope | Stop and ask user |
+
+## Automatic cleanup scope
+
+DevOps may automatically reconcile only docs/artifact bookkeeping:
+
+- `agents.output/**` docs/artifacts
+- `agents.wiki*/**` docs
+- roadmap/docs artifacts
+- `.next-id` allocator file when consistent with completed run IDs
+- identical moves into `closed/` directories after confirming content parity
+
+## Forbidden automatic cleanup scope
+
+If any remaining dirty path touches the following, classify as `ASK_USER` and stop:
+
+- product source
+- tests
+- package/version files
+- migrations
+- runtime config
+- scripts
+- lockfiles
+- dependency manifests
+
+Do not hide these under artifact hygiene.
+
+## Required evidence table
+
+Record a table in the deployment/devops artifact:
+
+```md
+| Path | Git status | Classification | Action | Rationale |
+|------|------------|----------------|--------|-----------|
+| agents.output/.next-id | M | COMMIT_NOW | stage | allocator advanced by completed run |
+| agents.output/architecture/1-architect-findings.md | ?? | DELETE_NOW | rm | malformed stub artifact |
+```
+
+## Hygiene commit
+
+If only `COMMIT_NOW` and `DELETE_NOW` docs/artifact paths remain, DevOps may create a separate commit:
+
+```text
+chore(artifacts): reconcile post-release spillover
+```
+
+Before committing, show:
+
+```bash
+git diff --cached --name-status
+```
+
+After committing, require:
+
+```bash
+git status --short
+```
+
+to be clean, or document every remaining dirty path with `LEAVE_DIRTY` owner/reason/next action.
+
+## Anti-recursion rule
+
+Do not start a full new pipeline solely for docs/artifact hygiene. If product/runtime files are involved, stop and ask the user whether to create a real follow-up epic.
