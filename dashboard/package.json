@@ -1,0 +1,12 @@
+{
+  "name": "running-pi-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local SQLite-backed dashboard for Running Pi runs, secondary lanes, and pipeline analysis.",
+  "scripts": {
+    "ingest": "python3 scripts/ingest.py",
+    "dev": "python3 scripts/server.py",
+    "start": "python3 scripts/server.py"
+  }
+}
