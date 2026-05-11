@@ -16,7 +16,7 @@ Status: Active
 # Changelog
 | Timestamp | Slice | Commit | Notes |
 |---|---|---|---|
-| 2026-05-12 00:00 | live-page-slice | 9510fc9 | Replace `dashboard/routes/_dashboard/live.tsx` placeholder with `/api/live` consumer + defensive rendering + summary + list sections. |
+| 2026-05-12 00:00 | live-page-slice | current | Replace `dashboard/routes/_dashboard/live.tsx` placeholder with `/api/live` consumer + defensive rendering + summary + list sections. |
 
 # Implementation Summary
 - Replaced placeholder component with fetch-driven live view using `/api/live`.
@@ -85,6 +85,6 @@ Status: Active
 <!-- ROUTING
 verdict: COMPLETE
 route_to: orchestrator
-reason: Live page implemented for `/api/live` in `dashboard/routes/_dashboard/live.tsx` and committed as `9510fc9`.
+reason: Live page implemented for `/api/live` in `dashboard/routes/_dashboard/live.tsx` and committed in this final slice revision.
 context_file: agents.output/implementation/live-page-slice.md
 -->
