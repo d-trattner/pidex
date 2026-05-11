@@ -125,6 +125,7 @@ const TOOL_HEAVY_AGENTS = new Set([
 	"pidex-devops",
 	"pidex-pi",
 ]);
+const TOOL_FORWARDING_AGENTS = new Set(["pidex-implementer", "pidex-security", "pidex-qa"]);
 const TOOL_ALIASES: Record<string, string | undefined> = {
 	glob: "find",
 	grep: "grep",
@@ -220,7 +221,7 @@ function isPiProvider(provider: string): boolean {
 }
 
 function supportsDelegateToolLoop(provider: string): boolean {
-	return provider === "claude";
+	return provider === "claude" || provider === "codex";
 }
 
 function isToolHeavyAgent(agent: string): boolean {
@@ -1351,6 +1352,7 @@ async function runConfiguredAgent(params: {
 	const route = resolveRoute(config, params.agent);
 	const provider = normalizeProvider(params.providerOverride ?? route.provider);
 	const explicitTools = normalizeToolList(params.tools);
+	const delegateTools = TOOL_FORWARDING_AGENTS.has(params.agent) ? explicitTools ?? route.tools : route.tools;
 
 	const runProvider = async (selectedProvider: string, fallbackFrom?: string): Promise<RpResult> => {
 		if (isToolHeavyAgent(params.agent) && !isPiProvider(selectedProvider) && !supportsDelegateToolLoop(selectedProvider)) {
@@ -1397,7 +1399,7 @@ async function runConfiguredAgent(params: {
 			effort: selectedEffort,
 			timeoutSeconds: route.timeout_seconds,
 			permissionMode: route.permission_mode,
-			delegateTools: route.tools,
+			delegateTools: delegateTools,
 			allowedTools: route.allowed_tools,
 			disallowedTools: route.disallowed_tools,
 			addDirs: route.add_dirs,
@@ -1419,7 +1421,8 @@ async function runConfiguredAgent(params: {
 	}
 	const fallbackProviderRaw = config.fallback?.on_error?.trim().toLowerCase();
 	const fallbackDisabled = !fallbackProviderRaw || ["none", "off", "disabled", "false"].includes(fallbackProviderRaw);
-	const fallbackProvider = fallbackDisabled ? "" : normalizeProvider(config.fallback?.on_error);
+	const configuredFallback = normalizeProvider(config.fallback?.on_error);
+	const fallbackProvider = fallbackDisabled ? "" : (configuredFallback === "pi" || configuredFallback === "codex" ? configuredFallback : "pi");
 	if (shouldFallback && !result.setupError && fallbackProvider && fallbackProvider !== provider && !params.providerOverride) {
 		params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} failed${missingRouting ? " (missing ROUTING)" : ""}; falling back to ${fallbackProvider}.`);
 		result = await runProvider(fallbackProvider, provider);
