@@ -2,7 +2,7 @@
 ID: 3446827
 Origin: rp-implementer-task
 UUID: f0ad1f64
-Status: Active
+Status: Completed
 ---
 
 ## Plan Reference
@@ -69,11 +69,11 @@ Executed JUNK 4 scoped migration.
 - None.
 
 ## Next Steps
-- Route to `rp-code-reviewer`.
+- Route to `pidex-code-reviewer`.
 
 <!-- ROUTING
 verdict: COMPLETE
-route_to: rp-code-reviewer
+route_to: pidex-code-reviewer
 reason: JUNK 4 scope completed, verified with grep-based migration checks, and final slice committed (`57bf9af`, `4a4a4d3`).
 context_file: agents.output/implementation/3446827-copy-skills-extensions-rp-to-pidex.md
 -->

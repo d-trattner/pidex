@@ -54,9 +54,9 @@ a {
 }
 
 .page-shell {
-  width: min(1300px, calc(100% - 32px));
+  width: min(1300px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 18px 0 110px;
+  padding: 18px 0 140px;
 }
 
 .global-header {
@@ -69,27 +69,37 @@ a {
   display: none;
 }
 
-.mobile-menu-trigger {
+.mobile-menu-trigger-full {
   position: fixed;
-  left: 50%;
-  bottom: max(14px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  min-width: 130px;
-  min-height: 44px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: linear-gradient(135deg, rgba(3, 8, 20, 0.95), rgba(10, 18, 33, 0.8));
+  left: 12px;
+  right: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  min-height: 56px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 245, 255, 0.38);
+  background: linear-gradient(135deg, rgba(3, 8, 20, 0.96), rgba(10, 18, 33, 0.92));
   color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
   z-index: 50;
+}
+
+.mobile-menu-trigger-full:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mobile-sheet-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
   display: grid;
   align-items: end;
   z-index: 60;
+}
+
+.mobile-sheet-enter {
+  animation: overlay-in 160ms ease-out;
 }
 
 .mobile-sheet {
@@ -97,6 +107,7 @@ a {
   max-height: 80vh;
   overflow: auto;
   padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  animation: sheet-up 220ms ease-out;
 }
 
 .mobile-sheet-head {
@@ -106,12 +117,20 @@ a {
   gap: 8px;
 }
 
+.quality-metrics-grid {
+  grid-template-columns: 1fr;
+}
+
 @media (min-width: 900px) {
+  .quality-metrics-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
   .desktop-nav {
     display: block;
   }
 
-  .mobile-menu-trigger,
+  .mobile-menu-trigger-full,
   .mobile-sheet-overlay {
     display: none;
   }
@@ -135,6 +154,24 @@ a {
   grid-column: span 4;
 }
 
+.glass-card.quality-card {
+  grid-column: 1 / -1;
+}
+
+.glass-card.quality-metric-card {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 900px) {
+  .glass-card.quality-card {
+    grid-column: span 4;
+  }
+
+  .glass-card.quality-metric-card {
+    grid-column: span 3;
+  }
+}
+
 .nav {
   display: flex;
   flex-wrap: wrap;
@@ -155,8 +192,14 @@ a {
   padding: 6px 10px;
 }
 
+.table-scroll {
+  overflow-x: auto;
+  width: 100%;
+}
+
 .table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
 }
 
@@ -260,4 +303,35 @@ a {
 .btn-glass-danger {
   border-color: rgba(255, 56, 100, 0.38);
   box-shadow: 0 0 12px rgba(255, 56, 100, 0.16) inset;
+}
+
+.mobile-nav-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mobile-nav-item {
+  display: block;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 12px;
+  min-height: 52px;
+  background: rgba(3, 8, 20, 0.75);
+}
+
+.mobile-nav-item.active {
+  border-color: rgba(0, 245, 255, 0.7);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }

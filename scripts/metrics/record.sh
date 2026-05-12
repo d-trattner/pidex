@@ -20,6 +20,7 @@ SOURCE="manual"
 FALLBACK_FROM=""
 LOG_FILE=""
 FINAL_TEXT_CHARS="0"
+ALLOW_NON_CODEX="${PIDEX_RECORD_ALL_PROVIDERS:-0}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -40,11 +41,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-python3 - "$STATE_DIR" "$PRICING_FILE" "$PROJECT" "$PLAN" "$AGENT" "$PROVIDER" "$MODEL" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "$EXIT_CODE" "$SOURCE" "$FALLBACK_FROM" "$LOG_FILE" "$FINAL_TEXT_CHARS" <<'PY'
+python3 - "$STATE_DIR" "$PRICING_FILE" "$PROJECT" "$PLAN" "$AGENT" "$PROVIDER" "$MODEL" "$INPUT_TOKENS" "$OUTPUT_TOKENS" "$DURATION_MS" "$EXIT_CODE" "$SOURCE" "$FALLBACK_FROM" "$LOG_FILE" "$FINAL_TEXT_CHARS" "$ALLOW_NON_CODEX" <<'PY'
 import json, os, re, sys, datetime
 state_dir, pricing_file = sys.argv[1], sys.argv[2]
 (project, plan, agent, provider, model, input_tokens, output_tokens, duration_ms,
- exit_code, source, fallback_from, log_file, final_text_chars) = sys.argv[3:16]
+ exit_code, source, fallback_from, log_file, final_text_chars, allow_non_codex) = sys.argv[3:17]
+
+def is_codex_provider(value: str) -> bool:
+    v = (value or '').lower().strip()
+    m = (model or '').lower()
+    return (
+        v == 'codex'
+        or v == 'openai'
+        or v.startswith('openai-codex/')
+        or 'codex' in v
+        or 'gpt-5.3-codex' in m
+    )
+
+if allow_non_codex not in {'1', 'true', 'yes'} and provider and not is_codex_provider(provider):
+    # Keep codex-only analytics lane: ignore non-codex providers.
+    # Use PIDEX_RECORD_ALL_PROVIDERS=1 to retain historical legacy records.
+    raise SystemExit(0)
 
 def slug(value):
     value = re.sub(r'[^a-zA-Z0-9._-]+', '-', value).strip('-')
@@ -69,8 +86,7 @@ if normalized_model.startswith('-m '):
     normalized_model = normalized_model[3:].strip()
 if normalized_model.startswith('--model '):
     normalized_model = normalized_model[8:].strip()
-aliases = {'opus': 'claude-opus', 'sonnet': 'claude-sonnet', 'haiku': 'claude-haiku'}
-price = pricing.get(normalized_model) or pricing.get(aliases.get(normalized_model, normalized_model))
+price = pricing.get(normalized_model)
 cost = None
 if price:
     cost = (in_tok / 1_000_000) * float(price.get('input', 0)) + (out_tok / 1_000_000) * float(price.get('output', 0))

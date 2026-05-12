@@ -1,15 +1,15 @@
 ---
-ID: 3446827
+id: 3446827
 Origin: JUNK 9-10
 UUID: f18d0ddc
-Status: Active
+Status: Completed
 ---
 
 # Plan Reference
 - Plan: `3446827`
 - Origin: `JUNK 9-10`
 - UUID: `f18d0ddc`
-- Status: In Progress
+- Status: Completed
 
 # Date
 2026-05-11
@@ -47,27 +47,27 @@ Completed migration-only copy and provider-masking updates for pidex:
 
 | Path | Purpose |
 | --- | --- |
-| `dashboard/README.md` | Migration README copy with pidex paths.
-| `dashboard/package.json` | Dashboard package scripts/config copied from source.
-| `dashboard/public/index.html` | Dashboard UI entry.
-| `dashboard/public/android-chrome-192x192.png` | Dashboard favicon/icon asset.
-| `dashboard/public/android-chrome-512x512.png` | Dashboard favicon/icon asset.
-| `dashboard/public/apple-touch-icon.png` | Dashboard icon asset.
-| `dashboard/public/assets/pi_transparent_512.webp` | Dashboard logo asset.
-| `dashboard/public/favicon-16x16.png` | Dashboard favicon.
-| `dashboard/public/favicon-32x32.png` | Dashboard favicon.
-| `dashboard/public/favicon.ico` | Dashboard favicon.
-| `dashboard/public/site.webmanifest` | Dashboard web manifest.
-| `dashboard/public/vendor/liquid-glass/button.js` | Dashboard liquid-glass UI helper.
-| `dashboard/public/vendor/liquid-glass/container.js` | Dashboard liquid-glass UI helper.
-| `dashboard/public/vendor/liquid-glass/expose.js` | Dashboard liquid-glass UI helper.
-| `dashboard/public/vendor/liquid-glass/glass.css` | Dashboard liquid-glass styles.
-| `dashboard/scripts/ingest.py` | Copied with PIDEX provider filters + db path rewrite.
-| `dashboard/scripts/server.py` | Copied with PIDEX provider filters + db path rewrite.
-| `dashboard/start.sh` | Start helper script copied.
-| `scripts/metrics/record.sh` | Metrics recorder copy.
-| `scripts/metrics/summarize.sh` | Metrics summarizer copy.
-| `scripts/pipeline/event.sh` | Pipeline event recorder copy.
+| `dashboard/README.md` | Migration README copy with pidex paths. |
+| `dashboard/package.json` | Dashboard package scripts/config copied from source. |
+| `dashboard/public/index.html` | Dashboard UI entry. |
+| `dashboard/public/android-chrome-192x192.png` | Dashboard favicon/icon asset. |
+| `dashboard/public/android-chrome-512x512.png` | Dashboard favicon/icon asset. |
+| `dashboard/public/apple-touch-icon.png` | Dashboard icon asset. |
+| `dashboard/public/assets/pi_transparent_512.webp` | Dashboard logo asset. |
+| `dashboard/public/favicon-16x16.png` | Dashboard favicon. |
+| `dashboard/public/favicon-32x32.png` | Dashboard favicon. |
+| `dashboard/public/favicon.ico` | Dashboard favicon. |
+| `dashboard/public/site.webmanifest` | Dashboard web manifest. |
+| `dashboard/public/vendor/liquid-glass/button.js` | Dashboard liquid-glass UI helper. |
+| `dashboard/public/vendor/liquid-glass/container.js` | Dashboard liquid-glass UI helper. |
+| `dashboard/public/vendor/liquid-glass/expose.js` | Dashboard liquid-glass UI helper. |
+| `dashboard/public/vendor/liquid-glass/glass.css` | Dashboard liquid-glass styles. |
+| `dashboard/scripts/ingest.py` | Copied with PIDEX provider filters + db path rewrite. |
+| `dashboard/scripts/server.py` | Copied with PIDEX provider filters + db path rewrite. |
+| `dashboard/start.sh` | Start helper script copied. |
+| `scripts/metrics/record.sh` | Metrics recorder copy. |
+| `scripts/metrics/summarize.sh` | Metrics summarizer copy. |
+| `scripts/pipeline/event.sh` | Pipeline event recorder copy. |
 
 # Code Quality Validation
 - [x] Python syntax check for modified dashboard scripts.
@@ -83,7 +83,7 @@ Completed migration-only copy and provider-masking updates for pidex:
 # TDD Compliance
 
 | Function/Class | Test File | Test Written First? | Failure Verified? | Failure Reason | Pass After Impl? |
-|----------------|-----------|---------------------|-------------------|----------------|------------------|
+|----------------|-----------|--------------------|-------------------|----------------|------------------|
 | N/A (artifact migration only) | N/A | ✓ Yes | ✓ Yes | N/A | ✓ Yes |
 
 # Test Coverage
@@ -130,11 +130,11 @@ Output:
 - None.
 
 # Next Steps
-- Route to `rp-code-reviewer` for review after commit.
+- Route to `pidex-code-reviewer` for review after commit.
 
 <!-- ROUTING
 verdict: COMPLETE
-route_to: rp-code-reviewer
-reason: Migration slice committed in e0433ed; no unresolved open questions; runtime services not started.
+route_to: pidex-code-reviewer
+reason: Migration slice committed in e0433ed; no unresolved open questions and runtime services not started.
 context_file: agents.output/implementation/3446827-junk-9-10-migration-only.md
 -->

@@ -42,7 +42,7 @@ Options:
   --plan PLAN             Plan key, e.g. plan-030.
   --event EVENT           Event type, e.g. pipeline_started, pipeline_stage_completed.
   --status STATUS         running, waiting, blocked, completed, failed, aborted.
-  --actor ACTOR           orchestrator, lead, rp-planner, etc. Defaults to orchestrator.
+  --actor ACTOR           orchestrator, lead, pidex-planner, etc. Defaults to orchestrator.
   --message TEXT          Short human-readable note.
   --source SOURCE         Source label. Defaults to manual.
   --metadata-json JSON    Optional JSON object with extra analytics fields.
@@ -97,16 +97,23 @@ current_file = base / f'{plan_safe}.current'
 terminal_events = {'pipeline_completed', 'pipeline_failed', 'pipeline_aborted', 'pipeline_cancelled'}
 
 if not pipeline_id:
-    if event == 'pipeline_started' or not current_file.exists():
+    if event == 'pipeline_started':
         stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
         pipeline_id = slug(f'{project_slug_safe}-{plan_safe}-{stamp}')
         current_file.write_text(pipeline_id, encoding='utf-8')
-    else:
+    elif current_file.exists():
         pipeline_id = current_file.read_text(encoding='utf-8', errors='ignore').strip()
         if not pipeline_id:
-            stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-            pipeline_id = slug(f'{project_slug_safe}-{plan_safe}-{stamp}')
-            current_file.write_text(pipeline_id, encoding='utf-8')
+            raise SystemExit(f'Active pipeline id file is empty for project={project_slug_safe} plan={plan_key}: {current_file}')
+    elif event in terminal_events:
+        raise SystemExit(
+            f'Terminal event {event} for project={project_slug_safe} plan={plan_key} has no active pipeline id. '
+            f'Pass --pipeline-id explicitly or emit pipeline_started first; refusing to create an orphan terminal pipeline.'
+        )
+    else:
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        pipeline_id = slug(f'{project_slug_safe}-{plan_safe}-{stamp}')
+        current_file.write_text(pipeline_id, encoding='utf-8')
 else:
     pipeline_id = slug(pipeline_id)
     if event == 'pipeline_started':

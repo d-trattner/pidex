@@ -1,6 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
+
+import { readProjectFromSearch, setProjectInSearch } from '../../lib/client/project-query';
 
 export const NAV_LINKS = [
   { to: '/overview', label: 'Overview' },
@@ -13,14 +15,71 @@ export const NAV_LINKS = [
   { to: '/limits', label: 'Limits' },
 ] as const;
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function ProjectSelector() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const selectedProject = readProjectFromSearch(location.search);
+  const [projects, setProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/projects')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!mounted) return;
+        const values: string[] = Array.isArray(json?.projects)
+          ? json.projects
+              .map((item: { name?: unknown; path?: unknown }) => String(item?.name || item?.path || '').trim())
+              .filter((item: string) => item.length > 0)
+          : [];
+        setProjects(Array.from(new Set(values)).sort((a: string, b: string) => a.localeCompare(b)));
+      })
+      .catch(() => setProjects([]));
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
-    <nav className="nav" aria-label="dashboard navigation">
-      {NAV_LINKS.map((item) => (
-        <Link key={item.to} to={item.to} className="pill" onClick={onNavigate}>
-          {item.label}
-        </Link>
-      ))}
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span className="muted" style={{ fontSize: 12 }}>Project</span>
+      <select
+        aria-label="Project selector"
+        value={selectedProject}
+        onChange={(event) => {
+          const search = setProjectInSearch(location.search, event.target.value);
+          void navigate({ href: `${location.pathname}${search}` });
+        }}
+      >
+        <option value="">All projects</option>
+        {projects.map((project) => (
+          <option key={project} value={project}>{project}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NavLinks({ onNavigate, mobile = false }: { onNavigate?: () => void; mobile?: boolean }) {
+  const location = useLocation();
+  const currentProject = useMemo(() => readProjectFromSearch(location.search), [location.search]);
+  return (
+    <nav className={mobile ? 'mobile-nav-list' : 'nav'} aria-label="dashboard navigation">
+      {NAV_LINKS.map((item) => {
+        const isActive = location.pathname === item.to;
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            search={(currentProject ? ({ project: currentProject } as never) : ({} as never))}
+            className={mobile ? `mobile-nav-item${isActive ? ' active' : ''}` : 'pill'}
+            aria-current={isActive ? 'page' : undefined}
+            onClick={onNavigate}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
@@ -32,8 +91,11 @@ export function GlobalHeader() {
         <h1 className="h2">PIDEX Dashboard</h1>
         <p className="muted">Operational metrics, pipeline health, live status, and provider limits.</p>
       </div>
-      <div className="desktop-nav">
-        <NavLinks />
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <ProjectSelector />
+        <div className="desktop-nav">
+          <NavLinks />
+        </div>
       </div>
     </header>
   );
@@ -44,6 +106,7 @@ export function MobileMenuSheet() {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const sheetRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
   const dialogId = useId();
   const titleId = useId();
   const location = useLocation();
@@ -62,7 +125,7 @@ export function MobileMenuSheet() {
       }
 
       if (event.key === 'Tab') {
-        const tabbables = sheetRef.current?.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        const tabbables = sheetRef.current?.querySelectorAll('a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
         if (!tabbables || tabbables.length === 0) return;
 
         const first = tabbables[0] as HTMLElement;
@@ -86,8 +149,10 @@ export function MobileMenuSheet() {
   }, [open]);
 
   useEffect(() => {
-    if (open) return;
-    triggerRef.current?.focus();
+    if (wasOpenRef.current && !open) {
+      triggerRef.current?.focus();
+    }
+    wasOpenRef.current = open;
   }, [open]);
 
   return (
@@ -95,7 +160,7 @@ export function MobileMenuSheet() {
       <button
         ref={triggerRef}
         type="button"
-        className="mobile-menu-trigger"
+        className="mobile-menu-trigger-full"
         aria-label="Open menu"
         aria-haspopup="dialog"
         aria-controls={dialogId}
@@ -105,7 +170,7 @@ export function MobileMenuSheet() {
         Menu
       </button>
       {open ? (
-        <div className="mobile-sheet-overlay" onClick={() => setOpen(false)}>
+        <div className="mobile-sheet-overlay mobile-sheet-enter" onClick={() => setOpen(false)}>
           <section
             ref={sheetRef}
             id={dialogId}
@@ -121,7 +186,8 @@ export function MobileMenuSheet() {
                 Close
               </button>
             </div>
-            <NavLinks onNavigate={() => setOpen(false)} />
+            <ProjectSelector />
+            <NavLinks mobile onNavigate={() => setOpen(false)} />
           </section>
         </div>
       ) : null}

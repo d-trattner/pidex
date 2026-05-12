@@ -7,6 +7,7 @@ Last updated: 2026-04-25
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Validation Taxonomy Standard | [validation-taxonomy.md](validation-taxonomy.md) | 3 | Standardize validation status tokens: PASS/FAIL/SKIPPED/NOT_CONFIGURED/BLOCKED across PI/release artifacts |
+| PI User Decision Routing Consistency | [user-decision-routing-consistency.md](user-decision-routing-consistency.md) | PI-DECISION | PI must route to user when rule/instruction/process changes need approval; orchestrator pauses on unresolved decision markers even if ROUTING says roadmap |
 
 ## How to use
 

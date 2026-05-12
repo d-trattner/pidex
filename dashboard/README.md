@@ -1,63 +1,49 @@
-# Running Pi Dashboard
+# PIDEX Dashboard (TanStack Start)
 
-Small local SQLite dashboard for Running Pi metrics, analytics-only pipeline lifecycle events, secondary review lanes, live view, quality charts, and pipeline analyst reports.
+Neue Dashboard-Implementierung (`dashboard`) auf TanStack Start mit Routenstruktur unter `dashboard/routes/`.
 
-## Ingest
-
-```bash
-cd /home/daniel/pidex/dashboard
-npm run ingest -- --project /home/daniel/projects/local/forge.ng --project /home/daniel/homelab
-```
-
-If no projects are passed, ingest uses pidex metrics plus common local project paths when present.
-
-## Pipeline lifecycle events
-
-Direct-mode runs can record analytics-only lifecycle events with:
-
-```bash
-~/pidex/scripts/pipeline/event.sh --plan plan-030 --event pipeline_started --status running --actor orchestrator
-~/pidex/scripts/pipeline/event.sh --plan plan-030 --event pipeline_completed --status completed --actor orchestrator
-```
-
-The helper defaults `project_path` to the current directory and stores JSONL under:
-
-```text
-state/pipeline-events/<project-slug>/<pipeline-id>.jsonl
-```
-
-Operators never pass SQLite `project_id`; ingest resolves/creates it from `project_path`.
-
-## Serve
-
-Recommended restart helper:
-
-```bash
-cd /home/daniel/pidex
-./dashboard/start.sh
-# prints local and LAN URLs
-```
-
-Manual foreground server:
+## Start
 
 ```bash
 cd /home/daniel/pidex/dashboard
-npm run dev -- --host 0.0.0.0 --port 18777
-# http://127.0.0.1:18777
+npm install
+npm run dev
 ```
 
-## Data
+Standard: `http://127.0.0.1:18777`
 
-Generated DB:
+## LAN / infra binding
 
-```text
-dashboard/data/pidex.sqlite
+`pi.lan` is the canonical LAN dashboard domain and is fronted by nginx, so user-facing URLs do **not** include a port:
+
+- `http://pi.lan/dashboard`
+- `http://pi.lan/limits`
+
+nginx proxies to the dashboard upstream on this host at port `18777`. Start the upstream with:
+
+```bash
+./start.sh --dev --no-build --no-ingest --host 0.0.0.0 --port 18777 --public-read
 ```
 
-Pipeline analyst reports are read from:
+Fallback direct upstream URL for debugging only:
 
-```text
-analysis/**/**-pipeline-analysis.md
-```
+- `http://10.0.0.103:18777/limits`
 
-Generated data directories are gitignored by the root repo.
+Security note: `--public-read` allows unauthenticated provider-limits `GET` requests so the `/limits` page can render through nginx/LAN. Provider/profile mutation (`POST`) remains token-protected by `PIDEX_PROVIDER_LIMITS_TOKEN` / `PROVIDER_LIMITS_TOKEN` when publicly bound.
+
+## Route-Ziele
+
+- `/dashboard` → zentrale Stats-Landing (KPIs)
+- `/_dashboard/overview`
+- `/_dashboard/runs`
+- `/_dashboard/tokens`
+- `/_dashboard/pipelines`
+- `/_dashboard/quality`
+- `/_dashboard/analysis`
+- `/_dashboard/live`
+- `/_dashboard/limits`
+
+## Migration-Ziele
+
+- API- und Datenadapter werden in separaten Sprint-Paketen nachgerüstet (siehe `obsidian-wikis/pidex/plans/`).
+- Legacy-Implementierung liegt unter `../dashboard-old` (read-only Referenz).

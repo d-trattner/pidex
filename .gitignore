@@ -1,11 +1,20 @@
 state/
 logs/
 dashboard/data/
+dashboard-old/data/
+dashboard/.playwright/
+dashboard/.fallow/
+dashboard/dist/
+dashboard/test-results/
+dashboard/tmp-*.mjs
+.fallow/
+.tmp-*/
 __pycache__/
 *.pyc
 analysis/**/*prompt.md
 analysis/tmp-*/
 agents.output/.locks/*.mutex
+agents.output/.next-id
 
 config.env
 .env

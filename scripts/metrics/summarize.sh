@@ -6,6 +6,7 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)
 STATE_DIR="${RUNNING_PI_STATE_DIR:-$ROOT/state}"
 PROJECT_FILTER=""
 PLAN=""
+INCLUDE_ALL="${PIDEX_SUMMARY_INCLUDE_ALL:-0}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,9 +23,9 @@ done
 
 : "${PLAN:?plan id required}"
 
-python3 - "$STATE_DIR" "$PLAN" "$PROJECT_FILTER" <<'PY'
+python3 - "$STATE_DIR" "$PLAN" "$PROJECT_FILTER" "$INCLUDE_ALL" <<'PY'
 import glob, json, os, re, sys
-state_dir, plan, project_filter = sys.argv[1:4]
+state_dir, plan, project_filter, include_all = sys.argv[1:5]
 
 def slug(value):
     value = re.sub(r'[^a-zA-Z0-9._-]+', '-', value).strip('-')
@@ -38,6 +39,14 @@ else:
     files = glob.glob(os.path.join(base, '*', f'{plan_slug}.jsonl'))
 
 records = []
+
+def is_codex_record(rec):
+    if str(include_all).strip().lower() in {'1', 'true', 'yes'}:
+        return True
+    provider = (rec.get('provider') or '').lower()
+    model = (rec.get('model') or '').lower()
+    return 'codex' in provider or 'openai-codex' in provider or 'gpt-5.3-codex' in model or model.startswith('openai-codex/')
+
 for path in files:
     if not os.path.exists(path):
         continue
@@ -48,10 +57,12 @@ for path in files:
                 continue
             try:
                 rec = json.loads(line)
-                rec['_file'] = path
-                records.append(rec)
             except Exception:
-                pass
+                continue
+            if not is_codex_record(rec):
+                continue
+            rec['_file'] = path
+            records.append(rec)
 
 if not records:
     print(f'No metrics found for {plan_slug}')

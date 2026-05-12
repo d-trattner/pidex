@@ -42,6 +42,7 @@ Last updated: 2026-05-09 (PROC-NEW-034-1)
 | RED/GREEN/Non-TDD Evidence Block | [red-green-non-tdd-evidence-block.md](red-green-non-tdd-evidence-block.md) | PROC-NEW-1 | Before first review request, implementation doc must show explicit RED, GREEN, and Non-TDD evidence lanes |
 
 | Layout-Parity DOM Snapshot | [layout-parity-dom-snapshot.md](layout-parity-dom-snapshot.md) | 034-1 | For layout-parity tasks, snapshot DOM of reference element before writing code; never copy from sibling page; verify class list |
+| Dashboard Route Parity Pre-Review Smoke | [dashboard-route-parity-pre-review-smoke.md](dashboard-route-parity-pre-review-smoke.md) | DASHBOARD-PARITY-SMOKE | Dashboard parity/query work must include route/API smoke matrix for planned surfaces, weekly/monthly tokens, live filter, and project page-key reset before code review |
 ## How to use
 
 Read this index at task start. Load specific rule files when relevant to current task.

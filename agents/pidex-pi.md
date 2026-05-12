@@ -209,6 +209,7 @@ Required sections:
 - **Status indicators**: ✓ (implemented), 🆕 (new), ⚠️ (conflicts), ✗ (rejected)
 - **Tone**: Objective, analytical, no advocacy
 - **Approval required**: Always wait for user approval before implementing
+- **Routing consistency**: If approval is required, route to `user` with `gate: G7`; never route to roadmap while `User Decision Required` remains unresolved.
 
 # Escalation
 
@@ -282,7 +283,8 @@ context_file: agents.output/process-improvement/<id>-<slug>-pi.md
 
 Routing rules:
 
-- **COMPLETE / DEFERRED / REJECTED** → `pidex-roadmap`; roadmap updates epic status and presents remaining open epics.
+- If PI doc contains unresolved user-decision markers (`User Decision Required`, `Gate G7`, `approve-all`, `Suggested Agent Instruction Updates`, proposed edits to `agents/*.md` or `rules/**`), final ROUTING MUST be `verdict: BLOCKED`, `route_to: user`, `gate: G7`. See `rules/pidex-pi/user-decision-routing-consistency.md`.
+- Only when no unresolved user decision remains: **COMPLETE / DEFERRED / REJECTED** → `pidex-roadmap`; roadmap updates epic status and presents remaining open epics.
 - **BLOCKED** → `user` with exact missing decision/context.
 
 Final chat max 3 lines: result, files changed or "none", next route.

@@ -76,3 +76,34 @@ test('content routes move to root paths and legacy dashboard paths redirect', as
     assert.match(legacyFile, new RegExp(`redirect\\(\\{\\s*to:\\s*'/${routeName}'`), `${routeName} legacy route should redirect to root path`);
   }
 });
+
+test('mobile nav uses full-width bottom trigger and accessible sheet rows', async () => {
+  const navText = await readFile(join(componentsRoot.pathname, 'navigation/global-nav.tsx'), 'utf8');
+  assert.match(navText, /className="mobile-menu-trigger-full"/, 'mobile trigger should use full-width bottom control class');
+  assert.match(navText, /mobile-nav-list/, 'mobile sheet should render one-row nav list');
+  assert.match(navText, /aria-current=\{isActive\s*\?\s*'page'\s*:\s*undefined\}/, 'sheet nav item should mark active route');
+  assert.match(navText, /const wasOpenRef = useRef\(false\)/, 'mobile sheet should track prior open state');
+  assert.match(navText, /if \(wasOpenRef\.current && !open\) \{\s*triggerRef\.current\?\.focus\(\);\s*\}/, 'focus should return to trigger only after open -> close transition');
+
+  const themeText = await readFile(new URL('../app/styles/theme.css', import.meta.url), 'utf8');
+  assert.match(themeText, /\.mobile-menu-trigger-full\s*\{/, 'theme should define full-width mobile trigger class');
+  assert.match(themeText, /\.mobile-sheet-enter\s*\{/, 'theme should define sheet animation class');
+});
+
+test('limits page uses table scroll wrapper and stable unique row keys', async () => {
+  const limitsText = await readFile(join(rootRouteRoot.pathname, 'limits.tsx'), 'utf8');
+  assert.match(limitsText, /className="table-scroll"/, 'limits table should use shared table scroll wrapper');
+  assert.match(limitsText, /key=\{\[record\.provider,\s*record\.window,\s*record\.limit_name,\s*String\(record\.resets_at\)\]\.join\('\|'\)\}/, 'limits row key should be composite for duplicate providers');
+  assert.match(limitsText, /const rows = payload\?\.limits\?\.length \? payload\.limits : payload\?\.records \|\| \[\]/, 'limits should fallback to records when limits missing');
+});
+
+test('pipelines route guards object-valued fields before rendering cells', async () => {
+  const pipelinesText = await readFile(join(rootRouteRoot.pathname, 'pipelines.tsx'), 'utf8');
+  assert.match(pipelinesText, /function formatText\(value: unknown\): string/, 'pipelines should normalize unknown text values to render-safe strings');
+  assert.match(pipelinesText, /if \(value == null\) return '—';/, 'text formatter should handle nullish values');
+  assert.match(pipelinesText, /if \(typeof value === 'object'\) return '—';/, 'text formatter should reject object values');
+  assert.match(pipelinesText, /const endpoint = '\/api\/pipelines';/, 'pipelines should avoid coercing router search object into endpoint string');
+  assert.match(pipelinesText, /<td>\{formatText\(row\.project\)\}<\/td>/, 'project cell should use safe text formatter');
+  assert.match(pipelinesText, /<td>\{formatText\(row\.plan_key\)\}<\/td>/, 'plan key cell should use safe text formatter');
+  assert.match(pipelinesText, /key=\{`\$\{formatText\(row\.completed_at\)\}-\$\{formatText\(row\.project\)\}-\$\{formatText\(row\.plan_key\)\}-\$\{index\}`\}/, 'row key should avoid direct object coercion');
+});

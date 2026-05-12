@@ -62,6 +62,7 @@ Last updated: 2026-05-09 (PROC-NEW-034-3)
 | Structural Route-Contract Table (Pre-Critic) | [structural-route-contract-table.md](structural-route-contract-table.md) | 019-1 | Structural route-graph plans must include full role-edge/skip/terminal route-contract table before critic handoff |
 | Table UI Checklist + Copy Semantics Contract | [table-ui-copy-contract.md](table-ui-copy-contract.md) | UI-TABLE-COPY | Table/list UI plans bind layout constraints; agent/audit/AI copy must match actual deterministic vs LLM behavior |
 | Plan Lint Preflight | [plan-lint-preflight.md](plan-lint-preflight.md) | 69-2 | Plans with profiles/skips/retro/version/G9 triggers must lint enum, retro consistency, release coherence, G9 applicability, and artifact path uniqueness before critic handoff |
+| UI-Heavy Profile + Designer Preflight | [ui-heavy-profile-designer-preflight.md](ui-heavy-profile-designer-preflight.md) | UI-HEAVY-PREFLIGHT | UI-heavy plans must use supported profile enum, keep designer active, and retain security separately when API/data surfaces are touched |
 | Degraded Badge Contract Table | [degraded-badge-contract-table.md](degraded-badge-contract-table.md) | 74-1 | Plans with degraded/unknown semantics must ship one canonical status→badge/copy/aria/fallback table; alternates forbidden |
 
 | Layout Parity Exact Element Reference | [layout-parity-element-ref.md](layout-parity-element-ref.md) | 034-2 | Layout parity tasks must specify exact element path (route → element + class list), not just page name |

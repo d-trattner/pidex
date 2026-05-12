@@ -1,0 +1,61 @@
+{
+  "closed": {
+    "path": "/live",
+    "trigger": true,
+    "triggerText": "Menu",
+    "sheet": false,
+    "header": true,
+    "active": "mobile-menu-trigger"
+  },
+  "open": {
+    "path": "/live",
+    "expanded": "true",
+    "sheet": true,
+    "role": "dialog",
+    "modal": "true",
+    "active": "Close",
+    "links": [
+      [
+        "Overview",
+        "/overview"
+      ],
+      [
+        "Runs",
+        "/runs"
+      ],
+      [
+        "Tokens",
+        "/tokens"
+      ],
+      [
+        "Pipelines",
+        "/pipelines"
+      ],
+      [
+        "Quality",
+        "/quality"
+      ],
+      [
+        "Analysis",
+        "/analysis"
+      ],
+      [
+        "Live",
+        "/live"
+      ],
+      [
+        "Limits",
+        "/limits"
+      ]
+    ]
+  },
+  "tab1": "Close",
+  "shiftTab": "Limits",
+  "postNav": {
+    "path": "/analysis",
+    "sheet": false,
+    "expanded": "false",
+    "header": true,
+    "trigger": true
+  }
+}

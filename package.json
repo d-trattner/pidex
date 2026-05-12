@@ -1,0 +1,26 @@
+{
+  "name": "pidex",
+  "version": "0.1.0",
+  "description": "Codex-only fork of Running Pi with pidex naming and provider hardening.",
+  "type": "module",
+  "keywords": ["pi-package", "pi", "agents", "pipeline", "subagents", "codex"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-agent-core": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"],
+    "prompts": ["./skills"]
+  },
+  "scripts": {
+    "check": "bash ./scripts/guard-codex-only.sh && bash -n install.sh uninstall.sh scripts/doctor.sh scripts/smoke-test.sh scripts/delegate/codex.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh && python3 -m py_compile dashboard-old/scripts/ingest.py dashboard-old/scripts/server.py",
+    "doctor": "bash scripts/doctor.sh"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

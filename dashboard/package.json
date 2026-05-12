@@ -1,12 +1,31 @@
 {
-  "name": "running-pi-dashboard",
+  "name": "pidex-dashboard",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local SQLite-backed dashboard for Running Pi runs, secondary lanes, and pipeline analysis.",
+  "description": "TanStack-Start PIDEX dashboard frontend (analytics + live ops).",
   "scripts": {
-    "ingest": "python3 scripts/ingest.py",
-    "dev": "python3 scripts/server.py",
-    "start": "python3 scripts/server.py"
+    "dev": "vite --host 127.0.0.1 --port 18777",
+    "build": "vite build",
+    "start": "vite preview --host 127.0.0.1 --port 18777",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.80.7",
+    "@tanstack/react-router": "1.169.2",
+    "@tanstack/react-start": "1.167.65",
+    "motion": "^12.18.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "@tanstack/router-plugin": "1.167.35",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^5.0.4",
+    "@types/node": "^24.10.1",
+    "typescript": "~5.9.2",
+    "vite": "^7.0.0"
   }
 }

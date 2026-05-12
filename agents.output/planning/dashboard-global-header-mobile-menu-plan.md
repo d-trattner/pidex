@@ -2,7 +2,7 @@
 ID: 3
 Origin: 3
 UUID: 7c9a2d4f
-Status: In Progress
+Status: Code Review Approved
 Target Release: v0.1.0
 Epic: Shared Dashboard Navigation Consistency
 ---
@@ -10,6 +10,7 @@ Epic: Shared Dashboard Navigation Consistency
 ## Changelog
 - 2026-05-12: Plan finalized from brief; UI rule contracts bound.
 - 2026-05-12: Implementation started by pidex-implementer.
+- 2026-05-12: Code review re-check approved; route to pidex-security.
 
 ## Value Statement and Business Objective
 As dashboard user, I want persistent global header/menu plus mobile always-visible menu button opening sheet, so that navigation stays fast/clear on every page and viewport.
