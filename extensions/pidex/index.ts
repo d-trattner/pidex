@@ -612,6 +612,89 @@ function extractPlanUuid(task: string, finalText = ""): string | undefined {
 		?? combined.match(/\buuid[=:]\s*([a-zA-Z0-9-]+)/i)?.[1];
 }
 
+function normalizePlanKey(value: string | undefined): string {
+	const raw = (value ?? "unknown-plan").trim() || "unknown-plan";
+	const numeric = raw.match(/^(?:plan-)?(\d{1,3})$/i)?.[1];
+	if (numeric) return `plan-${numeric.padStart(3, "0")}`;
+	const prefixed = raw.match(/^(?:plan-)?(\d{1,3})[-_]/i)?.[1];
+	if (prefixed) return `plan-${prefixed.padStart(3, "0")}`;
+	return raw;
+}
+
+function operatorEventFile(cwd: string, planId: string): { file: string; pipelineId: string } {
+	const project = safePathSegment(cwd);
+	const normalizedPlan = normalizePlanKey(planId);
+	const pipelineId = process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${project}-${safePathSegment(normalizedPlan)}`;
+	const file = path.join(STATE_DIR, "orchestrator-events", project, `${safePathSegment(pipelineId)}.jsonl`);
+	return { file, pipelineId };
+}
+
+function appendOperatorEvent(cwd: string, planId: string, event: Record<string, unknown>): string | undefined {
+	try {
+		const normalizedPlan = normalizePlanKey(planId);
+		const { file, pipelineId } = operatorEventFile(cwd, normalizedPlan);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		const record = {
+			timestamp: new Date().toISOString(),
+			project_path: cwd,
+			project_slug: path.basename(cwd) || safePathSegment(cwd),
+			pipeline_id: pipelineId,
+			plan_key: normalizedPlan,
+			actor: "orchestrator",
+			source: "pidex_agent_extension",
+			...event,
+		};
+		fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
+		return file;
+	} catch {
+		return undefined;
+	}
+}
+
+function recordOperatorEvents(result: RpResult, cwd: string, task: string): string | undefined {
+	const routing = extractRoutingBlock(result.finalText);
+	const planId = extractPlanId(task, result.finalText);
+	const contextFile = extractRoutingField(routing, "context_file");
+	const gate = extractRoutingField(routing, "gate");
+	const routeTo = extractRoutingField(routing, "route_to");
+	let eventFile = appendOperatorEvent(cwd, planId, {
+		operator_type: "OpSpawn",
+		agent: result.agent,
+		provider: result.provider,
+		model: normalizeModelForPricing(result.model),
+		duration_ms: result.durationMs,
+		exit_code: result.exitCode,
+		context_file: contextFile,
+		log_file: result.logFile,
+		run_dir: result.runDir,
+		logical_decision: { agent: result.agent },
+		physical_action: { provider: result.provider, model: normalizeModelForPricing(result.model), exit_code: result.exitCode },
+	});
+	if (routeTo || gate) {
+		eventFile = appendOperatorEvent(cwd, planId, {
+			operator_type: "OpRoute",
+			agent: result.agent,
+			source_artifact: contextFile,
+			gate_present: Boolean(gate),
+			logical_decision: { route_to: routeTo, gate: gate || undefined, context_file: contextFile },
+			physical_action: { returned_to_orchestrator: true },
+			confidence: routeTo ? "medium" : "insufficient-data",
+		}) ?? eventFile;
+	}
+	if (gate) {
+		eventFile = appendOperatorEvent(cwd, planId, {
+			operator_type: "OpGate",
+			agent: result.agent,
+			source_artifact: contextFile,
+			gate,
+			logical_decision: { gate, route_to: routeTo, user_decision_required: true },
+			physical_action: { gate_detected: true, decision_pending_in_parent_session: true },
+			confidence: "medium",
+		}) ?? eventFile;
+	}
+	return eventFile;
+}
+
 function recordAgentMetric(result: RpResult, cwd: string, task: string): string | undefined {
 	try {
 		const project = safePathSegment(cwd);
@@ -1417,6 +1500,10 @@ async function runConfiguredAgent(params: {
 		];
 	}
 	result.metricsFile = recordAgentMetric(result, params.cwd, params.task);
+	const operatorEventFile = recordOperatorEvents(result, params.cwd, params.task);
+	if (operatorEventFile) {
+		result.warnings = [...(result.warnings ?? []), `Operator events recorded: ${operatorEventFile}`];
+	}
 	return result;
 }
 
