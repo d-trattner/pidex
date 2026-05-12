@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -693,6 +693,37 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 		}) ?? eventFile;
 	}
 	return eventFile;
+}
+
+function runPidexQualityReport(cwd: string, argsLine?: string): { ok: boolean; summary: string } {
+	const script = path.join(PACKAGE_ROOT, "scripts", "quality", "report.py");
+	const rawArgs = (argsLine ?? "").trim().split(/\s+/).filter(Boolean);
+	const args = [script, "--project", cwd];
+	if (rawArgs.length) args.push(...rawArgs);
+	else args.push("--since-last-review", "--last", "5");
+	const proc = spawnSync("python3", args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const stdout = (proc.stdout || "").trim();
+	const stderr = (proc.stderr || "").trim();
+	if (proc.status !== 0) {
+		return { ok: false, summary: `pdq failed (${proc.status ?? "signal"})\n${stderr || stdout}` };
+	}
+	try {
+		const payload = JSON.parse(stdout);
+		return {
+			ok: true,
+			summary: [
+				"PIDEX quality report complete.",
+				`Markdown: ${payload.markdown}`,
+				`JSON: ${payload.json}`,
+				payload.review_state ? `Review state: ${payload.review_state}` : undefined,
+				`Plans: ${(payload.plans ?? []).join(", ") || "none"}`,
+				`Confidence: ${payload.confidence}`,
+				`Trace gaps: ${payload.trace_gaps}`,
+			].filter(Boolean).join("\n"),
+		};
+	} catch {
+		return { ok: true, summary: stdout || "pdq completed with no output" };
+	}
 }
 
 function recordAgentMetric(result: RpResult, cwd: string, task: string): string | undefined {
@@ -1567,6 +1598,14 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.registerCommand("pd", {
 		description: "Start the pidex pidex-* software-delivery pipeline (direct-mode MVP).",
 		handler: startRunningPi,
+	});
+
+	pi.registerCommand("pdq", {
+		description: "Run read-only PIDEX quality/self-improvement report.",
+		handler: async (argLine, ctx) => {
+			const result = runPidexQualityReport(ctx.cwd ?? PACKAGE_ROOT, argLine);
+			await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
+		},
 	});
 
 	const rpAgentTool: any = {
