@@ -17,6 +17,14 @@ Generate report:
 python3 scripts/quality/report.py --project /home/daniel/pidex --last 10
 ```
 
+Review only plans not yet marked reviewed, then update cadence state:
+
+```bash
+python3 scripts/quality/report.py --project /home/daniel/pidex --since-last-review --last 5 --update-review-state
+```
+
+Cadence state lives at `state/quality/review-state.json`.
+
 Write/dry-run an operator event:
 
 ```bash

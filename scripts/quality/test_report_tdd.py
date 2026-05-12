@@ -49,6 +49,11 @@ def test_expected_trace_detects_unlogged_spawn_route_gate():
     assert any(f["operator_type"] == "OpGate" and f["type"] == "missing_operator" for f in trace["findings"])
 
 
+def test_review_state_selects_unreviewed_plans():
+    state = {"reviewed_plans": ["plan-001", "plan-003"]}
+    assert mod.select_since_last_review(["plan-003", "plan-002", "plan-001"], state) == ["plan-002"]
+
+
 def test_markdown_and_json_report_shape():
     data = {
         "metrics": [],
@@ -82,5 +87,6 @@ def test_markdown_and_json_report_shape():
 if __name__ == "__main__":
     test_normalize_plan()
     test_expected_trace_detects_unlogged_spawn_route_gate()
+    test_review_state_selects_unreviewed_plans()
     test_markdown_and_json_report_shape()
     print("ok")

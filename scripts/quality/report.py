@@ -297,6 +297,55 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     }
 
 
+def review_state_path(project: Path) -> Path:
+    return STATE / "quality" / "review-state.json"
+
+
+def load_review_state(project: Path) -> dict[str, Any]:
+    path = review_state_path(project)
+    if not path.exists():
+        return {"reviewed_plans": [], "reviews": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"reviewed_plans": [], "reviews": [], "load_error": "invalid-json"}
+    if not isinstance(data, dict):
+        return {"reviewed_plans": [], "reviews": [], "load_error": "not-object"}
+    data.setdefault("reviewed_plans", [])
+    data.setdefault("reviews", [])
+    return data
+
+
+def select_since_last_review(all_plans: list[str], state: dict[str, Any]) -> list[str]:
+    reviewed = set(str(p) for p in state.get("reviewed_plans", []))
+    return [p for p in all_plans if p not in reviewed]
+
+
+def update_review_state(project: Path, report: dict[str, Any], json_out: Path, md_out: Path) -> Path:
+    path = review_state_path(project)
+    state = load_review_state(project)
+    plans = report["summary"].get("plans_reviewed", [])
+    reviewed = list(dict.fromkeys([*state.get("reviewed_plans", []), *plans]))
+    review = {
+        "timestamp": report["generated_at"],
+        "plans_reviewed": plans,
+        "json_report": str(json_out),
+        "markdown_report": str(md_out),
+        "confidence": report["summary"].get("confidence"),
+        "trace_gaps": report["summary"].get("operator_trace", {}).get("gap_count"),
+        "rule_actions": report["summary"].get("sample_size", {}).get("rule_actions"),
+    }
+    state.update({
+        "updated_at": report["generated_at"],
+        "reviewed_plans": reviewed,
+        "last_review": review,
+        "reviews": [*state.get("reviews", []), review][-100:],
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
+
 def write_markdown(report: dict[str, Any], path: Path) -> None:
     s = report["summary"]
     trace = s["operator_trace"]
@@ -310,6 +359,7 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
         "## Scope",
         "",
         "Plans reviewed: " + (", ".join(f"`{p}`" for p in s["plans_reviewed"]) or "none"),
+        f"Review mode: `{report.get('review_mode', 'manual')}`",
         "",
         "## Sample Size",
         "",
@@ -355,17 +405,22 @@ def main() -> int:
     ap.add_argument("--project", default=str(ROOT))
     ap.add_argument("--last", type=int, default=10)
     ap.add_argument("--plan")
-    ap.add_argument("--since-last-review", action="store_true", help="Reserved: currently same as --last; does not mutate review state")
+    ap.add_argument("--since-last-review", action="store_true", help="Review plans not yet present in state/quality/review-state.json")
+    ap.add_argument("--update-review-state", action="store_true", help="After writing reports, mark reviewed plans in state/quality/review-state.json")
     ap.add_argument("--json-out")
     ap.add_argument("--md-out")
     args = ap.parse_args()
 
     project = Path(args.project).expanduser().resolve()
     data = load_quality_data(project)
-    plans = select_plans(data["metrics"], data["pipeline_events"], args.plan, args.last)
+    all_plans = select_plans(data["metrics"], data["pipeline_events"], args.plan, 0 if args.since_last_review else args.last)
+    review_state = load_review_state(project)
+    plans = select_since_last_review(all_plans, review_state) if args.since_last_review and not args.plan else all_plans
+    if args.since_last_review and args.last > 0:
+        plans = plans[:args.last]
     summary = summarize(data, plans)
     generated = dt.datetime.now(dt.timezone.utc).isoformat()
-    report = {"generated_at": generated, "project_path": str(project), "summary": summary}
+    report = {"generated_at": generated, "project_path": str(project), "review_mode": "since-last-review" if args.since_last_review else "manual", "summary": summary}
 
     stamp = utc_now_slug()
     json_out = Path(args.json_out) if args.json_out else ROOT / "state" / "quality" / f"pdq-{stamp}.json"
@@ -373,7 +428,8 @@ def main() -> int:
     json_out.parent.mkdir(parents=True, exist_ok=True)
     json_out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     write_markdown(report, md_out)
-    print(json.dumps({"json": str(json_out), "markdown": str(md_out), "plans": plans, "confidence": summary["confidence"], "trace_gaps": summary["operator_trace"]["gap_count"]}, indent=2))
+    review_state_out = update_review_state(project, report, json_out, md_out) if args.update_review_state else None
+    print(json.dumps({"json": str(json_out), "markdown": str(md_out), "review_state": str(review_state_out) if review_state_out else None, "plans": plans, "confidence": summary["confidence"], "trace_gaps": summary["operator_trace"]["gap_count"]}, indent=2))
     return 0
 
 
