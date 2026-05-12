@@ -54,6 +54,15 @@ test('root layout mounts shared header and mobile menu controls', async () => {
   const navText = await readFile(join(componentsRoot.pathname, 'navigation/global-nav.tsx'), 'utf8');
   assert.match(navText, /to:\s*'\/live'/, 'shared nav should include /live route');
   assert.match(navText, /label:\s*'Overview'/, 'shared nav should include Overview label');
+  assert.match(navText, /event\.key === 'Tab'/, 'mobile sheet should trap Tab focus');
+  assert.match(navText, /querySelectorAll\('a\[href\], button/, 'mobile sheet should collect tabbable elements for focus trap');
+});
+
+test('dashboard landing route defers nav ownership to shared global header', async () => {
+  const dashboardIndexText = await readFile(join(dashboardRoot.pathname, 'index.tsx'), 'utf8');
+  assert.doesNotMatch(dashboardIndexText, /const links = \[/, 'dashboard index should not define duplicate links array');
+  assert.doesNotMatch(dashboardIndexText, /aria-label="section navigation"/, 'dashboard index should not render duplicate section nav');
+  assert.doesNotMatch(dashboardIndexText, /import\s+\{\s*createFileRoute,\s*Link\s*\}/, 'dashboard index should not import Link for duplicate nav');
 });
 
 test('content routes move to root paths and legacy dashboard paths redirect', async () => {

@@ -43,6 +43,7 @@ export function MobileMenuSheet() {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const sheetRef = useRef<HTMLElement | null>(null);
   const dialogId = useId();
   const titleId = useId();
   const location = useLocation();
@@ -55,7 +56,30 @@ export function MobileMenuSheet() {
     if (!open) return;
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        setOpen(false);
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const tabbables = sheetRef.current?.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        if (!tabbables || tabbables.length === 0) return;
+
+        const first = tabbables[0] as HTMLElement;
+        const last = tabbables[tabbables.length - 1] as HTMLElement;
+        const active = document.activeElement;
+
+        if (event.shiftKey && active === first) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+
+        if (!event.shiftKey && active === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -83,6 +107,7 @@ export function MobileMenuSheet() {
       {open ? (
         <div className="mobile-sheet-overlay" onClick={() => setOpen(false)}>
           <section
+            ref={sheetRef}
             id={dialogId}
             className="glass mobile-sheet"
             role="dialog"
