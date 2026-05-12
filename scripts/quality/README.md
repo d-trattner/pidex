@@ -49,9 +49,28 @@ Important operators:
 - `OpRuleAction`
 - `OpReleaseDecision`
 
-## Rule-action ledger draft
+## Rule-action ledger
 
-Future rule ledger entries should include:
+Record a rule/process action without editing rules:
+
+```bash
+python3 scripts/quality/rule-actions.py add \
+  --action monitor \
+  --status monitoring \
+  --owning-agent orchestrator \
+  --approval-source user \
+  --expected-impact-dimension routing-correctness \
+  --expected-direction increase \
+  --reason "Watch routing correctness after adding operator events"
+```
+
+List actions:
+
+```bash
+python3 scripts/quality/rule-actions.py list
+```
+
+Ledger entries include:
 
 - `timestamp`
 - `action`: add/remove/move/merge/split/compress/pin/monitor/rollback/downgrade/narrow/no-op
@@ -64,4 +83,4 @@ Future rule ledger entries should include:
 - `linked_pipeline_id`
 - `status`: accepted/rejected/deferred/monitoring/rolled-back
 
-Phase 0 does not mutate rules or write rule ledger entries automatically.
+Phase 0 does not mutate rules. Ledger writes are explicit user/operator actions only.

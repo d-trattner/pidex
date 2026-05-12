@@ -141,12 +141,14 @@ def load_quality_data(project: Path) -> dict[str, Any]:
     metrics = [r for r in iter_jsonl(STATE / "metrics") if metric_project_matches(r, project)]
     events = [r for r in iter_jsonl(STATE / "pipeline-events") if str(r.get("project_path") or r.get("project") or "") in {str(project), str(project.resolve())} or not r.get("project_path")]
     orchestrator_events = [r for r in iter_jsonl(STATE / "orchestrator-events") if str(r.get("project_path") or "") in {str(project), str(project.resolve()), ""}]
+    rule_actions = [r for r in iter_jsonl(STATE / "rule-actions") if str(r.get("project_path") or "") in {str(project), str(project.resolve()), ""}]
     routing_artifacts = discover_artifact_routing(project)
     rules = discover_rules(project)
     return {
         "metrics": metrics,
         "pipeline_events": events,
         "orchestrator_events": orchestrator_events,
+        "rule_actions": rule_actions,
         "routing_artifacts": routing_artifacts,
         "rules": rules,
     }
@@ -275,16 +277,20 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     by_gate = Counter(str(r.get("gate") or "none") for r in metrics)
     by_event = Counter(str(r.get("event_type") or "unknown") for r in events)
     by_rule_agent = Counter(str(r.get("agent") or "unknown") for r in data["rules"])
+    rule_actions = data.get("rule_actions", [])
+    by_rule_action = Counter(str(r.get("action") or "unknown") for r in rule_actions)
     total_tokens = sum(int(r.get("input_tokens_estimate") or 0) + int(r.get("output_tokens_estimate") or 0) for r in metrics)
     total_cost = sum(float(r.get("cost_usd_estimate") or 0.0) for r in metrics)
     return {
         "plans_reviewed": plans,
-        "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
+        "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "rule_actions": len(rule_actions), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
         "agent_runs_by_agent": dict(by_agent),
         "agent_verdicts": dict(by_verdict),
         "gates": dict(by_gate),
         "pipeline_event_types": dict(by_event),
         "rules_by_owner": dict(by_rule_agent),
+        "rule_actions_by_action": dict(by_rule_action),
+        "recent_rule_actions": rule_actions[-20:],
         "cost_tokens": {"estimated_tokens": total_tokens, "estimated_cost_usd": round(total_cost, 6)},
         "operator_trace": trace,
         "confidence": "descriptive-only" if trace["gap_count"] else "medium",
@@ -332,7 +338,14 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
     lines += ["", "## Rule Inventory", ""]
     for k, v in sorted(s["rules_by_owner"].items()):
         lines.append(f"- {k}: {v} rule docs")
-    lines += ["", "## Recommendation", "", "Phase 0 report is descriptive-only. Add typed operator events and rule-action ledger before causal self-improvement claims.", ""]
+    lines += ["", "## Rule-Action Ledger", ""]
+    if s.get("recent_rule_actions"):
+        lines.append("Action counts: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("rule_actions_by_action", {}).items())))
+        for row in s.get("recent_rule_actions", [])[-10:]:
+            lines.append(f"- {row.get('timestamp')} `{row.get('action')}` `{row.get('status')}` {row.get('rule_path') or '—'} owner `{row.get('owning_agent')}` impact `{row.get('expected_impact_dimension')}` direction `{row.get('expected_direction')}`")
+    else:
+        lines.append("- No rule actions recorded yet.")
+    lines += ["", "## Recommendation", "", "Phase 0 report is descriptive-only. Add/maintain typed operator events and rule-action ledger entries before causal self-improvement claims.", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
 

@@ -54,6 +54,16 @@ def test_markdown_and_json_report_shape():
         "metrics": [],
         "pipeline_events": [],
         "orchestrator_events": [],
+        "rule_actions": [
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "action": "monitor",
+                "status": "monitoring",
+                "owning_agent": "orchestrator",
+                "expected_impact_dimension": "routing-correctness",
+                "expected_direction": "increase",
+            }
+        ],
         "routing_artifacts": [],
         "rules": [],
     }
@@ -65,6 +75,8 @@ def test_markdown_and_json_report_shape():
         text = out.read_text()
         assert "PIDEX Quality Report" in text
         assert "Expected-vs-Observed Operator Trace" in text
+        assert "Rule-Action Ledger" in text
+        assert "routing-correctness" in text
 
 
 if __name__ == "__main__":
