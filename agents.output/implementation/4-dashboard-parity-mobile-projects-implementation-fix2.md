@@ -63,3 +63,11 @@ Status: Active
 
 ## Next Steps
 - Route to code review for v3 verification.
+
+<!-- ROUTING -->
+verdict: COMPLETE
+route_to: pidex-code-reviewer
+context_file: agents.output/implementation/4-dashboard-parity-mobile-projects-implementation-fix2.md
+gate: none
+reason: M3 fixed with regression test; focused tests + typecheck green.
+<!-- /ROUTING -->
