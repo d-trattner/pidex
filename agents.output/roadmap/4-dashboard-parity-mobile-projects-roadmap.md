@@ -1,7 +1,7 @@
 # Dashboard parity · mobile / project selector roadmap record
 
 ## Header
-- Last Updated: 2026-05-12T20:00:12Z
+- Last Updated: 2026-05-13T00:00:00Z
 - Roadmap Owner: pidex-roadmap
 - Plan ID: 4 | UUID: 5098e241 | Lane: epic-lane
 - Strategic Vision: restore trusted dashboard triage across mobile and desktop with shared project-scoped state and historical quality/token visibility.
@@ -11,6 +11,7 @@
 |---|---|---|
 | 2026-05-12T20:00:12Z | Closed roadmap record for plan 4 and marked primary epic Delivered (local) | UAT approval + security/QA evidence + devops local readiness with explicit HELD release status |
 | 2026-05-12T20:00:12Z | Added backlog follow-ups from retro/PI and future-quality-metrics epic | Retro and PI surfaced recurring pipeline process gaps and new quality learning need |
+| 2026-05-13T00:00:00Z | Added provider-limits weekly forecast + visualization epic | User needs weekly Codex/Codex Spark visibility, progress bars, burn-rate forecast, and weekly usage chart |
 
 ## Release: v0.1.0 (Local hold)
 - Target Date: 2026-05-12 (pipeline completion)
@@ -36,6 +37,7 @@
 - P1 / Planned — **Security dependency preflight**: require supply-chain/version sanity check before implementation starts in affected plans.
 - P1 / Planned — **Route/API parity smoke matrix before code-review**: enforce project and token-page checks for planned surfaces (`/live`, `/tokens`, weekly/monthly pagination, project-switch state reset).
 - P1 / Planned — **Responsive proof by computed layout/cascade assertions**: test visual behavior outcome, not selector presence only.
+- P1 / Planned — **Provider-limits weekly forecast + visualization epic**: extend `/limits` beyond daily `codex`/`codex-spark` rows to include weekly windows, progress bars, burn-rate forecasts, and weekly usage line chart with forecast marker (`agents.output/briefs/dashboard-provider-limits-weekly-forecast-epic.md`).
 - P2 / Planned — **Orchestration quality metrics epic**: ingest structured pipeline-quality score per run, render dashboard quality trend, and overlay improvement-point markers tied to PI outcomes (`agents.output/briefs/dashboard-orchestration-quality-metrics-epic.md`).
 
 ## Active Release Tracker
