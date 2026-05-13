@@ -6,7 +6,7 @@ Status: QA Complete
 ---
 
 # Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
 
 # QA Status
 QA Complete
@@ -39,7 +39,7 @@ verdict: IN_PROGRESS
 route_to: pidex-qa
 reason: Phase 2 running.
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa.md
+context_file: <pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa.md
 -->
 
 # Implementation Review (Post-Implementation)
@@ -57,10 +57,10 @@ context_file: /home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile
 - Gap: true interactive browser keyboard cycle not executed due missing Playwright runtime libs in host.
 
 # Test Execution Results
-- `cd /home/daniel/pidex/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs` → PASS (5/5)
-- `cd /home/daniel/pidex/dashboard && npm run typecheck` → PASS
-- `cd /home/daniel/pidex/dashboard && npm run build` → PASS
-- `cd /home/daniel/pidex/dashboard && ./start.sh --no-build` → PASS (server on :18777)
+- `cd <pidex-root>/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs` → PASS (5/5)
+- `cd <pidex-root>/dashboard && npm run typecheck` → PASS
+- `cd <pidex-root>/dashboard && npm run build` → PASS
+- `cd <pidex-root>/dashboard && ./start.sh --no-build` → PASS (server on :18777)
 - Runtime smoke (curl):
   - `/dashboard` 200
   - `/live` 200
@@ -95,5 +95,5 @@ verdict: COMPLETE
 route_to: pidex-uat
 reason: Required tests/typecheck/build/runtime smoke passed; scoped QA acceptable with documented browser-lib environment limit.
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa.md
+context_file: <pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa.md
 -->

@@ -21,18 +21,18 @@ The report focuses on facts, dimensions, confidence labels, and evidence links. 
 
 ## Command
 
-From `/home/daniel/pidex`:
+From `<pidex-root>`:
 
 ```bash
-python3 scripts/quality/report.py --project /home/daniel/pidex --last 10
+python3 scripts/quality/report.py --project <pidex-root> --last 10
 ```
 
 Useful options:
 
 ```bash
-python3 scripts/quality/report.py --project /home/daniel/pidex --since-last-review
-python3 scripts/quality/report.py --project /home/daniel/pidex --plan plan-004
-python3 scripts/quality/report.py --project /home/daniel/pidex --json-out state/quality/manual.json --md-out agents.output/quality/manual.md
+python3 scripts/quality/report.py --project <pidex-root> --since-last-review
+python3 scripts/quality/report.py --project <pidex-root> --plan plan-004
+python3 scripts/quality/report.py --project <pidex-root> --json-out state/quality/manual.json --md-out agents.output/quality/manual.md
 ```
 
 ## Guardrails

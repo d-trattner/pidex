@@ -22,7 +22,7 @@ As dashboard user, I want core pages at root routes (`/live`, `/overview`, `/ana
 4. Document behavior for old `/dashboard/*` paths.
 
 ## Scope and Constraints
-- In scope: `/home/daniel/pidex/dashboard` route structure, navigation links, route compatibility handling.
+- In scope: `<pidex-root>/dashboard` route structure, navigation links, route compatibility handling.
 - Out of scope: API endpoint changes, copy rewrites, UI redesign.
 - Constraint: no contract break on backend/API paths.
 
@@ -111,5 +111,5 @@ Post-retro handoffs: none
 <!-- ROUTING
 verdict: COMPLETE
 route_to: pidex-critic
-context_file: /home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md
+context_file: <pidex-root>/agents.output/planning/dashboard-root-routes-plan.md
 -->

@@ -7,7 +7,7 @@ Status: UAT Complete
 
 ## UAT Report: Dashboard English Copy + Interaction Reliability
 
-**Plan Reference**: /home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md
+**Plan Reference**: <pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md
 **Date**: 2026-05-12
 **UAT Agent**: pidex-uat
 
@@ -35,7 +35,7 @@ Value delivered per doc chain. User-visible English copy shown. Primary interact
 
 ### UI Evidence Before G9
 - SS-1..SS-4 intent covered by provided desktop/mobile screenshots + route checks.
-- Browser artifacts present: `/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-screens/`.
+- Browser artifacts present: `<pidex-root>/agents.output/qa/dashboard-english-buttons-screens/`.
 - Decision: G9 READY.
 
 ### User Preview Before G4
@@ -70,5 +70,5 @@ verdict: APPROVED
 route_to: pidex-devops
 reason: UAT complete; G9-required UI evidence present; proceed release pipeline. Preview URL http://pi.lan:18777/dashboard
 gate: G9
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-english-buttons-uat-final.md
+context_file: <pidex-root>/agents.output/uat/dashboard-english-buttons-uat-final.md
 -->

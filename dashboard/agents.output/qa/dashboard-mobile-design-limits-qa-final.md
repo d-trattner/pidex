@@ -9,7 +9,7 @@ Status: QA Complete
 
 ## Plan Reference
 
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 - ID: dashboard-mobile-design-limits-plan
 - Origin: dashboard-mobile-design-limits-brief
 - UUID: eec388ea
@@ -154,6 +154,6 @@ Status: QA Complete
 verdict: COMPLETE
 route_to: pidex-uat
 reason: Required checks pass after hotfix; /pipelines no-console/browser evidence green and route smoke clean
-context_file: /home/daniel/pidex/dashboard/agents.output/qa/dashboard-mobile-design-limits-qa-final.md
+context_file: <pidex-root>/dashboard/agents.output/qa/dashboard-mobile-design-limits-qa-final.md
 gate: none
 -->

@@ -57,7 +57,7 @@ None.
 | MINOR-1 — Tests prove only recommendation absence | Resolved | Probe/server tests now assert `records`, `active_profile`, profiles, exact `codex` and `codex-spark` providers. |
 
 ## Positive Observations
-- Fix remains small. No new dependency. No `/home/daniel/running-pi` coupling found in reviewed files.
+- Fix remains small. No new dependency. No `<running-pi-root>` coupling found in reviewed files.
 - Existing empty `state/provider-limits/latest.json` stays valid; native source absent means stable empty records, per plan risk mitigation.
 - Source contract sufficient for review scope: explicit PIDEX-local JSON record feed plus fixture-backed proof.
 

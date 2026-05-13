@@ -6,7 +6,7 @@ Status: Active
 ---
 
 ## Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 
 ## Date
 - 2026-05-12
@@ -79,5 +79,5 @@ Status: Active
 verdict: COMPLETE
 route_to: pidex-code-reviewer
 reason: QA runtime error fixed, regression added, required validations green including browser smoke
-context_file: /home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md
+context_file: <pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md
 -->

@@ -9,11 +9,11 @@ color: yellow
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-code-reviewer/index.md` to load active process rules.
-For UI/frontend plans, load `~/running-pi/rules/pidex-code-reviewer/ui-pattern-parity-review.md`.
-When plan has Execution Profile/Skipped Agents, load `~/running-pi/rules/pidex-code-reviewer/execution-profile-diff-guard.md`.
-For JS/TS scope, load `~/running-pi/rules/pidex-code-reviewer/fallow-evidence.md`; for non-JS/TS, record `FALLOW-SKIP: non-JS/TS scope`.
-For tiny test-only/type-only/devops-blocker hotfixes, load `~/running-pi/rules/pidex-code-reviewer/tdd-table-narrow-hotfix-escape.md` before rejecting solely for a missing full TDD table.
+At task start, read `<pidex-root>/rules/pidex-code-reviewer/index.md` to load active process rules.
+For UI/frontend plans, load `<pidex-root>/rules/pidex-code-reviewer/ui-pattern-parity-review.md`.
+When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-code-reviewer/execution-profile-diff-guard.md`.
+For JS/TS scope, load `<pidex-root>/rules/pidex-code-reviewer/fallow-evidence.md`; for non-JS/TS, record `FALLOW-SKIP: non-JS/TS scope`.
+For tiny test-only/type-only/devops-blocker hotfixes, load `<pidex-root>/rules/pidex-code-reviewer/tdd-table-narrow-hotfix-escape.md` before rejecting solely for a missing full TDD table.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-code-reviewer.md`, read that too for project-specific rules.
 
 # Purpose
@@ -46,15 +46,15 @@ Workflow order (PROC-NEW-2 — sequential phases, not open-ended reading loop):
 4. Read critique (if exists) — verify findings against critique OPEN items
 5. Verify TDD Compliance table — check implementation doc table first, spot-check live code
 6. Write findings, verdict, ROUTING directive
-7. **Draft ROUTING immediately after first file write/edit** (PROC-NEW-1 enforcement): → See `~/running-pi/rules/pidex-code-reviewer/draft-routing.md`
+7. **Draft ROUTING immediately after first file write/edit** (PROC-NEW-1 enforcement): → See `<pidex-root>/rules/pidex-code-reviewer/draft-routing.md`
 8. **Budget self-monitor**: every ~5 tool_uses, estimate progress vs. `maxTurns`. At **>75% of maxTurns**: STOP reading new files, finalize with findings-so-far, emit final ROUTING NOW, return.
 9. **Final ROUTING as second-to-last action** (Rule 9c): emit authoritative block with actual verdict. If coverage gate overridden, document in ROUTING `reason` per Coverage Gate Accountability. Orchestrator treats LAST `<!-- ROUTING -->` as authoritative — final overrides draft.
 
 **Critical**: Do NOT defer all writing to "after finish reading everything." Write findings per commit AS YOU READ IT. Ensures partial output exists at any budget kill point.
 
-**Large-diff batching (PROC-NEW-2 — MANDATORY when diff spans 5+ files)**: → See `~/running-pi/rules/pidex-code-reviewer/large-diff-batching.md`
+**Large-diff batching (PROC-NEW-2 — MANDATORY when diff spans 5+ files)**: → See `<pidex-root>/rules/pidex-code-reviewer/large-diff-batching.md`
 
-**Investigation budget cap (PROC-NEW-2 — MANDATORY)**: → See `~/running-pi/rules/pidex-code-reviewer/investigation-budget-cap.md`
+**Investigation budget cap (PROC-NEW-2 — MANDATORY)**: → See `<pidex-root>/rules/pidex-code-reviewer/investigation-budget-cap.md`
 
 If orchestrator pre-created skeleton (frontmatter already present), skip step 1, begin filling TDD Compliance Check section first.
 
@@ -90,7 +90,7 @@ Load at review start:
 - **Error handling**: Failure modes handled? Exceptions swallowed? Logging adequate?
 - **Naming and readability**: Clear names, meaningful comments for WHY not WHAT
 - **Scope creep**: Implementation match plan, or did it grow?
-- **Deferred scope (DO NOT REJECT for absent deferred items)**: → See `~/running-pi/rules/pidex-code-reviewer/deferred-scope-check.md` (PROC-NEW-13)
+- **Deferred scope (DO NOT REJECT for absent deferred items)**: → See `<pidex-root>/rules/pidex-code-reviewer/deferred-scope-check.md` (PROC-NEW-13)
 - **Security**: Obvious vulnerabilities (injection, secret leaks, auth bypass)
 - **UI pattern parity**: For UI plans, verify implementation honors UI Quality Contract/source pattern before QA
 - **Execution profile diff guard**: Verify actual changed files/surfaces stay within approved profile/skipped-agent assumptions

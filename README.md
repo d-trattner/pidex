@@ -5,7 +5,7 @@ Codex-only fork of Running Pi, normalized to `pidex-*` agents and hardening agai
 ## Install
 
 ```bash
-pi install ~/pidex
+pi install <pidex-root>
 # simulate without changing Pi settings:
 ./install.sh --dry-run
 ```
@@ -13,7 +13,7 @@ pi install ~/pidex
 Uninstall:
 
 ```bash
-pi uninstall ~/pidex
+pi uninstall <pidex-root>
 # simulate without changing Pi settings:
 ./uninstall.sh --dry-run
 ```
@@ -24,10 +24,10 @@ pi uninstall ~/pidex
 In Pi:
 
 ```text
-/pd Add a small helper in ~/my-project
+/pidex Add a small helper in ~/my-project
 ```
 
-The orchestrator flow is unchanged from Running Pi, but now constrained to Codex models and `pidex-*` role names.
+`/pd` is available as a short alias. The orchestrator flow is unchanged from Running Pi, but now constrained to Codex models and `pidex-*` role names.
 
 ## Repo scope
 

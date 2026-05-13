@@ -35,7 +35,7 @@ SEC-1 not resolved. Token + same-origin logic added. Localhost decision uses `ne
 
 ## Automated Checks
 - `node --experimental-strip-types --test dashboard/lib/server/provider-limits-auth.tdd.test.mjs dashboard/lib/server/limits.tdd.test.mjs` — PASS, 3/3.
-- Scoped secret check: `/home/daniel/running-pi/skills/security-patterns/scripts/check-secrets.sh dashboard/lib/server/provider-limits-auth.ts ...` — PASS/no obvious secrets for first scoped file; broad dashboard scan hit dependency test false positives under `node_modules/zod`, ignored.
+- Scoped secret check: `<running-pi-root>/skills/security-patterns/scripts/check-secrets.sh dashboard/lib/server/provider-limits-auth.ts ...` — PASS/no obvious secrets for first scoped file; broad dashboard scan hit dependency test false positives under `node_modules/zod`, ignored.
 - Pattern scan: `dangerouslySetInnerHTML|eval|new Function|innerHTML|child_process|exec|spawn|writeFile|readFile` in `dashboard`. No new scoped XSS/command injection in changed provider-limits auth/routes. Existing `limits.ts` fixed state file read/write reviewed from prior pass.
 
 ## Fallow Structural Scan

@@ -19,17 +19,17 @@ Implementation doc has complete TDD table for hotfix rows:
 
 ## Plan Reference
 
-- `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 - ID: `dashboard-mobile-design-limits-plan`
 - UUID: `eec388ea`
 
 ## Implementation Reference
 
-- `/home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
+- `<pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
 
 ## QA Failure Reference
 
-- `/home/daniel/pidex/agents.output/qa/dashboard-mobile-design-limits-qa.md`
+- `<pidex-root>/agents.output/qa/dashboard-mobile-design-limits-qa.md`
 - Failed route: `/pipelines`
 - Error: `TypeError: Cannot convert object to primitive value`
 
@@ -97,7 +97,7 @@ None.
 
 ## Fallow Evidence
 
-- Command: `cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
+- Command: `cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
 - Outcome: PASS_WITH_FINDINGS
 - Review impact: Non-blocking. Findings are broad pre-existing complexity/duplication; only touched hotfix-relevant item is `routes/pipelines.tsx:35 formatNumber` CRAP/high due no coverage. Simplicity acceptable for narrow guard.
 
@@ -132,5 +132,5 @@ Route to pidex-qa. Re-run browser smoke on `/pipelines` desktop/mobile and confi
 verdict: APPROVED
 route_to: pidex-qa
 reason: QA hotfix approved; /pipelines object coercion guarded, endpoint contract preserved, tests/typecheck/build pass
-context_file: /home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-code-review-after-qa.md
+context_file: <pidex-root>/agents.output/review/dashboard-mobile-design-limits-code-review-after-qa.md
 -->

@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 
 import { readPageForKey, readProjectFromSearch, setPageForKey, withProjectParam } from '../lib/client/project-query';
+import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type AgentTokenStat = {
   agent: string;
@@ -42,46 +41,22 @@ type TokenPayload = {
 };
 
 function TokensPage() {
-  const [payload, setPayload] = useState<TokenPayload | null>(null);
-  const [loading, setLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
   const project = readProjectFromSearch(location.search);
   const weekPage = readPageForKey(location.search, 'page_week');
   const monthPage = readPageForKey(location.search, 'page_month');
-
-  useEffect(() => {
-    let mounted = true;
-    Promise.all([
-      fetch(withProjectParam(`/api/token-consumption?granularity=week&page=${weekPage}`, project)).then((res) => res.json()),
-      fetch(withProjectParam(`/api/token-consumption?granularity=month&page=${monthPage}`, project)).then((res) => res.json()),
-    ])
-      .then(([weeklyJson, monthlyJson]) => {
-        if (!mounted) return;
-        const weeklyPayload = weeklyJson && typeof weeklyJson === 'object' ? (weeklyJson as TokenPayload) : null;
-        const monthlyPayload = monthlyJson && typeof monthlyJson === 'object' ? (monthlyJson as TokenPayload) : null;
-        if (!weeklyPayload || !monthlyPayload) {
-          setPayload(null);
-          return;
-        }
-        setPayload({
-          agent_stats: weeklyPayload.agent_stats,
-          chart_agents: weeklyPayload.chart_agents,
-          weekly: weeklyPayload.weekly,
-          monthly: monthlyPayload.monthly,
-        });
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setPayload(null);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [monthPage, project, weekPage]);
+  const weeklyQuery = useDashboardQuery<TokenPayload>(['tokens', 'week', project, weekPage], withProjectParam(`/api/token-consumption?granularity=week&page=${weekPage}`, project));
+  const monthlyQuery = useDashboardQuery<TokenPayload>(['tokens', 'month', project, monthPage], withProjectParam(`/api/token-consumption?granularity=month&page=${monthPage}`, project));
+  const payload = weeklyQuery.data && monthlyQuery.data
+    ? {
+        agent_stats: weeklyQuery.data.agent_stats,
+        chart_agents: weeklyQuery.data.chart_agents,
+        weekly: weeklyQuery.data.weekly,
+        monthly: monthlyQuery.data.monthly,
+      }
+    : null;
+  const loading = weeklyQuery.isLoading || monthlyQuery.isLoading;
 
   const goPage = (key: 'page_week' | 'page_month', nextPage: number) => {
     const nextSearch = setPageForKey(location.search, key, nextPage);

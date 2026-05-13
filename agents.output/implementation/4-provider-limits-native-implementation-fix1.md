@@ -21,7 +21,7 @@ Status: Active
 - Probe now loads native records when `latest.json` has missing/invalid/empty `records`.
 - Strengthened probe test: verifies active/profile preservation + exact `codex`/`codex-spark` pass-through.
 - Strengthened server test: verifies payload shape + active profile + exact `codex`/`codex-spark` records.
-- No `/home/daniel/running-pi` dependency introduced.
+- No `<running-pi-root>` dependency introduced.
 
 ## Milestones Completed
 - [x] MAJOR-1 native source/fixture collection path

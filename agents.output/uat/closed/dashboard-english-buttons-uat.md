@@ -7,7 +7,7 @@ Status: Blocked
 
 ## UAT Report: Dashboard English Copy + Interaction Reliability
 
-**Plan Reference**: /home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md
+**Plan Reference**: <pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md
 **Date**: 2026-05-12
 **UAT Agent**: pidex-uat
 
@@ -71,7 +71,7 @@ Routes: `/dashboard`, `/dashboard/analysis`, `/dashboard/live`, one extra touche
 - UAT blocked pending UI evidence set (SS-1..SS-4 + flow + mobile/a11y).
 
 ### Findings by Severity
-- Major: Missing UI evidence package required before G9 (`/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-qa.md`, UI evidence sections).
+- Major: Missing UI evidence package required before G9 (`<pidex-root>/agents.output/qa/dashboard-english-buttons-qa.md`, UI evidence sections).
 
 ### Changelog Note
 - 2026-05-12: pidex-uat blocked release; missing G9 UI evidence bundle.
@@ -82,5 +82,5 @@ verdict: BLOCKED
 route_to: pidex-qa
 reason: UI/G9 evidence missing; need browser screenshots + flow/mobile/a11y proof before G9.
 gate: G3
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-english-buttons-uat.md
+context_file: <pidex-root>/agents.output/uat/dashboard-english-buttons-uat.md
 -->

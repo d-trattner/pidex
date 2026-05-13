@@ -1,13 +1,13 @@
 # Implementer fix brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-provider-limits-native-plan.md`
 Implementation: `agents.output/implementation/4-provider-limits-native-implementation.md`
 Code review rejection: `agents.output/code-review/4-provider-limits-native-code-review.md`
 Expected output: `agents.output/implementation/4-provider-limits-native-implementation-fix1.md`
 
 Fix the code-review rejection only:
-- MAJOR-1: Probe currently echoes existing `latest.json` or empty records. Implement a minimal PIDEX-native provider-limit record source/fixture contract that can produce `codex` and `codex-spark` records when available, without `/home/daniel/running-pi`.
+- MAJOR-1: Probe currently echoes existing `latest.json` or empty records. Implement a minimal PIDEX-native provider-limit record source/fixture contract that can produce `codex` and `codex-spark` records when available, without `<running-pi-root>`.
 - MINOR-1: Strengthen tests to assert records shape, active/profile preservation, and exact `codex`/`codex-spark` pass-through/collection from the supported source.
 
 Guidance:

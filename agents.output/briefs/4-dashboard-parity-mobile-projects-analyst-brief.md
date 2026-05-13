@@ -1,6 +1,6 @@
 # Analyst brief: dashboard parity/mobile/project selector findings first
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan id: `4`
 Slug: `dashboard-parity-mobile-projects`
 Mode: direct pidex orchestrator.

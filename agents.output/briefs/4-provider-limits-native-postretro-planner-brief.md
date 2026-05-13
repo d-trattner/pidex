@@ -1,6 +1,6 @@
 # Post-retro planner handoff: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Retrospective: `agents.output/retrospective/4-provider-limits-native-retrospective.md`
 PI: `agents.output/pi/4-provider-limits-native-pi.md`
 Expected output: `agents.output/planning/4-provider-limits-native-postretro-planning-insights.md`

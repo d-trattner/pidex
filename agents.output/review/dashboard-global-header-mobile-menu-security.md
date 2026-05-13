@@ -10,12 +10,12 @@ Verdict: APPROVED
 UI nav/menu/sheet only. Files: `dashboard/components/navigation/global-nav.tsx`, `dashboard/routes/dashboard/index.tsx`, root mount in `dashboard/routes/__root.tsx`.
 
 # Inputs
-- `/home/daniel/pidex/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
-- `/home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-code-review-final.md`
+- `<pidex-root>/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
+- `<pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-code-review-final.md`
 - Source files above + `dashboard/tests/dashboard-copy-and-interactions.test.mjs`
 
 # Rules Loaded
-- `~/running-pi/rules/pidex-security/index.md`: not found (ENOENT)
+- `<pidex-root>/rules/pidex-security/index.md`: not found (ENOENT)
 - `agents.wiki.dashboard/rules/pidex-security.md`: not found (ENOENT)
 
 # Method
@@ -37,7 +37,7 @@ No security findings in scoped change.
 
 # Fallow Signal
 Ran:
-`cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain`
+`cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain`
 Result: `verdict: fail` with pre-existing dead-code/complexity/duplication findings outside scoped nav/menu files. No new scoped security signal.
 
 # Verdict
@@ -49,5 +49,5 @@ verdict: APPROVED
 route_to: pidex-qa
 reason: Scoped nav/menu/sheet security checks clean; no XSS/open-redirect/unsafe-link issue.
 gate: none
-context_file: /home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-security.md
+context_file: <pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-security.md
 -->

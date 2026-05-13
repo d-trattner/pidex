@@ -26,7 +26,7 @@ Status: PASS
 ## Test Execution
 
 ```bash
-cd /home/daniel/pidex
+cd <pidex-root>
 bash -n install.sh scripts/doctor.sh scripts/smoke-test.sh scripts/delegate/codex.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh scripts/analysis/run-pipeline-analysis.sh scripts/guard-codex-only.sh
 grep -n "provider\|pidex.sqlite\|historical" dashboard/scripts/ingest.py dashboard/scripts/server.py dashboard/public/index.html
 python3 -m py_compile dashboard/scripts/ingest.py dashboard/scripts/server.py

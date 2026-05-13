@@ -196,5 +196,5 @@ verdict: COMPLETE
 route_to: orchestrator
 reason: QA complete — PASS with conditions. 1 CRITICAL (live.tsx TS API lacks 3 data sections vs legacy), 1 MAJOR (misleading fallback check), 3 MINOR, 0 tests. Action items listed.
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/pipelines-quality-live-review-deepseek.md
+context_file: <pidex-root>/agents.output/qa/pipelines-quality-live-review-deepseek.md
 -->

@@ -6,7 +6,7 @@ Status: Active
 ---
 
 ## Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md` (`dashboard-readiness-plan`, `a7533441`)
+- `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md` (`dashboard-readiness-plan`, `a7533441`)
 
 ## Date
 - 2026-05-12
@@ -94,5 +94,5 @@ Status: Active
 verdict: COMPLETE
 route_to: pidex-code-reviewer
 reason: Required validations passed (build + typecheck) with scoped readiness fixes applied.
-context_file: /home/daniel/pidex/agents.output/implementation/dashboard-readiness-implementation.md
+context_file: <pidex-root>/agents.output/implementation/dashboard-readiness-implementation.md
 -->

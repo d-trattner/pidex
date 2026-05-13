@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Append a single event to the pidex history log.
-# File: $PIDEX_STATE_DIR/history.jsonl (default: ~/pidex/state/history.jsonl)
+# File: $PIDEX_STATE_DIR/history.jsonl (default: <pidex-root>/state/history.jsonl)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../.." && pwd -P)

@@ -39,7 +39,11 @@ export function parseSearchParams(search = ''): URLSearchParams {
 
 export async function listProjects(): Promise<Array<{ name: string; path: string }>> {
   return queryRows<{ name: string; path: string }>(
-    'SELECT p.name, p.path FROM projects p ORDER BY p.name COLLATE NOCASE ASC',
+    `SELECT p.name, p.path
+     FROM projects p
+     WHERE p.path NOT LIKE '/tmp/%'
+       AND p.name NOT LIKE '%smoke%'
+     ORDER BY p.name COLLATE NOCASE ASC`,
   );
 }
 
@@ -608,6 +612,20 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
     [...projectFilter.params],
   );
 
+  const timelineRuns = await queryRows<DbRow>(
+    `WITH recent AS (
+       SELECT ar.timestamp, p.name AS project, ar.plan_key, ar.agent, ar.provider, ar.model, ar.route_to, ar.verdict,
+              ar.gate, ar.duration_ms, ar.context_file
+       FROM agent_runs ar LEFT JOIN projects p ON p.id = ar.project_id
+       WHERE ar.timestamp IS NOT NULL
+         AND ar.agent IS NOT NULL
+         ${projectFilter.sql}
+       ORDER BY ar.timestamp DESC LIMIT 240
+     )
+     SELECT * FROM recent ORDER BY timestamp ASC`,
+    [...projectFilter.params],
+  );
+
   const active = (latestRuns || []).filter((row) => {
     const verdict = String(row.verdict || '').toUpperCase();
     return verdict !== 'COMPLETE' && verdict !== 'RELEASED' && verdict !== 'DONE' && verdict !== 'SAVED';
@@ -635,6 +653,7 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
     )
     SELECT project, plan_key, pipeline_id, started_at, timestamp AS last_at, event_type, status,
       actor, message, 'pipeline_events' AS source, 0 AS agent_runs, 0 AS distinct_agents, 0 AS failures, actor AS last_agent,
+      (SELECT ar.context_file FROM agent_runs ar WHERE ar.project_id = ranked.project_id AND ar.plan_key = ranked.plan_key AND ar.context_file IS NOT NULL ORDER BY ar.timestamp DESC LIMIT 1) AS context_file,
       CAST((julianday(COALESCE(timestamp, CURRENT_TIMESTAMP)) - julianday(started_at)) * 86400000 AS INTEGER) AS age_ms
     FROM ranked
     WHERE rn = 1
@@ -661,6 +680,7 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
     SELECT project, plan_key, '' AS pipeline_id, started_at, last_at, '' AS event_type, 'inferred_unresolved' AS status,
       '' AS actor, 'Legacy inference from agent_runs; no pipeline lifecycle event exists.' AS message,
       'agent_runs_inferred' AS source, agent_runs, distinct_agents, failures, last_agent,
+      (SELECT ar.context_file FROM agent_runs ar WHERE ar.project_id = grouped.project_id AND ar.plan_key = grouped.plan_key AND ar.context_file IS NOT NULL ORDER BY ar.timestamp DESC LIMIT 1) AS context_file,
       CAST((julianday(COALESCE(last_at, CURRENT_TIMESTAMP)) - julianday(started_at)) * 86400000 AS INTEGER) AS age_ms
     FROM grouped
     WHERE completed_at IS NULL AND last_at >= datetime('now', '-12 hours')
@@ -691,6 +711,12 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
   );
 
   const runningPipelines = openPipelines.filter((row) => row.source === 'pipeline_events' && row.status === 'running').length;
+  const activeProjects = new Set(
+    openPipelines
+      .filter((row) => row.source === 'pipeline_events' && row.status === 'running')
+      .map((row) => String(row.project || ''))
+      .filter(Boolean),
+  ).size;
   const unresolvedInferred = openPipelines.filter((row) => row.source === 'agent_runs_inferred').length;
   const latest = latestRuns[0] as DbRow | null;
   const pendingGateRows = latestRuns
@@ -709,7 +735,9 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
     status_counts: statusCounts,
     running_agents: active.length,
     running_pipelines: runningPipelines,
+    active_projects: activeProjects,
     open_pipelines: openPipelines as unknown as JsonValue,
+    timeline_runs: timelineRuns as unknown as JsonValue,
     latest_by_agent: latestByAgent as unknown as JsonValue,
     latest_runs: latestRuns as unknown as JsonValue,
     recent_secondary: recentSecondary as unknown as JsonValue,
@@ -721,6 +749,7 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
       last_route: latest?.route_to || null,
       open_pipelines: openPipelines.length,
       running_pipelines: runningPipelines,
+      active_projects: activeProjects,
       unresolved_inferred: unresolvedInferred,
       pending_gate: pendingGateRows.length > 0,
       active_lead: false,

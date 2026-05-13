@@ -7,7 +7,7 @@ Status: UAT Complete
 
 ## UAT Report: Dashboard root routes migration
 
-**Plan Reference**: /home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md
+**Plan Reference**: <pidex-root>/agents.output/planning/dashboard-root-routes-plan.md
 **Date**: 2026-05-12
 **UAT Agent**: pidex-uat
 
@@ -76,5 +76,5 @@ verdict: APPROVED
 route_to: pidex-devops
 reason: Acceptance met; value delivered; predecessor docs pass
 gate: none
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-root-routes-uat.md
+context_file: <pidex-root>/agents.output/uat/dashboard-root-routes-uat.md
 -->

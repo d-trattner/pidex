@@ -75,7 +75,7 @@ Residual SEC-1 note:
 
 ## Automated Checks
 - `node --experimental-strip-types --test dashboard/lib/server/provider-limits-auth.tdd.test.mjs dashboard/lib/server/limits.tdd.test.mjs` — PASS, 6/6.
-- `/home/daniel/running-pi/skills/security-patterns/scripts/check-secrets.sh dashboard/lib/server/provider-limits-auth.ts ... dashboard/package.json` — PASS/no obvious secrets for scoped files.
+- `<running-pi-root>/skills/security-patterns/scripts/check-secrets.sh dashboard/lib/server/provider-limits-auth.ts ... dashboard/package.json` — PASS/no obvious secrets for scoped files.
 - Pattern scan: `dangerouslySetInnerHTML|eval|new Function|innerHTML|child_process|exec|spawn|writeFile|readFile` in `dashboard`. No new scoped XSS/command injection in provider-limits auth/routes. Existing file IO in limits reviewed in prior pass.
 - `python3 -m json.tool dashboard/package.json` — FAIL, malformed JSON.
 

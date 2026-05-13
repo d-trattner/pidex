@@ -6,7 +6,7 @@ Status: QA Complete
 ---
 
 ## Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
 
 ## QA Status
 QA Complete
@@ -42,17 +42,17 @@ pidex-qa
 - Remaining risk low for scoped change.
 
 ## Test Execution Results
-- `cd /home/daniel/pidex/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs` → PASS (5/5).
-- `cd /home/daniel/pidex/dashboard && npm run typecheck` → PASS.
-- `cd /home/daniel/pidex/dashboard && npm run build` → PASS.
-- `cd /home/daniel/pidex/dashboard && ./start.sh --no-build` + curl smoke:
+- `cd <pidex-root>/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs` → PASS (5/5).
+- `cd <pidex-root>/dashboard && npm run typecheck` → PASS.
+- `cd <pidex-root>/dashboard && npm run build` → PASS.
+- `cd <pidex-root>/dashboard && ./start.sh --no-build` + curl smoke:
   - `/dashboard` 200
   - `/live` 200
   - `/overview` 200
   - `/analysis` 200
   - `/limits` 200
-- Design audit final reviewed: `/home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design-audit-final.md` → APPROVED.
-- Browser evidence reviewed: `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-screens/evidence.json` + `ss-2/3/4` captures.
+- Design audit final reviewed: `<pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design-audit-final.md` → APPROVED.
+- Browser evidence reviewed: `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-screens/evidence.json` + `ss-2/3/4` captures.
   - Closed state PASS.
   - Open dialog state PASS (`role=dialog`, `aria-modal=true`, focus on Close).
   - Keyboard trap PASS (`Shift+Tab` wraps to Limits).
@@ -67,5 +67,5 @@ Handing off to pidex-uat for value delivery validation
 <!-- ROUTING
 verdict: COMPLETE
 route_to: pidex-uat
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa-final.md
+context_file: <pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa-final.md
 -->

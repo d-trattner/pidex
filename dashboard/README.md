@@ -5,7 +5,7 @@ Neue Dashboard-Implementierung (`dashboard`) auf TanStack Start mit Routenstrukt
 ## Start
 
 ```bash
-cd /home/daniel/pidex/dashboard
+cd <pidex-root>/dashboard
 npm install
 npm run dev
 ```
@@ -27,7 +27,7 @@ nginx proxies to the dashboard upstream on this host at port `18777`. Start the 
 
 Fallback direct upstream URL for debugging only:
 
-- `http://10.0.0.103:18777/limits`
+- `http://<lan-ip>:18777/limits`
 
 Security note: `--public-read` allows unauthenticated provider-limits `GET` requests so the `/limits` page can render through nginx/LAN. Provider/profile mutation (`POST`) remains token-protected by `PIDEX_PROVIDER_LIMITS_TOKEN` / `PROVIDER_LIMITS_TOKEN` when publicly bound.
 

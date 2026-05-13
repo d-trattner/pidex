@@ -21,7 +21,7 @@ As dashboard user, I want English UI copy + working buttons/interactions, so flo
 3. Keep API contracts, paths, visual style unchanged.
 
 ## Scope and Constraints
-- Scope: `/home/daniel/pidex/dashboard` only.
+- Scope: `<pidex-root>/dashboard` only.
 - Preserve API endpoints + payload contracts.
 - Preserve layout, classes, design language.
 - Slice size: 1-3 files per slice.
@@ -109,9 +109,9 @@ Artifact directory: `.playwright/` (gitignored).
 | Nav pills + analysis open button | English accessible labels | tab focus visible, enter/space activate | load/error text readable | existing contrast preserved, touch targets >=44px where possible | browser capture + manual keyboard pass |
 
 ## Validation Commands
-- `cd /home/daniel/pidex/dashboard && npm run typecheck`
-- `cd /home/daniel/pidex/dashboard && npm run build`
-- `cd /home/daniel/pidex/dashboard && npm run dev` then manual smoke routes.
+- `cd <pidex-root>/dashboard && npm run typecheck`
+- `cd <pidex-root>/dashboard && npm run build`
+- `cd <pidex-root>/dashboard && npm run dev` then manual smoke routes.
 - API sanity (contract preserved): `curl -i http://127.0.0.1:18777/api/analysis`, `.../api/analysis/plans`, `.../api/live`.
 
 ## Testing Strategy
@@ -132,7 +132,7 @@ Artifact directory: `.playwright/` (gitignored).
 |---|---|
 | UI involved | yes |
 | Preview required before G4 | yes |
-| Preview command | `cd /home/daniel/pidex/dashboard && npm run dev` |
+| Preview command | `cd <pidex-root>/dashboard && npm run dev` |
 | Preview URL/port | `http://pi.lan:18777/dashboard` (or `http://10.0.0.103:18777/dashboard`) |
 | Routes/screens to inspect | `/dashboard`, `/dashboard/analysis`, `/dashboard/live`, one additional touched route |
 | Mobile viewport needed | yes |
@@ -151,5 +151,5 @@ Artifact directory: `.playwright/` (gitignored).
 verdict: COMPLETE
 route_to: pidex-critic
 reason: Micro-plan ready with UI contracts, slices, validation, preview, Fallow handling.
-context_file: /home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md
+context_file: <pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md
 -->

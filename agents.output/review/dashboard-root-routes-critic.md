@@ -5,7 +5,7 @@ UUID: 8f3ac1d2
 Status: OPEN
 ---
 
-Plan reference: `/home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md` | ID 3 | UUID 8f3ac1d2  
+Plan reference: `<pidex-root>/agents.output/planning/dashboard-root-routes-plan.md` | ID 3 | UUID 8f3ac1d2  
 Date: 2026-05-12  
 Status: Revision 1
 
@@ -64,5 +64,5 @@ verdict: APPROVED
 route_to: pidex-implementer
 reason: Plan quality sufficient; value, scope, safety declarations clear.
 gate: none
-context_file: /home/daniel/pidex/agents.output/review/dashboard-root-routes-critic.md
+context_file: <pidex-root>/agents.output/review/dashboard-root-routes-critic.md
 -->

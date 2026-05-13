@@ -6,7 +6,7 @@ Status: OPEN
 ---
 
 ## Plan reference
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
 - ID: 3
 - UUID: 7c9a2d4f
 
@@ -73,5 +73,5 @@ verdict: APPROVED
 route_to: pidex-designer
 reason: UI-heavy mobile navigation change; designer pass required by routing rule.
 gate: none
-context_file: /home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-critic.md
+context_file: <pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-critic.md
 -->

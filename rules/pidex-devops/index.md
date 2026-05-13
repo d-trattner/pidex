@@ -20,10 +20,11 @@ Last updated: 2026-05-08 (POST-RELEASE-HYGIENE)
 | G9 Preview Upstream Reachability | [g9-preview-upstream-reachability.md](g9-preview-upstream-reachability.md) | G9-UPSTREAM | Before presenting a LAN/domain G9 URL, prove listener bind, local upstream, LAN upstream, and user-facing domain/proxy reachability |
 | Post-Stage1 UI Preview Before G4 | [post-stage1-ui-preview-before-g4.md](post-stage1-ui-preview-before-g4.md) | UI-PREVIEW | UI-involved work must route to orchestrator G9 preview after Stage 1 local commit and before G4 |
 | Suppress Gate Notifications in Direct Mode | [suppress-gate-in-direct-mode.md](suppress-gate-in-direct-mode.md) | 49-3 | No Telegram/external G4 notifications when orchestrator is in direct interactive terminal session with user |
-| running-pi Install Propagation | [running-pi-install-propagation.md](running-pi-install-propagation.md) | 53-1 | After Stage 1 commit, run `bash ~/running-pi/install.sh` when plan touched any `~/running-pi/` source file; log result in deployment doc |
+| running-pi Install Propagation | [running-pi-install-propagation.md](running-pi-install-propagation.md) | 53-1 | After Stage 1 commit, run `bash <pidex-root>/install.sh` when plan touched any `<pidex-root>/` source file; log result in deployment doc |
 | DevOps Execution Profile Diff Guard | [execution-profile-diff-guard.md](execution-profile-diff-guard.md) | DEVOPS-EXECUTION-PROFILE-DIFF | Final changed-file/profile consistency check before local commit/release when fast paths may skip gates |
 | Prepare-Only Stage Marker | [prepare-only-stage-marker.md](prepare-only-stage-marker.md) | 2 | Stage 1 must carry fixed prepare-only marker; tag/push/publish forbidden until Stage 2 approval |
 | Dirty Tree Triage Report | [dirty-tree-triage-report.md](dirty-tree-triage-report.md) | RELEASE-DIRTY-TREE | Dirty workspaces before Stage 1/2 require include/exclude triage and selective-staging evidence before tag/push |
+| Pre-Hold Sync Gate | [pre-hold-sync-gate.md](pre-hold-sync-gate.md) | 89-3 | Before HOLD-mode handoff/sync, block on unrelated dirty artifacts and require owner map + reconcile plan |
 | QA Status Reconciliation Preflight | [qa-status-reconciliation-preflight.md](qa-status-reconciliation-preflight.md) | DEVOPS-QA-STATUS | Before release/local readiness, verify QA status/evidence/ROUTING align or block for reconciliation |
 
 ## Notes

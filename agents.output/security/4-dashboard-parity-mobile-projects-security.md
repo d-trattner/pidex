@@ -18,7 +18,7 @@ Verdict: BLOCKED_PENDING_REMEDIATION
 - Implementation: `agents.output/implementation/4-dashboard-parity-mobile-projects-implementation.md`
 - Implementation continuation/fixes: listed in brief.
 - Fallow rule: `rules/pidex-security/fallow-structural-signal.md`
-- Global rule path missing: `/home/daniel/running-pi/rules/pidex-security/index.md` ENOENT.
+- Global rule path missing: `<running-pi-root>/rules/pidex-security/index.md` ENOENT.
 - Project-specific security wiki rule: none found.
 - `security-patterns` skill path not found in repo.
 

@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 
 type PipelineRow = {
@@ -44,42 +42,15 @@ function formatNumber(value: unknown): string {
 }
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 function PipelinesPage() {
-  const [rows, setRows] = useState<PipelineRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-
-  useEffect(() => {
-    let mounted = true;
-    const endpoint = withProjectParam('/api/pipelines', project);
-
-    setLoading(true);
-    setError('');
-
-    fetch(endpoint)
-      .then((res) => res.json())
-      .then((payload) => {
-        if (!mounted) return;
-        setRows(Array.isArray(payload) ? (payload as PipelineRow[]) : []);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setRows([]);
-        setError('Pipelines could not be loaded.');
-      })
-      .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [project]);
+  const query = useDashboardQuery<PipelineRow[]>(['pipelines', project], withProjectParam('/api/pipelines', project));
+  const rows = Array.isArray(query.data) ? query.data : [];
+  const loading = query.isLoading;
+  const error = query.isError ? 'Pipelines could not be loaded.' : '';
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>

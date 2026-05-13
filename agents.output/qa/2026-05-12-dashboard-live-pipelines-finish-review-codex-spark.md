@@ -2,7 +2,7 @@
 title: Dashboard Live/Pipelines finish review (codex-spark)
 date: 2026-05-12
 status: PASS
-scope: /home/daniel/pidex/dashboard/routes/_dashboard/{live,pipelines} and /home/daniel/pidex/dashboard/lib/server/api.ts
+scope: <pidex-root>/dashboard/routes/_dashboard/{live,pipelines} and <pidex-root>/dashboard/lib/server/api.ts
 ---
 
 # Dashboard Live/Pipelines Finish Review (codex-spark)
@@ -37,5 +37,5 @@ Implemented remaining fixups for the migrated dashboard pages:
 <!-- ROUTING
 verdict: PASS
 route_to: orchestrator
-context_file: /home/daniel/pidex/agents.output/qa/2026-05-12-dashboard-live-pipelines-finish-review-codex-spark.md
+context_file: <pidex-root>/agents.output/qa/2026-05-12-dashboard-live-pipelines-finish-review-codex-spark.md
 -->

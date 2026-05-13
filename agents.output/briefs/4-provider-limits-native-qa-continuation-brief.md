@@ -2,7 +2,7 @@
 
 Prior QA spawn hit turn limit after creating mostly empty `agents.output/qa/4-provider-limits-native-qa.md`. Finish QA with a tight command set.
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Expected output: overwrite/fill `agents.output/qa/4-provider-limits-native-qa.md`
 
 Required commands/evidence:

@@ -8,12 +8,12 @@ Agent: pidex-devops
 # Dashboard Readiness DevOps
 
 ## Inputs Check
-- Plan read: `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md`
-- QA read: `/home/daniel/pidex/agents.output/qa/dashboard-readiness-qa.md` (QA Complete)
-- UAT read: `/home/daniel/pidex/agents.output/uat/dashboard-readiness-uat.md` (APPROVED FOR RELEASE)
+- Plan read: `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md`
+- QA read: `<pidex-root>/agents.output/qa/dashboard-readiness-qa.md` (QA Complete)
+- UAT read: `<pidex-root>/agents.output/uat/dashboard-readiness-uat.md` (APPROVED FOR RELEASE)
 
 ## Final Verification Re-run
-Run dir: `/home/daniel/pidex/dashboard`
+Run dir: `<pidex-root>/dashboard`
 
 1. `npm run typecheck` → PASS
 2. `npm run build` → PASS
@@ -41,10 +41,10 @@ Git hygiene gate not clean. Ready for controlled release prep, not blind commit.
 ## Pipeline Event
 Emitted analytics event:
 - command: `bash ../scripts/pipeline/event.sh ... --event pipeline_completed ...`
-- output: `/home/daniel/pidex/state/pipeline-events/dashboard/dashboard-dashboard-readiness-plan-20260511T230617Z.jsonl`
+- output: `<pidex-root>/state/pipeline-events/dashboard/dashboard-dashboard-readiness-plan-20260511T230617Z.jsonl`
 
 <!-- ROUTING
 verdict: COMPLETE
 route_to: pidex-retrospective
-context_file: /home/daniel/pidex/agents.output/devops/dashboard-readiness-devops.md
+context_file: <pidex-root>/agents.output/devops/dashboard-readiness-devops.md
 -->

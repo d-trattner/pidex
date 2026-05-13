@@ -50,7 +50,7 @@ Deliver mobile-safe dashboard layout across root pages, improve shared bottom na
 
 ## Source Brief Summary
 
-Brief path: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-brief.md`.
+Brief path: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-brief.md`.
 
 Required outcomes:
 - Preserve `/live`, `/overview`, `/analysis`, `/limits`, current root routes.
@@ -61,13 +61,13 @@ Required outcomes:
 
 ## Roadmap Alignment
 
-Roadmap source missing: `/home/daniel/pidex/agents.output/roadmap/product-roadmap.md` not found. Target release remains TBD. Plan still aligns with product objective implied by dashboard: make operational metrics usable and accurate.
+Roadmap source missing: `<pidex-root>/agents.output/roadmap/product-roadmap.md` not found. Target release remains TBD. Plan still aligns with product objective implied by dashboard: make operational metrics usable and accurate.
 
 ## Scope and Constraints
 
 | Area | In scope | Out of scope / forbidden |
 |---|---|---|
-| Repo scope | `/home/daniel/pidex/dashboard` product files and dashboard-local artifacts | Other pidex repos/directories |
+| Repo scope | `<pidex-root>/dashboard` product files and dashboard-local artifacts | Other pidex repos/directories |
 | Routes | Preserve root routes and dashboard redirect routes | Rename/remove `/live`, `/overview`, `/analysis`, `/limits`, aliases |
 | API | Preserve `/api/provider-limits` path and response/request contract | Breaking contract, auth changes, new API path unless additive alias already exists |
 | Visual style | Improve glass mobile design, spacing, menu affordance | Replace brand/style system wholesale |
@@ -307,7 +307,7 @@ If L1 shows no real records, do not fake data. Surface honest empty/fallback sta
 
 ### Screenshot Matrix
 
-Artifact directory: `/home/daniel/pidex/dashboard/.playwright/` or equivalent ignored project-local Playwright output. Do not store screenshots in `agents.output/`.
+Artifact directory: `<pidex-root>/dashboard/.playwright/` or equivalent ignored project-local Playwright output. Do not store screenshots in `agents.output/`.
 
 | Screenshot ID | Surface/route | Viewport | State | Required evidence | Owner |
 |---|---|---|---|---|---|
@@ -340,7 +340,7 @@ Artifact directory: `/home/daniel/pidex/dashboard/.playwright/` or equivalent ig
 
 **Gate G9**: required — mobile navigation, CSS layout, table overflow, and visible Limits data binding change.
 
-Validation commands from `/home/daniel/pidex/dashboard`:
+Validation commands from `<pidex-root>/dashboard`:
 
 | ID | Command / evidence | Purpose |
 |---|---|---|
@@ -374,7 +374,7 @@ JS/TS scope expected. Code-review/security/QA must run one Fallow structural sig
 |---|---|
 | UI involved | yes |
 | Preview required before G4 | yes |
-| Preview command | `cd /home/daniel/pidex/dashboard && ./start.sh --no-build` after build |
+| Preview command | `cd <pidex-root>/dashboard && ./start.sh --no-build` after build |
 | Preview URL/port | `http://pi.lan:18777/dashboard` plus root pages such as `/live`, `/analysis`, `/limits` |
 | Routes/screens to inspect | `/overview`, `/live`, `/analysis`, `/limits`; mobile menu open/closed; Limits data |
 | Mobile viewport needed | yes — 375×812 or phone browser |
@@ -414,5 +414,5 @@ JS/TS scope expected. Code-review/security/QA must run one Fallow structural sig
 verdict: COMPLETE
 route_to: pidex-critic
 reason: Implementation-ready plan complete; no unresolved open questions.
-context_file: /home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md
+context_file: <pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md
 -->

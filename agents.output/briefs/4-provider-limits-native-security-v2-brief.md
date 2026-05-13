@@ -1,6 +1,6 @@
 # Security v2 brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Prior security review: `agents.output/security/4-provider-limits-native-security.md`
 Security fix implementation: `agents.output/implementation/4-provider-limits-native-security-fix.md`
 Commit: `9558df8 fix(security): gate provider-limits api to local/token and same-origin writes`

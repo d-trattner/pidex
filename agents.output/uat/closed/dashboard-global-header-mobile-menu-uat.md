@@ -8,7 +8,7 @@ Status: UAT Failed
 # UAT Report: Dashboard Global Header Mobile Menu
 
 ## Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
 
 ## Value Statement Under Test
 As dashboard user, I want persistent global header/menu plus mobile always-visible menu button opening sheet, so navigation stays fast/clear on every page and viewport.
@@ -95,5 +95,5 @@ verdict: BLOCKED
 route_to: pidex-designer
 reason: G9 blocked; required designer audit and complete interactive UI evidence missing.
 gate: G3
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-global-header-mobile-menu-uat.md
+context_file: <pidex-root>/agents.output/uat/dashboard-global-header-mobile-menu-uat.md
 -->

@@ -1,6 +1,6 @@
 # Designer brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Critic approval: `agents.output/critic/4-dashboard-parity-mobile-projects-critique-v2.md`
 Expected output: `agents.output/design/4-dashboard-parity-mobile-projects-design.md`

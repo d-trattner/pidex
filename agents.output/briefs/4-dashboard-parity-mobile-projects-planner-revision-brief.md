@@ -1,6 +1,6 @@
 # Planner revision brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan to revise: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Critique: `agents.output/critic/4-dashboard-parity-mobile-projects-critique.md`
 Expected output: update/overwrite `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`

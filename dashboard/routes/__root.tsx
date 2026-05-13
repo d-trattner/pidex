@@ -1,8 +1,19 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 
+import { ShaderBackground } from '../components/background/shader-background';
 import { GlobalHeader, MobileMenuSheet } from '../components/navigation/global-nav';
 
 import '@/styles/theme.css';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 0,
+      retry: 1,
+    },
+  },
+});
 
 export const Route = createRootRoute({
   head: () => ({
@@ -18,11 +29,14 @@ export const Route = createRootRoute({
         <HeadContent />
       </head>
       <body className="h-full">
-        <div className="page-shell">
-          <GlobalHeader />
-          <Outlet />
-        </div>
-        <MobileMenuSheet />
+        <QueryClientProvider client={queryClient}>
+          <ShaderBackground />
+          <div className="page-shell">
+            <GlobalHeader />
+            <Outlet />
+          </div>
+          <MobileMenuSheet />
+        </QueryClientProvider>
         <Scripts />
       </body>
     </html>

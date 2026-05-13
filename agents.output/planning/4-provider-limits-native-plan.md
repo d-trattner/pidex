@@ -11,11 +11,11 @@ Epic: PIDEX-native provider limits
 
 ## Value Statement and Business Objective
 
-As a pidex operator, I want provider-limit collection, API, and dashboard display to use PIDEX-native state, so that Codex and Codex Spark usage appears without `/home/daniel/running-pi` coupling or profile recommendation noise.
+As a pidex operator, I want provider-limit collection, API, and dashboard display to use PIDEX-native state, so that Codex and Codex Spark usage appears without `<running-pi-root>` coupling or profile recommendation noise.
 
 ## Objective
 
-Deliver native provider-limits path in `/home/daniel/pidex`: probe writes concrete records to `state/provider-limits/latest.json`; API returns same records; `/limits` displays `codex` and `codex-spark` rows when data exists. Preserve existing `codex-optimized` and `codex-high` profiles. Remove recommendation behavior from probe, server response, and UI surface.
+Deliver native provider-limits path in `<pidex-root>`: probe writes concrete records to `state/provider-limits/latest.json`; API returns same records; `/limits` displays `codex` and `codex-spark` rows when data exists. Preserve existing `codex-optimized` and `codex-high` profiles. Remove recommendation behavior from probe, server response, and UI surface.
 
 ## Roadmap and Release Alignment
 
@@ -46,7 +46,7 @@ Reason: focused revision touches multiple gates but no migration, multi-repo con
 
 - Do not implement in planner phase.
 - Do not touch unrelated dirty repository state. Implementer must inspect `git status --short` before edits and preserve unrelated changes.
-- Avoid any dependency on `/home/daniel/running-pi`.
+- Avoid any dependency on `<running-pi-root>`.
 - Preserve `config/profiles/codex-optimized.json` and `config/profiles/codex-high.json` semantics and availability.
 - Remove recommendation behavior; no `recommended_profile` guidance in probe/API/UI or profile helper surface.
 - Current recommendation references also exist in profile alias routes and `scripts/profile/recommend.sh`; address or retire them so no active surface recommends profile switches.
@@ -75,7 +75,7 @@ Likely files:
 - `state/provider-limits/latest.json` generated only during validation, not committed unless repo convention requires fixture state
 
 Work package:
-- Discover PIDEX-local Codex/Spark usage source without referencing `/home/daniel/running-pi` at runtime.
+- Discover PIDEX-local Codex/Spark usage source without referencing `<running-pi-root>` at runtime.
 - If legacy behavior needs comparison, use only repository-local artifacts already present; do not call or import external checkout paths.
 - Collect `codex` and `codex-spark` usage into records when source data available.
 - Preserve profiles list and active profile field if currently useful.
@@ -280,7 +280,7 @@ No version bump assumed because target package version already `0.1.0`. If relea
 
 - Start with current file inspection named in brief; do not broaden scope unless references demand it.
 - Keep implementation small. Avoid abstractions beyond probe reader/normalizer needs.
-- Do not add dependency on `/home/daniel/running-pi` or assume it exists.
+- Do not add dependency on `<running-pi-root>` or assume it exists.
 - If provider-state contract proves unknown, route to pidex-analyst with concrete missing source question.
 - Grep evidence found `recommended_profile` in probe, server limits, canonical/underscore profile routes, and `scripts/profile/recommend.sh`; remove active surfaces, ignore historical `agents.output` and `analysis` artifacts.
 

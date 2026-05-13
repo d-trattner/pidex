@@ -40,10 +40,10 @@ Post-retro handoffs: none
 
 ## Assumptions
 - Release line inferred from `dashboard/package.json` version `0.1.0` (roadmap artifact absent in repo).
-- Screenshot Artifact Directory: `/home/daniel/pidex/dashboard/.playwright/` only; must be gitignored.
+- Screenshot Artifact Directory: `<pidex-root>/dashboard/.playwright/` only; must be gitignored.
 
 ## Constraints and Guardrails
-- Scope: `/home/daniel/pidex/dashboard` only.
+- Scope: `<pidex-root>/dashboard` only.
 - Preserve API routes/contracts and top-level content routes.
 - Single nav source-of-truth; no per-page duplicate nav definitions.
 
@@ -113,10 +113,10 @@ Exact files (implementation targets):
 | Sheet close/nav links | accessible text labels | focus enters sheet, exits on close | close state deterministic | WCAG AA | browser check |
 
 ## Validation Commands
-- `cd /home/daniel/pidex/dashboard && npm run typecheck`
-- `cd /home/daniel/pidex/dashboard && npm run build`
-- `cd /home/daniel/pidex/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs`
-- `cd /home/daniel/pidex/dashboard && ./start.sh --no-build`
+- `cd <pidex-root>/dashboard && npm run typecheck`
+- `cd <pidex-root>/dashboard && npm run build`
+- `cd <pidex-root>/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs`
+- `cd <pidex-root>/dashboard && ./start.sh --no-build`
 - Runtime smoke: `/dashboard`, `/live`, `/overview`, `/analysis`.
 - Playwright browser-level smoke AC: desktop 1280x720 + mobile 375x812, 0 console errors, no overlay-blocked primary nav action.
 - JS/TS QA output must state `Fallow` or `FALLOW-SKIP` with reason.
@@ -126,7 +126,7 @@ Exact files (implementation targets):
 |---|---|
 | UI involved | yes |
 | Preview required before G4 | yes |
-| Preview command | `cd /home/daniel/pidex/dashboard && ./start.sh --no-build` |
+| Preview command | `cd <pidex-root>/dashboard && ./start.sh --no-build` |
 | Preview URL/port | `http://pi.lan:18777/dashboard`, `http://pi.lan:18777/live` |
 | Routes/screens to inspect | `/dashboard`, `/live`, `/overview`, `/analysis` |
 | Mobile viewport needed | yes |
@@ -159,5 +159,5 @@ Required. Reason: shared nav surface and mobile interaction changed.
 verdict: COMPLETE
 route_to: pidex-critic
 reason: Micro-plan complete; UI contracts, slices, validations, preview/G9 bound.
-context_file: /home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md
+context_file: <pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md
 -->

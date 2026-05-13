@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -20,6 +20,9 @@ export const DB_PATH = process.env.PIDEX_DASHBOARD_DB
   : path.resolve(DASHBOARD_DIR, 'data', 'pidex.sqlite');
 
 const PYTHON_QUERY = path.resolve(DASHBOARD_DIR, 'lib/server/sqlite-query.py');
+const INGEST_SCRIPT = path.resolve(DASHBOARD_DIR, '../dashboard-old/scripts/ingest.py');
+let lastIngestAt = 0;
+let ingestFailedAt = 0;
 
 export type SqlParams = Array<string | number | boolean | null>;
 
@@ -40,10 +43,36 @@ function normalizeParams(params: SqlParams): string {
   return JSON.stringify(params ?? []);
 }
 
+function refreshDashboardDataIfNeeded(): void {
+  if ((process.env.PIDEX_DASHBOARD_AUTO_INGEST || '1') === '0') return;
+  if (!existsSync(INGEST_SCRIPT)) return;
+  const now = Date.now();
+  if (now - lastIngestAt < 10_000) return;
+  if (ingestFailedAt && now - ingestFailedAt < 60_000) return;
+  try {
+    execFileSync('python3', [
+      INGEST_SCRIPT,
+      '--db',
+      DB_PATH,
+      '--project',
+      path.resolve(DASHBOARD_DIR, '..'),
+    ], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'ignore', 'ignore'],
+      timeout: 20_000,
+    });
+    lastIngestAt = now;
+    ingestFailedAt = 0;
+  } catch {
+    ingestFailedAt = now;
+  }
+}
+
 function runQueryInternal<T>(sql: string, params: SqlParams = []): T {
   if (!sql) {
     return [] as T;
   }
+  refreshDashboardDataIfNeeded();
   if (!existsDb()) {
     return [] as T;
   }

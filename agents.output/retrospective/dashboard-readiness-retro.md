@@ -6,7 +6,7 @@ Status: Active
 ---
 
 ## Plan Reference
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md`
 - ID: `dashboard-readiness-plan`
 - UUID: `a7533441`
 
@@ -37,5 +37,5 @@ verdict: COMPLETE
 route_to: pidex-pi
 reason: Retro complete; process improvements extracted for closure.
 post_retro_handoffs: pidex-planner,pidex-roadmap
-context_file: /home/daniel/pidex/agents.output/retrospective/dashboard-readiness-retro.md
+context_file: <pidex-root>/agents.output/retrospective/dashboard-readiness-retro.md
 -->

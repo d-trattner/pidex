@@ -53,7 +53,7 @@ None.
 - **File/line**: `scripts/provider-limits/probe.py:42-60`
 - **Description**: `latest_snapshot()` only reads existing `state/provider-limits/latest.json`; if absent/invalid, it writes `records: []`. No PIDEX-local source discovery, parsing, or record construction exists. Plan objective requires native probe path producing records for available Codex providers and `codex`/`codex-spark` visibility when data exists.
 - **Impact**: Core value can pass with empty state forever. `/limits` and API can only display rows if another process manually pre-populates state. QA cannot validate native collection path from this implementation.
-- **Recommendation**: Add minimal PIDEX-local record source reader or explicit supported source contract. Add fixture/seed test proving `latest_snapshot()` emits/preserves `codex` and `codex-spark` records from that source without `/home/daniel/running-pi` coupling.
+- **Recommendation**: Add minimal PIDEX-local record source reader or explicit supported source contract. Add fixture/seed test proving `latest_snapshot()` emits/preserves `codex` and `codex-spark` records from that source without `<running-pi-root>` coupling.
 
 ### Minor
 

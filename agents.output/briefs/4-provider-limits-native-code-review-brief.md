@@ -1,6 +1,6 @@
 # Code review brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-provider-limits-native-plan.md`
 Implementation: `agents.output/implementation/4-provider-limits-native-implementation.md`
 Expected output: `agents.output/code-review/4-provider-limits-native-code-review.md`
@@ -16,6 +16,6 @@ Review only the intended implementation changes for PIDEX-native provider limits
 - `dashboard/routes/limits.tsx`
 - any directly related provider-limits API files.
 
-Check correctness, maintainability, tests, no recommendation behavior, no `/home/daniel/running-pi` dependency, codex/codex-spark visibility when records are present, and preservation of profiles.
+Check correctness, maintainability, tests, no recommendation behavior, no `<running-pi-root>` dependency, codex/codex-spark visibility when records are present, and preservation of profiles.
 
 Do not implement changes. ROUTING must include `context_file: agents.output/code-review/4-provider-limits-native-code-review.md`.

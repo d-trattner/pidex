@@ -6,10 +6,10 @@ Status: Approved
 ---
 
 # Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md` (ID 3, UUID 7c9a2d4f)
+- `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md` (ID 3, UUID 7c9a2d4f)
 
 # Implementation reference
-- `/home/daniel/pidex/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
+- `<pidex-root>/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
 
 # Date
 - 2026-05-12
@@ -62,7 +62,7 @@ Rejection fixes verified. Focus trap added in mobile sheet. Duplicate route-leve
 | `ui-heavy` | UI component + route + tests | none invalidated | pass |
 
 ## Fallow Evidence
-- Command: `cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
+- Command: `cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
 - Outcome: PASS_WITH_FINDINGS
 - Review impact: non-blocking; findings pre-existing outside scoped fix.
 
@@ -88,5 +88,5 @@ Route to pidex-security.
 verdict: APPROVED
 route_to: pidex-security
 reason: Re-review pass; focus trap and duplicate nav ownership fixes verified.
-context_file: /home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-code-review-final.md
+context_file: <pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-code-review-final.md
 -->

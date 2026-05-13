@@ -15,9 +15,9 @@ Verdict: APPROVED_WITH_CONTROLS
 - Brief: `agents.output/briefs/4-dashboard-parity-mobile-projects-security-v2-brief.md`.
 - Prior security: `agents.output/security/4-dashboard-parity-mobile-projects-security.md`.
 - Security fix doc: `agents.output/implementation/4-dashboard-parity-mobile-projects-security-fix.md`.
-- Global rule path missing: `/home/daniel/running-pi/rules/pidex-security/index.md` ENOENT.
+- Global rule path missing: `<running-pi-root>/rules/pidex-security/index.md` ENOENT.
 - Project security wiki rule: none found.
-- Skill loaded: `/home/daniel/running-claude/skills/security-patterns/SKILL.md`, JS reference.
+- Skill loaded: `<home>/running-claude/skills/security-patterns/SKILL.md`, JS reference.
 
 ## Mode
 - Targeted Code Review. Pipeline second pass. No clarification gate.

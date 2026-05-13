@@ -1585,7 +1585,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			`First read the orchestration skill at ${SKILL_PATH}.`,
 			"Use direct mode. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
 			"Use the pidex_agent tool for specialist handoffs. Keep project artifacts under agents.output/ and agents.wiki.<project>/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
-			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/pidex/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
+			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			authPreflight.ok
 				? "Delegate auth preflight passed for configured non-Pi providers."
 				: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
@@ -1615,7 +1615,7 @@ export default function runningPi(pi: ExtensionAPI) {
 		promptSnippet: "Run a bundled pidex-* specialist agent using pidex provider routing from config/agents.json.",
 		promptGuidelines: [
 			"Use pidex_agent for pidex specialist handoffs such as pidex-planner, pidex-critic, pidex-implementer, pidex-code-reviewer, pidex-qa, pidex-uat, pidex-devops, pidex-retrospective, and pidex-pi.",
-			"pidex_agent automatically honors /home/daniel/pidex/config/agents.json unless provider/model/effort are explicitly overridden.",
+			"pidex_agent automatically honors <pidex-root>/config/agents.json unless provider/model/effort are explicitly overridden.",
 			"parallel_secondary entries in config/agents.json are orchestrator-owned: pidex_agent does not spawn nested agents. The orchestrator must launch primary and secondary lanes as separate visible pidex_agent calls with explicit provider/model overrides and unique expected output paths.",
 			"When using pidex_agent, pass complete context in the task, including project cwd, current epic, relevant agents.output paths, expected output file, and required ROUTING behavior. The final ROUTING block must include context_file, not doc. route_to may be an pidex-* agent, user, or orchestrator for deterministic internal follow-up.",
 			"For JS/TS security or QA handoffs, remind pidex-security/pidex-qa to run the relevant Fallow gate or document FALLOW-SKIP.",

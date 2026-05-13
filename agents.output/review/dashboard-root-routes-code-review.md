@@ -6,10 +6,10 @@ Status: Approved
 ---
 
 # Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md` (ID 3, UUID 8f3ac1d2)
+- `<pidex-root>/agents.output/planning/dashboard-root-routes-plan.md` (ID 3, UUID 8f3ac1d2)
 
 # Implementation reference
-- `/home/daniel/pidex/agents.output/implementation/dashboard-root-routes-implementation.md`
+- `<pidex-root>/agents.output/implementation/dashboard-root-routes-implementation.md`
 
 # Date
 - 2026-05-12
@@ -102,5 +102,5 @@ Route to pidex-security.
 verdict: APPROVED
 route_to: pidex-security
 reason: Route migration complete; quality gate pass; send default security gate
-context_file: /home/daniel/pidex/agents.output/review/dashboard-root-routes-code-review.md
+context_file: <pidex-root>/agents.output/review/dashboard-root-routes-code-review.md
 -->

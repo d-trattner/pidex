@@ -1,6 +1,6 @@
 # PI brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Retrospective: `agents.output/retrospective/4-provider-limits-native-retrospective.md`
 Expected output: `agents.output/pi/4-provider-limits-native-pi.md`
 

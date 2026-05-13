@@ -1,6 +1,6 @@
 # Implementer security fix brief
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Security review: `agents.output/security/4-dashboard-parity-mobile-projects-security.md`
 Expected output: `agents.output/implementation/4-dashboard-parity-mobile-projects-security-fix.md`
 

@@ -1,6 +1,6 @@
 # UAT brief: G9 fix2 mobile Quality
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 QA: `agents.output/qa/4-dashboard-parity-mobile-projects-g9-fix2-qa.md`
 Code review: `agents.output/code-review/4-dashboard-parity-mobile-projects-g9-fix2-code-review.md`
 Expected output: `agents.output/uat/4-dashboard-parity-mobile-projects-g9-fix2-uat.md`

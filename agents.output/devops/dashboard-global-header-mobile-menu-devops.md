@@ -1,9 +1,9 @@
 # DevOps Finalization — dashboard-global-header-mobile-menu
 
 ## Inputs
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
-- QA final: `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa-final.md`
-- UAT final: `/home/daniel/pidex/agents.output/uat/dashboard-global-header-mobile-menu-uat-final.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
+- QA final: `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa-final.md`
+- UAT final: `<pidex-root>/agents.output/uat/dashboard-global-header-mobile-menu-uat-final.md`
 
 ## Verification Runs
 - `node --test tests/dashboard-copy-and-interactions.test.mjs` → pass (5/5, 0 fail)
@@ -29,11 +29,11 @@
 
 ## Pipeline Event
 - Emitted `pipeline_completed` via `../scripts/pipeline/event.sh`
-- Event file: `/home/daniel/pidex/state/pipeline-events/dashboard/dashboard-dashboard-global-header-mobile-menu-20260512T095845Z.jsonl`
+- Event file: `<pidex-root>/state/pipeline-events/dashboard/dashboard-dashboard-global-header-mobile-menu-20260512T095845Z.jsonl`
 - Pipeline id: `dashboard-dashboard-global-header-mobile-menu-20260512T095845Z`
 
 <!-- ROUTING
 verdict: COMPLETE
 route_to: orchestrator
-context_file: /home/daniel/pidex/agents.output/devops/dashboard-global-header-mobile-menu-devops.md
+context_file: <pidex-root>/agents.output/devops/dashboard-global-header-mobile-menu-devops.md
 -->

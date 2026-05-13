@@ -1,13 +1,13 @@
 ---
 ID: dashboard-mobile-design-limits
-Origin: /home/daniel/pidex/state/runs/home-daniel-pidex-dashboard/2026-05-12T13-10-10-608Z_pidex-uat_3446827_788fc341/pidex-uat.task.md
+Origin: <pidex-root>/state/runs/home-daniel-pidex-dashboard/2026-05-12T13-10-10-608Z_pidex-uat_3446827_788fc341/pidex-uat.task.md
 UUID: pending
 Status: UAT Complete
 ---
 
 ## UAT Report: dashboard-mobile-design-limits
 
-**Plan Reference**: /home/daniel/pidex/state/runs/home-daniel-pidex-dashboard/2026-05-12T13-10-10-608Z_pidex-uat_3446827_788fc341/pidex-uat.task.md
+**Plan Reference**: <pidex-root>/state/runs/home-daniel-pidex-dashboard/2026-05-12T13-10-10-608Z_pidex-uat_3446827_788fc341/pidex-uat.task.md
 **Date**: 2026-05-12
 **UAT Agent**: pidex-uat
 
@@ -53,5 +53,5 @@ Routes/screens: mobile dashboard, nav/menu, table overflow, Limits view
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-devops
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-mobile-design-limits-uat.md
+context_file: <pidex-root>/agents.output/uat/dashboard-mobile-design-limits-uat.md
 -->

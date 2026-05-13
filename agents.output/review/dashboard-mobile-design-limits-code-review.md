@@ -9,13 +9,13 @@ Status: Rejected
 
 ## Plan reference
 
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 - ID: `dashboard-mobile-design-limits-plan`
 - UUID: `eec388ea`
 
 ## Implementation reference
 
-- Path: `/home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
+- Path: `<pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
 
 ## Date
 
@@ -139,5 +139,5 @@ Return to pidex-implementer. Fix focus-return transition. Re-run `node --test te
 verdict: REJECTED
 route_to: pidex-implementer
 reason: Mobile sheet focus-return effect autofocuses bottom Menu on initial page load; fix before security/QA.
-context_file: /home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-code-review.md
+context_file: <pidex-root>/agents.output/review/dashboard-mobile-design-limits-code-review.md
 -->

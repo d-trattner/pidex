@@ -1,6 +1,6 @@
 # UAT brief
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 QA: `agents.output/qa/4-dashboard-parity-mobile-projects-qa.md`
 Security: `agents.output/security/4-dashboard-parity-mobile-projects-security-v3.md`

@@ -5,7 +5,7 @@ This folder contains small, deterministic migration tooling for bootstrap and re
 ## Baseline (JUNK16)
 
 ```bash
-bash scripts/migration/replay-running-pi-to-pidex.sh baseline --source /home/daniel/running-pi --target /home/daniel/pidex
+bash scripts/migration/replay-running-pi-to-pidex.sh baseline --source <running-pi-root> --target <pidex-root>
 ```
 
 Generates `analysis/scope-baseline.md` with:

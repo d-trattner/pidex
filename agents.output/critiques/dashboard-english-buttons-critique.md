@@ -6,7 +6,7 @@ Status: OPEN
 ---
 
 ## Plan reference
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md`
 - ID: 2
 - UUID: b7c41e9a
 

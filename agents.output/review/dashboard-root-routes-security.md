@@ -7,11 +7,11 @@ Verdict: APPROVED
 ---
 
 # Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-root-routes-plan.md`
 
 # Inputs
-- `/home/daniel/pidex/agents.output/implementation/dashboard-root-routes-implementation.md`
-- `/home/daniel/pidex/agents.output/review/dashboard-root-routes-code-review.md`
+- `<pidex-root>/agents.output/implementation/dashboard-root-routes-implementation.md`
+- `<pidex-root>/agents.output/review/dashboard-root-routes-code-review.md`
 
 # Mode
 - Targeted Code Review (pipeline default)
@@ -57,5 +57,5 @@ Security assessment:
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-qa
-context_file: /home/daniel/pidex/agents.output/review/dashboard-root-routes-security.md
+context_file: <pidex-root>/agents.output/review/dashboard-root-routes-security.md
 -->

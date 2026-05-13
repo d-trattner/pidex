@@ -1,6 +1,6 @@
 # Retrospective brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Devops: `agents.output/devops/4-dashboard-parity-mobile-projects-devops.md`
 Security docs: `agents.output/security/4-dashboard-parity-mobile-projects-security.md`, `agents.output/security/4-dashboard-parity-mobile-projects-security-v3.md`

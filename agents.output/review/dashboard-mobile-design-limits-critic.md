@@ -9,7 +9,7 @@ Status: OPEN
 
 ## Plan Reference
 
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 - ID: `dashboard-mobile-design-limits-plan`
 - UUID: `eec388ea`
 - Date: 2026-05-12
@@ -110,5 +110,5 @@ verdict: APPROVED_WITH_COMMENTS
 route_to: pidex-designer
 reason: UI-heavy mobile plan implementable; designer review needed before implementation; low notes deferred.
 gate: none
-context_file: /home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-critic.md
+context_file: <pidex-root>/agents.output/review/dashboard-mobile-design-limits-critic.md
 -->

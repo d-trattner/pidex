@@ -4,7 +4,7 @@
   "description": "PIDEX codex-optimized profile: GPT-5.5 for thinking/review/design agents, Codex 5.3 for implementation, Codex Spark for lightweight QA/UAT/devops/governance.",
   "defaults": {
     "provider": "pi",
-    "model": "openai-codex/gpt-5.3-codex",
+    "model": "openai-codex/gpt-5.5",
     "timeout_seconds": 300
   },
   "agents": {

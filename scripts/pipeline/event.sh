@@ -63,11 +63,11 @@ if [ -z "$EVENT" ]; then
   exit 2
 fi
 
-python3 - "$STATE_DIR" "$PROJECT" "$PROJECT_SLUG" "$PIPELINE_ID" "$PLAN" "$EVENT" "$STATUS" "$ACTOR" "$MESSAGE" "$SOURCE" "$METADATA_JSON" <<'PY'
-import datetime, json, os, re, sys
+python3 - "$ROOT" "$STATE_DIR" "$PROJECT" "$PROJECT_SLUG" "$PIPELINE_ID" "$PLAN" "$EVENT" "$STATUS" "$ACTOR" "$MESSAGE" "$SOURCE" "$METADATA_JSON" <<'PY'
+import datetime, json, os, re, subprocess, sys
 from pathlib import Path
 
-(state_dir, project, project_slug, pipeline_id, plan, event, status, actor, message, source, metadata_json) = sys.argv[1:12]
+(root, state_dir, project, project_slug, pipeline_id, plan, event, status, actor, message, source, metadata_json) = sys.argv[1:13]
 
 def slug(value: str) -> str:
     value = re.sub(r'[^a-zA-Z0-9._-]+', '-', value).strip('-')
@@ -153,4 +153,23 @@ if event in terminal_events and current_file.exists():
         pass
 
 print(f'{out_path} pipeline_id={pipeline_id}')
+
+auto_pdq_disabled = os.environ.get('PIDEX_AUTO_PDQ', '1').lower() in {'0', 'false', 'no', 'off'}
+if event in terminal_events and not auto_pdq_disabled:
+    script = Path(root) / 'scripts' / 'quality' / 'run-auto-pdq.py'
+    if script.exists():
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(script), '--project', project_path, '--plan', plan_key, '--pipeline-id', pipeline_id, '--terminal-event', event],
+                cwd=str(root),
+                text=True,
+                capture_output=True,
+                timeout=int(os.environ.get('PIDEX_AUTO_PDQ_TIMEOUT_SECONDS', '120')),
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                print(proc.stdout.strip())
+            elif proc.returncode != 0:
+                print(f'auto_pdq failed exit={proc.returncode}: {(proc.stderr or proc.stdout).strip()}', file=sys.stderr)
+        except Exception as exc:
+            print(f'auto_pdq failed: {exc}', file=sys.stderr)
 PY

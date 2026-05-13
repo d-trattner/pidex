@@ -1,12 +1,12 @@
 # Planner brief: PIDEX-native provider limits
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan id: `4`
 Slug: `provider-limits-native`
 Mode: direct pidex orchestrator.
 
 Confirmed epic:
-Implement PIDEX-native provider-limits collection in `/home/daniel/pidex`. Replace/adapt the current minimal `scripts/provider-limits/probe.py` so it probes Codex and Codex Spark usage directly into `/home/daniel/pidex/state/provider-limits/latest.json`, without depending on `/home/daniel/running-pi`. Preserve `config/profiles/codex-optimized.json` and `config/profiles/codex-high.json`, remove recommendation behavior, and ensure `/api/provider-limits` and `/limits` show real `codex` / `codex-spark` rows when data is available. Acceptance: probe output contains records, API returns those records, `/limits` UI displays them, and build/typecheck/tests pass.
+Implement PIDEX-native provider-limits collection in `<pidex-root>`. Replace/adapt the current minimal `scripts/provider-limits/probe.py` so it probes Codex and Codex Spark usage directly into `<pidex-root>/state/provider-limits/latest.json`, without depending on `<running-pi-root>`. Preserve `config/profiles/codex-optimized.json` and `config/profiles/codex-high.json`, remove recommendation behavior, and ensure `/api/provider-limits` and `/limits` show real `codex` / `codex-spark` rows when data is available. Acceptance: probe output contains records, API returns those records, `/limits` UI displays them, and build/typecheck/tests pass.
 
 Initial reconnaissance:
 - `scripts/provider-limits/probe.py` is currently a minimal helper that returns profiles, active_profile, records (often empty), and recommended_profile.
@@ -16,7 +16,7 @@ Initial reconnaissance:
 - Profiles to preserve: `config/profiles/codex-optimized.json`, `config/profiles/codex-high.json`.
 
 Constraints:
-- No dependency on `/home/daniel/running-pi`.
+- No dependency on `<running-pi-root>`.
 - Preserve codex-optimized/codex-high profiles.
 - Remove recommendation behavior: do not recommend switching profiles; active profile selection may remain.
 - Make real rows appear for `codex` and `codex-spark` when data is available.

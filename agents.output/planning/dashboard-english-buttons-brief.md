@@ -1,6 +1,6 @@
 # PIDEX Dashboard English + Buttons Brief
 
-Project cwd: `/home/daniel/pidex/dashboard`
+Project cwd: `<pidex-root>/dashboard`
 User request: two next-epic items:
 1. Change dashboard UI language/copy to English.
 2. Fix non-working buttons/interactions across the dashboard.
@@ -26,6 +26,6 @@ Required validation:
 - Document any Playwright/Fallow skip or evidence.
 
 Expected artifacts:
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-english-buttons-implementation.md`
-- QA: `/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-qa.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-english-buttons-implementation.md`
+- QA: `<pidex-root>/agents.output/qa/dashboard-english-buttons-qa.md`

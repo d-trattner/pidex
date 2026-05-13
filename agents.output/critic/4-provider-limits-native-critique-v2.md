@@ -29,7 +29,7 @@ No unresolved open questions. `Open Questions` says none blocking.
 
 ## Scope Assessment
 
-Scope remains fit: probe, API normalization/routes, `/limits` display, profile preservation, validation. No feature drift. No external `/home/daniel/running-pi` runtime coupling allowed.
+Scope remains fit: probe, API normalization/routes, `/limits` display, profile preservation, validation. No feature drift. No external `<running-pi-root>` runtime coupling allowed.
 
 Implementation discovery risk remains bounded by analyst escape: if provider-state contract unknown, route to pidex-analyst with concrete missing-source question.
 

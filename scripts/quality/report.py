@@ -34,7 +34,7 @@ OPERATOR_TYPES = {
 
 
 def utc_now_slug() -> str:
-    return dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def safe_slug(value: str) -> str:
@@ -423,8 +423,9 @@ def main() -> int:
     report = {"generated_at": generated, "project_path": str(project), "review_mode": "since-last-review" if args.since_last_review else "manual", "summary": summary}
 
     stamp = utc_now_slug()
-    json_out = Path(args.json_out) if args.json_out else ROOT / "state" / "quality" / f"pdq-{stamp}.json"
-    md_out = Path(args.md_out) if args.md_out else ROOT / "agents.output" / "quality" / f"pdq-{stamp}.md"
+    project_slug = safe_slug(str(project))
+    json_out = Path(args.json_out) if args.json_out else ROOT / "state" / "quality" / f"pdq-{project_slug}-{stamp}.json"
+    md_out = Path(args.md_out) if args.md_out else ROOT / "agents.output" / "quality" / f"pdq-{project_slug}-{stamp}.md"
     json_out.parent.mkdir(parents=True, exist_ok=True)
     json_out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     write_markdown(report, md_out)

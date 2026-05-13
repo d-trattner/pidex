@@ -21,7 +21,7 @@ As PIDEX operator, I want dashboard build + typecheck + API handlers stable with
 4. Preserve legacy API contract/path parity used by old UI.
 
 ## Scope and Constraints
-- In-scope: `/home/daniel/pidex/dashboard` only, except minimal doc/script note if strictly required.
+- In-scope: `<pidex-root>/dashboard` only, except minimal doc/script note if strictly required.
 - Preserve API contracts:
   - `/api/analysis`
   - `/api/analysis/plans`
@@ -34,7 +34,7 @@ As PIDEX operator, I want dashboard build + typecheck + API handlers stable with
 - No implementation code in this plan.
 
 ## Inputs Reviewed
-1. `/home/daniel/pidex/agents.output/planning/dashboard-readiness-brief.md`
+1. `<pidex-root>/agents.output/planning/dashboard-readiness-brief.md`
 2. `dashboard/package.json`, `dashboard/vite.config.ts`, `dashboard/app/router.tsx`, `dashboard/tsconfig.json`
 3. Current `npm run typecheck` failure log (dashboard)
 4. Legacy parity references: `dashboard-old/scripts/server.py`, `dashboard-old/public/index.html`
@@ -112,7 +112,7 @@ Lane D — Legacy parity + release artifact (2 files)
 3. If fallback/default behavior differs from `dashboard-old/scripts/server.py`, document delta before merge.
 
 ## Validation Commands
-Run from `/home/daniel/pidex/dashboard`:
+Run from `<pidex-root>/dashboard`:
 1. `npm ci`
 2. `npm run build` (must generate/resolve route tree; no `./routeTree.gen` failure)
 3. `npm run typecheck`
@@ -153,5 +153,5 @@ Run from `/home/daniel/pidex/dashboard`:
 verdict: COMPLETE
 route_to: pidex-critic
 reason: Plan complete, scoped smallest readiness fixes, open-question check closed.
-context_file: /home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md
+context_file: <pidex-root>/agents.output/planning/dashboard-readiness-plan.md
 -->

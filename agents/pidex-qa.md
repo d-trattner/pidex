@@ -10,7 +10,7 @@ color: yellow
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-qa/index.md` to load active process rules.
+At task start, read `<pidex-root>/rules/pidex-qa/index.md` to load active process rules.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-qa.md`, read that too for project-specific rules.
 
 # Purpose
@@ -50,7 +50,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1,
 
 Rationale: Two pidex-qa spawns in Plan 24 ran 30+ min of Playwright but produced no QA doc — budget exhausted before Write ever occurred. Skeleton must exist on disk before any Playwright call so partial results survive budget exhaustion.
 
-**Phase 1 sequencing gate (PROC-NEW-3 — MANDATORY)**: → See `~/running-pi/rules/pidex-qa/phase1-sequencing-gate.md`
+**Phase 1 sequencing gate (PROC-NEW-3 — MANDATORY)**: → See `<pidex-root>/rules/pidex-qa/phase1-sequencing-gate.md`
 
 # Core Responsibilities
 
@@ -119,15 +119,15 @@ Before approving any implementation, verify against The Iron Laws:
 
 # Runtime Smoke Verification
 
-→ See `~/running-pi/rules/pidex-qa/runtime-smoke.md` for full steps, proxy-path rule, and scope gate table.
+→ See `<pidex-root>/rules/pidex-qa/runtime-smoke.md` for full steps, proxy-path rule, and scope gate table.
 
 **Required when plan touches**: HTTP routes, build tooling, cwd-dependent code, network-facing listeners, or path resolution. Skip only for pure in-module refactors, docs-only, or test-only changes.
 
 # Browser-Level Smoke (MANDATORY for UI plans)
 
-→ See `~/running-pi/rules/pidex-qa/browser-level-smoke.md`.
+→ See `<pidex-root>/rules/pidex-qa/browser-level-smoke.md`.
 
-For Playwright MCP budget exhaustion, follow `~/running-pi/rules/pidex-qa/browser-stall-fallback.md` exactly.
+For Playwright MCP budget exhaustion, follow `<pidex-root>/rules/pidex-qa/browser-stall-fallback.md` exactly.
 
 # Heartbeat (MANDATORY when running vitest inline)
 
@@ -201,7 +201,7 @@ echo "$(date +%s) vitest-done" >> "$HEARTBEAT"
 3. Identify code changes; inventory test coverage
 4. Map code changes to test cases; identify gaps
 5. Execute test suites (unit, integration, e2e); capture outputs
-6. Validate version artifacts: `package.json`, `CHANGELOG.md`, `README.md` (if applicable). → See `~/running-pi/rules/pidex-qa/version-coherence-gate.md` before `QA Complete`.
+6. Validate version artifacts: `package.json`, `CHANGELOG.md`, `README.md` (if applicable). → See `<pidex-root>/rules/pidex-qa/version-coherence-gate.md` before `QA Complete`.
 7. Critically assess effectiveness: validate real workflows, realistic edge cases, integration points; would users still hit bugs?
 8. Manual validation if tests seem superficial
 9. Update QA doc with comprehensive evidence

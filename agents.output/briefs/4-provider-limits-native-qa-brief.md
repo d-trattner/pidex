@@ -1,6 +1,6 @@
 # QA brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-provider-limits-native-plan.md`
 Implementation docs:
 - `agents.output/implementation/4-provider-limits-native-implementation.md`

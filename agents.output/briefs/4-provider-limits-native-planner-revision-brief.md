@@ -1,6 +1,6 @@
 # Planner revision brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan to revise: `agents.output/planning/4-provider-limits-native-plan.md`
 Critique: `agents.output/critic/4-provider-limits-native-critique.md`
 

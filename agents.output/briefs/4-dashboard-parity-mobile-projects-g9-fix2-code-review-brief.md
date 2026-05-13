@@ -1,6 +1,6 @@
 # Code review brief: G9 fix2
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Fix2: `agents.output/implementation/4-dashboard-parity-mobile-projects-g9-fix2.md`
 Prior rejection: `agents.output/code-review/4-dashboard-parity-mobile-projects-g9-fix-code-review.md`
 Expected output: `agents.output/code-review/4-dashboard-parity-mobile-projects-g9-fix2-code-review.md`

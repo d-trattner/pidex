@@ -9,9 +9,9 @@ Status: Complete
 Finalize root route migration release-readiness check.
 
 ## Inputs Reviewed
-- `/home/daniel/pidex/agents.output/implementation/dashboard-root-routes-implementation.md`
-- `/home/daniel/pidex/agents.output/qa/dashboard-root-routes-qa.md`
-- `/home/daniel/pidex/agents.output/uat/dashboard-root-routes-uat.md`
+- `<pidex-root>/agents.output/implementation/dashboard-root-routes-implementation.md`
+- `<pidex-root>/agents.output/qa/dashboard-root-routes-qa.md`
+- `<pidex-root>/agents.output/uat/dashboard-root-routes-uat.md`
 
 ## UAT/QA Gate
 - UAT: `APPROVED FOR RELEASE`
@@ -43,7 +43,7 @@ Validation:
 ## Pipeline Event
 - Emitted: `pipeline_completed`
 - Command: `bash scripts/pipeline/event.sh --plan 3 --event pipeline_completed --status completed --actor pidex-devops ...`
-- Output: `/home/daniel/pidex/state/pipeline-events/pidex/pidex-plan-003-20260512T071906Z.jsonl`
+- Output: `<pidex-root>/state/pipeline-events/pidex/pidex-plan-003-20260512T071906Z.jsonl`
 
 ## Verdict
 Complete. Release-readiness verification tasks done. No git commit performed due broad dirty tree.
@@ -51,5 +51,5 @@ Complete. Release-readiness verification tasks done. No git commit performed due
 <!-- ROUTING
 verdict: COMPLETE
 route_to: orchestrator
-context_file: /home/daniel/pidex/agents.output/devops/dashboard-root-routes-devops.md
+context_file: <pidex-root>/agents.output/devops/dashboard-root-routes-devops.md
 -->

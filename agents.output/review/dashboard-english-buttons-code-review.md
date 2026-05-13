@@ -6,10 +6,10 @@ Status: In Review
 ---
 
 # Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md` (ID 2, UUID b7c41e9a)
+- `<pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md` (ID 2, UUID b7c41e9a)
 
 # Implementation reference
-- `/home/daniel/pidex/agents.output/implementation/dashboard-english-buttons-implementation.md`
+- `<pidex-root>/agents.output/implementation/dashboard-english-buttons-implementation.md`
 
 # Date
 - 2026-05-12
@@ -70,7 +70,7 @@ Scope match plan: dashboard-only UI copy + root navigation entry fix. Build/type
 | ui-heavy, skipped agents: none | UI/frontend product files + one test + plan status edit | none | PASS (within profile) |
 
 ## Fallow Evidence
-- Command: `cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
+- Command: `cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
 - Outcome: PASS_WITH_FINDINGS (pre-existing complexity/duplication hotspots; no new blocker tied to this scoped copy/interaction change).
 - Review impact: non-blocking for this plan scope.
 
@@ -96,5 +96,5 @@ Route pidex-security.
 verdict: APPROVED
 route_to: pidex-security
 reason: Scope met, validations green, full pipeline profile keeps security gate.
-context_file: /home/daniel/pidex/agents.output/review/dashboard-english-buttons-code-review.md
+context_file: <pidex-root>/agents.output/review/dashboard-english-buttons-code-review.md
 -->

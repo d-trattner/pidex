@@ -35,6 +35,10 @@ function isPublicReadEnabled(): boolean {
   return envFlag('PIDEX_PROVIDER_LIMITS_PUBLIC_READ');
 }
 
+function isPublicWriteEnabled(): boolean {
+  return envFlag('PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE');
+}
+
 function isSameOrigin(requestUrl: URL, origin: string): boolean {
   try {
     const originUrl = new URL(origin);
@@ -52,12 +56,13 @@ export function authorizeProviderLimitsRequest(request: Request, options: { meth
   const requiresToken = isPublicBindEnabled() || !isLocal;
 
   const method = options.method.toUpperCase();
-  if (requiresToken && !hasValidToken(request) && !(method === 'GET' && isPublicReadEnabled())) {
+  const origin = request.headers.get('origin');
+  const sameOriginWriteAllowed = method !== 'GET' && isPublicWriteEnabled() && origin && isSameOrigin(requestUrl, origin);
+  if (requiresToken && !hasValidToken(request) && !(method === 'GET' && isPublicReadEnabled()) && !sameOriginWriteAllowed) {
     return { allowed: false, status: 403, error: 'provider-limits access denied' };
   }
 
   if (method !== 'GET') {
-    const origin = request.headers.get('origin');
     if (origin && !isSameOrigin(requestUrl, origin)) {
       return { allowed: false, status: 403, error: 'cross-origin provider-limits write denied' };
     }

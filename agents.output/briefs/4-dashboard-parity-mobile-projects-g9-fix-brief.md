@@ -1,6 +1,6 @@
 # Implementer G9 fix brief
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 QA: `agents.output/qa/4-dashboard-parity-mobile-projects-qa.md`
 UAT: `agents.output/uat/4-dashboard-parity-mobile-projects-uat.md`

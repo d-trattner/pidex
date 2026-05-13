@@ -1,6 +1,6 @@
 ---
 ID: dashboard-mobile-pilan
-Origin: /home/daniel/pidex/agents.output/planning/dashboard-mobile-pilan-brief.md
+Origin: <pidex-root>/agents.output/planning/dashboard-mobile-pilan-brief.md
 UUID: dashboard-mobile-pilan-20260512
 Status: QA Complete
 ---
@@ -55,14 +55,14 @@ Status: QA Complete
 
 ## Fixes Applied
 
-File changed: `/home/daniel/pidex/dashboard/vite.config.ts`
+File changed: `<pidex-root>/dashboard/vite.config.ts`
 
 - `server.allowedHosts` changed `['pi.lan'] -> true`
 - `preview.allowedHosts` changed `['pi.lan'] -> true`
 
 Why: remove hostname-policy blocker for mobile clients resolving host differently (`pi.lan.local`, router DNS alias, direct LAN hostnames).
 
-Dashboard restarted with `/home/daniel/pidex/dashboard/start.sh` after config change.
+Dashboard restarted with `<pidex-root>/dashboard/start.sh` after config change.
 
 ## Mobile URL to try now
 
@@ -76,5 +76,5 @@ verdict: COMPLETE
 route_to: orchestrator
 reason: diagnostics complete, safe config hardening applied, runtime evidence captured
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-mobile-pilan-playwright.md
+context_file: <pidex-root>/agents.output/qa/dashboard-mobile-pilan-playwright.md
 -->

@@ -6,10 +6,10 @@ Status: In Review
 ---
 
 # Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md` (ID: dashboard-readiness-plan, UUID: a7533441)
+- `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md` (ID: dashboard-readiness-plan, UUID: a7533441)
 
 # Implementation reference
-- `/home/daniel/pidex/agents.output/implementation/dashboard-readiness-implementation.md`
+- `<pidex-root>/agents.output/implementation/dashboard-readiness-implementation.md`
 
 # Date
 - 2026-05-12
@@ -96,5 +96,5 @@ Route to `pidex-security` for standard security gate.
 verdict: APPROVED
 route_to: pidex-security
 reason: Build/typecheck pass; route/API parity preserved; security review required because API handlers touched.
-context_file: /home/daniel/pidex/agents.output/review/dashboard-readiness-code-review.md
+context_file: <pidex-root>/agents.output/review/dashboard-readiness-code-review.md
 -->

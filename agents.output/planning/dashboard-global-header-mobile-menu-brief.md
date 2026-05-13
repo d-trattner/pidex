@@ -1,6 +1,6 @@
 # PIDEX Dashboard Global Header + Mobile Menu Brief
 
-Project cwd: `/home/daniel/pidex/dashboard`
+Project cwd: `<pidex-root>/dashboard`
 
 User request:
 - The header (PIDEX logo/menu) is not always visible.
@@ -22,7 +22,7 @@ Desired behavior:
 - Keep existing glass style.
 
 Constraints:
-- Modify only `/home/daniel/pidex/dashboard` product files and artifacts.
+- Modify only `<pidex-root>/dashboard` product files and artifacts.
 - No API path changes.
 - Keep scope small; component extraction is expected.
 
@@ -35,6 +35,6 @@ Validation:
 - Browser/screenshot evidence if feasible (system Chromium is available; Playwright CLI may not be)
 
 Expected artifacts:
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
-- QA: `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
+- QA: `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa.md`

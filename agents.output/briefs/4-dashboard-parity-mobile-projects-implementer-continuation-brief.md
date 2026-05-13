@@ -1,6 +1,6 @@
 # Implementer continuation brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Original plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Continuation plan: `agents.output/planning/4-dashboard-parity-mobile-projects-continuation.md`
 Prior implementation: `agents.output/implementation/4-dashboard-parity-mobile-projects-implementation.md`

@@ -1,6 +1,6 @@
 # UAT brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-provider-limits-native-plan.md`
 QA: `agents.output/qa/4-provider-limits-native-qa.md`
 Security approval: `agents.output/security/4-provider-limits-native-security-v5.md`

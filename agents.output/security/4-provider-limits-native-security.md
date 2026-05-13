@@ -40,7 +40,7 @@ Reviewed:
 ## Automated Checks
 - `python3 scripts/provider-limits/test_probe_tdd.py` — PASS.
 - `node --experimental-strip-types --test dashboard/lib/server/limits.tdd.test.mjs` — PASS.
-- `/home/daniel/running-claude/skills/security-patterns/scripts/check-secrets.sh .` — PASS/no output.
+- `<home>/running-claude/skills/security-patterns/scripts/check-secrets.sh .` — PASS/no output.
 - Pattern scan reviewed `recommended_profile`, `running-pi`, XSS sinks, eval/exec/subprocess, file read/write in scoped paths.
 
 ## Findings

@@ -10,8 +10,8 @@ status: Complete
 ## Root Cause
 `dashboard-old/scripts/ingest.py` default project discovery still pulled external/historical project artifact trees:
 
-- `/home/daniel/projects/local/forge.ng`
-- `/home/daniel/homelab`
+- `<project-root>/forge.ng`
+- `<project-root>/homelab`
 - projects discovered from historical metrics
 
 Those artifacts included secondary review labels like `minimax` and `deepseek`. The summary `by_model` union includes `artifacts.model_label`, so old/historical non-PIDEX artifacts polluted PIDEX dashboard top-model stats.

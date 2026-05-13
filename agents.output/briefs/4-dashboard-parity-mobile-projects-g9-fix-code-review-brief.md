@@ -1,6 +1,6 @@
 # Code review brief: G9 fix mobile Quality one chart per row
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 G9 fix: `agents.output/implementation/4-dashboard-parity-mobile-projects-g9-fix.md`
 Expected output: `agents.output/code-review/4-dashboard-parity-mobile-projects-g9-fix-code-review.md`
 

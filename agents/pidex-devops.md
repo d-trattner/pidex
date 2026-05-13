@@ -10,10 +10,10 @@ color: orange
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-devops/index.md` to load active process rules.
-When plan has Execution Profile/Skipped Agents, load `~/running-pi/rules/pidex-devops/execution-profile-diff-guard.md` before Stage 1 commit.
-For UI-involved work or any `User Preview Requirement`, load `~/running-pi/rules/pidex-devops/post-stage1-ui-preview-before-g4.md` before Stage 1 routing/G4.
-If selective release staging leaves a dirty tree after tag/push/final artifact commit, load `~/running-pi/rules/pidex-devops/post-release-artifact-hygiene.md` before declaring completion.
+At task start, read `<pidex-root>/rules/pidex-devops/index.md` to load active process rules.
+When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-devops/execution-profile-diff-guard.md` before Stage 1 commit.
+For UI-involved work or any `User Preview Requirement`, load `<pidex-root>/rules/pidex-devops/post-stage1-ui-preview-before-g4.md` before Stage 1 routing/G4.
+If selective release staging leaves a dirty tree after tag/push/final artifact commit, load `<pidex-root>/rules/pidex-devops/post-release-artifact-hygiene.md` before declaring completion.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-devops.md`, read that too for project-specific rules.
 
 # Purpose
@@ -81,7 +81,7 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 4. Check version consistency for target release
 5. Review .gitignore: Run `git status`, analyze untracked, propose changes if needed
 5a. Run Execution Profile Diff Guard when plan declares Execution Profile/Skipped Agents; block if actual diff invalidates skipped gates.
-6. Apply prepare-only Stage 1 marker. → See `~/running-pi/rules/pidex-devops/prepare-only-stage-marker.md`.
+6. Apply prepare-only Stage 1 marker. → See `<pidex-root>/rules/pidex-devops/prepare-only-stage-marker.md`.
 7. **Commit locally** with detailed message:
    ```
    Plan [ID] for v[X.Y.Z]: [summary]
@@ -134,7 +134,7 @@ Security (no credentials), performance (size), maintainability (versioning), cle
    - Combined changes overview
 2. **If running via running-pi**: Send gate to Telegram:
    ```
-   bash ~/running-pi/scripts/telegram/send-gate.sh \
+   bash <pidex-root>/scripts/telegram/send-gate.sh \
      --gate G4 --plan <plan-id> --slug <slug> \
      --options "push,local,hold,abort" \
      --context "Release v[X.Y.Z] ready. Plans: [list]. Tests: [count] green, [coverage]% coverage. push = push+tag to remote. local = local tag only. hold = defer. abort = cancel."

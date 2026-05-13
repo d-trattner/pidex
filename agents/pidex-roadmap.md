@@ -10,7 +10,7 @@ color: purple
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-roadmap/index.md` to load active process rules.
+At task start, read `<pidex-root>/rules/pidex-roadmap/index.md` to load active process rules.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-roadmap.md`, read that too for project-specific rules.
 
 # Purpose

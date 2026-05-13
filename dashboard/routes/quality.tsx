@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import {
   Area,
@@ -20,6 +18,7 @@ import {
 } from 'recharts';
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type CompletionRow = {
   day?: string | null;
@@ -82,130 +81,38 @@ type ModelQualityPayload = {
   models: ModelQualityRow[];
 };
 
+const EMPTY_QUALITY: QualityPayload = {
+  completionByDay: [],
+  runtimeByAgent: [],
+  secondaryHealth: [],
+  mergeDisposition: [],
+  mergeClassification: [],
+  agentVerdicts: [],
+  malformedByDay: [],
+  g9ByDay: [],
+  gatesByPipeline: [],
+  reworkByPipeline: [],
+  plannerRevisionsByPlan: [],
+  analystVerdicts: [],
+  qualityImpactByDay: [],
+  infraMarkers: {},
+};
+
 function QualityPage() {
-  const [quality, setQuality] = useState<QualityPayload | null>(null);
-  const [modelQuality, setModelQuality] = useState<ModelQualityPayload | null>(null);
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project], withProjectParam('/api/charts/quality', project));
+  const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project], withProjectParam('/api/charts/model-quality', project));
+  const quality = qualityQuery.data ?? EMPTY_QUALITY;
+  const modelQuality = modelQuery.data ?? { models: [] };
+  const loading = qualityQuery.isLoading || modelQuery.isLoading;
+  const error = qualityQuery.isError || modelQuery.isError ? 'Quality data could not be loaded.' : '';
 
   const safeNumber = (value: unknown): number => {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : 0;
   };
 
-  useEffect(() => {
-    let mounted = true;
-
-    const pickArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
-
-    Promise.all([
-      fetch(withProjectParam('/api/charts/quality', project)),
-      fetch(withProjectParam('/api/charts/model-quality', project)),
-    ])
-      .then(async ([qualityResp, modelResp]) => {
-        if (!qualityResp.ok || !modelResp.ok) {
-          throw new Error('A quality API did not respond correctly.');
-        }
-
-        const [qualityPayloadRaw, modelPayloadRaw] = await Promise.all([qualityResp.json(), modelResp.json()]);
-
-        if (!mounted) return;
-
-        const rawQuality =
-          qualityPayloadRaw && typeof qualityPayloadRaw === 'object' && !Array.isArray(qualityPayloadRaw)
-            ? (qualityPayloadRaw as Record<string, unknown>)
-            : {};
-        const rawModel =
-          modelPayloadRaw && typeof modelPayloadRaw === 'object' && !Array.isArray(modelPayloadRaw)
-            ? (modelPayloadRaw as Record<string, unknown>)
-            : {};
-
-        setQuality({
-          completionByDay: pickArray<CompletionRow>(rawQuality.completionByDay),
-          runtimeByAgent: pickArray<RuntimeRow>(rawQuality.runtimeByAgent),
-          secondaryHealth: pickArray<SecondaryHealthRow>(rawQuality.secondaryHealth),
-          mergeDisposition: pickArray<MergeRow>(rawQuality.mergeDisposition),
-          mergeClassification: pickArray<{
-            classification?: string | null;
-            count?: number | string | null;
-          }>(rawQuality.mergeClassification),
-          agentVerdicts: pickArray<{ agent?: string | null; verdict?: string | null; count?: number | string | null }>(rawQuality.agentVerdicts),
-          malformedByDay: pickArray<{ day?: string | null; malformed?: number | string | null }>(rawQuality.malformedByDay),
-          g9ByDay: pickArray<{ day?: string | null; g9_events?: number | string | null; g9_rejections?: number | string | null }>(rawQuality.g9ByDay),
-          gatesByPipeline: pickArray<{
-            project?: string | null;
-            plan_key?: string | null;
-            gates?: number | string | null;
-            failures?: number | string | null;
-            total_runtime_ms?: number | string | null;
-            cost_usd?: number | string | null;
-          }>(rawQuality.gatesByPipeline),
-          reworkByPipeline: pickArray<{
-            project?: string | null;
-            plan_key?: string | null;
-            agent_runs?: number | string | null;
-            gates?: number | string | null;
-            failures?: number | string | null;
-            total_runtime_ms?: number | string | null;
-            cost_usd?: number | string | null;
-          }>(rawQuality.reworkByPipeline),
-          plannerRevisionsByPlan: pickArray<{
-            project?: string | null;
-            plan_key?: string | null;
-            planner_runs?: number | string | null;
-          }>(rawQuality.plannerRevisionsByPlan),
-          analystVerdicts: rawQuality.analystVerdicts ?? [],
-          qualityImpactByDay: pickArray<unknown>(rawQuality.qualityImpactByDay),
-          infraMarkers:
-            rawQuality.infraMarkers && typeof rawQuality.infraMarkers === 'object' && !Array.isArray(rawQuality.infraMarkers)
-              ? (rawQuality.infraMarkers as Record<string, unknown>)
-              : {},
-        });
-
-        setModelQuality({
-          models: pickArray<ModelQualityRow>(rawModel.models),
-        });
-
-        const hasApiIssue =
-          !Array.isArray(rawQuality.completionByDay) ||
-          !Array.isArray(rawModel.models);
-        if (hasApiIssue) {
-          setError('Unexpected response format, using fallback view.');
-        } else {
-          setError('');
-        }
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setQuality({
-          completionByDay: [],
-          runtimeByAgent: [],
-          secondaryHealth: [],
-          mergeDisposition: [],
-          mergeClassification: [],
-          agentVerdicts: [],
-          malformedByDay: [],
-          g9ByDay: [],
-          gatesByPipeline: [],
-          reworkByPipeline: [],
-          plannerRevisionsByPlan: [],
-          analystVerdicts: [],
-          qualityImpactByDay: [],
-          infraMarkers: {},
-        });
-        setModelQuality({ models: [] });
-        setError('Quality data could not be loaded.');
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [project]);
 
   const completionData = (quality?.completionByDay || [])
     .map((row) => ({
@@ -280,11 +187,11 @@ function QualityPage() {
         {error ? <p style={{ color: '#f8a' }}>{error}</p> : null}
       </article>
 
-      <article className="glass-card glass quality-card">
-        <h3>Completion rate (Area)</h3>
+      <article className="glass-card glass quality-card quality-card-full">
+        <h3>Completion rate</h3>
         <p className="muted">Latest completion rate: {latestCompletion}</p>
         {completionData.length ? (
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={completionData} margin={{ left: 4, right: 4, top: 8, bottom: 8 }}>
               <CartesianGrid stroke="rgba(34,255,225,0.16)" />
               <XAxis dataKey="day" stroke="#8ad7ff" />
@@ -298,11 +205,11 @@ function QualityPage() {
         )}
       </article>
 
-      <article className="glass-card glass quality-card">
-        <h3>Agent runtime (Line)</h3>
+      <article className="glass-card glass quality-card quality-card-full">
+        <h3>Agent runtime</h3>
         <p className="muted">Average runtime by agent (ms).</p>
         {runtimeData.length ? (
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={300}>
             <LineChart data={runtimeData} margin={{ left: 4, right: 4, top: 8, bottom: 8 }}>
               <CartesianGrid stroke="rgba(34,255,225,0.16)" />
               <XAxis dataKey="agent" stroke="#8ad7ff" />
@@ -317,11 +224,11 @@ function QualityPage() {
         )}
       </article>
 
-      <article className="glass-card glass quality-card">
-        <h3>Top models (Bar)</h3>
+      <article className="glass-card glass quality-card quality-card-full">
+        <h3>Top models</h3>
         <p className="muted">Quality score by model (significant models only).</p>
         {modelBars.length ? (
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={300}>
             <BarChart data={modelBars} margin={{ left: 4, right: 4, top: 8, bottom: 32 }}>
               <CartesianGrid stroke="rgba(34,255,225,0.16)" />
               <XAxis dataKey="model" stroke="#8ad7ff" angle={-30} textAnchor="end" interval={0} height={45} />

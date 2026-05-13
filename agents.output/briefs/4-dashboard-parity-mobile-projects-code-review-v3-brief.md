@@ -1,6 +1,6 @@
 # Code review v3 brief
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Prior review: `agents.output/code-review/4-dashboard-parity-mobile-projects-code-review-v2.md`
 Fix2: `agents.output/implementation/4-dashboard-parity-mobile-projects-implementation-fix2.md`
 Expected output: `agents.output/code-review/4-dashboard-parity-mobile-projects-code-review-v3.md`

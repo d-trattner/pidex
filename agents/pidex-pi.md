@@ -10,7 +10,7 @@ color: purple
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-pi/index.md` to load active process rules.
+At task start, read `<pidex-root>/rules/pidex-pi/index.md` to load active process rules.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-pi.md`, read that too for project-specific rules.
 
 # Purpose
@@ -24,8 +24,8 @@ Review retrospectives to identify repeatable process improvements, validate agai
 Process improvements use a two-tier storage model. NEVER write learned rules directly into agent `.md` files.
 
 **Tier 1 — Global rules** (applies all projects):
-- `~/running-pi/rules/<agent-name>/index.md` — index of all rules for that agent
-- `~/running-pi/rules/<agent-name>/<rule-slug>.md` — one file per specific rule
+- `<pidex-root>/rules/<agent-name>/index.md` — index of all rules for that agent
+- `<pidex-root>/rules/<agent-name>/<rule-slug>.md` — one file per specific rule
 
 **Tier 2 — Project-specific rules**:
 - `agents.wiki.<project>/rules/<agent-name>.md` — project-specific overrides/additions
@@ -69,7 +69,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 # Constraints
 
 - **Never modify source code, tests, or application functionality**
-- Edit: source agent instruction files (`~/running-pi/agents/pidex-*.md`), rules files (`~/running-pi/rules/<agent>/<rule>.md`), workflow docs (CLAUDE.md, README.md), project-specific rules (`agents.wiki.<project>/rules/<agent>.md`)
+- Edit: source agent instruction files (`<pidex-root>/agents/pidex-*.md`), rules files (`<pidex-root>/rules/<agent>/<rule>.md`), workflow docs (CLAUDE.md, README.md), project-specific rules (`agents.wiki.<project>/rules/<agent>.md`)
 - Only create pipeline artifacts in `agents.output/process-improvement/`
 - Focus exclusively on process improvements, not technical implementation
 - Maintain consistency across all agent instructions (naming, format, terminology)
@@ -131,7 +131,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 
 **If running via running-pi**, send gate to Telegram. Use only concrete, fixed option names:
 ```
-bash ~/running-pi/scripts/telegram/send-gate.sh \
+bash <pidex-root>/scripts/telegram/send-gate.sh \
   --gate G7 --plan <plan-id> --slug <slug> \
   --options "approve-all,defer,reject" \
   --context "PI proposes <N> changes to agent instructions:
@@ -159,9 +159,9 @@ Then END YOUR TURN. Orchestrator resumes with user's decision. Based on response
 **Two-tier rules architecture** — rules go to `rules/` files, NOT into agent `.md` files:
 
 1. **For each learned rule / PROC-NEW:**
-   a. Create `~/running-pi/rules/<agent-name>/<rule-slug>.md` with rule content
-   b. Add row to `~/running-pi/rules/<agent-name>/index.md`
-   c. In agent `.md`, replace inline PROC-NEW block with one-line reference: `→ See ~/running-pi/rules/<agent-name>/<rule-slug>.md`
+   a. Create `<pidex-root>/rules/<agent-name>/<rule-slug>.md` with rule content
+   b. Add row to `<pidex-root>/rules/<agent-name>/index.md`
+   c. In agent `.md`, replace inline PROC-NEW block with one-line reference: `→ See <pidex-root>/rules/<agent-name>/<rule-slug>.md`
 
 2. **For project-specific improvements:**
    Write to `agents.wiki.<project>/rules/<agent-name>.md` (create if missing)
@@ -180,7 +180,7 @@ Then END YOUR TURN. Orchestrator resumes with user's decision. Based on response
    - Validation plan
 6. Verify all changes applied successfully
 7. Close retrospective: update its Status to "Processed" and move to `agents.output/retrospectives/closed/`.
-8. Apply canonical validation taxonomy in generated validation sections. → See `~/running-pi/rules/pidex-pi/validation-taxonomy.md`.
+8. Apply canonical validation taxonomy in generated validation sections. → See `<pidex-root>/rules/pidex-pi/validation-taxonomy.md`.
 
 # Analysis Document Format
 

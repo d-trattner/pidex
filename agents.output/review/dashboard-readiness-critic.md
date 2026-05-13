@@ -6,7 +6,7 @@ Status: OPEN
 ---
 
 ## Plan Reference
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md`
 - ID: `dashboard-readiness-plan`
 - UUID: `a7533441`
 - Date: 2026-05-12
@@ -68,5 +68,5 @@ Overall delivery risk: Low-Medium. Primary risk from inconsistent parity proof, 
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-implementer
-context_file: /home/daniel/pidex/agents.output/review/dashboard-readiness-critic.md
+context_file: <pidex-root>/agents.output/review/dashboard-readiness-critic.md
 -->

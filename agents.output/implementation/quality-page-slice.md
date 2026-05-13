@@ -8,7 +8,7 @@ Status: Completed
 ## Plan Reference
 
 - ID: 3446827
-- Path: /home/daniel/running-pi/state/runs/home-daniel-pidex/2026-05-11T22-11-55-177Z_rp-implementer_3446827_58ad1ec3/rp-implementer.task.md
+- Path: <running-pi-root>/state/runs/home-daniel-pidex/2026-05-11T22-11-55-177Z_rp-implementer_3446827_58ad1ec3/rp-implementer.task.md
 - Context: Dashboard migration slice 2
 
 ## Date

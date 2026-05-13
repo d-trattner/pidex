@@ -6,10 +6,10 @@ Status: Rejected
 ---
 
 # Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md` (ID 3, UUID 7c9a2d4f)
+- `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md` (ID 3, UUID 7c9a2d4f)
 
 # Implementation reference
-- `/home/daniel/pidex/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
+- `<pidex-root>/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
 
 # Date
 - 2026-05-12
@@ -100,5 +100,5 @@ Route to pidex-implementer. Fix major items. Re-submit same plan/doc set.
 verdict: REJECTED
 route_to: pidex-implementer
 reason: Mobile sheet lacks required focus trap; duplicate dashboard route-level nav violates single source-of-truth contract.
-context_file: /home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-code-review.md
+context_file: <pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-code-review.md
 -->

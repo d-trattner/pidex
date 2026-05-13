@@ -1,6 +1,6 @@
 # Roadmap brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-provider-limits-native-plan.md`
 Devops: `agents.output/devops/4-provider-limits-native-devops.md`
 Retrospective: `agents.output/retrospective/4-provider-limits-native-retrospective.md`

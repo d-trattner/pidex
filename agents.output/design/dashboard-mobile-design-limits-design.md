@@ -8,10 +8,10 @@ Status: OPEN
 # Mobile Design Limits Review
 
 ## Plan reference
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 - ID: `dashboard-mobile-design-limits-plan`
 - UUID: `eec388ea`
-- Critic: `/home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-critic.md`
+- Critic: `<pidex-root>/agents.output/review/dashboard-mobile-design-limits-critic.md`
 
 ## Date
 - 2026-05-12
@@ -29,7 +29,7 @@ Status: OPEN
 - Existing glass/cyber dashboard identity preserved. No product files modified.
 
 ## Design Token Specifications
-- Use DESIGN.md tokens. New source written: `/home/daniel/pidex/agents.output/design/DESIGN.md`.
+- Use DESIGN.md tokens. New source written: `<pidex-root>/agents.output/design/DESIGN.md`.
 - Bottom trigger fill: dark glass panel using current panel gradient, 1px cyan line, no pill radius.
 - Bottom trigger text: `#d7fff7`, 16px, 600 weight. Secondary hint optional in `#6ee7e0`, 12-13px.
 - Active route: cyan line/fill accent; text remains high contrast. Avoid pink as main active state.
@@ -140,7 +140,7 @@ Status: OPEN
 
 ### Low
 - DESIGN.md was absent. Bootstrapped current dashboard tokens for this plan.
-- Process rules files under `~/running-pi/rules/pidex-designer/` unavailable in this runtime; followed embedded role rules.
+- Process rules files under `<pidex-root>/rules/pidex-designer/` unavailable in this runtime; followed embedded role rules.
 - Critic low note L2 addressed by screenshot/evidence expectations and interaction states above.
 
 ## Verdict
@@ -150,5 +150,5 @@ APPROVED
 verdict: APPROVED
 route_to: pidex-implementer
 reason: Mobile visual specs complete for bottom trigger, sheet, overflow tables, and Limits display expectations.
-context_file: /home/daniel/pidex/agents.output/design/dashboard-mobile-design-limits-design.md
+context_file: <pidex-root>/agents.output/design/dashboard-mobile-design-limits-design.md
 -->

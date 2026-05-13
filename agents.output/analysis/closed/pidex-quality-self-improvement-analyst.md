@@ -31,11 +31,11 @@ Inspected:
 - `scripts/pipeline/event.sh`
 - `dashboard-old/scripts/ingest.py`
 - `dashboard/lib/server/api.ts`, `dashboard/routes/quality.tsx`
-- `/home/daniel/running-pi/scripts/analysis/run-pipeline-analysis.sh`
-- `/home/daniel/running-pi/scripts/token-log/parse-session.py`
+- `<running-pi-root>/scripts/analysis/run-pipeline-analysis.sh`
+- `<running-pi-root>/scripts/token-log/parse-session.py`
 - Current `state/metrics/**`, `state/pipeline-events/**`, `rules/**`, `agents.output/**`
 
-Rules load note: required `/home/daniel/running-pi/rules/pidex-analyst/index.md` missing. No project-specific `agents.wiki.*/rules/pidex-analyst.md` found.
+Rules load note: required `<running-pi-root>/rules/pidex-analyst/index.md` missing. No project-specific `agents.wiki.*/rules/pidex-analyst.md` found.
 
 ## Methodology
 - Read current instrumentation contracts and sample state.

@@ -9,11 +9,11 @@ Status: OPEN
 Re-audit global header + mobile menu using new live evidence set.
 
 ## Evidence Reviewed
-- Prior audit: `/home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design-audit.md`
-- `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-screens/ss-2-mobile-closed-live.png`
-- `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-screens/ss-3-mobile-sheet-open-live.png`
-- `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-screens/ss-4-mobile-post-nav-analysis.png`
-- `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-screens/evidence.json`
+- Prior audit: `<pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design-audit.md`
+- `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-screens/ss-2-mobile-closed-live.png`
+- `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-screens/ss-3-mobile-sheet-open-live.png`
+- `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-screens/ss-4-mobile-post-nav-analysis.png`
+- `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-screens/evidence.json`
 
 ## Findings
 - Mobile closed `/live`: PASS. Global header present. Menu trigger present/visible.
@@ -28,5 +28,5 @@ APPROVED — design acceptance criteria met for header + mobile menu evidence ga
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-qa
-context_file: /home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design-audit-final.md
+context_file: <pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design-audit-final.md
 -->

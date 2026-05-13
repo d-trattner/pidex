@@ -18,7 +18,7 @@
 #
 # Usage:
 #   PROMPT_FILE=/tmp/p.md OUTPUT_FILE=/tmp/out.md MODEL=gpt-5.3-codex \
-#     bash ~/pidex/scripts/delegate/codex.sh
+#     bash <pidex-root>/scripts/delegate/codex.sh
 
 set -euo pipefail
 

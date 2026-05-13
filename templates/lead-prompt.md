@@ -1,6 +1,6 @@
 # Lead Prompt Template
 
-Used by the orchestrator when calling `~/running-pi/scripts/lead/start.sh --prompt "..."`.
+Used by the orchestrator when calling `<pidex-root>/scripts/lead/start.sh --prompt "..."`.
 Substitute `<pidex-planner | pidex-architect>` and `<epic statement>` before passing.
 
 ```
@@ -31,19 +31,19 @@ Use TaskCreate / TaskUpdate / TaskList for the shared task list.
 Use peer-to-peer messaging between teammates instead of treating each as a one-shot subagent.
 
 Apply auto-proceed (Rule 4), gate detection (Rule 5), Telegram routing via running-pi
-(Rule 6 — use bash ~/running-pi/scripts/telegram/send-gate.sh, NOT the MCP plugin),
+(Rule 6 — use bash <pidex-root>/scripts/telegram/send-gate.sh, NOT the MCP plugin),
 and idle-stall handling (Rule 1).
 
 CLI-DELEGATE ROUTING (MANDATORY — applies in this session too):
 Before spawning pidex-critic, pidex-code-reviewer, pidex-uat, pidex-retrospective, or pidex-designer via the
 Agent tool, check agents.json and attempt delegation via dispatch.sh:
 
-  PROVIDER=$(jq -r --arg a "<agent>" '.agents[$a].provider // .defaults.provider' ~/running-pi/config/agents.json)
+  PROVIDER=$(jq -r --arg a "<agent>" '.agents[$a].provider // .defaults.provider' <pidex-root>/config/agents.json)
 
   If PROVIDER=codex or PROVIDER=gemini:
   1. Pre-create output skeleton (standard frontmatter + empty section headers)
   2. Build /tmp/pidex-inputs.json with the keys the template expects (see SKILL.md section 1b)
-  3. Run: bash ~/running-pi/scripts/delegate/dispatch.sh --agent <agent> --inputs /tmp/pidex-inputs.json --output <output-path> --project-dir "$PWD"
+  3. Run: bash <pidex-root>/scripts/delegate/dispatch.sh --agent <agent> --inputs /tmp/pidex-inputs.json --output <output-path> --project-dir "$PWD"
   4. Exit 0 → skip Agent spawn, output doc is populated. Read ROUTING block from output doc.
   5. Any other exit → fall back to Agent tool as normal (mandatory, never fail pipeline on delegate error).
 
@@ -51,7 +51,7 @@ Agent tool, check agents.json and attempt delegation via dispatch.sh:
   layout/form/button" keywords in plan). Spawn Claude subagent with maxTurns=3 instead (auto-approve).
 
 CRITICAL GATE ROUTING: Every gate (G1–G10) MUST be sent via:
-  bash ~/running-pi/scripts/telegram/send-gate.sh --gate <ID> --plan <N> --slug <slug> --options "<comma-separated>" --context "<message>" --lead-id "$LEAD_ID"
+  bash <pidex-root>/scripts/telegram/send-gate.sh --gate <ID> --plan <N> --slug <slug> --options "<comma-separated>" --context "<message>" --lead-id "$LEAD_ID"
 Do NOT write gate messages as text output — --print mode buffers all output, so the user
 never sees it. This causes a deadlock. Always call send-gate.sh, then END YOUR TURN.
 

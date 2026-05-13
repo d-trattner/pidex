@@ -9,17 +9,17 @@ Status: Approved
 
 ## Plan reference
 
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
 - ID: `dashboard-mobile-design-limits-plan`
 - UUID: `eec388ea`
 
 ## Implementation reference
 
-- Path: `/home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
+- Path: `<pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
 
 ## Prior review reference
 
-- Path: `/home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-code-review.md`
+- Path: `<pidex-root>/agents.output/review/dashboard-mobile-design-limits-code-review.md`
 
 ## Date
 
@@ -92,7 +92,7 @@ None new.
 
 ## Fallow Evidence
 
-- Command: `cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
+- Command: `cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
 - Outcome: PASS_WITH_FINDINGS.
 - Review impact: Non-blocking. Findings remain existing broad complexity/duplication; hotfix adds no new complexity concern.
 
@@ -131,5 +131,5 @@ Route to pidex-security.
 verdict: APPROVED
 route_to: pidex-security
 reason: MAJOR-1 fixed; validation green; security gate required by plan.
-context_file: /home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-code-review-final.md
+context_file: <pidex-root>/agents.output/review/dashboard-mobile-design-limits-code-review-final.md
 -->

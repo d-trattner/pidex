@@ -6,7 +6,7 @@ Status: Active
 ---
 
 ## Plan Reference
-- Path: `/home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md`
+- Path: `<pidex-root>/agents.output/planning/dashboard-root-routes-plan.md`
 - ID: 3
 - UUID: 8f3ac1d2
 
@@ -89,5 +89,5 @@ User value met: `/dashboard` now landing page only; operational pages moved to r
 verdict: COMPLETE
 route_to: pidex-code-reviewer
 reason: Root-route migration implemented, legacy redirects added, required checks green
-context_file: /home/daniel/pidex/agents.output/implementation/dashboard-root-routes-implementation.md
+context_file: <pidex-root>/agents.output/implementation/dashboard-root-routes-implementation.md
 -->

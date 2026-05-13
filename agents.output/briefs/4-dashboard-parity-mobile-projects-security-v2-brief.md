@@ -1,6 +1,6 @@
 # Security v2 brief
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Prior security: `agents.output/security/4-dashboard-parity-mobile-projects-security.md`
 Security fix: `agents.output/implementation/4-dashboard-parity-mobile-projects-security-fix.md`
 Expected output: `agents.output/security/4-dashboard-parity-mobile-projects-security-v2.md`

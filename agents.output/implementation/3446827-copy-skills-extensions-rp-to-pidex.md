@@ -7,7 +7,7 @@ Status: Completed
 
 ## Plan Reference
 - ID: 3446827
-- Origin: `/home/daniel/running-pi/state/runs/home-daniel-pidex/2026-05-11T18-00-31-530Z_rp-implementer_3446827_f0ad1f64/rp-implementer.task.md`
+- Origin: `<running-pi-root>/state/runs/home-daniel-pidex/2026-05-11T18-00-31-530Z_rp-implementer_3446827_f0ad1f64/rp-implementer.task.md`
 - UUID: f0ad1f64
 
 ## Date

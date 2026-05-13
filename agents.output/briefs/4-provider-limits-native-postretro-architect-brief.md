@@ -1,6 +1,6 @@
 # Post-retro architect handoff: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Retrospective: `agents.output/retrospective/4-provider-limits-native-retrospective.md`
 Security docs: `agents.output/security/4-provider-limits-native-security-v5.md`
 Expected output: `agents.output/architecture/4-provider-limits-native-postretro-architecture.md`

@@ -55,8 +55,8 @@ Planner/implementer must treat these findings as guidance for scope control:
 Reuse/adapt existing Running Pi/PIDEX building blocks instead of inventing from scratch:
 
 - PIDEX metrics/dashboard plumbing: `scripts/metrics/record.sh`, `scripts/metrics/summarize.sh`, `state/metrics/**`, `state/pipeline-events/**`, dashboard `agent_runs`/`pipeline_events`/quality APIs.
-- Running Pi analysis prior art: `/home/daniel/running-pi/scripts/analysis/run-pipeline-analysis.sh` already analyzes orchestration quality, intent capture, routing, gates, evidence timing, rework loops, secondary lane value/noise, existing harness coverage, and harness improvement candidates.
-- Running Pi token/context prior art: `/home/daniel/running-pi/scripts/token-log/parse-session.py` extracts orchestrator and subagent token usage and can inform context-bloat scoring.
+- Running Pi analysis prior art: `<running-pi-root>/scripts/analysis/run-pipeline-analysis.sh` already analyzes orchestration quality, intent capture, routing, gates, evidence timing, rework loops, secondary lane value/noise, existing harness coverage, and harness improvement candidates.
+- Running Pi token/context prior art: `<running-pi-root>/scripts/token-log/parse-session.py` extracts orchestrator and subagent token usage and can inform context-bloat scoring.
 
 The PIDEX implementation should turn these ideas into structured JSON + dashboard data, not only markdown reports.
 
@@ -164,7 +164,7 @@ Example JSONL row:
 ```json
 {
   "timestamp": "2026-05-12T18:00:00Z",
-  "project_path": "/home/daniel/pidex",
+  "project_path": "<pidex-root>",
   "pipeline_id": "4-dashboard-parity-mobile-projects",
   "event_type": "orchestrator_route",
   "from_agent": "pidex-qa",
@@ -412,6 +412,49 @@ Suggested paths:
 - `state/orchestrator-events/**/*.jsonl`
 - `state/quality/*.json`
 - `agents.output/quality/*.md`
+
+## Phase 3 Deferred: Turn Budget Optimization / Dynamic Turn Limits
+Do **not** start this until Phase 2 is complete. This is a later self-improvement candidate, not part of the first dashboard/PDQ stabilization work.
+
+Rationale: PIDEX already records enough subprocess metadata to infer turn pressure (`state/runs/**/metadata.json` has `usage.turns`; agent frontmatter has `maxTurns`; exit code `143` often indicates SIGTERM from turn-limit kill), but these fields are not yet first-class in metrics/dashboard. Turn-limit hits cause visible retry loops and can increase cost, but removing limits would risk runaway agents and larger quota/cost burn. The right improvement is measurement + targeted policy, not blindly raising every limit.
+
+Phase 3 scope:
+
+- Persist first-class fields into agent metrics and dashboard DB:
+  - `turn_count`
+  - `max_turns`
+  - `turn_limit_hit`
+  - `timed_out`
+  - retry count / retry reason
+  - routing success and context-file presence
+  - cost/tokens/duration for failed vs successful attempts
+- Baseline over at least 5-10 comparable runs:
+  - turn-limit hit rate
+  - near-limit rate (>90% of maxTurns)
+  - median/p95 turn usage by agent/task class
+  - retry-after-hit rate
+  - cost of failed/partial attempts
+  - time-to-valid-routing
+- Add dashboard facts/trends:
+  - Turn Limit Pressure by Agent
+  - Near-Limit Runs
+  - Retry Cost After Turn Limit
+  - Task classes/agents most likely to need split plans
+- Use rule-action tracking before changing behavior:
+  - expected impact dimension: `turn-limit-hit-rate`
+  - expected direction: `decrease`
+  - confidence labels and sample sizes required
+- Later experiment with dynamic `maxTurns` by agent/task risk:
+  - QA/UAT/Playwright-heavy work may receive higher budgets.
+  - simple review/synthesis remains capped.
+  - global safety caps remain mandatory.
+  - planner/orchestrator may choose split-plan instead of more turns when scope is too large.
+
+Acceptance for starting Phase 3:
+
+- Phase 2 automatic PDQ + expanded operator events + dashboard quality trace views are stable.
+- There is enough recent run data to compare before/after without pretending causality.
+- At least one approved rule-action/process-change entry exists for monitoring turn-budget policy.
 
 ## Dashboard Additions
 Extend dashboard with a quality/rules view:

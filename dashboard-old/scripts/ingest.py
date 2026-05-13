@@ -165,6 +165,9 @@ def normalize_plan_key(rec: dict, fallback: str) -> str:
     m = re.search(r"(?:^|/)(\d{1,3})[-_]", context)
     if m and (not explicit_plan or plan in {"plan-1", "unknown-plan"} or plan == fallback):
         return f"plan-{normalize_plan_number(m.group(1))}"
+    m = re.fullmatch(r"(?:plan-)?(\d{1,3})", str(plan), re.I)
+    if m:
+        return f"plan-{normalize_plan_number(m.group(1))}"
     return plan
 
 
@@ -395,7 +398,10 @@ def discover_projects(args_projects: list[str]) -> list[Path]:
                     projects.append(p)
         return projects
 
-    for p in [Path("/home/daniel/projects/local/forge.ng"), Path("/home/daniel/homelab")]:
+    for raw in os.environ.get("PIDEX_DASHBOARD_EXTERNAL_PROJECTS", "").split(os.pathsep):
+        if not raw.strip():
+            continue
+        p = Path(raw).expanduser()
         if p.exists() and p not in projects:
             projects.append(p)
     # Include projects observed in metrics if they still exist.

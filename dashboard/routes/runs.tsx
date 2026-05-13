@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { GlassPanel } from '../components/ui/glass-panel';
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type RunRow = {
   timestamp: string;
@@ -17,25 +16,10 @@ type RunRow = {
 };
 
 function RunsPlaceholder() {
-  const [runs, setRuns] = useState<RunRow[]>([]);
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-
-  useEffect(() => {
-    let mounted = true;
-    fetch(withProjectParam('/api/runs?limit=20', project))
-      .then((res) => res.json())
-      .then((payload) => {
-        if (!mounted) return;
-        setRuns(Array.isArray(payload) ? payload : []);
-      })
-      .catch(() => {
-        setRuns([]);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [project]);
+  const query = useDashboardQuery<RunRow[]>(['runs', project], withProjectParam('/api/runs?limit=20', project));
+  const runs = Array.isArray(query.data) ? query.data : [];
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>

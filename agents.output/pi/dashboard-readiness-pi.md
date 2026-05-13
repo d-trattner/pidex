@@ -39,19 +39,19 @@ Target files (after explicit approval):
 - `agents/pidex-devops.md`
 - `agents/pidex-planner.md`
 - `agents/pidex-implementer.md`
-Or two-tier preferred: add new rule files + index rows under `~/running-pi/rules/<agent>/`.
+Or two-tier preferred: add new rule files + index rows under `<pidex-root>/rules/<agent>/`.
 
 ## User Decision Required
 Pending if instruction changes requested later: `approve-all` / `defer` / `reject`.
 Current run: analysis-only deliverable complete.
 
 ## Related Artifacts
-- Retro: `/home/daniel/pidex/agents.output/retrospective/dashboard-readiness-retro.md`
-- Devops: `/home/daniel/pidex/agents.output/devops/dashboard-readiness-devops.md`
-- Output: `/home/daniel/pidex/agents.output/pi/dashboard-readiness-pi.md`
+- Retro: `<pidex-root>/agents.output/retrospective/dashboard-readiness-retro.md`
+- Devops: `<pidex-root>/agents.output/devops/dashboard-readiness-devops.md`
+- Output: `<pidex-root>/agents.output/pi/dashboard-readiness-pi.md`
 
 <!-- ROUTING
 verdict: COMPLETE
 route_to: orchestrator
-context_file: /home/daniel/pidex/agents.output/pi/dashboard-readiness-pi.md
+context_file: <pidex-root>/agents.output/pi/dashboard-readiness-pi.md
 -->

@@ -6,7 +6,7 @@ Status: OPEN
 ---
 
 ## Plan reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
 - ID 3, UUID 7c9a2d4f
 
 ## Date
@@ -96,5 +96,5 @@ APPROVED
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-implementer
-context_file: /home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design.md
+context_file: <pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design.md
 -->

@@ -8,9 +8,9 @@ Status: Complete
 # DevOps Finalization
 
 ## Inputs Read
-- `/home/daniel/pidex/agents.output/implementation/dashboard-english-buttons-implementation.md`
-- `/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-qa-evidence.md`
-- `/home/daniel/pidex/agents.output/uat/dashboard-english-buttons-uat-final.md`
+- `<pidex-root>/agents.output/implementation/dashboard-english-buttons-implementation.md`
+- `<pidex-root>/agents.output/qa/dashboard-english-buttons-qa-evidence.md`
+- `<pidex-root>/agents.output/uat/dashboard-english-buttons-uat-final.md`
 
 ## Final Verification Re-run
 - `node --test tests/dashboard-copy-and-interactions.test.mjs` -> PASS (2/2)
@@ -36,11 +36,11 @@ Status: Complete
 
 ## Pipeline Event
 - Emitted:
-  - `bash /home/daniel/pidex/scripts/pipeline/event.sh --plan 2 --event pipeline_completed --status completed --actor pidex-devops --message "DevOps verification complete: test/typecheck/build pass, dashboard restarted on :18777"`
-- Result file: `/home/daniel/pidex/state/pipeline-events/dashboard/dashboard-plan-002-20260512T064515Z.jsonl`
+  - `bash <pidex-root>/scripts/pipeline/event.sh --plan 2 --event pipeline_completed --status completed --actor pidex-devops --message "DevOps verification complete: test/typecheck/build pass, dashboard restarted on :18777"`
+- Result file: `<pidex-root>/state/pipeline-events/dashboard/dashboard-plan-002-20260512T064515Z.jsonl`
 
 <!-- ROUTING
 verdict: COMPLETE
 route_to: orchestrator
-context_file: /home/daniel/pidex/agents.output/devops/dashboard-english-buttons-devops.md
+context_file: <pidex-root>/agents.output/devops/dashboard-english-buttons-devops.md
 -->

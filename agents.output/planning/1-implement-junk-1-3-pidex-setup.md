@@ -8,15 +8,15 @@ Epic: JUNK 1-3
 ---
 
 ## Value Statement and Business Objective
-As an engineering implementer, I want to complete JUNK 1–3 from `basis.md` in `/home/daniel/pidex`, so that repo bootstrap is production-safe from first commit with Codex-ready role/rule artifacts and no leftover runtime state.
+As an engineering implementer, I want to complete JUNK 1–3 from `basis.md` in `<pidex-root>`, so that repo bootstrap is production-safe from first commit with Codex-ready role/rule artifacts and no leftover runtime state.
 
 ## Objective
 Deliver three end-to-end slices covering:
 1) repo basis + safety guardrails, 2) agent prompt copy + naming normalization, 3) rules/templates copy + role-reference normalization.
 
 ## Requirements and Assumptions
-- Source paths exist: `/home/daniel/running-pi/agents`, `/home/daniel/running-pi/rules`, `/home/daniel/obsidian-wikis/pidex/plans/basis.md`.
-- Target path `/home/daniel/pidex` is the active working repo.
+- Source paths exist: `<running-pi-root>/agents`, `<running-pi-root>/rules`, `<home>/obsidian-wikis/pidex/plans/basis.md`.
+- Target path `<pidex-root>` is the active working repo.
 - Scope is file-system bootstrap only; implementation behavior outside copied content is out of scope.
 - Target release artifact is initial baseline milestone; set as `v0.1.0` unless roadmap adds stricter lane version.
 
@@ -49,7 +49,7 @@ Post-retro handoffs: none
 Objective: create minimal pidex-safe repository root and prove sensitive-state hygiene contract.
 - Create/verify root files: `.gitignore`, `.git/init`, `LICENSE`, `NOTICE`, short `README.md`.
 - Ensure `.gitignore` blocks sensitive runtime/state paths under repo root.
-- Validate `/home/daniel/pidex` contains no tracked `state/runs`, `state/metrics`, `state/pipeline-events` after this slice.
+- Validate `<pidex-root>` contains no tracked `state/runs`, `state/metrics`, `state/pipeline-events` after this slice.
 - Dependencies: none.
 - Acceptance criteria:
   1. Fresh clone-like baseline can be described by files above.
@@ -59,19 +59,19 @@ Owner: rp-implementer
 
 ### Slice 2: Agent Prompts Copy + Rename
 Objective: replicate agent prompt contract with pidex naming.
-- Copy every `/home/daniel/running-pi/agents/rp-*.md` file to `/home/daniel/pidex/agents/pidex-*.md`.
+- Copy every `<running-pi-root>/agents/rp-*.md` file to `<pidex-root>/agents/pidex-*.md`.
 - Normalize file content in copies: all role references `rp-...` -> `pidex-...`.
 - Dependencies: Slice 1 complete and source agent tree available.
 - Acceptance criteria:
   1. `ls agents/` in target contains pidex-prefixed counterparts.
-  2. No functional duplicate names remain as `rp-*.md` in `/home/daniel/pidex/agents`.
+  2. No functional duplicate names remain as `rp-*.md` in `<pidex-root>/agents`.
 
 Owner: rp-implementer
 
 ### Slice 3: Rules + Templates Copy + Rename
 Objective: port role-rule ecosystem so each copied role has matching pidex rule basis.
-- Copy `/home/daniel/running-pi/rules/rp-*/*` to `/home/daniel/pidex/rules/pidex-*/*`.
-- Copy templates tree into `/home/daniel/pidex/templates/*` if missing in target.
+- Copy `<running-pi-root>/rules/rp-*/*` to `<pidex-root>/rules/pidex-*/*`.
+- Copy templates tree into `<pidex-root>/templates/*` if missing in target.
 - Normalize copied rule/template content from `rp-*` role references to `pidex-*`.
 - Dependencies: Slice 2 complete and source rules/templates tree available.
 - Acceptance criteria:

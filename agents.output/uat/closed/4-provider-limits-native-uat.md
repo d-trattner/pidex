@@ -6,7 +6,7 @@ Status: UAT Complete
 ---
 
 ## Value Statement Under Test
-PIDEX-native provider-limit path and `/limits` UI should expose local `codex` and `codex-spark` usage rows from PIDEX-native state, remove recommendation noise, preserve `codex-optimized` / `codex-high`, and support user verification without `/home/daniel/running-pi` coupling.
+PIDEX-native provider-limit path and `/limits` UI should expose local `codex` and `codex-spark` usage rows from PIDEX-native state, remove recommendation noise, preserve `codex-optimized` / `codex-high`, and support user verification without `<running-pi-root>` coupling.
 
 ## Doc Review Summary
 - **Implementation** (`agents.output/implementation/4-provider-limits-native-implementation.md`, `.../implementation-fix1.md`): Active; milestones for Slice1–4 completed; code/docs show native fallback + profile behavior preservation.
@@ -15,7 +15,7 @@ PIDEX-native provider-limit path and `/limits` UI should expose local `codex` an
 - **QA** (`agents.output/qa/4-provider-limits-native-qa.md`): Frontmatter shows `Status: QA Blocked`, but evidence section shows API+DOM smoke with seeded native rows and screenshots for desktop/mobile.
 
 ## Value Delivery Assessment
-Core objective delivered. Evidence now shows `state/provider-limits/native-records.json` contract, `state/provider-limits/latest.json` generation, API contract without `recommended_profile`, and `/limits` rendering `codex` + `codex-spark` rows with no recommendation copy. No `/home/daniel/running-pi` path in provider-limits core files.
+Core objective delivered. Evidence now shows `state/provider-limits/native-records.json` contract, `state/provider-limits/latest.json` generation, API contract without `recommended_profile`, and `/limits` rendering `codex` + `codex-spark` rows with no recommendation copy. No `<running-pi-root>` path in provider-limits core files.
 
 ## Technical Compliance
 - **Acceptance 1-3** (probe state writes + no recommendation + API records): PASS (plan, code review, QA evidence).

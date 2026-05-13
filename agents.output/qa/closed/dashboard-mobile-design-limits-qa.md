@@ -6,10 +6,10 @@ Status: QA Failed
 ---
 
 # Plan Reference
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
-- Code Review: `/home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-code-review-final.md`
-- Security: `/home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-security.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
+- Code Review: `<pidex-root>/agents.output/review/dashboard-mobile-design-limits-code-review-final.md`
+- Security: `<pidex-root>/agents.output/review/dashboard-mobile-design-limits-security.md`
 
 # QA Status
 - Current: **QA Failed**
@@ -86,7 +86,7 @@ Status: QA Failed
 # Browser Smoke Evidence
 - Report: `/tmp/dashboard-mobile-design-limits-browser-evidence.json`
 - Console artifact: `/tmp/dashboard-mobile-design-limits-browser-console.txt`
-- Key screenshots under `/home/daniel/pidex/dashboard/.playwright/`:
+- Key screenshots under `<pidex-root>/dashboard/.playwright/`:
   - `ss-desktop-dashboard.png`, `ss-desktop-live.png`, `ss-desktop-limits.png`, `ss-desktop-pipelines.png`, `ss-desktop-quality.png`
   - `ss-mobile-dashboard.png`, `ss-mobile-live.png`, `ss-mobile-limits.png`, `ss-mobile-pipelines.png`, `ss-mobile-quality.png`
   - `ss-overview-mobile-closed.png`, `ss-overview-mobile-open.png`, `ss-mobile-after-nav.png`, `ss-limits-mobile.png`
@@ -119,5 +119,5 @@ verdict: FAILED
 route_to: pidex-implementer
 gate: G2
 reason: Browser smoke found runtime console error on /pipelines: cannot convert object to primitive value (Pipedline page). Desktop/mobile required tests and assertions blocked.
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-mobile-design-limits-qa.md
+context_file: <pidex-root>/agents.output/qa/dashboard-mobile-design-limits-qa.md
 -->

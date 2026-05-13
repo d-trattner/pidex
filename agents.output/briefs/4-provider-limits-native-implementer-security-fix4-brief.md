@@ -1,6 +1,6 @@
 # Implementer security fix4 brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Security v4 rejection: `agents.output/security/4-provider-limits-native-security-v4.md`
 Expected output: `agents.output/implementation/4-provider-limits-native-security-fix4.md`
 

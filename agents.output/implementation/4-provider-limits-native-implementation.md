@@ -54,7 +54,7 @@ Status: Active
 
 ## Value Statement Validation
 - PIDEX-native state path used: `state/provider-limits/latest.json`.
-- No `/home/daniel/running-pi` coupling added.
+- No `<running-pi-root>` coupling added.
 - Recommendation noise removed from probe/API/UI/profile surfaces.
 
 ## TDD Compliance

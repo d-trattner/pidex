@@ -1,6 +1,6 @@
 # PI brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Retrospective: `agents.output/retrospective/4-dashboard-parity-mobile-projects-retrospective.md`
 Future epic: `agents.output/briefs/dashboard-orchestration-quality-metrics-epic.md`
 Expected output: `agents.output/pi/4-dashboard-parity-mobile-projects-pi.md`

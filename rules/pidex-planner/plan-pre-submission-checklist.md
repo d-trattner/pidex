@@ -20,7 +20,7 @@ Run this checklist mentally (or literally as a Bash grep) before treating the pl
 **1. Acceptance Criteria — WHAT not HOW**
 
 - [ ] Every AC row describes the observable outcome, not the implementation mechanism.
-- [ ] BAD: "S1 runs `bash ~/running-pi/install.sh` to propagate changes" → HOW-leakage.
+- [ ] BAD: "S1 runs `bash <pidex-root>/install.sh` to propagate changes" → HOW-leakage.
 - [ ] GOOD: "Active orchestrator environment reflects all source changes from this plan."
 - [ ] Quick check: if an AC row contains a command, file path, or function name, it is probably HOW-leakage. Rewrite as a behavior that can be verified without knowing the implementation.
 
@@ -60,7 +60,7 @@ Read every AC row. For each row, ask: "Could I verify this AC without knowing ho
 
 Common HOW-leakage patterns:
 - AC contains a command (`grep`, `bash`, `curl`)
-- AC contains a file path (`~/running-pi/install.sh`)
+- AC contains a file path (`<pidex-root>/install.sh`)
 - AC contains a function/method name
 - AC says "the implementer should X" instead of "the system does X"
 

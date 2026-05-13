@@ -1,6 +1,6 @@
 # pidex-qa Rules Index
 
-Last updated: 2026-05-08 (PROC-NEW-80-3)
+Last updated: 2026-05-13 (PROC-NEW-88-3)
 
 ## Active Rules
 
@@ -29,6 +29,7 @@ Last updated: 2026-05-08 (PROC-NEW-80-3)
 | Async CTA Duplicate-Click Regression | [async-cta-duplicate-click-regression.md](async-cta-duplicate-click-regression.md) | 80-3 | QA must execute and evidence rapid double-click regression for each new/changed async CTA before QA COMPLETE |
 | Global Hook Mutation Full-Suite Smoke | [global-hook-mutation-full-suite-smoke.md](global-hook-mutation-full-suite-smoke.md) | PROC-NEW-2 | Global test lifecycle hook mutations require immediate full-suite smoke gate; block on race/flaky signal |
 | QA Status / Evidence Reconciliation | [status-evidence-reconciliation.md](status-evidence-reconciliation.md) | QA-STATUS-RECONCILE | When BLOCKED evidence is later supplied, patch the same QA artifact with final status/evidence/ROUTING before UAT/release |
+| QA Handoff Evidence Bundle | [qa-handoff-evidence-bundle.md](qa-handoff-evidence-bundle.md) | PROC-NEW-88-3 | QA handoff must include command transcripts, evidence hashes, version checks, failing artifact list, and retry boundary |
 
 ## How to use
 

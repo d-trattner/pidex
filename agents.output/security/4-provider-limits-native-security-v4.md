@@ -26,7 +26,7 @@ Reviewed:
 Brief asks final SEC-1 verification after package JSON comma fix. Run targeted checks and Fallow.
 
 Process rule file unavailable:
-- `/home/daniel/running-pi/rules/pidex-security/index.md` — ENOENT.
+- `<running-pi-root>/rules/pidex-security/index.md` — ENOENT.
 - No `agents.wiki.*/rules/pidex-security.md` found.
 
 Security skill unavailable in repo search:
@@ -94,7 +94,7 @@ Security impact:
 ## Automated Checks
 Secret scan:
 ```sh
-/home/daniel/running-pi/skills/security-patterns/scripts/check-secrets.sh dashboard/lib/server/provider-limits-auth.ts ...
+<running-pi-root>/skills/security-patterns/scripts/check-secrets.sh dashboard/lib/server/provider-limits-auth.ts ...
 ```
 Result:
 - PASS/no obvious secrets for first scoped file. Script accepted only first path in output.

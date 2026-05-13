@@ -1,6 +1,6 @@
 # pidex-implementer Rules Index
 
-Last updated: 2026-05-09 (PROC-NEW-034-1)
+Last updated: 2026-05-13 (PROC-NEW-88-2)
 
 ## Active Rules
 
@@ -43,6 +43,7 @@ Last updated: 2026-05-09 (PROC-NEW-034-1)
 
 | Layout-Parity DOM Snapshot | [layout-parity-dom-snapshot.md](layout-parity-dom-snapshot.md) | 034-1 | For layout-parity tasks, snapshot DOM of reference element before writing code; never copy from sibling page; verify class list |
 | Dashboard Route Parity Pre-Review Smoke | [dashboard-route-parity-pre-review-smoke.md](dashboard-route-parity-pre-review-smoke.md) | DASHBOARD-PARITY-SMOKE | Dashboard parity/query work must include route/API smoke matrix for planned surfaces, weekly/monthly tokens, live filter, and project page-key reset before code review |
+| Bounded Fix Slice Plan | [bounded-fix-slice-plan.md](bounded-fix-slice-plan.md) | PROC-NEW-88-2 | Implementer MUST execute bounded spawn-ready slices with explicit objective, failure class, pass criteria, and next-slice trigger |
 ## How to use
 
 Read this index at task start. Load specific rule files when relevant to current task.

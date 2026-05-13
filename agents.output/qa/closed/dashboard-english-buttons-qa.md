@@ -6,7 +6,7 @@ Status: QA Complete
 ---
 
 # Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md`
 - Target Release: `v0.1.0`
 
 # QA Status
@@ -43,7 +43,7 @@ pidex-qa
 # Phase 2: Test Execution Results (Post-Implementation)
 
 ## TDD Compliance Gate
-- Implementation doc checked: `/home/daniel/pidex/agents.output/implementation/dashboard-english-buttons-implementation.md`
+- Implementation doc checked: `<pidex-root>/agents.output/implementation/dashboard-english-buttons-implementation.md`
 - TDD Compliance table present: Yes.
 - Rows complete for new behavior: Yes.
 - Gate result: PASS.
@@ -66,9 +66,9 @@ pidex-qa
 ## Test Execution Results
 | Command | Result | Evidence |
 |---|---|---|
-| `cd /home/daniel/pidex/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs` | PASS | 2 pass, 0 fail |
-| `cd /home/daniel/pidex/dashboard && npm run typecheck` | PASS | `tsc --noEmit` clean |
-| `cd /home/daniel/pidex/dashboard && npm run build` | PASS | Vite client+SSR build success |
+| `cd <pidex-root>/dashboard && node --test tests/dashboard-copy-and-interactions.test.mjs` | PASS | 2 pass, 0 fail |
+| `cd <pidex-root>/dashboard && npm run typecheck` | PASS | `tsc --noEmit` clean |
+| `cd <pidex-root>/dashboard && npm run build` | PASS | Vite client+SSR build success |
 
 ## Runtime Smoke Verification
 - Scope trigger: UI route behavior touched; runtime smoke executed.
@@ -82,7 +82,7 @@ pidex-qa
 
 ## Fallow Gate
 - Using current security artifact evidence per task allowance.
-- Source: `/home/daniel/pidex/agents.output/review/dashboard-english-buttons-security.md`
+- Source: `<pidex-root>/agents.output/review/dashboard-english-buttons-security.md`
 - Recorded result: `PASS_WITH_FINDINGS` (pre-existing/non-blocking), acceptable for this scoped change.
 
 ## Version Verification
@@ -95,7 +95,7 @@ pidex-qa
 - N/A (no vitest inline run; node test runner used).
 
 ## Deferred Findings Tracking
-- Checked: `/home/daniel/pidex/agents.wiki.dashboard/open-items.md`
+- Checked: `<pidex-root>/agents.wiki.dashboard/open-items.md`
 - File absent; no deferred testable findings to close.
 
 ## Final Status
@@ -108,5 +108,5 @@ verdict: COMPLETE
 route_to: pidex-uat
 reason: Required QA checks green; runtime smoke feasible/pass; no blocking defects.
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-english-buttons-qa.md
+context_file: <pidex-root>/agents.output/qa/dashboard-english-buttons-qa.md
 -->

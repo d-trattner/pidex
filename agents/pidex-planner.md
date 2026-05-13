@@ -9,7 +9,7 @@ color: blue
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-planner/index.md` to load active process rules.
+At task start, read `<pidex-root>/rules/pidex-planner/index.md` to load active process rules.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-planner.md`, read that too for project-specific rules.
 
 # Purpose
@@ -75,11 +75,11 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 
 # Monorepo Migration Pre-Checks
 
-→ See `~/running-pi/rules/pidex-planner/monorepo-migration-prechecks.md`.
+→ See `<pidex-root>/rules/pidex-planner/monorepo-migration-prechecks.md`.
 
 # Third-Party Package Registry Check
 
-→ See `~/running-pi/rules/pidex-planner/third-party-registry-check.md`.
+→ See `<pidex-root>/rules/pidex-planner/third-party-registry-check.md`.
 
 # Targeted Rule Checks
 
@@ -112,15 +112,15 @@ Prefer small, focused scopes delivering value quickly.
 
 # Multi-Slice Budget Risk (MANDATORY for plans >4 slices)
 
-→ See `~/running-pi/rules/pidex-planner/multi-slice-budget-risk.md`.
+→ See `<pidex-root>/rules/pidex-planner/multi-slice-budget-risk.md`.
 
 # Browser-Level Smoke Obligation (MANDATORY for UI plans)
 
-→ See `~/running-pi/rules/pidex-planner/playwright-smoke-ac.md`
+→ See `<pidex-root>/rules/pidex-planner/playwright-smoke-ac.md`
 
 # User Preview Requirement (MANDATORY for all plans)
 
-→ See `~/running-pi/rules/pidex-planner/user-preview-requirement.md`.
+→ See `<pidex-root>/rules/pidex-planner/user-preview-requirement.md`.
 
 Every plan must include `## User Preview Requirement`. If UI is involved, post-devops user preview before G4 is mandatory. QA/UAT browser evidence does not replace user preview.
 
@@ -202,7 +202,7 @@ Does NOT apply to purely architectural plans (no user-visible content), bug fixe
 
 # Domain Fixture Derivation (Agent and Service Identifiers)
 
-→ See `~/running-pi/rules/pidex-planner/fixture-derivation.md`
+→ See `<pidex-root>/rules/pidex-planner/fixture-derivation.md`
 
 # Process
 
@@ -272,8 +272,8 @@ Project wiki lives at `agents.wiki.<project-name>/` in project root. Directory n
 **On first run in new project**: if no `agents.wiki.*` directory exists, initialize:
 1. Determine project name from current working directory basename
 2. Create `agents.wiki.<name>/` with subdirectories: `concepts/`, `decisions/`, `entities/`, `retrospectives/`
-3. Create `agents.wiki.<name>/index.md` from `~/running-pi/templates/wiki/index.md` (replace `__PROJECT_NAME__` with project name and `__DATE__` with today's date)
-4. Create `agents.wiki.<name>/log.md` from `~/running-pi/templates/wiki/log.md` (replace `__PROJECT_NAME__`)
+3. Create `agents.wiki.<name>/index.md` from `<pidex-root>/templates/wiki/index.md` (replace `__PROJECT_NAME__` with project name and `__DATE__` with today's date)
+4. Create `agents.wiki.<name>/log.md` from `<pidex-root>/templates/wiki/log.md` (replace `__PROJECT_NAME__`)
 
 **On every plan**: check wiki index. If plan introduces new concept, technology, or pattern not yet documented, write concept page in `concepts/` and update index. Not a copy of plan — distilled knowledge entry explaining concept in project context, independent of any specific plan.
 

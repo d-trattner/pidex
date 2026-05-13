@@ -1,6 +1,6 @@
 # Implementer fix brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Code review rejection: `agents.output/code-review/4-dashboard-parity-mobile-projects-code-review.md`
 Expected output: `agents.output/implementation/4-dashboard-parity-mobile-projects-implementation-fix1.md`
 

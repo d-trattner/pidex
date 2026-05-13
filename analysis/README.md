@@ -5,7 +5,7 @@ This folder stores optional post-run advisory analysis artifacts.
 Recommended commands:
 
 - `scripts/analysis/run-pipeline-analysis.sh --project <project> --plan <plan-id>`
-- `scripts/migration/replay-running-pi-to-pidex.sh baseline --source /home/daniel/running-pi --target /home/daniel/pidex`
+- `scripts/migration/replay-running-pi-to-pidex.sh baseline --source <home>/running-pi --target <home>/pidex`
 - `scripts/migration/replay-running-pi-to-pidex.sh sync [--source ...] [--target ...] --dry-run` (deterministic migration sync plan)
 
 Outputs are markdown reports with a trailing ROUTING block for follow-up.

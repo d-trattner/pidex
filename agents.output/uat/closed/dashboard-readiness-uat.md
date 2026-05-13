@@ -7,7 +7,7 @@ Status: UAT Complete
 
 ## UAT Report: Dashboard Production Readiness
 
-**Plan Reference**: /home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md
+**Plan Reference**: <pidex-root>/agents.output/planning/dashboard-readiness-plan.md
 **Date**: 2026-05-12
 **UAT Agent**: pidex-uat
 
@@ -65,5 +65,5 @@ verdict: APPROVED
 route_to: pidex-devops
 reason: UAT pass; value delivered; G9 not required for non-redesign readiness scope.
 gate: none
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-readiness-uat.md
+context_file: <pidex-root>/agents.output/uat/dashboard-readiness-uat.md
 -->

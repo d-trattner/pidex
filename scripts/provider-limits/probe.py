@@ -10,12 +10,14 @@ import argparse
 import json
 import os
 import subprocess
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state" / "provider-limits"
 ALERT_STATE = STATE / "alert-state.json"
+HISTORY = STATE / "history.jsonl"
 PROFILES = ROOT / "config" / "profiles"
 
 
@@ -26,6 +28,8 @@ def now_iso() -> str:
 def parse_time(value):
     if value is None:
         return None
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), timezone.utc)
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
     except Exception:
@@ -74,9 +78,10 @@ def list_profiles() -> list[str]:
 def active_profile() -> str:
     active = STATE / "active-profile.json"
     data = load_json(active)
-    if data.get("active_profile") in list_profiles():
+    profiles = list_profiles()
+    if data.get("active_profile") in profiles:
         return data["active_profile"]
-    return "codex-optimized"
+    return profiles[0] if profiles else "custom"
 
 
 def native_records() -> list[dict]:
@@ -86,6 +91,106 @@ def native_records() -> list[dict]:
     if not isinstance(rows, list):
         return []
     return [row for row in rows if isinstance(row, dict)]
+
+
+def codex_token() -> str | None:
+    if os.environ.get("CODEX_TOKEN"):
+        return os.environ["CODEX_TOKEN"]
+    path = Path(os.environ.get("CODEX_AUTH_FILE", str(Path.home() / ".codex" / "auth.json")))
+    data = load_json(path)
+    return ((data.get("tokens") or {}).get("access_token") or data.get("access_token"))
+
+
+def get_json(url: str, token: str) -> dict:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "User-Agent": "pidex-provider-limits/0.1",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=12) as res:
+        return json.loads(res.read().decode("utf-8", "replace"))
+
+
+def codex_additional_provider_name(limit: dict) -> str:
+    name = str(limit.get("limit_name") or limit.get("metered_feature") or "additional").strip().lower()
+    if "spark" in name or "bengalfox" in name:
+        return "codex-spark"
+    slug = "".join(ch if ch.isalnum() else "-" for ch in name).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return f"codex-{slug or 'additional'}"
+
+
+def append_codex_rate_limit(out: list[dict], data: dict, rl: dict, provider: str, limit_name: str | None = None, metered_feature: str | None = None) -> None:
+    for source, name in [(rl.get("primary_window") or {}, "five_hour"), (rl.get("secondary_window") or {}, "seven_day")]:
+        reset_at = parse_time(source.get("reset_at")) if source.get("reset_at") else None
+        out.append({
+            "provider": provider,
+            "window": name,
+            "used_percent": source.get("used_percent"),
+            "resets_at": reset_at.isoformat().replace("+00:00", "Z") if reset_at else None,
+            "allowed": rl.get("allowed"),
+            "limit_reached": rl.get("limit_reached"),
+            "plan": data.get("plan_type"),
+            "limit_name": limit_name,
+            "metered_feature": metered_feature,
+        })
+
+
+def probe_codex() -> list[dict]:
+    tok = codex_token()
+    if not tok:
+        return [{"provider": "codex", "window": "auth", "error": "missing Codex token"}]
+    try:
+        data = get_json("https://chatgpt.com/backend-api/wham/usage", tok)
+    except Exception as exc:
+        return [{"provider": "codex", "window": "auth", "error": f"Codex usage probe failed: {exc}"}]
+    out: list[dict] = []
+    append_codex_rate_limit(out, data, data.get("rate_limit") or {}, "codex")
+    for limit in data.get("additional_rate_limits") or []:
+        if not isinstance(limit, dict):
+            continue
+        append_codex_rate_limit(
+            out,
+            data,
+            limit.get("rate_limit") or {},
+            codex_additional_provider_name(limit),
+            limit.get("limit_name"),
+            limit.get("metered_feature"),
+        )
+    return out
+
+
+def write_history(records: list[dict], captured_at: str) -> None:
+    STATE.mkdir(parents=True, exist_ok=True)
+    with HISTORY.open("a", encoding="utf-8") as fh:
+        for record in records:
+            row = dict(record)
+            row["captured_at"] = captured_at
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def refresh_snapshot() -> dict:
+    captured_at = now_iso()
+    records = probe_codex()
+    for record in records:
+        record["captured_at"] = captured_at
+    payload = {
+        "active_profile": active_profile(),
+        "profiles": list_profiles(),
+        "records": records,
+        "generated_at": captured_at,
+        "latest": captured_at,
+    }
+    STATE.mkdir(parents=True, exist_ok=True)
+    (STATE / "latest.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    write_history(records, captured_at)
+    payload = auto_switch_if_needed(payload)
+    (STATE / "latest.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return payload
 
 
 def latest_snapshot() -> dict:
@@ -99,12 +204,14 @@ def latest_snapshot() -> dict:
             "generated_at": now_iso(),
             "latest": now_iso(),
         }
-    data.setdefault("profiles", list_profiles())
-    if "active_profile" not in data:
+    profiles = list_profiles()
+    data["profiles"] = profiles
+    if data.get("active_profile") not in profiles:
         data["active_profile"] = active_profile()
     if "records" not in data or not isinstance(data.get("records"), list) or not data.get("records"):
         data["records"] = native_records()
     data.pop("recommended_profile", None)
+    data = auto_switch_if_needed(data)
     STATE.mkdir(parents=True, exist_ok=True)
     latest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return data
@@ -177,11 +284,64 @@ def set_profile(profile: str) -> dict:
     return payload
 
 
+def spark_limit_hit(records: list[dict]) -> bool:
+    for record in records:
+        if record.get("provider") != "codex-spark":
+            continue
+        used = record.get("used_percent")
+        try:
+            used_num = float(used) if used is not None else None
+        except Exception:
+            used_num = None
+        if record.get("limit_reached") or record.get("allowed") is False or (used_num is not None and used_num >= 99):
+            return True
+    return False
+
+
+def non_spark_fallback_profile(current: str, profiles: list[str]) -> str | None:
+    no_spark = [profile for profile in profiles if "no-spark" in profile]
+    if not no_spark:
+        return None
+    if current in no_spark:
+        return None
+    exact = current.replace("plus-spark", "no-spark")
+    if exact in no_spark:
+        return exact
+    if current.startswith("5.3") and "5.3-no-spark-balanced" in no_spark:
+        return "5.3-no-spark-balanced"
+    if current.startswith("5.5") and "5.5-no-spark-balanced" in no_spark:
+        return "5.5-no-spark-balanced"
+    return no_spark[0]
+
+
+def auto_switch_if_needed(payload: dict) -> dict:
+    if env_bool("PIDEX_PROVIDER_LIMITS_DISABLE_AUTO_SWITCH", False):
+        return payload
+    records = payload.get("records") if isinstance(payload.get("records"), list) else []
+    if not spark_limit_hit(records):
+        return payload
+    profiles = list_profiles()
+    current = str(payload.get("active_profile") or active_profile())
+    target = non_spark_fallback_profile(current, profiles)
+    if not target:
+        return payload
+    switched = set_profile(target)
+    switched["auto_profile_switch"] = {
+        "reason": "codex-spark-limit-hit",
+        "from": current,
+        "to": target,
+        "updated": now_iso(),
+    }
+    return switched
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=False)
     latest = sub.add_parser("latest")
     latest.set_defaults(func=lambda _args: latest_snapshot())
+    refresh = sub.add_parser("refresh")
+    refresh.set_defaults(func=lambda _args: refresh_snapshot())
     use = sub.add_parser("use")
     use.add_argument("profile")
     use.set_defaults(func=lambda args: set_profile(args.profile))

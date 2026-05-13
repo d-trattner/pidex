@@ -1,6 +1,6 @@
 # PIDEX Dashboard Root Routes Brief
 
-Project cwd: `/home/daniel/pidex/dashboard`
+Project cwd: `<pidex-root>/dashboard`
 User request: The dashboard currently nests pages under `/dashboard/*` by mistake. `/dashboard` should be only a landing page. Functional dashboard routes should live directly under root, e.g. `/live` instead of `/dashboard/live`.
 
 Current context:
@@ -23,6 +23,6 @@ Validation:
 - Smoke: `/dashboard`, `/live`, `/overview`, `/analysis`, and ideally old `/dashboard/live` behavior documented.
 
 Expected artifacts:
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-root-routes-implementation.md`
-- QA: `/home/daniel/pidex/agents.output/qa/dashboard-root-routes-qa.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-root-routes-plan.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-root-routes-implementation.md`
+- QA: `<pidex-root>/agents.output/qa/dashboard-root-routes-qa.md`

@@ -1,6 +1,6 @@
 # Devops brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 UAT: `agents.output/uat/4-dashboard-parity-mobile-projects-uat.md`
 G9 fix UAT: `agents.output/uat/4-dashboard-parity-mobile-projects-g9-fix2-uat.md`

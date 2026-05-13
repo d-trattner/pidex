@@ -73,4 +73,4 @@ say "installing package into Pi settings"
 "${CMD[@]}"
 
 say "install complete"
-printf '\nRun in Pi:\n  /reload\n  /pd <your task>\n'
+printf '\nRun in Pi:\n  /reload\n  /pidex <your task>\n\nShortcut:\n  /pd <your task>\n'

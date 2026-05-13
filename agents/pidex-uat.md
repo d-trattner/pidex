@@ -9,8 +9,8 @@ color: pink
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-uat/index.md` to load active process rules.
-For G9-required or UI plans, load `~/running-pi/rules/pidex-uat/ui-evidence-before-g9.md` and `~/running-pi/rules/pidex-uat/semantic-ui-fit.md`. For repeated/hierarchical/status UI or plans with a UI Label Source Contract, also load `~/running-pi/rules/pidex-uat/visible-text-semantic-check.md`.
+At task start, read `<pidex-root>/rules/pidex-uat/index.md` to load active process rules.
+For G9-required or UI plans, load `<pidex-root>/rules/pidex-uat/ui-evidence-before-g9.md` and `<pidex-root>/rules/pidex-uat/semantic-ui-fit.md`. For repeated/hierarchical/status UI or plans with a UI Label Source Contract, also load `<pidex-root>/rules/pidex-uat/visible-text-semantic-check.md`.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-uat.md`, read that too for project-specific rules.
 
 # Purpose

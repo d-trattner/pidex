@@ -15,10 +15,10 @@ Security focus: XSS, open redirect, unsafe links, path traversal relevance.
 Targeted Code Review (pipeline step).
 
 # Evidence
-- /home/daniel/pidex/agents.output/implementation/dashboard-english-buttons-implementation.md
-- /home/daniel/pidex/agents.output/review/dashboard-english-buttons-code-review.md
-- /home/daniel/pidex/dashboard/routes/dashboard/index.tsx
-- /home/daniel/pidex/dashboard/tests/dashboard-copy-and-interactions.test.mjs
+- <pidex-root>/agents.output/implementation/dashboard-english-buttons-implementation.md
+- <pidex-root>/agents.output/review/dashboard-english-buttons-code-review.md
+- <pidex-root>/dashboard/routes/dashboard/index.tsx
+- <pidex-root>/dashboard/tests/dashboard-copy-and-interactions.test.mjs
 - grep scan on `dashboard/routes/dashboard/**/*.tsx` for risky sinks/patterns.
 
 # Findings
@@ -35,7 +35,7 @@ Root redirect uses internal path + replace.
 No dependency changes.
 
 # Fallow Signal
-FALLOW-RUN: `cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain`
+FALLOW-RUN: `cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain`
 Result: PASS_WITH_FINDINGS (pre-existing complexity/duplication hotspots, not introduced by this scoped UI copy/redirect change).
 
 # Verdict
@@ -47,5 +47,5 @@ verdict: APPROVED
 route_to: pidex-qa
 reason: No security-relevant regression in scoped UI copy/redirect/test changes.
 gate: none
-context_file: /home/daniel/pidex/agents.output/review/dashboard-english-buttons-security.md
+context_file: <pidex-root>/agents.output/review/dashboard-english-buttons-security.md
 -->

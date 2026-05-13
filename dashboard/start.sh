@@ -10,6 +10,7 @@ BUILD=1
 INGEST=1
 DEV=0
 PUBLIC_READ="${PIDEX_PROVIDER_LIMITS_PUBLIC_READ:-0}"
+PUBLIC_WRITE="${PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE:-0}"
 DOMAIN="${PIDEX_DASHBOARD_DOMAIN:-pi.lan}"
 
 usage() {
@@ -20,7 +21,8 @@ Options:
   --host HOST       Bind host. Default: 127.0.0.1
   --port PORT       Bind port. Default: 18777
   --domain NAME     Print friendly domain URL. Default: pi.lan
-  --public-read     Allow unauthenticated provider-limits GETs on public bind (writes still require token)
+  --public-read     Allow unauthenticated provider-limits GETs on public bind
+  --public-write    Allow same-origin provider-limits writes on public bind (profile buttons)
   --no-build        Skip production build before start
   --no-ingest       Skip SQLite ingest before start
   --dev             Run Vite dev server instead of production preview
@@ -38,6 +40,7 @@ while [ $# -gt 0 ]; do
     --no-ingest) INGEST=0; shift ;;
     --dev) DEV=1; shift ;;
     --public-read) PUBLIC_READ=1; shift ;;
+    --public-write) PUBLIC_WRITE=1; shift ;;
     --foreground) FOREGROUND=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; usage >&2; exit 2 ;;
@@ -86,6 +89,7 @@ fi
 export PIDEX_DASHBOARD_ROOT="$ROOT"
 export PIDEX_DASHBOARD_DB="$ROOT/data/pidex.sqlite"
 export PIDEX_PROVIDER_LIMITS_PUBLIC_READ="$PUBLIC_READ"
+export PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE="$PUBLIC_WRITE"
 
 if [ "$HOST" = "127.0.0.1" ] || [ "$HOST" = "localhost" ] || [ "$HOST" = "::1" ]; then
   export PIDEX_DASHBOARD_PUBLIC_BIND=0

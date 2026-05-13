@@ -1,6 +1,6 @@
 # Security brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Code review approval: `agents.output/code-review/4-dashboard-parity-mobile-projects-code-review-v3.md`
 Implementation docs:

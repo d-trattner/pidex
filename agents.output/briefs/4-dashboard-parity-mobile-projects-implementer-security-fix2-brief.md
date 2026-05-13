@@ -1,6 +1,6 @@
 # Implementer security fix2 brief
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Security v2: `agents.output/security/4-dashboard-parity-mobile-projects-security-v2.md`
 Expected output: `agents.output/implementation/4-dashboard-parity-mobile-projects-security-fix2.md`
 

@@ -1,6 +1,6 @@
 # Roadmap brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Devops: `agents.output/devops/4-dashboard-parity-mobile-projects-devops.md`
 Retro: `agents.output/retrospective/4-dashboard-parity-mobile-projects-retrospective.md`

@@ -8,7 +8,7 @@ Status: UAT Complete
 # UAT Report: Dashboard Global Header Mobile Menu
 
 ## Plan Reference
-`/home/daniel/pidex/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
+`<pidex-root>/agents.output/planning/dashboard-global-header-mobile-menu-plan.md`
 
 ## Date
 2026-05-12
@@ -20,11 +20,11 @@ pidex-uat
 As dashboard user, I want persistent global header/menu plus mobile always-visible menu button opening sheet, so navigation stays fast/clear on every page and viewport.
 
 ## Doc Review Summary
-- Implementation: complete. `/home/daniel/pidex/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
-- Code Review: approved. `/home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-code-review-final.md`
-- Security: approved. `/home/daniel/pidex/agents.output/review/dashboard-global-header-mobile-menu-security.md`
-- QA: QA Complete. `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa-final.md`
-- Final Design Audit: approved. `/home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design-audit-final.md`
+- Implementation: complete. `<pidex-root>/agents.output/implementation/dashboard-global-header-mobile-menu-implementation.md`
+- Code Review: approved. `<pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-code-review-final.md`
+- Security: approved. `<pidex-root>/agents.output/review/dashboard-global-header-mobile-menu-security.md`
+- QA: QA Complete. `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa-final.md`
+- Final Design Audit: approved. `<pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design-audit-final.md`
 
 ## Value Delivery Assessment
 Value delivered. Shared header/menu present cross target routes. Desktop menu visible. Mobile fixed Menu button opens accessible sheet, traps focus, closes after nav. Tests/build/smoke pass.
@@ -92,5 +92,5 @@ No blocking findings.
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-devops
-context_file: /home/daniel/pidex/agents.output/uat/dashboard-global-header-mobile-menu-uat-final.md
+context_file: <pidex-root>/agents.output/uat/dashboard-global-header-mobile-menu-uat-final.md
 -->

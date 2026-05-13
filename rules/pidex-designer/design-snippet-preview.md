@@ -22,9 +22,9 @@ Produce a small disposable HTML/CSS/JS preview that communicates layout, hierarc
 Use Running Pi preview helpers:
 
 ```bash
-bash ~/running-pi/scripts/preview/create-design-snippet.sh --title "<title>" < snippet.html
-bash ~/running-pi/scripts/preview/serve-design-snippet.sh --id <id>
-bash ~/running-pi/scripts/preview/stop-design-snippet.sh --id <id>
+bash <pidex-root>/scripts/preview/create-design-snippet.sh --title "<title>" < snippet.html
+bash <pidex-root>/scripts/preview/serve-design-snippet.sh --id <id>
+bash <pidex-root>/scripts/preview/stop-design-snippet.sh --id <id>
 ```
 
 The serve helper returns both:

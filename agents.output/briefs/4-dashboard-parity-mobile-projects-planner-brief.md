@@ -1,6 +1,6 @@
 # Planner brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan id: `4`
 Slug: `dashboard-parity-mobile-projects`
 Findings: `agents.output/analysis/4-dashboard-parity-mobile-projects-findings.md`

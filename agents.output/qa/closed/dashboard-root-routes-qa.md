@@ -6,7 +6,7 @@ Status: QA Complete
 ---
 
 ## Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-root-routes-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-root-routes-plan.md`
 
 ## QA Status
 - QA Complete
@@ -88,5 +88,5 @@ verdict: COMPLETE
 route_to: pidex-uat
 reason: Required QA checks pass; runtime route smoke + legacy redirect verified
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-root-routes-qa.md
+context_file: <pidex-root>/agents.output/qa/dashboard-root-routes-qa.md
 -->

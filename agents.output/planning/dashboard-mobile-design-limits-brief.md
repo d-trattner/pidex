@@ -1,6 +1,6 @@
 # PIDEX Dashboard Mobile Design + Limits Data Brief
 
-Project cwd: `/home/daniel/pidex/dashboard`
+Project cwd: `<pidex-root>/dashboard`
 
 User task: Improve PIDEX dashboard mobile design and fix Limits provider data.
 
@@ -29,7 +29,7 @@ Constraints:
 - Preserve API paths/contracts.
 - Preserve current glass visual style while improving mobile usability.
 - Use shared header/menu components; no duplicate page-level nav.
-- Modify only `/home/daniel/pidex/dashboard` product files and artifacts.
+- Modify only `<pidex-root>/dashboard` product files and artifacts.
 - Run tests/build/typecheck, runtime route smoke, and mobile screenshot/browser evidence if feasible.
 
 Current context:
@@ -39,7 +39,7 @@ Current context:
 - System Chromium is available; `playwright-cli` may be unavailable.
 
 Expected artifacts:
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-mobile-design-limits-plan.md`
-- Design: `/home/daniel/pidex/agents.output/design/dashboard-mobile-design-limits-design.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
-- QA: `/home/daniel/pidex/agents.output/qa/dashboard-mobile-design-limits-qa.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-mobile-design-limits-plan.md`
+- Design: `<pidex-root>/agents.output/design/dashboard-mobile-design-limits-design.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
+- QA: `<pidex-root>/agents.output/qa/dashboard-mobile-design-limits-qa.md`

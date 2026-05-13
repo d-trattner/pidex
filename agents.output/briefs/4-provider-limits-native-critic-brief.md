@@ -1,8 +1,8 @@
 # Critic brief: 4-provider-limits-native
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-provider-limits-native-plan.md`
-Epic: PIDEX-native provider-limits collection for Codex and Codex Spark into PIDEX state; no `/home/daniel/running-pi`; preserve codex profiles; remove recommendation behavior; show real rows in API/UI; validate probe/API/UI/build/typecheck/tests.
+Epic: PIDEX-native provider-limits collection for Codex and Codex Spark into PIDEX state; no `<running-pi-root>`; preserve codex profiles; remove recommendation behavior; show real rows in API/UI; validate probe/API/UI/build/typecheck/tests.
 
 Review the plan for implementation readiness, missing requirements, acceptance criteria, risk, and execution profile correctness. Do not implement.
 

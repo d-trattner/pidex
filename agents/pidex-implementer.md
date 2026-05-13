@@ -10,7 +10,7 @@ color: green
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-implementer/index.md` to load active process rules.
+At task start, read `<pidex-root>/rules/pidex-implementer/index.md` to load active process rules.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-implementer.md`, read that too for project-specific rules.
 
 # Purpose
@@ -136,7 +136,7 @@ Uncommitted work = unrecoverable on crash/budget exhaustion. Impl doc = intent; 
 
 1. **Atomic TDD slices** (helper + its test): commit RED separately from GREEN when each verified. Two commits per slice.
 2. **Architecturally coupled slices** (UI layout + nav integration that leaves un-shippable intermediate state): bundle into ONE commit, but commit AS SOON AS unit is coherent.
-3. **Release-prep slices** (CHANGELOG, version bump): CHANGELOG entry is the FIRST file written. → See `~/running-pi/rules/pidex-implementer/changelog-ordering.md`
+3. **Release-prep slices** (CHANGELOG, version bump): CHANGELOG entry is the FIRST file written. → See `<pidex-root>/rules/pidex-implementer/changelog-ordering.md`
 4. After each commit, update impl doc Slice Table row with commit hash via `Edit`.
 5. **Dep-pruning slice completeness (PROC-NEW-23)**: Any slice that removes packages from `package.json` is not complete without running `rm -rf node_modules package-lock.json && npm install` and committing the updated lockfile in the same slice. Lockfile regeneration is not an optional follow-up — it is part of the slice definition. Stale lockfile = CVEs for removed packages persist.
 
@@ -167,7 +167,7 @@ Each commit costs ~2 Bash calls (`git add` + `git commit`) + ~1 Edit (Slice Tabl
 
 # STALL Signal (best-effort — primary signal is stub-state output doc)
 
-→ See `~/running-pi/rules/pidex-implementer/stall-recovery.md`
+→ See `<pidex-root>/rules/pidex-implementer/stall-recovery.md`
 
 **Primary stall signal: stub-state output doc** (see Output Discipline — PROC-NEW-1). Orchestrator treats stubbed output doc after idle as stall, no text needed.
 
@@ -184,7 +184,7 @@ Each commit costs ~2 Bash calls (`git add` + `git commit`) + ~1 Edit (Slice Tabl
 2. Read roadmap only for target release/value alignment when not already present in plan briefing.
 3. Read architecture only when plan touches architecture, APIs, integrations, data boundaries, or non-trivial design.
 4. Read critique if exists. Address APPROVED_WITH_COMMENTS findings.
-5. Read design review if exists. Check "Must-Fix Before Commit" FIRST. → See `~/running-pi/rules/pidex-implementer/design-review-must-fix.md`
+5. Read design review if exists. Check "Must-Fix Before Commit" FIRST. → See `<pidex-root>/rules/pidex-implementer/design-review-must-fix.md`
 6. Read security findings if present. Address required controls.
 7. Load targeted rule files only when trigger appears (route deletion, port change, dep pruning, endpoint work, query keys, external API, etc.). Rule index is source of trigger list.
 8. **Uncertainty Guardrail (bugfixes)**: Plan without verified root cause = speculative fix. Prefer verifiable changes (tests), reduced blast radius, improved diagnosability. Speculative behavior change? STOP and request clarification from pidex-planner.
@@ -331,7 +331,7 @@ After installing dependencies, verify installed versions match plan spec. If `np
 
 May be invoked multiple times for same plan when downstream agents reject:
 
-- **From pidex-code-reviewer REJECTED**: Read findings, fix specific issues, re-run tests, update impl doc with revision entry. Fix surgically — not from scratch. **Fix loop scope cap (PROC-NEW-14)**: → See `~/running-pi/rules/pidex-implementer/fix-loop-scope-cap.md`
+- **From pidex-code-reviewer REJECTED**: Read findings, fix specific issues, re-run tests, update impl doc with revision entry. Fix surgically — not from scratch. **Fix loop scope cap (PROC-NEW-14)**: → See `<pidex-root>/rules/pidex-implementer/fix-loop-scope-cap.md`
 - **From pidex-qa FAILED**: Read QA doc for failing tests/coverage gaps, fix impl, re-run tests, update impl doc.
 - **From pidex-uat NOT APPROVED**: Read UAT doc for value gaps, fix to deliver stated value, update impl doc.
 - **From G9 Preview REJECTED**: Read user feedback on what broke in browser, fix specific UI/UX issue.

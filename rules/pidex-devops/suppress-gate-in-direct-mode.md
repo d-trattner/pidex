@@ -12,15 +12,15 @@ external channel. The gate MUST be presented in the terminal only.
 
 The orchestrator is in direct mode when ALL of the following are true:
 
-1. The lead was NOT started via `~/running-pi/scripts/lead/start.sh` (no detached
+1. The lead was NOT started via `<pidex-root>/scripts/lead/start.sh` (no detached
    `--print` process in the background)
 2. The orchestrator session is interactive — the user is actively present in the terminal
-3. No `~/running-pi/state/pending-gate.json` exists from a prior background run
+3. No `<pidex-root>/state/pending-gate.json` exists from a prior background run
 
 Heuristic for the orchestrator (check before calling `send-gate.sh`):
 
   # Is a background lead running?
-  LEAD_PID=$(cat ~/running-pi/state/lead.pid 2>/dev/null)
+  LEAD_PID=$(cat <pidex-root>/state/lead.pid 2>/dev/null)
   if [ -n "$LEAD_PID" ] && kill -0 "$LEAD_PID" 2>/dev/null; then
     BACKGROUND_MODE=true
   else

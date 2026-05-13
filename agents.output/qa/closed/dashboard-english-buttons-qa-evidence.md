@@ -6,7 +6,7 @@ Status: QA Complete
 ---
 
 # Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md`
+- `<pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md`
 
 # QA Status
 QA Complete
@@ -50,9 +50,9 @@ pidex-qa
 - N/A (no vitest run inline).
 
 # Browser Evidence
-- `/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-screens/overview.png` (1440x1000)
-- `/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-screens/mobile.png` (390x844)
-- `/home/daniel/pidex/agents.output/qa/dashboard-english-buttons-screens/analysis.png` (1440x1000)
+- `<pidex-root>/agents.output/qa/dashboard-english-buttons-screens/overview.png` (1440x1000)
+- `<pidex-root>/agents.output/qa/dashboard-english-buttons-screens/mobile.png` (390x844)
+- `<pidex-root>/agents.output/qa/dashboard-english-buttons-screens/analysis.png` (1440x1000)
 - Hashes:
   - `overview.png`: `164db90ad6a1150293b615e783e326d2512e68e480a48c9f9d630d6482dbddf6`
   - `mobile.png`: `937c6dac8aee5ef5ef8c023e73647716b51bb9e1a50bcd1bbaae257e44f76784`
@@ -68,5 +68,5 @@ verdict: COMPLETE
 route_to: pidex-uat
 reason: UAT blocker addressed with available screenshot/runtime/navigation/button evidence despite Playwright CLI unavailable.
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-english-buttons-qa-evidence.md
+context_file: <pidex-root>/agents.output/qa/dashboard-english-buttons-qa-evidence.md
 -->

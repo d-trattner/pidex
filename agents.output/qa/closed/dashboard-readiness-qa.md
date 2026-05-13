@@ -8,10 +8,10 @@ Status: QA Complete
 # QA Document
 
 ## Plan Reference
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-readiness-implementation.md`
-- Code review: `/home/daniel/pidex/agents.output/review/dashboard-readiness-code-review.md`
-- Security: `/home/daniel/pidex/agents.output/review/dashboard-readiness-security.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-readiness-implementation.md`
+- Code review: `<pidex-root>/agents.output/review/dashboard-readiness-code-review.md`
+- Security: `<pidex-root>/agents.output/review/dashboard-readiness-security.md`
 
 ## QA Status
 - Current: QA Complete
@@ -87,5 +87,5 @@ verdict: COMPLETE
 route_to: pidex-uat
 reason: Required checks pass; endpoint smokes pass including analysis/document handler proof.
 gate: none
-context_file: /home/daniel/pidex/agents.output/qa/dashboard-readiness-qa.md
+context_file: <pidex-root>/agents.output/qa/dashboard-readiness-qa.md
 -->

@@ -7,9 +7,9 @@ Verdict: APPROVED
 ---
 
 ## Plan Reference
-- Plan: `/home/daniel/pidex/agents.output/planning/dashboard-readiness-plan.md`
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-readiness-implementation.md`
-- Code review: `/home/daniel/pidex/agents.output/review/dashboard-readiness-code-review.md`
+- Plan: `<pidex-root>/agents.output/planning/dashboard-readiness-plan.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-readiness-implementation.md`
+- Code review: `<pidex-root>/agents.output/review/dashboard-readiness-code-review.md`
 
 ## Mode
 - Targeted Code Review (pipeline default).
@@ -58,5 +58,5 @@ Verdict: APPROVED
 <!-- ROUTING
 verdict: APPROVED
 route_to: pidex-qa
-context_file: /home/daniel/pidex/agents.output/review/dashboard-readiness-security.md
+context_file: <pidex-root>/agents.output/review/dashboard-readiness-security.md
 -->

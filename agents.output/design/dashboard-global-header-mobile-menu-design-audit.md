@@ -6,10 +6,10 @@ Status: OPEN
 ---
 
 ## Reference
-- UAT: `/home/daniel/pidex/agents.output/uat/dashboard-global-header-mobile-menu-uat.md`
-- Design spec: `/home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design.md`
-- QA: `/home/daniel/pidex/agents.output/qa/dashboard-global-header-mobile-menu-qa.md`
-- Screenshots: `/home/daniel/pidex/dashboard/.playwright/ss-1-dashboard-desktop.png`, `ss-2-live-mobile-closed.png`
+- UAT: `<pidex-root>/agents.output/uat/dashboard-global-header-mobile-menu-uat.md`
+- Design spec: `<pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design.md`
+- QA: `<pidex-root>/agents.output/qa/dashboard-global-header-mobile-menu-qa.md`
+- Screenshots: `<pidex-root>/dashboard/.playwright/ss-1-dashboard-desktop.png`, `ss-2-live-mobile-closed.png`
 
 ## Date
 - 2026-05-12
@@ -55,5 +55,5 @@ REJECTED — evidence gate failed. Design intent cannot be accepted yet.
 verdict: REJECTED
 route_to: pidex-implementer
 reason: Provide missing mobile sheet/open-post-nav and keyboard-focus evidence; fix UI if mismatches found.
-context_file: /home/daniel/pidex/agents.output/design/dashboard-global-header-mobile-menu-design-audit.md
+context_file: <pidex-root>/agents.output/design/dashboard-global-header-mobile-menu-design-audit.md
 -->

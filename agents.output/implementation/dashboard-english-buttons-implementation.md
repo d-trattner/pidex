@@ -6,7 +6,7 @@ Status: Active
 ---
 
 ## Plan Reference
-- `/home/daniel/pidex/agents.output/planning/dashboard-english-buttons-plan.md` (ID 2, UUID b7c41e9a)
+- `<pidex-root>/agents.output/planning/dashboard-english-buttons-plan.md` (ID 2, UUID b7c41e9a)
 
 ## Date
 - 2026-05-12
@@ -86,5 +86,5 @@ Status: Active
 verdict: COMPLETE
 route_to: pidex-code-reviewer
 reason: Implementation complete, validations green, TDD evidence documented.
-context_file: /home/daniel/pidex/agents.output/implementation/dashboard-english-buttons-implementation.md
+context_file: <pidex-root>/agents.output/implementation/dashboard-english-buttons-implementation.md
 -->

@@ -44,7 +44,7 @@ Defaults:
 
 Examples:
   ./scripts/guard-codex-only.sh
-  ./scripts/guard-codex-only.sh --root /home/daniel/pidex
+  ./scripts/guard-codex-only.sh --root <pidex-root>
   ./scripts/guard-codex-only.sh --allow-line "Legacy:.*running-pi" \
     --allow-line "Historical profile:"
 EOF

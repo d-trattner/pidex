@@ -26,7 +26,7 @@ Inputs inspected:
 - `agents.output/briefs/dashboard-orchestration-quality-metrics-epic.md`
 - `agents.output/analysis/closed/pidex-quality-self-improvement-analyst.md`
 
-Rules load note: `/home/daniel/running-pi/rules/pidex-analyst/index.md` missing. No `agents.wiki.*/rules/pidex-analyst.md` found.
+Rules load note: `<running-pi-root>/rules/pidex-analyst/index.md` missing. No `agents.wiki.*/rules/pidex-analyst.md` found.
 
 ## Methodology
 - Read extracted paper text end-to-end.

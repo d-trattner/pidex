@@ -29,11 +29,11 @@ Brief asks:
 - Run/document Fallow.
 
 Process rule file unavailable:
-- `/home/daniel/running-pi/rules/pidex-security/index.md` — ENOENT.
+- `<running-pi-root>/rules/pidex-security/index.md` — ENOENT.
 - No `agents.wiki.*/rules/pidex-security.md` found.
 
 Security skill loaded:
-- `/home/daniel/running-pi/skills/security-patterns/SKILL.md`.
+- `<running-pi-root>/skills/security-patterns/SKILL.md`.
 
 ## Mode
 Targeted Code Review. Direct mode. Pipeline-style fixed pass.

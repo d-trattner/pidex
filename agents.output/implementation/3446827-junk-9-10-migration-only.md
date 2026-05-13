@@ -17,7 +17,7 @@ Status: Completed
 # Changelog
 | Date | Commit | Summary |
 | --- | --- | --- |
-| 2026-05-11 | e0433ed | Migrate dashboard + scripts assets from `/home/daniel/running-pi` into `/home/daniel/pidex`, PIDEX DB path + codex-first provider filters |
+| 2026-05-11 | e0433ed | Migrate dashboard + scripts assets from `<running-pi-root>` into `<pidex-root>`, PIDEX DB path + codex-first provider filters |
 
 # Implementation Summary
 Completed migration-only copy and provider-masking updates for pidex:
@@ -28,8 +28,8 @@ Completed migration-only copy and provider-masking updates for pidex:
 - Updated `dashboard/README.md` paths and DB filename references from Running-Pi migration defaults to PIDEX defaults.
 
 # Milestones Completed
-- [x] Copy `dashboard` tree from `/home/daniel/running-pi` to `/home/daniel/pidex`.
-- [x] Copy `scripts/metrics` and `scripts/pipeline` trees from `/home/daniel/running-pi` to `/home/daniel/pidex`.
+- [x] Copy `dashboard` tree from `<running-pi-root>` to `<pidex-root>`.
+- [x] Copy `scripts/metrics` and `scripts/pipeline` trees from `<running-pi-root>` to `<pidex-root>`.
 - [x] Set DB path to `dashboard/data/pidex.sqlite` in dashboard scripts.
 - [x] Enforce codex-first/provider-historical filtering defaults in dashboard API + UI.
 - [x] Verify syntax and static checks; no runtime service started.

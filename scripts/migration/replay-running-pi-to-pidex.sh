@@ -110,8 +110,8 @@ replacements = [
     ('rp_agent', 'pidex_agent'),
     ('running-pi-instructions', 'pidex-instructions'),
     ('/runningpi/', '/pidex/'),
-    ('~/running-pi', '~/pidex'),
-    ('~/runningpi', '~/pidex'),
+    ('<running-pi-root>', '<pidex-root>'),
+    ('~/runningpi', '<pidex-root>'),
     ('https://running-pi.dev', 'https://pidex.dev'),
 ]
 for old, new in replacements:

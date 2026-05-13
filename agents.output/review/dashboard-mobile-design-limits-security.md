@@ -17,14 +17,14 @@ Verdict: APPROVED
 - Product files unchanged.
 
 ## Inputs
-- Implementation: `/home/daniel/pidex/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
-- Code review final: `/home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-code-review-final.md`
+- Implementation: `<pidex-root>/agents.output/implementation/dashboard-mobile-design-limits-implementation.md`
+- Code review final: `<pidex-root>/agents.output/review/dashboard-mobile-design-limits-code-review-final.md`
 - Code: `components/navigation/global-nav.tsx`, `routes/limits.tsx`, `routes/api/provider-limits.tsx`, `routes/api/provider-limits/profile.tsx`, `lib/server/limits.ts`, `app/styles/theme.css`.
 
 ## Rules / Skill Load
-- Process rules path missing: `/home/daniel/running-pi/rules/pidex-security/index.md` ENOENT. No project-specific `agents.wiki.*/rules/pidex-security.md` found.
+- Process rules path missing: `<running-pi-root>/rules/pidex-security/index.md` ENOENT. No project-specific `agents.wiki.*/rules/pidex-security.md` found.
 - Loaded `security-patterns/SKILL.md`. Applied OWASP XSS/injection/access-control/insecure-design checks.
-- Self-check: `/home/daniel/pidex/agents.output/security` absent. No terminal docs to move.
+- Self-check: `<pidex-root>/agents.output/security` absent. No terminal docs to move.
 
 ## Checks
 | Area | Evidence | Result |
@@ -45,7 +45,7 @@ Verdict: APPROVED
 - No blocking issue for scoped change.
 
 ## Fallow Evidence
-- Command: `cd /home/daniel/pidex/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
+- Command: `cd <pidex-root>/dashboard && npx fallow audit --format json --quiet --explain 2>/dev/null || true`
 - Outcome: completed with findings.
 - Relevant findings: `routes/limits.tsx` complexity, `components/navigation/global-nav.tsx:onKey` complexity, broad existing duplication/complexity.
 - Security impact: non-blocking. Findings structural/maintainability, not exploitable in scoped diff. Code-review Fallow evidence consistent.
@@ -71,5 +71,5 @@ verdict: APPROVED
 route_to: pidex-qa
 reason: Scoped XSS/link/focus/data-spoofing/API checks pass; Fallow has non-blocking structural findings only.
 gate: none
-context_file: /home/daniel/pidex/agents.output/review/dashboard-mobile-design-limits-security.md
+context_file: <pidex-root>/agents.output/review/dashboard-mobile-design-limits-security.md
 -->

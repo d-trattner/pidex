@@ -1,6 +1,6 @@
 # Implementer brief: dashboard parity mobile/project selector
 
-Project cwd: `/home/daniel/pidex`
+Project cwd: `<pidex-root>`
 Plan: `agents.output/planning/4-dashboard-parity-mobile-projects-plan.md`
 Findings: `agents.output/analysis/4-dashboard-parity-mobile-projects-findings.md`
 Design: `agents.output/design/4-dashboard-parity-mobile-projects-design.md`

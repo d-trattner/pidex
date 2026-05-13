@@ -9,7 +9,7 @@ color: red
 
 # Rules
 
-At task start, read `~/running-pi/rules/pidex-security/index.md` to load active process rules.
+At task start, read `<pidex-root>/rules/pidex-security/index.md` to load active process rules.
 If a project wiki exists with `agents.wiki.<project>/rules/pidex-security.md`, read that too for project-specific rules.
 
 # Mission Statement
@@ -91,7 +91,7 @@ Before starting, classify request into one mode:
 
 **If running via running-pi (background mode)**, send mode question as gate:
 ```
-bash ~/running-pi/scripts/telegram/send-gate.sh \
+bash <pidex-root>/scripts/telegram/send-gate.sh \
   --gate G5 --plan <plan-id> --slug <slug> \
   --options "full-audit,targeted,dependency-only,pre-prod-gate" \
   --context "Security review requested but mode is unclear. Which mode?

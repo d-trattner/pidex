@@ -15,9 +15,9 @@ Verdict: APPROVED
 - Brief: `agents.output/briefs/4-dashboard-parity-mobile-projects-security-v3-brief.md`.
 - Prior security: `agents.output/security/4-dashboard-parity-mobile-projects-security-v2.md`.
 - Fix doc: `agents.output/implementation/4-dashboard-parity-mobile-projects-security-fix2.md`.
-- Global rule path missing: `/home/daniel/running-pi/rules/pidex-security/index.md` ENOENT.
+- Global rule path missing: `<running-pi-root>/rules/pidex-security/index.md` ENOENT.
 - Project security wiki rule: none found.
-- Skill loaded: `/home/daniel/running-pi/skills/security-patterns/SKILL.md`.
+- Skill loaded: `<running-pi-root>/skills/security-patterns/SKILL.md`.
 
 ## Mode
 - Targeted Code Review. Pipeline third pass. No clarification gate.

@@ -6,7 +6,7 @@ Status: Active
 ---
 
 # Plan Reference
-- Plan path: `/home/daniel/running-pi/state/runs/home-daniel-pidex/2026-05-11T22-13-53-462Z_rp-implementer_3446827_75f7d35b/rp-implementer.task.md`
+- Plan path: `<running-pi-root>/state/runs/home-daniel-pidex/2026-05-11T22-13-53-462Z_rp-implementer_3446827_75f7d35b/rp-implementer.task.md`
 - ID: 3446827
 - UUID: 75f7d35b
 
