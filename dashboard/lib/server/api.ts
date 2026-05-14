@@ -688,7 +688,17 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
     [...projectFilter.params],
   );
 
-  const openPipelines = (eventOpen || []).concat(inferredOpen || []).slice(0, 24);
+  const inferredRunningMs = Number(process.env.PIDEX_DASHBOARD_INFERRED_RUNNING_MS || 45 * 60 * 1000);
+  const isRunningOpenPipeline = (row: DbRow): boolean => {
+    if (row.source === 'pipeline_events') return row.status === 'running';
+    if (row.source !== 'agent_runs_inferred') return false;
+    const lastAt = Date.parse(String(row.last_at || ''));
+    return Number.isFinite(lastAt) && Date.now() - lastAt <= inferredRunningMs;
+  };
+  const openPipelines: DbRow[] = ((eventOpen || []).concat(inferredOpen || []) as DbRow[]).slice(0, 24).map((row: DbRow) => ({
+    ...row,
+    is_running: isRunningOpenPipeline(row),
+  }));
 
   const latestByAgent = await queryRows<DbRow>(
     `WITH ranked AS (
@@ -710,10 +720,10 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
     [...projectFilter.params],
   );
 
-  const runningPipelines = openPipelines.filter((row) => row.source === 'pipeline_events' && row.status === 'running').length;
+  const runningPipelines = openPipelines.filter((row) => row.is_running).length;
   const activeProjects = new Set(
     openPipelines
-      .filter((row) => row.source === 'pipeline_events' && row.status === 'running')
+      .filter((row) => row.is_running)
       .map((row) => String(row.project || ''))
       .filter(Boolean),
   ).size;

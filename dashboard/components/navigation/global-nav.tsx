@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { Activity, BookOpen, Bot, FolderGit2, Gauge, Home, Menu as MenuIcon, Settings, ShieldCheck, X } from 'lucide-react';
 
 import { readProjectFromSearch, setProjectInSearch } from '../../lib/client/project-query';
+import { PidexLogo } from '../branding/pidex-logo';
 
 export const NAV_LINKS = [
   { to: '/overview', label: 'Overview', icon: Home },
@@ -156,6 +157,7 @@ export function GlobalHeader() {
     <header className="glass global-header">
       <div className="global-header-top">
         <div className="global-header-title">
+          <PidexLogo />
           <h1 className="h2">PIDEX Dashboard</h1>
         </div>
         <DesktopProjectSelect />

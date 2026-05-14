@@ -54,6 +54,7 @@ type PipelineRow = {
   failures?: unknown;
   last_agent?: unknown;
   context_file?: unknown;
+  is_running?: unknown;
 };
 
 type PendingGateRow = {
@@ -360,7 +361,7 @@ function LivePage() {
   const openPipelines = toOpenPipelines(payload || {});
   const runningPipelineKeys = new Set(
     openPipelines
-      .filter((row) => toText(row.status).toLowerCase() === 'running')
+      .filter((row) => toText(row.status).toLowerCase() === 'running' || row.is_running === true)
       .map((row) => `${toText(row.project)}::${toText(row.plan_key)}`),
   );
   const timelineRuns = toAgentTimeline(payload || {}).filter((row) => runningPipelineKeys.has(`${toText(row.project)}::${toText(row.plan_key)}`));

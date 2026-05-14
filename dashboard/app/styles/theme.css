@@ -112,8 +112,23 @@ body.modal-open {
   border: 1px solid var(--line);
 }
 
+.global-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .global-header-title .h2 {
   margin: 0;
+}
+
+.pidex-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  color: var(--text);
+  filter: drop-shadow(0 0 8px rgba(0, 245, 255, 0.25));
 }
 
 @media (min-width: 900px) {
