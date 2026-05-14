@@ -1,5 +1,6 @@
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 
+import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { readPageForKey, readProjectFromSearch, setPageForKey, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
@@ -40,7 +41,24 @@ type TokenPayload = {
   monthly: MonthlyPayload;
 };
 
-function TokensPage() {
+function formatNumber(value: unknown): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString() : '—';
+}
+
+function formatDate(value: unknown): string {
+  if (!value) return '—';
+  const dt = new Date(String(value));
+  return Number.isNaN(dt.getTime()) ? String(value) : dt.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
+}
+
+function formatMonth(value: unknown): string {
+  if (!value) return '—';
+  const dt = new Date(`${String(value)}-01T00:00:00Z`);
+  return Number.isNaN(dt.getTime()) ? String(value) : dt.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
+export function TokensPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const project = readProjectFromSearch(location.search);
@@ -71,9 +89,7 @@ function TokensPage() {
       </article>
 
       {loading ? (
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <p className="muted">Loading data…</p>
-        </article>
+        <LoadingIndicator label="Loading token usage…" />
       ) : (
         <>
           <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
@@ -82,23 +98,23 @@ function TokensPage() {
             <table className="table" aria-label="agent token stats">
               <thead>
                 <tr>
-                  <th>agent</th>
-                  <th>calls</th>
-                  <th>total tokens</th>
-                  <th>avg tokens</th>
-                  <th>input</th>
-                  <th>output</th>
+                  <th>Agent</th>
+                  <th>Calls</th>
+                  <th>Total Tokens</th>
+                  <th>Avg Tokens</th>
+                  <th>Input Tokens</th>
+                  <th>Output Tokens</th>
                 </tr>
               </thead>
               <tbody>
                 {(payload?.agent_stats || []).map((row) => (
                   <tr key={`${row.agent}`}>
                     <td>{row.agent}</td>
-                    <td>{row.calls}</td>
-                    <td>{row.total_tokens}</td>
-                    <td>{row.avg_tokens}</td>
-                    <td>{row.total_input_tokens}</td>
-                    <td>{row.total_output_tokens}</td>
+                    <td>{formatNumber(row.calls)}</td>
+                    <td>{formatNumber(row.total_tokens)}</td>
+                    <td>{formatNumber(row.avg_tokens)}</td>
+                    <td>{formatNumber(row.total_input_tokens)}</td>
+                    <td>{formatNumber(row.total_output_tokens)}</td>
                   </tr>
                 ))}
                 {(payload?.agent_stats || []).length === 0 && (
@@ -124,9 +140,9 @@ function TokensPage() {
               <table className="table" aria-label="token weekly">
                 <thead>
                   <tr>
-                    <th>day</th>
+                    <th>Day</th>
                     {payload?.weekly.agent_stats?.map((agent) => <th key={`h-${agent}`}>{agent}</th>)}
-                    <th>total</th>
+                    <th>Total Tokens</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -135,11 +151,11 @@ function TokensPage() {
                     const total = Number(row.total_tokens || 0);
                     return (
                       <tr key={`w-${day}`}>
-                        <td>{day}</td>
+                        <td>{formatDate(day)}</td>
                         {(payload?.weekly.agent_stats || []).map((agent) => (
-                          <td key={`${day}-${agent}`}>{Number(row[agent] || 0)}</td>
+                          <td key={`${day}-${agent}`}>{formatNumber(row[agent] || 0)}</td>
                         ))}
-                        <td>{total}</td>
+                        <td>{formatNumber(total)}</td>
                       </tr>
                     );
                   })}
@@ -166,9 +182,9 @@ function TokensPage() {
               <table className="table" aria-label="token monthly">
                 <thead>
                   <tr>
-                    <th>month</th>
+                    <th>Month</th>
                     {payload?.weekly.agent_stats?.map((agent) => <th key={`mh-${agent}`}>{agent}</th>)}
-                    <th>total</th>
+                    <th>Total Tokens</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -177,11 +193,11 @@ function TokensPage() {
                     const total = Number(row.total_tokens || 0);
                     return (
                       <tr key={`m-${month}`}>
-                        <td>{month}</td>
+                        <td>{formatMonth(month)}</td>
                         {(payload?.weekly.agent_stats || []).map((agent) => (
-                          <td key={`${month}-${agent}`}>{Number(row[agent] || 0)}</td>
+                          <td key={`${month}-${agent}`}>{formatNumber(row[agent] || 0)}</td>
                         ))}
-                        <td>{total}</td>
+                        <td>{formatNumber(total)}</td>
                       </tr>
                     );
                   })}

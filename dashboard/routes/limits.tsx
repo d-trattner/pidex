@@ -13,6 +13,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type ForecastStatus = 'forecast-hit-before-reset' | 'forecast-safe-until-reset' | 'insufficient-data' | 'unknown-limit';
@@ -270,7 +271,7 @@ function ProviderContainer({ provider, title, records, history }: { provider: st
   );
 }
 
-function LimitsPage() {
+export function LimitsPage() {
   const [busyProfile, setBusyProfile] = useState('');
   const [mutationError, setMutationError] = useState('');
   const queryClient = useQueryClient();
@@ -306,15 +307,8 @@ function LimitsPage() {
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>
-      <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-        <h2 className="h2">Limits</h2>
-        <p className="muted">Provider limits by profile.</p>
-      </article>
-
       {loading ? (
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <p className="muted">Loading limits…</p>
-        </article>
+        <LoadingIndicator label="Loading limits…" />
       ) : (
         <>
           <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
@@ -356,14 +350,14 @@ function LimitsPage() {
               <table className="table" aria-label="provider limits">
                 <thead>
                   <tr>
-                    <th>provider</th>
-                    <th>window</th>
-                    <th>limit</th>
-                    <th>used %</th>
-                    <th>forecast</th>
-                    <th>burn %/h</th>
-                    <th>status</th>
-                    <th>resets</th>
+                    <th>Provider</th>
+                    <th>Quota Window</th>
+                    <th>Limit Name</th>
+                    <th>Used</th>
+                    <th>Forecast</th>
+                    <th>Burn Rate</th>
+                    <th>Status</th>
+                    <th>Resets At</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -372,11 +366,11 @@ function LimitsPage() {
                       <td>{record.provider}</td>
                       <td>{record.window || record.limit_name || '—'}</td>
                       <td>{record.limit_name || '—'}</td>
-                      <td>{record.used_percent == null ? '—' : `${record.used_percent}`}</td>
+                      <td>{record.used_percent == null ? '—' : `${record.used_percent}%`}</td>
                       <td>{forecastLabel(record)}</td>
-                      <td>{record.burn_percent_per_hour == null ? '—' : record.burn_percent_per_hour}</td>
+                      <td>{record.burn_percent_per_hour == null ? '—' : `${record.burn_percent_per_hour}%/h`}</td>
                       <td>{record.status || '—'}</td>
-                      <td>{record.resets_at || '—'}</td>
+                      <td>{formatDateTime(record.resets_at)}</td>
                     </tr>
                   ))}
                   {rows.length === 0 && (

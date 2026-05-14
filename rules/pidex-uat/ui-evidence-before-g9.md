@@ -8,14 +8,15 @@ Load for any UAT where Gate G9 is required or the plan changes visible UI.
 
 ## Rule
 
-UAT MUST NOT approve routing to G9 unless the doc chain contains UI browser evidence. G9 is final human confirmation, not the first visual test.
+UAT MUST NOT approve routing to G9 or mark `UAT COMPLETE` unless the doc chain contains UI browser evidence. G9 is final human confirmation, not the first visual test.
 
 ## Required evidence before G9
 
 For UI/G9-required plans, verify QA/design docs include:
 
 - QA Browser-Level Smoke section with PASS/COMPLETE status
-- screenshot artifact paths for required desktop/mobile states
+- desktop screenshot artifacts for main contract paths
+- mobile screenshot artifacts for responsive contract paths (or explicit `N/A` only when plan declares mobile not applicable)
 - user browser flow executed, not only route loaded
 - console error check result
 - mobile viewport evidence when plan requires mobile/responsive behavior
@@ -28,6 +29,7 @@ For UI/G9-required plans, verify QA/design docs include:
 |---|---|
 | Complete and passing | UAT may approve and route to `pidex-devops`, `gate: G9` |
 | Missing browser evidence | `BLOCKED`, route to `pidex-qa` or `user`/orchestrator for browser evidence collection |
+| Browser evidence missing but required desktop/mobile evidence not collected | `BLOCKED`, keep evidence in handoff before any `UAT COMPLETE` |
 | Browser evidence fails | `REJECTED`, route to `pidex-implementer` with evidence |
 | Designer audit required but missing | `BLOCKED`, route to `pidex-designer` |
 
@@ -36,11 +38,14 @@ For UI/G9-required plans, verify QA/design docs include:
 Add `## UI Evidence Before G9` section for every G9-required plan:
 
 - Browser evidence: PASS / MISSING / FAIL
+- Desktop evidence: PASS / MISSING / FAIL
+- Mobile evidence: PASS / N/A / MISSING / FAIL
 - Screenshots: list artifact paths or `MISSING`
 - User flow: executed flow summary or `MISSING`
-- Mobile evidence: PASS / N/A / MISSING
 - Designer audit: PASS / N/A / MISSING
 - Decision: G9 READY / BLOCKED / REJECTED
+
+If `Decision != G9 READY`, UAT status is `UAT BLOCKED`/`UAT Failed`; do not set `UAT Complete`.
 
 ## Empirical basis
 

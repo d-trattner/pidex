@@ -2,19 +2,18 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import { Activity, BarChart3, Bot, FolderGit2, Gauge, GitBranch, Home, LineChart, Menu as MenuIcon, ShieldCheck } from 'lucide-react';
+import { Activity, BookOpen, Bot, FolderGit2, Gauge, Home, Menu as MenuIcon, Settings, ShieldCheck, X } from 'lucide-react';
 
 import { readProjectFromSearch, setProjectInSearch } from '../../lib/client/project-query';
 
 export const NAV_LINKS = [
   { to: '/overview', label: 'Overview', icon: Home },
-  { to: '/runs', label: 'Runs', icon: Bot },
-  { to: '/tokens', label: 'Tokens', icon: BarChart3 },
-  { to: '/pipelines', label: 'Pipelines', icon: GitBranch },
-  { to: '/quality', label: 'Quality', icon: ShieldCheck },
-  { to: '/analysis', label: 'Analysis', icon: LineChart },
   { to: '/live', label: 'Live', icon: Activity },
-  { to: '/limits', label: 'Limits', icon: Gauge },
+  { to: '/runs', label: 'Runs', icon: Bot },
+  { to: '/quality', label: 'Quality', icon: ShieldCheck },
+  { to: '/usage', label: 'Usage', icon: Gauge },
+  { to: '/wiki', label: 'Wiki', icon: BookOpen },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 
 function useProjects(): string[] {
@@ -46,7 +45,7 @@ function projectLabel(project: string): string {
   return project || 'All projects';
 }
 
-function ProjectButtons({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
+function useProjectSelection(onNavigate?: () => void) {
   const location = useLocation();
   const navigate = useNavigate();
   const projects = useProjects();
@@ -58,6 +57,12 @@ function ProjectButtons({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     onNavigate?.();
     void navigate({ href: `${location.pathname}${search}` });
   };
+
+  return { choices, selectedProject, selectProject };
+}
+
+function ProjectButtons({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
+  const { choices, selectedProject, selectProject } = useProjectSelection(onNavigate);
 
   return (
     <div className={mobile ? 'mobile-nav-list' : 'project-button-row'} role="list" aria-label="Project selector">
@@ -75,6 +80,47 @@ function ProjectButtons({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function DesktopProjectSelect() {
+  const [open, setOpen] = useState(false);
+  const { choices, selectedProject, selectProject } = useProjectSelection(() => setOpen(false));
+  const label = projectLabel(selectedProject);
+
+  return (
+    <div className={`project-select${open ? ' open' : ''}`} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+    }}>
+      <button
+        type="button"
+        className="project-pill project-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <FolderGit2 size={16} aria-hidden="true" />
+        <span>{label}</span>
+      </button>
+      <div className="project-select-menu" role="listbox" aria-label="Project selector" aria-hidden={!open}>
+        {choices.map((project) => {
+          const active = project === selectedProject;
+          return (
+            <button
+              key={project || '__all_projects__'}
+              type="button"
+              className={`project-select-option${active ? ' active' : ''}`}
+              role="option"
+              aria-selected={active}
+              tabIndex={open ? 0 : -1}
+              onClick={() => selectProject(project)}
+            >
+              {projectLabel(project)}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -108,12 +154,13 @@ function NavLinks({ onNavigate, mobile = false }: { onNavigate?: () => void; mob
 export function GlobalHeader() {
   return (
     <header className="glass global-header">
-      <div>
-        <h1 className="h2">PIDEX Dashboard</h1>
-        <p className="muted">Operational metrics, pipeline health, live status, and provider limits.</p>
+      <div className="global-header-top">
+        <div className="global-header-title">
+          <h1 className="h2">PIDEX Dashboard</h1>
+        </div>
+        <DesktopProjectSelect />
       </div>
       <div className="desktop-controls">
-        <ProjectButtons />
         <div className="desktop-nav">
           <NavLinks />
         </div>
@@ -155,11 +202,13 @@ function MobileSheet({
       >
         <div className="mobile-sheet-head">
           <h2 id={titleId} className="h2">{title}</h2>
-          <button ref={closeRef} type="button" className="glass-btn" aria-label={`Close ${title.toLowerCase()}`} onClick={onClose}>
-            Close
+          <button ref={closeRef} type="button" className="icon-button" aria-label={`Close ${title.toLowerCase()}`} onClick={onClose}>
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
-        {children}
+        <div className="mobile-sheet-body">
+          {children}
+        </div>
       </section>
     </div>
   );
@@ -179,6 +228,7 @@ export function MobileMenuSheet() {
   const projectTitleId = useId();
   const location = useLocation();
   const currentProject = readProjectFromSearch(location.search);
+  const showFilesButton = location.pathname === '/wiki';
   const open = openSheet !== null;
 
   const openDialog = (sheet: 'menu' | 'project', ref: RefObject<HTMLButtonElement | null>) => {
@@ -235,7 +285,7 @@ export function MobileMenuSheet() {
   return (
     <>
       <div className="mobile-menu-trigger-full" aria-label="Mobile dashboard controls">
-        <div className="mobile-bottom-bar">
+        <div className={`mobile-bottom-bar${showFilesButton ? ' mobile-bottom-bar--wiki' : ''}`}>
           <button
             ref={projectTriggerRef}
             type="button"
@@ -249,6 +299,17 @@ export function MobileMenuSheet() {
             <FolderGit2 size={16} aria-hidden="true" />
             <span>{projectLabel(currentProject)}</span>
           </button>
+          {showFilesButton ? (
+            <button
+              type="button"
+              className="mobile-bottom-button"
+              aria-label="Open markdown files"
+              onClick={() => window.dispatchEvent(new CustomEvent('pidex:wiki-files-open'))}
+            >
+              <BookOpen size={16} aria-hidden="true" />
+              <span>Files</span>
+            </button>
+          ) : null}
           <button
             ref={menuTriggerRef}
             type="button"

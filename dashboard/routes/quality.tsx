@@ -17,6 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
@@ -165,20 +166,6 @@ function QualityPage() {
   const latest = completionData.at(-1);
   const latestCompletion = latest ? `${safeNumber(latest.completion_rate).toFixed(1)}%` : '—';
 
-  if (loading) {
-    return (
-      <section className="grid" style={{ marginTop: 12 }}>
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <h2 className="h2">Quality</h2>
-          <p className="muted">Loading quality metrics…</p>
-        </article>
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <p className="muted">Data loading…</p>
-        </article>
-      </section>
-    );
-  }
-
   return (
     <section className="grid" style={{ marginTop: 12 }}>
       <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
@@ -186,6 +173,10 @@ function QualityPage() {
         <p className="muted">Pipeline, model, and artifact quality with Recharts (Area/Line/Bar/Pie).</p>
         {error ? <p style={{ color: '#f8a' }}>{error}</p> : null}
       </article>
+
+      {loading ? <LoadingIndicator label="Loading quality metrics…" /> : null}
+      {loading ? null : (
+        <>
 
       <article className="glass-card glass quality-card quality-card-full">
         <h3>Completion rate</h3>
@@ -320,6 +311,8 @@ function QualityPage() {
           </p>
         </article>
       ) : null}
+        </>
+      )}
     </section>
   );
 }

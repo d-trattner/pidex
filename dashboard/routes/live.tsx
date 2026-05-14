@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { Activity, BarChart3, Clock, FileText, GitBranch, LoaderCircle, Route as RouteIcon, Search, Table2, X } from 'lucide-react';
+import { Activity, BarChart3, Clock, FileText, GitBranch, Route as RouteIcon, Search, Table2, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { createPortal } from 'react-dom';
 import remarkGfm from 'remark-gfm';
 
 import { GlassPanel } from '../components/ui/glass-panel';
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { MetricTile } from '../components/ui/metric-tile';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
@@ -153,10 +155,8 @@ const toAgentTimeline = (payload: LivePayload): AgentRunRow[] => toArray<AgentRu
 const toLatestByAgent = (payload: LivePayload): AgentRunRow[] => toArray<AgentRunRow>(payload.latest_by_agent);
 const toRecentSecondary = (payload: LivePayload): SecondaryRow[] => toArray<SecondaryRow>(payload.recent_secondary);
 
-function splitFrontmatter(markdown: string): { frontmatter: Array<[string, string]>; body: string } {
-  const match = markdown.match(/^---\n([\s\S]*?)\n---\n?/);
-  if (!match) return { frontmatter: [], body: markdown };
-  const frontmatter = match[1]
+function parseKeyValueBlock(text: string): Array<[string, string]> {
+  return text
     .split('\n')
     .map((line): [string, string] | null => {
       const idx = line.indexOf(':');
@@ -164,23 +164,45 @@ function splitFrontmatter(markdown: string): { frontmatter: Array<[string, strin
       return [line.slice(0, idx).trim(), line.slice(idx + 1).trim()];
     })
     .filter((row): row is [string, string] => Boolean(row));
-  return { frontmatter, body: markdown.slice(match[0].length) };
+}
+
+function splitFrontmatter(markdown: string): { frontmatter: Array<[string, string]>; body: string } {
+  const match = markdown.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!match) return { frontmatter: [], body: markdown };
+  return { frontmatter: parseKeyValueBlock(match[1]), body: markdown.slice(match[0].length) };
+}
+
+function splitRoutingBlock(markdown: string): { body: string; routing: Array<[string, string]> } {
+  const match = markdown.match(/<!--\s*ROUTING\s*([\s\S]*?)-->/i);
+  if (!match) return { body: markdown, routing: [] };
+  const routing = parseKeyValueBlock(match[1].trim());
+  const start = match.index || 0;
+  const body = `${markdown.slice(0, start).trimEnd()}\n\n${markdown.slice(start + match[0].length).trimStart()}`.trim();
+  return { body, routing };
+}
+
+function InfoCard({ title, rows, className = '' }: { title: string; rows: Array<[string, string]>; className?: string }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className={`frontmatter-card ${className}`.trim()} aria-label={title}>
+      <h4>{title}</h4>
+      {rows.map(([key, value]) => (
+        <div key={key} className="frontmatter-row">
+          <span>{titleCase(key)}</span>
+          <strong>{value || '—'}</strong>
+        </div>
+      ))}
+    </section>
+  );
 }
 
 function MarkdownPreview({ markdown }: { markdown: string }) {
-  const { frontmatter, body } = splitFrontmatter(markdown);
+  const { frontmatter, body: withoutFrontmatter } = splitFrontmatter(markdown);
+  const { body, routing } = splitRoutingBlock(withoutFrontmatter);
   return (
     <div className="markdown-body">
-      {frontmatter.length > 0 ? (
-        <section className="frontmatter-card" aria-label="document metadata">
-          {frontmatter.map(([key, value]) => (
-            <div key={key} className="frontmatter-row">
-              <span>{titleCase(key)}</span>
-              <strong>{value || '—'}</strong>
-            </div>
-          ))}
-        </section>
-      ) : null}
+      <InfoCard title="Frontmatter" rows={frontmatter} />
+      <InfoCard title="Routing" rows={routing} className="routing-card" />
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
     </div>
   );
@@ -310,6 +332,12 @@ function LivePage() {
   const loading = liveQuery.isLoading;
   const error = liveQuery.isError ? 'Live data could not be loaded.' : '';
 
+  useEffect(() => {
+    if (!contextModal) return;
+    document.body.classList.add('modal-open');
+    return () => document.body.classList.remove('modal-open');
+  }, [contextModal]);
+
   const openContext = async (row: Pick<AgentRunRow, 'project' | 'context_file' | 'agent'>) => {
     setModalError('');
     setContextModal({ title: 'Loading context…', markdown: '' });
@@ -355,9 +383,7 @@ function LivePage() {
         <p className="muted">Last updated: {formatDateTime(payload?.generated_at)}</p>
       </GlassPanel>
 
-      {loading ? (
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}><p className="muted icon-inline"><LoaderCircle size={16} className="spin-icon" aria-hidden="true" /> Loading live data…</p></article>
-      ) : null}
+      {loading ? <LoadingIndicator label="Loading live data…" /> : null}
 
       {error ? (
         <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}><p style={{ color: '#f8a' }}>{error}</p></article>
@@ -546,7 +572,7 @@ function LivePage() {
         </>
       ) : null}
 
-      {contextModal ? (
+      {contextModal ? createPortal(
         <div role="dialog" aria-modal="true" className="modal-backdrop" onClick={() => setContextModal(null)}>
           <article className="context-modal glass-card glass" onClick={(event) => event.stopPropagation()}>
             <div className="context-modal__header">
@@ -560,7 +586,8 @@ function LivePage() {
               {modalError ? <p style={{ color: '#f8a' }}>{modalError}</p> : <MarkdownPreview markdown={contextModal.markdown} />}
             </div>
           </article>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </section>
   );

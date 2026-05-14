@@ -1,6 +1,6 @@
 # pidex-code-reviewer Rules Index
 
-Last updated: 2026-05-08 (PROC-NEW-80-1)
+Last updated: 2026-05-13 (PROC-NEW-90-2)
 
 ## Active Rules
 
@@ -18,6 +18,7 @@ Last updated: 2026-05-08 (PROC-NEW-80-1)
 | Execution Profile Diff Guard | [execution-profile-diff-guard.md](execution-profile-diff-guard.md) | EXECUTION-PROFILE-DIFF | Code review compares actual changed files/surfaces against approved profile/skipped-agent assumptions |
 | Fallow Evidence for JS/TS Review | [fallow-evidence.md](fallow-evidence.md) | FALLOW-CODE-REVIEW | For JS/TS code review, run Fallow or document `FALLOW-SKIP`; for non-JS/TS, record explicit skip |
 | Boundary Source-of-Truth Parity Review | [boundary-source-of-truth-parity.md](boundary-source-of-truth-parity.md) | BOUNDARY-SOT-PARITY | API/schema/provider/route/settings changes must use one source of truth or tested aliases; negative tests must assert intended failure cause |
+| Lifecycle Route Success/Conflict Separation | [lifecycle-route-success-conflict-separation.md](lifecycle-route-success-conflict-separation.md) | 90-2 | Reject lifecycle tests that accept success and conflict statuses in the same assertion; require separate success and conflict cases |
 | 503 All-Unavailable Nav Assertion | [all-unavailable-nav-assertion.md](all-unavailable-nav-assertion.md) | 74-3 | Degraded-capable routes require explicit all-unavailable nav assertion; static fallback in valid unavailable payload is reject-level |
 | TDD Table Narrow Hotfix Escape | [tdd-table-narrow-hotfix-escape.md](tdd-table-narrow-hotfix-escape.md) | PIPELINE-ANALYST-1E | Tiny test-only/type-only/devops-blocker hotfixes may use explicit TDD N/A row with validation proof |
 | Async CTA Proof Gate | [async-cta-proof-gate.md](async-cta-proof-gate.md) | 80-1 | Before APPROVED, evidence must prove pending label, disabled state, and duplicate-click block for each async CTA |

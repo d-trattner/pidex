@@ -1,4 +1,5 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { LoadingIndicator } from '../components/ui/loading-indicator';
 
 type PipelineRow = {
   completed_at: unknown;
@@ -60,9 +61,7 @@ function PipelinesPage() {
       </article>
 
       {loading ? (
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <p className="muted">Loading pipelines…</p>
-        </article>
+        <LoadingIndicator label="Loading pipelines…" />
       ) : (
         <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
           <div className="table-scroll">

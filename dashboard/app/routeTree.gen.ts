@@ -9,7 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './../routes/__root'
+import { Route as WikiRouteImport } from './../routes/wiki'
+import { Route as UsageRouteImport } from './../routes/usage'
 import { Route as TokensRouteImport } from './../routes/tokens'
+import { Route as SettingsRouteImport } from './../routes/settings'
 import { Route as RunsRouteImport } from './../routes/runs'
 import { Route as QualityRouteImport } from './../routes/quality'
 import { Route as PipelinesRouteImport } from './../routes/pipelines'
@@ -37,6 +40,7 @@ import { Route as ApiProvider_limitsRouteImport } from './../routes/api/provider
 import { Route as ApiProviderLimitsRouteImport } from './../routes/api/provider-limits'
 import { Route as ApiProjectsRouteImport } from './../routes/api/projects'
 import { Route as ApiPipelinesRouteImport } from './../routes/api/pipelines'
+import { Route as ApiMdBrowserRouteImport } from './../routes/api/md-browser'
 import { Route as ApiMalformedRouteImport } from './../routes/api/malformed'
 import { Route as ApiLiveRouteImport } from './../routes/api/live'
 import { Route as ApiDocumentRouteImport } from './../routes/api/document'
@@ -48,9 +52,24 @@ import { Route as ApiChartsModelQualityRouteImport } from './../routes/api/chart
 import { Route as ApiAnalysisPlansRouteImport } from './../routes/api/analysis/plans'
 import { Route as ApiAnalysisDocumentRouteImport } from './../routes/api/analysis/document'
 
+const WikiRoute = WikiRouteImport.update({
+  id: '/wiki',
+  path: '/wiki',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsageRoute = UsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TokensRoute = TokensRouteImport.update({
   id: '/tokens',
   path: '/tokens',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RunsRoute = RunsRouteImport.update({
@@ -188,6 +207,11 @@ const ApiPipelinesRoute = ApiPipelinesRouteImport.update({
   path: '/api/pipelines',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMdBrowserRoute = ApiMdBrowserRouteImport.update({
+  id: '/api/md-browser',
+  path: '/api/md-browser',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMalformedRoute = ApiMalformedRouteImport.update({
   id: '/api/malformed',
   path: '/api/malformed',
@@ -251,11 +275,15 @@ export interface FileRoutesByFullPath {
   '/pipelines': typeof PipelinesRoute
   '/quality': typeof QualityRoute
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRoute
   '/tokens': typeof TokensRoute
+  '/usage': typeof UsageRoute
+  '/wiki': typeof WikiRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
   '/api/document': typeof ApiDocumentRoute
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
+  '/api/md-browser': typeof ApiMdBrowserRoute
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/provider-limits': typeof ApiProviderLimitsRouteWithChildren
@@ -290,11 +318,15 @@ export interface FileRoutesByTo {
   '/pipelines': typeof PipelinesRoute
   '/quality': typeof QualityRoute
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRoute
   '/tokens': typeof TokensRoute
+  '/usage': typeof UsageRoute
+  '/wiki': typeof WikiRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
   '/api/document': typeof ApiDocumentRoute
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
+  '/api/md-browser': typeof ApiMdBrowserRoute
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/provider-limits': typeof ApiProviderLimitsRouteWithChildren
@@ -331,11 +363,15 @@ export interface FileRoutesById {
   '/pipelines': typeof PipelinesRoute
   '/quality': typeof QualityRoute
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRoute
   '/tokens': typeof TokensRoute
+  '/usage': typeof UsageRoute
+  '/wiki': typeof WikiRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
   '/api/document': typeof ApiDocumentRoute
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
+  '/api/md-browser': typeof ApiMdBrowserRoute
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/provider-limits': typeof ApiProviderLimitsRouteWithChildren
@@ -373,11 +409,15 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/quality'
     | '/runs'
+    | '/settings'
     | '/tokens'
+    | '/usage'
+    | '/wiki'
     | '/api/analysis'
     | '/api/document'
     | '/api/live'
     | '/api/malformed'
+    | '/api/md-browser'
     | '/api/pipelines'
     | '/api/projects'
     | '/api/provider-limits'
@@ -412,11 +452,15 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/quality'
     | '/runs'
+    | '/settings'
     | '/tokens'
+    | '/usage'
+    | '/wiki'
     | '/api/analysis'
     | '/api/document'
     | '/api/live'
     | '/api/malformed'
+    | '/api/md-browser'
     | '/api/pipelines'
     | '/api/projects'
     | '/api/provider-limits'
@@ -452,11 +496,15 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/quality'
     | '/runs'
+    | '/settings'
     | '/tokens'
+    | '/usage'
+    | '/wiki'
     | '/api/analysis'
     | '/api/document'
     | '/api/live'
     | '/api/malformed'
+    | '/api/md-browser'
     | '/api/pipelines'
     | '/api/projects'
     | '/api/provider-limits'
@@ -493,11 +541,15 @@ export interface RootRouteChildren {
   PipelinesRoute: typeof PipelinesRoute
   QualityRoute: typeof QualityRoute
   RunsRoute: typeof RunsRoute
+  SettingsRoute: typeof SettingsRoute
   TokensRoute: typeof TokensRoute
+  UsageRoute: typeof UsageRoute
+  WikiRoute: typeof WikiRoute
   ApiAnalysisRoute: typeof ApiAnalysisRouteWithChildren
   ApiDocumentRoute: typeof ApiDocumentRoute
   ApiLiveRoute: typeof ApiLiveRoute
   ApiMalformedRoute: typeof ApiMalformedRoute
+  ApiMdBrowserRoute: typeof ApiMdBrowserRoute
   ApiPipelinesRoute: typeof ApiPipelinesRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiProviderLimitsRoute: typeof ApiProviderLimitsRouteWithChildren
@@ -513,11 +565,32 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wiki': {
+      id: '/wiki'
+      path: '/wiki'
+      fullPath: '/wiki'
+      preLoaderRoute: typeof WikiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/usage': {
+      id: '/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof UsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tokens': {
       id: '/tokens'
       path: '/tokens'
       fullPath: '/tokens'
       preLoaderRoute: typeof TokensRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/runs': {
@@ -709,6 +782,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPipelinesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/md-browser': {
+      id: '/api/md-browser'
+      path: '/api/md-browser'
+      fullPath: '/api/md-browser'
+      preLoaderRoute: typeof ApiMdBrowserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/malformed': {
       id: '/api/malformed'
       path: '/api/malformed'
@@ -856,11 +936,15 @@ const rootRouteChildren: RootRouteChildren = {
   PipelinesRoute: PipelinesRoute,
   QualityRoute: QualityRoute,
   RunsRoute: RunsRoute,
+  SettingsRoute: SettingsRoute,
   TokensRoute: TokensRoute,
+  UsageRoute: UsageRoute,
+  WikiRoute: WikiRoute,
   ApiAnalysisRoute: ApiAnalysisRouteWithChildren,
   ApiDocumentRoute: ApiDocumentRoute,
   ApiLiveRoute: ApiLiveRoute,
   ApiMalformedRoute: ApiMalformedRoute,
+  ApiMdBrowserRoute: ApiMdBrowserRoute,
   ApiPipelinesRoute: ApiPipelinesRoute,
   ApiProjectsRoute: ApiProjectsRoute,
   ApiProviderLimitsRoute: ApiProviderLimitsRouteWithChildren,

@@ -217,6 +217,25 @@ def latest_snapshot() -> dict:
     return data
 
 
+def active_profile_uses_spark(profile: str | None = None) -> bool:
+    current = profile or active_profile()
+    if "no-spark" in current:
+        return False
+    if "spark" in current:
+        return True
+    data = load_json(PROFILES / f"{current}.json")
+    text = json.dumps(data).lower() if data else ""
+    return "codex-spark" in text
+
+
+def should_alert_record(record: dict, payload: dict) -> bool:
+    if record.get("provider") != "codex-spark":
+        return True
+    if env_bool("PIDEX_PROVIDER_ALERT_SPARK_WHEN_INACTIVE", False):
+        return True
+    return active_profile_uses_spark(str(payload.get("active_profile") or active_profile()))
+
+
 def alert(dry_run: bool = False) -> dict:
     payload = latest_snapshot()
     state = load_json(ALERT_STATE)
@@ -224,6 +243,8 @@ def alert(dry_run: bool = False) -> dict:
     sent: list[str] = []
 
     for record in payload.get("records", []):
+        if not isinstance(record, dict) or not should_alert_record(record, payload):
+            continue
         if not isinstance(record, dict) or record.get("used_percent") is None:
             continue
         used = float(record.get("used_percent"))

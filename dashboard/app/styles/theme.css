@@ -77,6 +77,10 @@ a {
   color: inherit;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -101,11 +105,44 @@ a {
 
 .global-header {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 12px;
   border-radius: 16px;
-  padding: 14px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
+}
+
+.global-header-title .h2 {
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .page-shell {
+    padding-top: 130px;
+  }
+
+  .global-header {
+    position: fixed !important;
+    top: 10px;
+    left: 50%;
+    width: min(1300px, calc(100% - 24px));
+    transform: translateX(-50%);
+    z-index: 1000;
+    align-items: center;
+    overflow: visible !important;
+  }
+
+  .global-header .project-select {
+    display: block;
+  }
+
+  .global-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-right: 210px;
+  }
 }
 
 .desktop-nav,
@@ -138,6 +175,10 @@ a {
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px) saturate(1.18);
   -webkit-backdrop-filter: blur(10px) saturate(1.18);
+}
+
+.mobile-bottom-bar--wiki {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .mobile-bottom-button {
@@ -176,9 +217,13 @@ a {
 }
 
 .mobile-sheet {
+  width: 100%;
+  justify-self: stretch;
   border-radius: 16px 16px 0 0;
   max-height: 80vh;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding-bottom: calc(18px + env(safe-area-inset-bottom));
   animation: sheet-up 220ms ease-out;
 }
@@ -188,6 +233,15 @@ a {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+}
+
+.mobile-sheet-body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 2px;
 }
 
 .quality-metrics-grid {
@@ -201,8 +255,13 @@ a {
 
   .desktop-nav,
   .desktop-controls {
-    display: grid;
+    display: flex;
+    align-items: center;
     gap: 10px;
+  }
+
+  .desktop-controls {
+    justify-content: flex-start;
   }
 
   .mobile-menu-trigger-full,
@@ -217,6 +276,47 @@ a {
   background: linear-gradient(135deg, rgba(3, 8, 20, 0.82), rgba(10, 18, 33, 0.62));
   backdrop-filter: blur(12px);
   padding: 18px;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.glass:not(.global-header):hover {
+  transform: translateY(-2px);
+  border-color: rgba(0, 245, 255, 0.38);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24), 0 0 24px rgba(0, 245, 255, 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass:not(.global-header):hover,
+  .button:hover,
+  .icon-button:hover,
+  .glass-btn:hover,
+  .pill:hover,
+  .project-pill:hover,
+  .mobile-bottom-button:hover,
+  .mobile-nav-item:hover {
+    transform: none;
+  }
+}
+
+.route-transition {
+  display: block;
+  transform-origin: 50% 16px;
+  will-change: opacity, transform, filter;
+}
+
+.page-loading {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 2px 0 4px;
+  padding: 7px 11px;
+  border: 1px solid rgba(0, 245, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(3, 8, 20, 0.46);
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .grid {
@@ -295,6 +395,94 @@ a {
   cursor: pointer;
 }
 
+.project-select {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 1200;
+  width: 190px;
+  max-height: 38px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  transition:
+    width 190ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    border-radius 180ms ease;
+}
+
+.project-select.open {
+  width: 280px;
+  max-height: 360px;
+  border-color: rgba(134, 255, 239, 0.3);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.035) 38%, rgba(0,245,255,0.08)),
+    radial-gradient(circle at 80% 0%, rgba(190, 96, 255, 0.2), transparent 34%),
+    linear-gradient(135deg, rgba(7, 10, 26, 0.78), rgba(17, 21, 44, 0.66));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    inset 0 -1px 0 rgba(0,245,255,0.08),
+    0 22px 60px rgba(0, 0, 0, 0.48),
+    0 0 30px rgba(190, 96, 255, 0.16);
+  backdrop-filter: blur(14px) saturate(1.25) contrast(1.04);
+  -webkit-backdrop-filter: blur(14px) saturate(1.25) contrast(1.04);
+}
+
+.project-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  transition: border-radius 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.project-select.open .project-select-trigger {
+  border-color: transparent;
+  border-radius: 14px 14px 8px 8px;
+  background: rgba(190, 96, 255, 0.12);
+  box-shadow: none;
+}
+
+.project-select-menu {
+  display: grid;
+  gap: 6px;
+  padding: 7px;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.project-select.open .project-select-menu {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.project-select-option {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-select-option:hover,
+.project-select-option.active {
+  border-color: rgba(190, 96, 255, 0.58);
+  background: rgba(190, 96, 255, 0.12);
+}
+
 .pill.active,
 .project-pill.active {
   border-color: rgba(0, 245, 255, 0.72);
@@ -302,8 +490,10 @@ a {
 }
 
 .table-scroll {
-  overflow-x: auto;
+  overflow: auto;
   width: 100%;
+  max-height: min(62vh, 640px);
+  overscroll-behavior: contain;
 }
 
 .table {
@@ -533,6 +723,34 @@ a {
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 22px rgba(0,0,0,0.18);
   color: var(--text);
   cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.button:hover,
+.icon-button:hover,
+.glass-btn:hover,
+.pill:hover,
+.project-pill:hover,
+.mobile-bottom-button:hover,
+.mobile-nav-item:hover {
+  border-color: rgba(190, 96, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    0 8px 22px rgba(0,0,0,0.18),
+    0 0 18px rgba(190, 96, 255, 0.22),
+    0 0 34px rgba(255, 43, 214, 0.12);
+  transform: translateY(-1px);
+}
+
+.button:hover::after,
+.icon-button:hover::after,
+.glass-btn:hover::after,
+.pill:hover::after,
+.project-pill:hover::after,
+.mobile-bottom-button:hover::after,
+.mobile-nav-item:hover::after {
+  opacity: 0.62;
+  background: linear-gradient(115deg, transparent 0%, rgba(190, 96, 255, 0.28) 28%, rgba(255, 43, 214, 0.18) 42%, transparent 58%);
 }
 
 .glass-btn.active,
@@ -610,18 +828,23 @@ a {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 2000;
   background: rgba(4, 7, 14, 0.72);
   display: grid;
   place-items: center;
   padding: 18px;
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 .context-modal {
-  width: min(980px, 96vw);
-  max-height: 88vh;
-  overflow: auto;
+  width: min(980px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(88vh, calc(100dvh - 24px));
+  overflow: hidden;
   padding: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .context-modal__header {
@@ -636,6 +859,12 @@ a {
   border-bottom: 1px solid rgba(34, 255, 225, 0.2);
   background: rgba(3, 8, 20, 0.97);
   backdrop-filter: blur(10px);
+  min-width: 0;
+}
+
+.context-modal__header .icon-button {
+  flex: 0 0 40px;
+  min-width: 40px;
 }
 
 .context-modal__titleblock {
@@ -654,11 +883,16 @@ a {
 
 .context-modal__body {
   padding: 18px;
+  overflow: auto;
+  min-width: 0;
+  overscroll-behavior: contain;
 }
 
 .markdown-body {
   color: rgba(215, 255, 247, 0.92);
   line-height: 1.62;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .markdown-body h1,
@@ -691,9 +925,12 @@ a {
 }
 
 .markdown-body table {
+  display: block;
   width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   overflow-x: auto;
+  white-space: nowrap;
 }
 
 .markdown-body th,
@@ -714,6 +951,17 @@ a {
   background: rgba(0, 245, 255, 0.06);
 }
 
+.frontmatter-card h4 {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+.routing-card {
+  border-color: rgba(190, 96, 255, 0.28);
+  background: rgba(190, 96, 255, 0.08);
+}
+
 .frontmatter-row {
   display: grid;
   gap: 2px;
@@ -727,6 +975,218 @@ a {
 .frontmatter-row strong {
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+.wiki-grid {
+  grid-template-columns: 1fr;
+}
+
+.wiki-hero,
+.wiki-empty,
+.wiki-nav,
+.wiki-viewer {
+  grid-column: 1 / -1;
+}
+
+.wiki-nav,
+.wiki-viewer {
+  min-height: 320px;
+}
+
+.wiki-nav {
+  display: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 72vh;
+}
+
+.wiki-viewer {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.wiki-viewer > .markdown-body {
+  overflow: auto;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.wiki-viewer-header {
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.wiki-viewer-header h3 {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.wiki-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.wiki-nav-header h3 {
+  margin: 0;
+}
+
+.wiki-nav-actions,
+.wiki-mobile-sheet-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wiki-nav-actions .icon-button,
+.wiki-mobile-sheet-actions .icon-button {
+  width: 34px;
+  height: 34px;
+}
+
+.wiki-tree,
+.wiki-tree-children {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.wiki-tree-children {
+  margin-left: 14px;
+  border-left: 1px solid rgba(34, 255, 225, 0.12);
+  padding-left: 6px;
+}
+
+.wiki-tree-item {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 14px 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wiki-tree-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wiki-tree-tooltip {
+  position: fixed;
+  z-index: 3000;
+  max-width: min(420px, 80vw);
+  width: max-content;
+  padding: 7px 9px;
+  border: 1px solid rgba(190, 96, 255, 0.42);
+  border-radius: 8px;
+  background: rgba(5, 9, 22, 0.96);
+  color: var(--text);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), 0 0 18px rgba(190, 96, 255, 0.16);
+  pointer-events: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 0.84rem;
+}
+
+.wiki-tree-item:hover,
+.wiki-tree-item.active {
+  border-color: rgba(190, 96, 255, 0.48);
+  background: rgba(190, 96, 255, 0.1);
+}
+
+.wiki-tree-spacer {
+  width: 14px;
+  height: 1px;
+}
+
+.wiki-files-sheet-backdrop {
+  z-index: 60;
+}
+
+.wiki-files-sheet {
+  overflow-x: hidden;
+}
+
+@media (min-width: 900px) {
+  .wiki-files-sheet-backdrop {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .markdown-body {
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  .markdown-body h1 { font-size: 1.25rem; }
+  .markdown-body h2 { font-size: 1.08rem; }
+  .markdown-body h3 { font-size: 0.98rem; }
+  .markdown-body h4 { font-size: 0.92rem; }
+
+  .markdown-body p,
+  .markdown-body li {
+    margin-block: 0.45em;
+  }
+
+  .markdown-body pre {
+    padding: 9px;
+    font-size: 0.76rem;
+  }
+
+  .markdown-body code {
+    font-size: 0.78rem;
+  }
+
+  .markdown-body th,
+  .markdown-body td {
+    padding: 5px 6px;
+    font-size: 0.78rem;
+  }
+
+  .frontmatter-card {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 9px;
+    font-size: 0.78rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .wiki-grid {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .wiki-hero,
+  .wiki-empty {
+    grid-column: 1 / -1;
+  }
+
+  .wiki-nav {
+    display: block;
+    grid-column: 1;
+  }
+
+  .wiki-viewer {
+    grid-column: 2;
+    max-height: 72vh;
+  }
 }
 
 @media (min-width: 640px) {
