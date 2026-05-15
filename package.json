@@ -17,7 +17,7 @@
     "prompts": ["./prompts"]
   },
   "scripts": {
-    "check": "bash ./scripts/guard-codex-only.sh && bash -n install.sh uninstall.sh scripts/doctor.sh scripts/smoke-test.sh scripts/delegate/codex.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh scripts/history/append.sh scripts/history/list.sh && python3 -m py_compile dashboard-old/scripts/ingest.py dashboard-old/scripts/server.py scripts/quality/report.py scripts/quality/orchestrator-events.py scripts/quality/rule-actions.py && python3 scripts/quality/test_report_tdd.py",
+    "check": "bash ./scripts/guard-codex-only.sh && bash -n install.sh uninstall.sh scripts/doctor.sh scripts/smoke-test.sh scripts/delegate/codex.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh scripts/history/append.sh scripts/history/list.sh scripts/git-hooks/install-global.sh scripts/git-hooks/uninstall-global.sh scripts/git-hooks/global/pre-commit scripts/git-hooks/global/commit-msg scripts/git-hooks/lib/security-scan.sh && python3 -m py_compile dashboard-old/scripts/ingest.py dashboard-old/scripts/server.py scripts/quality/report.py scripts/quality/orchestrator-events.py scripts/quality/rule-actions.py && python3 scripts/quality/test_report_tdd.py",
     "doctor": "bash scripts/doctor.sh"
   },
   "devDependencies": {

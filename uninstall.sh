@@ -4,6 +4,7 @@ set -euo pipefail
 
 TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
+UNINSTALL_GLOBAL_GIT_HOOK="${PIDEX_UNINSTALL_GLOBAL_GIT_HOOK:-ask}"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
@@ -16,6 +17,10 @@ Usage:
 Options:
   --dry-run   show command without executing
   --help      show this help
+
+Environment:
+  PIDEX_UNINSTALL_GLOBAL_GIT_HOOK=1  restore previous global Git hook path
+  PIDEX_UNINSTALL_GLOBAL_GIT_HOOK=0  leave global Git hook config unchanged
 EOF
 }
 
@@ -59,6 +64,29 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 "${CMD[@]}"
+
+if [ -x "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh" ] && [ -f "$TARGET_DIR/state/git-hooks/global-state.json" ]; then
+  case "$UNINSTALL_GLOBAL_GIT_HOOK" in
+    1|yes|true|on)
+      "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh"
+      ;;
+    0|no|false|off)
+      say "leaving global Git hook config unchanged"
+      ;;
+    ask|*)
+      if [ -t 0 ]; then
+        printf '\nRestore previous global Git hook path saved by PIDEX? [Y/n] '
+        read -r REPLY
+        case "$REPLY" in
+          n|N|no|NO) say "leaving global Git hook config unchanged" ;;
+          *) "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh" ;;
+        esac
+      else
+        say "non-interactive uninstall; leaving global Git hook config unchanged (set PIDEX_UNINSTALL_GLOBAL_GIT_HOOK=1 to restore)"
+      fi
+      ;;
+  esac
+fi
 
 say "uninstall complete"
 say "Run in Pi: /reload"

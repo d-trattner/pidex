@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# PIDEX global pre-commit hook.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
+PIDEX_ROOT=$(cd "$SCRIPT_DIR/../../.." && pwd -P)
+
+exec "$PIDEX_ROOT/scripts/git-hooks/lib/security-scan.sh" --staged

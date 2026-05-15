@@ -1632,6 +1632,42 @@ async function runConfiguredAgent(params: {
 	return result;
 }
 
+function shellEscapeForRegex(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getGlobalGitHookStatus(): string {
+	const expected = path.join(PACKAGE_ROOT, "scripts", "git-hooks", "global");
+	const current = spawnSync("git", ["config", "--global", "--get", "core.hooksPath"], { encoding: "utf8" });
+	const currentPath = current.status === 0 ? current.stdout.trim() : "";
+	const preCommit = path.join(expected, "pre-commit");
+	const commitMsg = path.join(expected, "commit-msg");
+	const executable = fs.existsSync(preCommit) && fs.existsSync(commitMsg);
+	if (currentPath === expected && executable) return "installed/current";
+	if (!currentPath) return `not active; global core.hooksPath is unset (expected ${expected})`;
+	return `not active; global core.hooksPath=${currentPath} (expected ${expected})`;
+}
+
+function inspectBashForGitHookRisk(command: string): { block?: string; warn?: string } | undefined {
+	const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
+	if (!compact) return undefined;
+	if (/\bgit\b[\s\S]*\bcommit\b[\s\S]*(--no-verify|--no-gpg-sign)/.test(compact)) {
+		return { block: "PIDEX blocks git commit bypass flags (--no-verify/--no-gpg-sign). Remove the flag and let the security hook run." };
+	}
+	const escapedRoot = shellEscapeForRegex(PACKAGE_ROOT);
+	const tamperPatterns = [
+		/git\s+config\s+(--global\s+)?(--unset\s+)?core\.hooksPath/,
+		/rm\s+.*\.git\/hooks\/(pre-commit|commit-msg)/,
+		/chmod\s+-x\s+.*\.git\/hooks\/(pre-commit|commit-msg)/,
+		new RegExp(`rm\\s+.*${escapedRoot}/scripts/git-hooks/global/(pre-commit|commit-msg)`),
+		new RegExp(`chmod\\s+-x\\s+.*${escapedRoot}/scripts/git-hooks/global/(pre-commit|commit-msg)`),
+	];
+	if (tamperPatterns.some((pattern) => pattern.test(compact))) {
+		return { warn: "This command may modify Git hook protection. Continue only if intentionally installing/uninstalling or repairing PIDEX hooks." };
+	}
+	return undefined;
+}
+
 const RpAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
@@ -1644,6 +1680,21 @@ const RpAgentParams = Type.Object({
 
 export default function runningPi(pi: ExtensionAPI) {
 	if (process.env[PIDEX_CHILD_ENV] === "1") return;
+
+	pi.on("tool_call", async (event: any, ctx: any) => {
+		if (event?.toolName !== "bash") return undefined;
+		const command = event?.input?.command;
+		if (typeof command !== "string") return undefined;
+		const risk = inspectBashForGitHookRisk(command);
+		if (!risk) return undefined;
+		if (risk.block) return { block: true, reason: risk.block };
+		if (risk.warn) {
+			if (!ctx.hasUI) return { block: true, reason: "PIDEX Git hook protection change requires interactive approval." };
+			const choice = await ctx.ui.select(`${risk.warn}\n\nCommand:\n${command.slice(0, 1200)}\n\nAllow?`, ["Yes", "No"]);
+			if (choice !== "Yes") return { block: true, reason: "PIDEX Git hook protection change was not approved." };
+		}
+		return undefined;
+	});
 
 	pi.registerCommand("pidexaudit", {
 		description: "Audit pidex context usage from metrics + child logs.",
@@ -1669,6 +1720,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	const startRunningPi = async (args: string | undefined, ctx: any) => {
 		const task = args?.trim();
 		const authPreflight = await runDelegateAuthPreflight();
+		const gitHookStatus = getGlobalGitHookStatus();
 		if (!authPreflight.ok) {
 			ctx.ui.notify("pidex delegate auth preflight failed; see injected instructions", "error");
 		} else if (authPreflight.output) {
@@ -1680,6 +1732,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			"Use direct mode. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
 			"Use the pidex_agent tool for specialist handoffs. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
+			`PIDEX global Git security hook: ${gitHookStatus}.`,
 			authPreflight.ok
 				? "Delegate auth preflight passed for configured non-Pi providers."
 				: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,

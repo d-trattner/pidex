@@ -4,6 +4,7 @@ set -euo pipefail
 
 TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
+INSTALL_GLOBAL_GIT_HOOK="${PIDEX_INSTALL_GLOBAL_GIT_HOOK:-ask}"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
@@ -16,6 +17,10 @@ Usage:
 Options:
   --dry-run   print pi install command without executing
   --help      show this help
+
+Environment:
+  PIDEX_INSTALL_GLOBAL_GIT_HOOK=1  install PIDEX global Git hook non-interactively
+  PIDEX_INSTALL_GLOBAL_GIT_HOOK=0  skip PIDEX global Git hook prompt
 EOF
 }
 
@@ -71,6 +76,29 @@ fi
 
 say "installing package into Pi settings"
 "${CMD[@]}"
+
+if [ -x "$TARGET_DIR/scripts/git-hooks/install-global.sh" ]; then
+  case "$INSTALL_GLOBAL_GIT_HOOK" in
+    1|yes|true|on)
+      "$TARGET_DIR/scripts/git-hooks/install-global.sh" --yes
+      ;;
+    0|no|false|off)
+      say "skipping PIDEX global Git hook install"
+      ;;
+    ask|*)
+      if [ -t 0 ]; then
+        printf '\nInstall PIDEX global Git security hook? This sets git config --global core.hooksPath to PIDEX hooks while installed. Previous value will be saved and restored on uninstall. [y/N] '
+        read -r REPLY
+        case "$REPLY" in
+          y|Y|yes|YES) "$TARGET_DIR/scripts/git-hooks/install-global.sh" --yes ;;
+          *) say "skipping PIDEX global Git hook install" ;;
+        esac
+      else
+        say "non-interactive install; skipping PIDEX global Git hook (set PIDEX_INSTALL_GLOBAL_GIT_HOOK=1 to enable)"
+      fi
+      ;;
+  esac
+fi
 
 say "install complete"
 printf '\nRun in Pi:\n  /reload\n  /pidex <your task>\n\nShortcut:\n  /pd <your task>\n'

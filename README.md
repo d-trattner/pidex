@@ -1,13 +1,24 @@
 # pidex
 
-Codex-only fork of Running Pi, normalized to `pidex-*` agents and hardening against non-PIDEX providers.
+Codex-only fork of Running Pi, normalized to `pidex-*` agents and hardened against non-PIDEX providers.
+
+## Detailed feature docs
+
+More detailed documentation for complex features lives in [`readme/`](readme/):
+
+- [Dashboard](readme/dashboard.md)
+- [Provider limits and profiles](readme/provider-limits-and-profiles.md)
+- [Global Git security hook](readme/security-hooks.md)
+- [Automatic quality reports](readme/automatic-quality-reports.md)
+- [Project session memory](readme/project-memory.md)
+- [Future briefs](readme/future-briefs.md)
 
 ## Install
 
 ```bash
 pi install <pidex-root>
 # simulate without changing Pi settings:
-./install.sh --dry-run
+<pidex-root>/install.sh --dry-run
 ```
 
 Uninstall:
@@ -15,9 +26,8 @@ Uninstall:
 ```bash
 pi uninstall <pidex-root>
 # simulate without changing Pi settings:
-./uninstall.sh --dry-run
+<pidex-root>/uninstall.sh --dry-run
 ```
-
 
 ## Quick start
 
@@ -27,7 +37,7 @@ In Pi:
 /pidex Add a small helper in ~/my-project
 ```
 
-`/pd` is available as a short alias. The orchestrator flow is unchanged from Running Pi, but now constrained to Codex models and `pidex-*` role names.
+`/pd` is available as a short alias. The orchestrator flow is inherited from Running Pi, but constrained to Codex models and `pidex-*` role names.
 
 Project session memory:
 
@@ -35,7 +45,7 @@ Project session memory:
 /pdmem optional note
 ```
 
-`/pdmem` writes a lightweight session snapshot to `<project-root>/wiki/session-memory/` and updates that folder's `index.md`.
+`/pdmem` writes to `<project-root>/wiki/session-memory/`. See [Project session memory](readme/project-memory.md).
 
 ## Repo scope
 
@@ -43,16 +53,18 @@ Project session memory:
 - `rules/` – role-specific rules
 - `templates/` – artifact/checklist templates
 - `extensions/pidex/` – Pi extension entrypoint (`pidex_agent`)
-- `config/agents.json` – codex-only routing
+- `config/agents.json` – Codex-only routing
 - `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark variants
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `scripts/metrics/` + `scripts/pipeline/` – analytics helpers
 - `scripts/analysis/` – pipeline analysis scaffold
 - `dashboard/` – local analytics UI
+- `readme/` – detailed feature docs
 
 ## Smoke checks
 
 ```bash
+cd <pidex-root>
 bash scripts/doctor.sh
 bash scripts/smoke-test.sh
 bash -n scripts/delegate/codex.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh scripts/analysis/run-pipeline-analysis.sh
@@ -62,73 +74,30 @@ python3 -m py_compile dashboard-old/scripts/ingest.py dashboard-old/scripts/serv
 ## Dashboard
 
 ```bash
-cd dashboard
+cd <pidex-root>/dashboard
 ./start.sh
 ```
 
-- New app (TanStack Start): `dashboard/`
-- Legacy archive: `dashboard-old/` (reference/validation only)
-
-Current dashboard sections:
-
-- **Overview** – high-level pipeline, agent, cost, and event KPIs.
-- **Live** – active projects, running pipelines, timeline, latest agent runs, and context/MD modal.
-- **Runs** – agent and completed pipeline tables with formatted timestamps, durations, cost, and context-document buttons.
-- **Quality** – completion/runtime/model-quality charts and artifact health signals.
-- **Usage** – provider limits, active profile, token consumption, quota trends, and profile switching.
-- **Wiki** – project-scoped markdown browser for `agents.output` and auto-detected `wiki` roots.
-- **Settings** – active profile, configured profiles, and provider-limit refresh status.
-
-Dashboard UX notes:
-
-- Core dashboard data polls every 5 seconds via TanStack Query.
-- Desktop header is fixed; mobile uses bottom-sheet navigation.
-- `/wiki` requires a selected project; “All Projects” shows a project-selection message.
-- Markdown viewers format frontmatter and PIDEX `<!-- ROUTING ... -->` blocks as cards.
-- Tables scroll internally to avoid whole-card/page overflow.
+The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, and Settings sections. See [Dashboard](readme/dashboard.md).
 
 ## Provider limits and profiles
 
-PIDEX tracks provider-native Codex quota windows:
+PIDEX tracks provider-native Codex quota windows, including Spark/no-Spark profile behavior and automatic no-Spark fallback when Spark is exhausted. See [Provider limits and profiles](readme/provider-limits-and-profiles.md).
 
-- `codex` and `codex-spark`
-- `five_hour` and `seven_day`
-- usage represented as `used_percent`
+## Global Git security hook
 
-The dashboard/API refreshes stale provider-limit state automatically. Spark alerts are suppressed when the active profile is a no-Spark profile, unless explicitly overridden with:
-
-```bash
-PIDEX_PROVIDER_ALERT_SPARK_WHEN_INACTIVE=1
-```
-
-Spark limit protection:
-
-- If Spark usage reaches 99% or the provider reports Spark as blocked, PIDEX auto-switches to the equivalent no-Spark profile when available.
-- Example mappings:
-  - `5.3-plus-spark-balanced` → `5.3-no-spark-balanced`
-  - `5.3-plus-spark-xhigh` → `5.3-no-spark-xhigh`
-  - `5.5-plus-spark-balanced` → `5.5-no-spark-balanced`
+PIDEX can optionally install a global Git pre-commit security hook for this Linux user. The hook saves/restores any previous global `core.hooksPath` and does not chain old hooks. See [Global Git security hook](readme/security-hooks.md).
 
 ## Automatic quality reports
 
-Terminal pipeline lifecycle events trigger automatic PDQ quality reports by default:
-
-- `pipeline_completed`
-- `pipeline_failed`
-- `pipeline_aborted`
-- `pipeline_cancelled`
-
-Disable with:
+Terminal pipeline lifecycle events can trigger automatic PDQ quality reports. Disable with:
 
 ```bash
 PIDEX_AUTO_PDQ=0
 ```
 
-Reports are written under `state/quality/` and `agents.output/quality/`, with an `OpQualityReview` operator event.
+See [Automatic quality reports](readme/automatic-quality-reports.md).
 
 ## Future briefs
 
-Notable future-epic briefs live under `agents.output/briefs/`, including:
-
-- `pidex-sketch-intake-tool-idea.md` – disposable sketch/design intake tool for UI-heavy preflight.
-- `claude-subscription-opportunistic-secondary-lanes.md` – optional Claude subscription secondary lanes if policy/support permits after June 15, 2026.
+Notable future-epic briefs live under `agents.output/briefs/`. See [Future briefs](readme/future-briefs.md).
