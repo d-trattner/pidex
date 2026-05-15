@@ -59,6 +59,7 @@ Project session memory:
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `scripts/metrics/` + `scripts/pipeline/` – analytics helpers
 - `scripts/analysis/` – pipeline analysis scaffold
+- `scripts/wiki/` – wiki hygiene audit/cadence helpers
 - `dashboard/` – local analytics UI
 - `readme/` – detailed feature docs
 
@@ -67,9 +68,9 @@ Project session memory:
 ```bash
 cd <pidex-root>
 bash scripts/doctor.sh
+npm run check
 bash scripts/smoke-test.sh
-bash -n scripts/delegate/codex.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh scripts/analysis/run-pipeline-analysis.sh
-python3 -m py_compile dashboard-old/scripts/ingest.py dashboard-old/scripts/server.py
+python3 scripts/wiki/hygiene.py audit --project <pidex-root>
 ```
 
 ## Dashboard
@@ -91,7 +92,7 @@ PIDEX can optionally install a global Git pre-commit security hook for this Linu
 
 ## Wiki hygiene
 
-Run a read-only wiki hygiene audit with `/pdwiki`. Reports are written to `agents.output/wiki-hygiene/`. See [Wiki hygiene](readme/wiki-hygiene.md).
+Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `python3 scripts/wiki/hygiene.py audit --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `wiki/.hygiene-state.json`. See [Wiki hygiene](readme/wiki-hygiene.md).
 
 ## Automatic quality reports
 

@@ -10,7 +10,7 @@ Canonical wiki path:
 
 ## Run
 
-In Pi:
+In Pi, after `/reload`:
 
 ```text
 /pdwiki
@@ -55,6 +55,16 @@ The audit checks for:
 - medium: broken non-index links, orphans with useful content, stale decisions/open items
 - low: minor formatting/staleness/legacy references
 
+## Specialist agent
+
+PIDEX also includes a specialist agent:
+
+```text
+pidex-wiki-hygienist
+```
+
+It can run through `pidex_agent` for pipeline handoffs. Default mode is read-only audit; it must not edit `wiki/` or create `agents.wiki.*`.
+
 ## Cadence
 
 Terminal pipeline events can update:
@@ -63,7 +73,7 @@ Terminal pipeline events can update:
 <project-root>/wiki/.hygiene-state.json
 ```
 
-The first implementation tracks cadence only. Automatic cadence must never apply changes.
+The first implementation tracks cadence only. Automatic cadence must never apply changes. When the counter reaches the configured threshold, run `/pdwiki` to create a fresh report.
 
 ## Apply mode
 
