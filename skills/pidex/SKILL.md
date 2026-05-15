@@ -523,14 +523,17 @@ Read back to the user: "Here is the epic I would send to the pipeline. Does this
 
 **What the orchestrator does BEFORE starting the lead (for fresh projects only):**
 
-After the user confirms the epic, create the project directory and the minimal agents.output structure so the lead has somewhere to write:
+After the user confirms the epic, create the project directory and the minimal agents.output structure so the lead has somewhere to write, and ensure generated/runtime PIDEX folders are ignored before any agent creates files:
 
 ```bash
-mkdir -p <project-path>/agents.output
+mkdir -p <project-path>/agents.output <project-path>/pidex/state <project-path>/pidex/rules <project-path>/pidex/config <project-path>/pidex/prompts
+printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n' >> <project-path>/.gitignore
 echo 0 > <project-path>/agents.output/.next-id
 ```
 
-Do NOT scaffold the project code (package.json, tsconfig, etc.) — that is the lead's job as part of the epic. The orchestrator only creates the directory and initializes agents.output. Do not copy agent files; bundled agents are invoked through `pidex_agent`.
+If `.gitignore` already exists, append only missing entries. `agents.output/**` must remain ignored/uncommitted; `pidex/state/wiki-hygiene.json` and other durable `pidex/` metadata may be committed when explicitly appropriate.
+
+Do NOT scaffold the project code (package.json, tsconfig, etc.) — that is the lead's job as part of the epic. The orchestrator only creates the directory, initializes agents.output, and ensures `.gitignore` protects generated PIDEX artifacts. Do not copy agent files; bundled agents are invoked through `pidex_agent`.
 
 Only proceed after explicit confirmation.
 
@@ -1029,12 +1032,15 @@ After the user confirms the epic, proceed as follows. Apply Rule 4 (auto-proceed
 
 **1. Preparation (for fresh projects only)**
 
-If the epic includes project scaffolding (onboarding flow), create the directory and copy agents before invoking any pidex-* agent:
+If the epic includes project scaffolding (onboarding flow), create the directory and initialize PIDEX runtime/metadata directories before invoking any pidex-* agent:
 
 ```bash
-mkdir -p <project-path>/agents.output
+mkdir -p <project-path>/agents.output <project-path>/pidex/state <project-path>/pidex/rules <project-path>/pidex/config <project-path>/pidex/prompts
+printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n' >> <project-path>/.gitignore
 echo 0 > <project-path>/agents.output/.next-id
 ```
+
+If `.gitignore` already exists, append only missing entries. `agents.output/**` must remain ignored/uncommitted; durable `pidex/` metadata is not ignored by default.
 
 Do not copy agent files into the project. Use bundled agents from `<pidex-root>/agents/` through `pidex_agent`. Then `cd` into the project (or pass the project path as `cwd` to every `pidex_agent` call).
 

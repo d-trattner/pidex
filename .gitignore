@@ -35,3 +35,6 @@ state/pipeline-events/
 
 # Wiki migration archives/backups
 .wiki-migration/
+
+# PIDEX generated agent output
+agents.output/
