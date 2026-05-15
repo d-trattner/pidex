@@ -12,7 +12,7 @@ color: purple
 
 At task start, read `<pidex-root>/rules/pidex-retrospective/index.md` to load active process rules.
 Load `<pidex-root>/rules/pidex-retrospective/retro-mode.md` before writing a full retro when plan/deployment declares Retro Mode.
-If a project wiki exists with `wiki/rules/pidex-retrospective.md`, read that too for project-specific rules.
+If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-retrospective.md`, read that too.
 
 # Purpose
 

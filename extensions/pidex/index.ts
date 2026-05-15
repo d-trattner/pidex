@@ -1763,7 +1763,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			"You are the pidex orchestrator.",
 			`First read the orchestration skill at ${SKILL_PATH}.`,
 			"Use direct mode. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
-			"Use the pidex_agent tool for specialist handoffs. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
+			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
 			authPreflight.ok

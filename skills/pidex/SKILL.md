@@ -877,24 +877,25 @@ Example epic:
 
 ### Step 8 — Task classification (decides the opening agent)
 
-Before starting the pipeline, classify the task to decide whether `pidex-architect` runs BEFORE `pidex-planner` (architecture-first) or whether `pidex-planner` opens directly.
+Before starting the pipeline, classify the task to decide whether `pidex-architect` runs BEFORE `pidex-planner` (architecture-first), whether a specialist maintenance agent opens directly, or whether `pidex-planner` opens directly.
 
 **Why this matters:** Horizontal-slicing plan failures (Plan-014-pattern) often trace back to structural decisions that pidex-planner made without architectural context — monorepo layouts, migration ordering, dependency boundaries. Running pidex-architect first produces an ADR that constrains the plan before it exists, eliminating a class of rejection loops.
 
-**Classify into one of these four buckets.** Use the heuristics; when truly in doubt, ask the user.
+**Classify into one of these buckets.** Use the heuristics; when truly in doubt, ask the user. Specialist maintenance routes take precedence over generic Bugfix / maintenance.
 
 | Category | Trigger heuristics | Opening agent |
 |----------|-------------------|---------------|
 | **Structural** | Framework migration (e.g. Next.js → TanStack), runtime swap (Node → Bun, CJS → ESM), DB engine/ORM change, monorepo restructure, auth-system replacement, new architectural pattern (event sourcing, CQRS, microservice split), major dependency version jump that breaks contracts. Epic verbs: "migrate", "switch from X to Y", "replace X with Y", "rewrite on top of", "refactor base". | `pidex-architect` → produces ADR → then `pidex-planner` |
 | **Cross-cutting large feature** | Touches 3+ system layers in one epic (e.g. UI + API + DB + auth), introduces a new cross-boundary contract, or spans 3+ existing epics. Epic mentions end-to-end new flows with multiple integration points. | `pidex-architect` → produces ADR → then `pidex-planner` |
 | **Standard feature** | Single-layer or 2-layer work, fits existing patterns, no new abstractions. Most "add endpoint X, wire UI Y" work lives here. | `pidex-planner` directly |
-| **Bugfix / maintenance** | Localized, no new abstractions. If root cause is unclear: open with `pidex-analyst` first. | `pidex-planner` (or `pidex-analyst` if diagnostic) |
+| **Wiki hygiene / project memory maintenance** | User asks for wiki hygiene, wiki cleanup, duplicate/stale wiki files, broken wiki links, Obsidian/wiki organization, `wiki/` audit, project memory/session-memory organization, or explicitly mentions `pidex-wiki-hygienist` / `/pdwiki`. Read-only audit/report requests should not go through planner. Cleanup/apply requests must still start audit-first and ask for explicit mutation approval. | `pidex-wiki-hygienist` directly |
+| **Bugfix / maintenance** | Localized, no new abstractions. If root cause is unclear: open with `pidex-analyst` first. Do not use this generic bucket for wiki hygiene; use the specialist route above. | `pidex-planner` (or `pidex-analyst` if diagnostic) |
 
 **Present the classification to the user explicitly:**
 
 ```
-Classification: <Structural | Cross-cutting large | Standard feature | Bugfix>
-Opening-Agent: <pidex-architect → pidex-planner | pidex-planner | pidex-analyst → pidex-planner>
+Classification: <Structural | Cross-cutting large | Standard feature | Wiki hygiene / project memory maintenance | Bugfix>
+Opening-Agent: <pidex-architect → pidex-planner | pidex-planner | pidex-analyst → pidex-planner | pidex-wiki-hygienist>
 Reason: <one-sentence justification, e.g. "Migration from Next.js App Router to TanStack Start = framework base change">
 ```
 
@@ -911,6 +912,18 @@ pidex-architect MUST run before pidex-planner and produce:
 - An ADR in wiki/decisions/ locking the structural decision
 - Findings in agents.output/architecture/<plan-id>-<slug>-architecture-findings.md
 pidex-planner then reads the ADR + findings as mandatory input.
+```
+
+For wiki hygiene / project memory maintenance routes, the team prompt must include:
+
+```
+OPENING AGENT: pidex-wiki-hygienist
+This is a wiki hygiene / project memory maintenance task.
+Before invoking the specialist, run the deterministic read-only audit when applicable:
+python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
+Pass the generated report path to pidex-wiki-hygienist.
+pidex-wiki-hygienist MUST start read-only, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** or create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only.
+Canonical wiki path is <project-root>/wiki/.
 ```
 
 For standard routes, no additional directive — pidex-planner opens as usual.
@@ -1108,6 +1121,7 @@ If uncertain, ignore the skip and run the conservative default route. Never skip
 
 | Step | Agent / Gate | Route rule |
 |---|---|---|
+| 0W | `pidex-wiki-hygienist` | Specialist opening route for wiki hygiene / project memory maintenance. Orchestrator runs the deterministic `/pdwiki`-style audit first when applicable, passes the report path, and keeps the task read-only unless the user approves an explicit apply plan. Wiki hygiene must never mutate `<project-root>/pidex/**`. `COMPLETE` routes to user or orchestrator; cleanup implementation is not automatic. |
 | 1 | `pidex-planner` | Epic → implementation-ready plan. `COMPLETE` routes to `pidex-critic`; `BLOCKED` routes to `pidex-analyst`, `pidex-architect`, or user depending on reason. |
 | 2 | `pidex-critic` | `APPROVED*` + UI-heavy/frontend scope → `pidex-designer` unless approved profile explicitly permits skip; `APPROVED*` + no UI or approved designer skip → `pidex-implementer`; `REJECTED` → `pidex-planner` (G1). |
 | 2.5 | `pidex-designer` | UI plans only. `APPROVED*` → `pidex-implementer`; `REJECTED` → `pidex-planner`. |
@@ -1126,6 +1140,7 @@ Optional early agents:
 
 - `pidex-analyst` — unknown APIs, unverified assumptions, RCA gaps.
 - `pidex-architect` — structural/core architecture decisions.
+- `pidex-wiki-hygienist` — wiki hygiene, project memory/wiki organization, duplicate/stale wiki files, broken wiki links. Use directly for those tasks rather than routing through `pidex-planner`.
 
 Parallel implementer lanes are optional, not default. Use them only when the plan has explicit spawn/lane markers and slice independence is clear. Otherwise use sequential implementer spawns following the plan's `Spawn` annotations.
 

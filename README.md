@@ -93,7 +93,7 @@ PIDEX can optionally install a global Git pre-commit security hook for this Linu
 
 ## Wiki hygiene
 
-Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `python3 scripts/wiki/hygiene.py audit --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `wiki/.hygiene-state.json`. See [Wiki hygiene](readme/wiki-hygiene.md).
+Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `python3 scripts/wiki/hygiene.py audit --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `pidex/state/wiki-hygiene.json`. Project-specific PIDEX rules live under `pidex/rules/`. See [Wiki hygiene](readme/wiki-hygiene.md).
 
 ## Optional parallel agents
 

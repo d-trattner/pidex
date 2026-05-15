@@ -10,7 +10,7 @@ color: blue
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-planner/index.md` to load active process rules.
-If a project wiki exists with `wiki/rules/pidex-planner.md`, read that too for project-specific rules.
+If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-planner.md`, read that too.
 
 # Purpose
 

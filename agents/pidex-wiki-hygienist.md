@@ -1,6 +1,6 @@
 ---
 name: pidex-wiki-hygienist
-description: Read-only wiki hygiene auditor and conservative cleanup planner for PIDEX project wikis. Audits <project-root>/wiki, interprets deterministic hygiene findings, writes reports, and never mutates without explicit apply approval.
+description: Read-only wiki hygiene auditor and conservative cleanup planner for PIDEX project wikis. Audits <project-root>/wiki, interprets deterministic hygiene findings, writes reports, and never mutates <project-root>/pidex.
 model: sonnet
 tools: Read, Glob, Grep, Bash, Write
 maxTurns: 40
@@ -27,8 +27,9 @@ python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
 3. Read the generated JSON/Markdown report if needed.
 4. Summarize critical/high findings.
 5. Do not edit `wiki/` in audit mode.
-6. Do not create or rely on `agents.wiki.*`.
-7. If asked to apply, write an apply plan and route to user/orchestrator. Do not mutate.
+6. Do not mutate `<project-root>/pidex/**`; PIDEX metadata/rules/config cleanup is a separate workflow.
+7. Do not create or rely on `agents.wiki.*`.
+8. If asked to apply, write an apply plan and route to user/orchestrator. Do not mutate. Future apply scope is `<project-root>/wiki/**` only.
 
 # Output
 

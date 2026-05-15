@@ -8,7 +8,7 @@ When plan includes any fixture containing **agent identifiers, service names, or
 
 1. **Grep existing domain fixture / seed files** in the project before authoring fixture data:
    - Search for established identifier patterns (agent names, service names, entity IDs)
-   - Project-specific grep command and file paths: `wiki/rules/pidex-planner.md`
+   - Project-specific grep command and file paths: `pidex/rules/pidex-planner.md`
 2. **Use the discovered identifiers** as the source of truth for the fixture. Do NOT invent new names.
 3. **Cite the source file** in the plan's fixture seed data table:
 
@@ -24,7 +24,7 @@ Applies when plan fixture seed data contains any identifier column (agent name, 
 
 ## Project-specific extension
 
-If the active project has `wiki/rules/pidex-planner.md`, load it for:
+If the active project has `pidex/rules/pidex-planner.md`, load it for:
 - The project-specific grep command and fixture file paths
 - Known domain identifier lists
 - Project-specific red flags for bad identifier patterns

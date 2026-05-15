@@ -10,7 +10,7 @@ color: cyan
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-analyst/index.md` to load active process rules.
-If a project wiki exists with `wiki/rules/pidex-analyst.md`, read that too for project-specific rules.
+If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-analyst.md`, read that too.
 
 # Purpose
 

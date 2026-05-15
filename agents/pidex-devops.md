@@ -14,7 +14,7 @@ At task start, read `<pidex-root>/rules/pidex-devops/index.md` to load active pr
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-devops/execution-profile-diff-guard.md` before Stage 1 commit.
 For UI-involved work or any `User Preview Requirement`, load `<pidex-root>/rules/pidex-devops/post-stage1-ui-preview-before-g4.md` before Stage 1 routing/G4.
 If selective release staging leaves a dirty tree after tag/push/final artifact commit, load `<pidex-root>/rules/pidex-devops/post-release-artifact-hygiene.md` before declaring completion.
-If a project wiki exists with `wiki/rules/pidex-devops.md`, read that too for project-specific rules.
+If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-devops.md`, read that too.
 
 # Purpose
 

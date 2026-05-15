@@ -326,13 +326,18 @@ def render_md(project: Path, data: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def hygiene_state_path(project: Path) -> Path:
+    return project / "pidex" / "state" / "wiki-hygiene.json"
+
+
 def cadence(args: argparse.Namespace) -> int:
     project = Path(args.project).expanduser().resolve()
     wiki = project / "wiki"
     if not wiki.exists():
         return 0
-    state = wiki / ".hygiene-state.json"
+    state = hygiene_state_path(project)
     try:
+        state.parent.mkdir(parents=True, exist_ok=True)
         data = json.loads(state.read_text(encoding="utf-8")) if state.exists() else {}
         data.setdefault("schema_version", 1)
         data.setdefault("pipeline_runs_since_hygiene", 0)

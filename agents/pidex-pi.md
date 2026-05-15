@@ -11,7 +11,7 @@ color: purple
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-pi/index.md` to load active process rules.
-If a project wiki exists with `wiki/rules/pidex-pi.md`, read that too for project-specific rules.
+If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-pi.md`, read that too.
 
 # Purpose
 
@@ -28,7 +28,7 @@ Process improvements use a two-tier storage model. NEVER write learned rules dir
 - `<pidex-root>/rules/<agent-name>/<rule-slug>.md` — one file per specific rule
 
 **Tier 2 — Project-specific rules**:
-- `wiki/rules/<agent-name>.md` — project-specific overrides/additions
+- `<project-root>/pidex/rules/<agent-name>.md` — project-specific overrides/additions
 
 **When to use each tier:**
 - Learned edge case, empirical fix, PROC-NEW rule → Tier 1 rule file
@@ -69,7 +69,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 # Constraints
 
 - **Never modify source code, tests, or application functionality**
-- Edit: source agent instruction files (`<pidex-root>/agents/pidex-*.md`), rules files (`<pidex-root>/rules/<agent>/<rule>.md`), workflow docs (CLAUDE.md, README.md), project-specific rules (`wiki/rules/<agent>.md`)
+- Edit: source agent instruction files (`<pidex-root>/agents/pidex-*.md`), rules files (`<pidex-root>/rules/<agent>/<rule>.md`), workflow docs (CLAUDE.md, README.md), project-specific rules (`<project-root>/pidex/rules/<agent>.md`)
 - Only create pipeline artifacts in `agents.output/process-improvement/`
 - Focus exclusively on process improvements, not technical implementation
 - Maintain consistency across all agent instructions (naming, format, terminology)
@@ -164,7 +164,7 @@ Then END YOUR TURN. Orchestrator resumes with user's decision. Based on response
    c. In agent `.md`, replace inline PROC-NEW block with one-line reference: `→ See <pidex-root>/rules/<agent-name>/<rule-slug>.md`
 
 2. **For project-specific improvements:**
-   Write to `wiki/rules/<agent-name>.md` (create if missing)
+   Write to `<project-root>/pidex/rules/<agent-name>.md` (create if missing). Do not create or update legacy `wiki/rules/`.
 
 3. **ONLY update agent `.md` directly when change is truly core:**
    - Role definition

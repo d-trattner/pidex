@@ -34,7 +34,7 @@ Recommendation: Planner must grep existing domain fixtures and cite source file 
 
 ## Project-specific extension
 
-Load `wiki/rules/pidex-critic.md` for:
+Load `pidex/rules/pidex-critic.md` for:
 - Project-specific known-bad identifier patterns (e.g., specific framework or tooling names that should never appear in domain fixtures)
 - Known domain identifier lists against which to cross-check
 

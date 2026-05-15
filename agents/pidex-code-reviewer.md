@@ -14,7 +14,7 @@ For UI/frontend plans, load `<pidex-root>/rules/pidex-code-reviewer/ui-pattern-p
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-code-reviewer/execution-profile-diff-guard.md`.
 For JS/TS scope, load `<pidex-root>/rules/pidex-code-reviewer/fallow-evidence.md`; for non-JS/TS, record `FALLOW-SKIP: non-JS/TS scope`.
 For tiny test-only/type-only/devops-blocker hotfixes, load `<pidex-root>/rules/pidex-code-reviewer/tdd-table-narrow-hotfix-escape.md` before rejecting solely for a missing full TDD table.
-If a project wiki exists with `wiki/rules/pidex-code-reviewer.md`, read that too for project-specific rules.
+If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-code-reviewer.md`, read that too.
 
 # Purpose
 

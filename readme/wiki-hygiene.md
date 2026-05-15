@@ -32,7 +32,7 @@ Reports are written to:
 <project-root>/agents.output/wiki-hygiene/YYYY-MM-DDTHH-MM-SSZ-report.json
 ```
 
-Audit mode does not edit `wiki/`.
+Audit mode does not edit `wiki/` and does not mutate `<project-root>/pidex/**`.
 
 ## Checks
 
@@ -63,18 +63,26 @@ PIDEX also includes a specialist agent:
 pidex-wiki-hygienist
 ```
 
-It can run through `pidex_agent` for pipeline handoffs. Default mode is read-only audit; it must not edit `wiki/` or create `agents.wiki.*`.
+It can run through `pidex_agent` for pipeline handoffs. Default mode is read-only audit; it must not edit `wiki/`, mutate `<project-root>/pidex/**`, or create `agents.wiki.*`.
 
 ## Cadence
 
 Terminal pipeline events can update:
 
 ```text
-<project-root>/wiki/.hygiene-state.json
+<project-root>/pidex/state/wiki-hygiene.json
 ```
 
-The first implementation tracks cadence only. Automatic cadence must never apply changes. When the counter reaches the configured threshold, run `/pdwiki` to create a fresh report.
+The cadence helper may update only that single PIDEX metadata file. Automatic cadence must never apply changes. When the counter reaches the configured threshold, run `/pdwiki` to create a fresh report.
+
+Project-specific PIDEX agent rules live in:
+
+```text
+<project-root>/pidex/rules/<agent>.md
+```
+
+`wiki/` remains durable project knowledge; `pidex/` is operational metadata.
 
 ## Apply mode
 
-Apply mode is future work. Any mutation must require an explicit user gate, backups, validation, and a scoped commit.
+Apply mode is future work. Any mutation must require an explicit user gate, backups, validation, and a scoped commit. Future wiki hygiene apply mode may only mutate `<project-root>/wiki/**`; PIDEX metadata cleanup needs a separate workflow.
