@@ -12,20 +12,21 @@ Classify every remaining dirty path into exactly one bucket:
 
 | Bucket | Meaning | Allowed action |
 |---|---|---|
-| `COMMIT_NOW` | Legitimate artifact/docs bookkeeping from completed pipeline work | Stage and commit in a separate hygiene commit |
+| `COMMIT_NOW` | Legitimate non-`agents.output` docs/bookkeeping from completed pipeline work | Stage and commit in a separate hygiene commit |
 | `DELETE_NOW` | Temporary, malformed, stub, duplicate, or spillover artifact with no durable value | Remove before final status |
 | `LEAVE_DIRTY` | Intentionally retained dirty state | Must name owner, reason, and next action |
 | `ASK_USER` | Ambiguous or outside automatic cleanup scope | Stop and ask user |
 
 ## Automatic cleanup scope
 
-DevOps may automatically reconcile only docs/artifact bookkeeping:
+DevOps may automatically reconcile only non-generated docs/bookkeeping:
 
-- `agents.output/**` docs/artifacts
 - `wiki/**` docs
-- roadmap/docs artifacts
-- `.next-id` allocator file when consistent with completed run IDs
-- identical moves into `closed/` directories after confirming content parity
+- `pidex/state/**` project metadata state when explicitly intended
+- roadmap/docs artifacts outside `agents.output/**`
+- identical moves into `closed/` directories outside `agents.output/**` after confirming content parity
+
+`agents.output/**` is generated runtime/operator output and must never be committed.
 
 ## Forbidden automatic cleanup scope
 
@@ -49,13 +50,13 @@ Record a table in the deployment/devops artifact:
 ```md
 | Path | Git status | Classification | Action | Rationale |
 |------|------------|----------------|--------|-----------|
-| agents.output/.next-id | M | COMMIT_NOW | stage | allocator advanced by completed run |
-| agents.output/architecture/1-architect-findings.md | ?? | DELETE_NOW | rm | malformed stub artifact |
+| pidex/state/wiki-hygiene.json | M | COMMIT_NOW | stage | durable hygiene cadence state |
+| agents.output/architecture/1-architect-findings.md | ?? | LEAVE_DIRTY | ignore | generated runtime artifact; never commit |
 ```
 
 ## Hygiene commit
 
-If only `COMMIT_NOW` and `DELETE_NOW` docs/artifact paths remain, DevOps may create a separate commit:
+If only `COMMIT_NOW` non-`agents.output` docs/state paths and `DELETE_NOW` temporary paths remain, DevOps may create a separate commit. Never stage `agents.output/**`:
 
 ```text
 chore(artifacts): reconcile post-release spillover

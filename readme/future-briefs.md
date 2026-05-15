@@ -18,6 +18,6 @@ These are planning artifacts, not active runtime code.
 
 ## Commit guidance
 
-Generated briefs under `agents.output/briefs/` can be committed when they represent durable roadmap/planning artifacts.
+Generated briefs under `agents.output/briefs/` are local runtime/operator artifacts and must not be committed. If a brief becomes durable roadmap/planning knowledge, copy or distill it into `wiki/` or another non-`agents.output` tracked location first.
 
-Generated quality reports under `agents.output/quality/` should generally not be committed unless intentionally preserved as evidence.
+Generated quality reports under `agents.output/quality/` must not be committed. Preserve durable conclusions in `wiki/` or `pidex/state/` where appropriate.

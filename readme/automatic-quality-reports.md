@@ -34,7 +34,7 @@ PIDEX also emits an `OpQualityReview` operator event.
 
 - `state/quality/` is runtime state.
 - `agents.output/quality/` is generated operator-facing output.
-- Generated `agents.output/quality/pdq-*.md` reports should generally not be committed unless intentionally preserved as project evidence.
+- Generated `agents.output/quality/pdq-*.md` reports must not be committed. Preserve durable conclusions in `wiki/` or `pidex/state/` where appropriate.
 
 ## Manual quality report
 

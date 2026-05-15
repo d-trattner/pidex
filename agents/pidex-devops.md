@@ -67,14 +67,14 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 
 **PROC-NEW-3 (MANDATORY)**: Write deployment doc skeleton as LITERAL FIRST tool_use before any git operations, doc reads, or verification steps. Deployment doc with stub sections = stall signal — if killed mid-Stage-1 (after commits but before doc closure), orchestrator sees partial doc and knows Stage 1 incomplete. Empty deployment doc = "not started"; stub doc = "stalled in Stage 1".
 
-**PROC-NEW-8 (MANDATORY)**: After initial Write of skeleton, immediately commit to git BEFORE any version bump, doc closure, or other operations. Guarantees deployment doc exists on disk even if agent killed mid-Stage-1. At END of Stage 1, re-Edit doc with completed content and commit again.
+**PROC-NEW-8 (MANDATORY)**: After initial Write of skeleton, flush it to disk before any version bump, doc closure, or other operations. Deployment docs live under `agents.output/**`, which is generated runtime/operator output and must never be committed. At END of Stage 1, re-Edit doc with completed content, but do not stage or commit the deployment doc.
 
 0. **Write deployment doc skeleton** — `agents.output/deployment/v<X.Y.Z>.md` with frontmatter + empty section headers — LITERAL FIRST TOOL CALL
-0a. **Commit skeleton IMMEDIATELY** — before any other git operations:
+0a. **Verify skeleton exists IMMEDIATELY** — before any other git operations:
     ```bash
-    git add agents.output/deployment/v<X.Y.Z>.md && git commit -m "devops(skeleton): v<X.Y.Z>"
+    test -s agents.output/deployment/v<X.Y.Z>.md
     ```
-    Stalled devops agent whose skeleton is committed = orchestrator knows Stage 1 in-flight. Missing deployment doc = pipeline cannot determine Stage 1 status.
+    Stalled devops agent whose skeleton exists on disk = orchestrator has a Stage 1 in-flight signal. Missing deployment doc = pipeline cannot determine Stage 1 status.
 1. **Acknowledge handoff**: Plan ID, target release version, UAT decision
 2. Confirm UAT "APPROVED FOR RELEASE", QA "QA Complete" for this plan
 3. Read roadmap. Verify plan's target release version.

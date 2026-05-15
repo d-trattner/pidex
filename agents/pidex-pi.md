@@ -242,19 +242,19 @@ Status: Active
 
 # Phase 6: Final Pipeline Commit
 
-After Phase 5 done (or skipped if rejected/deferred), commit all remaining uncommitted pipeline documents. These are docs created AFTER pidex-devops' Stage 1 commit — typically retrospective, this PI analysis, and deployment doc (which pidex-devops updates during Stage 2).
+After Phase 5 done (or skipped if rejected/deferred), commit durable wiki/project metadata updates only. `agents.output/**` is generated runtime/operator output and must never be committed, including PI/retrospective/deployment artifacts.
 
 0. First verify git repo: `git rev-parse --is-inside-work-tree`. If not (e.g., project scaffolding failed or git init was never run), skip commit step and note in PI doc: "Final commit skipped — project is not a git repository."
-1. Run `git status --short` to see uncommitted docs
-2. Stage all relevant files: `git add agents.output/ wiki/`
+1. Run `git status --short` to see uncommitted docs/state
+2. Stage relevant durable files only, e.g. `git add wiki/ pidex/state/` as appropriate. Never stage `agents.output/**`.
 3. Commit with message: `docs: retrospective + pi for Plan <id> (v<X.Y.Z>)`
-4. If G4 answered with "push" (check `agents.output/deployment/` doc for Status "Released"),
-   also push this commit so remote has complete paper trail:
+4. If G4 answered with "push" (check deployment context for Status "Released"),
+   also push this commit so remote has durable wiki/project metadata updates:
    `git push origin HEAD`
    Without this, release tag and source code are on remote but retro/PI docs are local-only.
 5. If G4 was "local", "hold", or "abort": do NOT push.
 
-Ensures full pipeline paper trail captured in version history AND on remote when push-release was done.
+Ensures durable wiki/project metadata updates are captured in version history AND on remote when push-release was done. Generated `agents.output/**` paper trail remains local/uncommitted.
 
 
 # Output Style

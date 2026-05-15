@@ -39,6 +39,7 @@ pidex currently supports direct mode as the working MVP:
 - `pidex_agent` records per-agent metrics under `<pidex-root>/state/metrics/`.
 - For plan-id allocation, use atomic helper `bash <pidex-root>/scripts/parallel/manifest.sh next-id --project-root <project-root>` (do not increment `.next-id` ad hoc under parallel load).
 - Specialist final responses must stay short: write full artifacts to files, then return only status, output paths, next route, concise evidence, and the ROUTING block.
+- Generated `agents.output/**` artifacts are runtime/operator outputs and must never be committed. Do not stage them, do not use `git add -f` for them, and do not suggest them as commit candidates. Commit durable wiki/project metadata instead (for example `wiki/**` or `pidex/state/wiki-hygiene.json` when appropriate).
 - Gates are asked in the Pi session. Do not use Telegram reply handling unless the user explicitly asks for the scaffolded background mode.
 - Optional notify-only Telegram is allowed in direct mode: use `<pidex-root>/scripts/telegram/notify.sh --optional` to alert the user that Pi needs attention and when the pipeline reaches terminal completion/failure/abort. This sends information only, no buttons, no replies, no `pending-gate.json`.
 
