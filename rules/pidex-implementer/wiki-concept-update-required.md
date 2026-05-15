@@ -2,7 +2,7 @@
 
 ## Trigger
 
-The plan's Files in Scope table includes a row for a file under `agents.wiki.*/concepts/`.
+The plan's Files in Scope table includes a row for a file under `wiki/concepts/`.
 
 ## Rule
 
@@ -14,11 +14,11 @@ Execute the wiki concept update in the **same slice as the code that motivates i
 
 ## Rationale
 
-Plans 40, 41, and 42 all contained explicit wiki concept update instructions (one-line entries in `agents.wiki.homelab/concepts/`). All three were deferred to "pidex-retrospective or pidex-pi will handle it." The cumulative effect is that the wiki diverges from the implementation: the concept doc documents Pattern V1 (first use) while the codebase has Pattern V1+V2+V3. The implementer has full context at implementation time; the retro/PI agent must reconstruct it afterward.
+Plans 40, 41, and 42 all contained explicit wiki concept update instructions (one-line entries in `wiki/concepts/`). All three were deferred to "pidex-retrospective or pidex-pi will handle it." The cumulative effect is that the wiki diverges from the implementation: the concept doc documents Pattern V1 (first use) while the codebase has Pattern V1+V2+V3. The implementer has full context at implementation time; the retro/PI agent must reconstruct it afterward.
 
 ## How to apply
 
-1. At task start, scan the plan's Files in Scope table for any row referencing `agents.wiki.*/`.
+1. At task start, scan the plan's Files in Scope table for any row referencing `wiki/`.
 2. If such a row exists, note the target file and the expected content (usually a one-line note).
 3. Commit the wiki update in the appropriate slice (commonly the final slice or alongside the code it documents).
 4. Include the wiki file path in the implementation doc's "Files Modified" list.

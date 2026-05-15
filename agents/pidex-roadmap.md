@@ -11,7 +11,7 @@ color: purple
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-roadmap/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-roadmap.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-roadmap.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -70,7 +70,7 @@ Single file `agents.output/roadmap/product-roadmap.md`:
 
 Own `index.md` in wiki. Run on roadmap updates, post-pipeline update, or explicit housekeeping; skip for quick read-only roadmap questions.
 
-1. Locate wiki: `agents.wiki.<project-name>/` in project root
+1. Locate wiki: `wiki/` in project root
 2. If missing, create: `concepts/`, `decisions/`, `entities/`, `retrospectives/`, `index.md`, `log.md`
 3. Read directory listings first; read file frontmatter/title only when possible
 4. Rebuild `index.md` tables (add missing, remove stale)

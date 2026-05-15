@@ -11,7 +11,7 @@ color: orange
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-critic/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-critic.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-critic.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -127,7 +127,7 @@ Required section:
 
 # Deferred Findings Tracking
 
-When verdict APPROVED_WITH_COMMENTS and finding non-blocking, write each deferred finding as bullet to `agents.wiki.<project-name>/open-items.md` (make if missing). Each entry must have: finding ID, one-line summary, origin agent, plan reference. Ensures deferred items tracked across pipeline, not orphan.
+When verdict APPROVED_WITH_COMMENTS and finding non-blocking, write each deferred finding as bullet to `wiki/open-items.md` (make if missing). Each entry must have: finding ID, one-line summary, origin agent, plan reference. Ensures deferred items tracked across pipeline, not orphan.
 
 # Document Lifecycle
 
@@ -191,7 +191,7 @@ When user asks re-review revised plan, update existing critique doc (no new one)
 
 # Out-of-Scope Tracking
 
-When reject feature, scope expansion, or approach during critique, add to `agents.wiki.<project-name>/out-of-scope.md` (make if missing). Each entry: date, what rejected, why, which plan. Stops same idea re-proposed in future plan without context why before rejected.
+When reject feature, scope expansion, or approach during critique, add to `wiki/out-of-scope.md` (make if missing). Each entry: date, what rejected, why, which plan. Stops same idea re-proposed in future plan without context why before rejected.
 
 # Backward Handoffs
 

@@ -29,6 +29,14 @@ In Pi:
 
 `/pd` is available as a short alias. The orchestrator flow is unchanged from Running Pi, but now constrained to Codex models and `pidex-*` role names.
 
+Project session memory:
+
+```text
+/pdmem optional note
+```
+
+`/pdmem` writes a lightweight session snapshot to `<project-root>/wiki/session-memory/` and updates that folder's `index.md`.
+
 ## Repo scope
 
 - `agents/` – role prompts
@@ -68,7 +76,7 @@ Current dashboard sections:
 - **Runs** – agent and completed pipeline tables with formatted timestamps, durations, cost, and context-document buttons.
 - **Quality** – completion/runtime/model-quality charts and artifact health signals.
 - **Usage** – provider limits, active profile, token consumption, quota trends, and profile switching.
-- **Wiki** – project-scoped markdown browser for `agents.output` and auto-detected `agents.wiki.*` roots.
+- **Wiki** – project-scoped markdown browser for `agents.output` and auto-detected `wiki` roots.
 - **Settings** – active profile, configured profiles, and provider-limit refresh status.
 
 Dashboard UX notes:

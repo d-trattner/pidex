@@ -80,10 +80,10 @@ function collectDirPaths(nodes: TreeNode[], out = new Set<string>()): Set<string
 }
 
 function defaultOpenPaths(nodes: TreeNode[]): Set<string> {
-  return new Set(nodes.filter((node) => node.path === 'agents.output' || node.path.startsWith('agents.wiki.')).map((node) => node.path));
+  return new Set(nodes.filter((node) => node.path === 'agents.output' || node.path === 'wiki' || node.path.startsWith('agents.wiki.')).map((node) => node.path));
 }
 
-function TreeItem({ node, selected, onSelect, openPaths, onToggle, onHover, onLeave }: { node: TreeNode; selected: string; onSelect: (path: string) => void; openPaths: Set<string>; onToggle: (path: string) => void; onHover: (name: string, rect: DOMRect) => void; onLeave: () => void }) {
+function TreeItem({ node, selected, onSelect, openPaths, onToggle, onHover, onLeave, disableTooltip = false }: { node: TreeNode; selected: string; onSelect: (path: string) => void; openPaths: Set<string>; onToggle: (path: string) => void; onHover: (name: string, rect: DOMRect) => void; onLeave: () => void; disableTooltip?: boolean }) {
   const isDir = node.type === 'dir';
   const open = openPaths.has(node.path);
   const active = node.path === selected;
@@ -94,10 +94,14 @@ function TreeItem({ node, selected, onSelect, openPaths, onToggle, onHover, onLe
       <button
         type="button"
         className={`wiki-tree-item${active ? ' active' : ''}`}
-        onClick={() => (isDir ? onToggle(node.path) : onSelect(node.path))}
-        onMouseEnter={(event) => onHover(node.name, event.currentTarget.getBoundingClientRect())}
+        onClick={() => {
+          onLeave();
+          if (isDir) onToggle(node.path);
+          else onSelect(node.path);
+        }}
+        onMouseEnter={(event) => { if (!disableTooltip) onHover(node.name, event.currentTarget.getBoundingClientRect()); }}
         onMouseLeave={onLeave}
-        onFocus={(event) => onHover(node.name, event.currentTarget.getBoundingClientRect())}
+        onFocus={(event) => { if (!disableTooltip) onHover(node.name, event.currentTarget.getBoundingClientRect()); }}
         onBlur={onLeave}
       >
         {isDir ? (open ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <span className="wiki-tree-spacer" />}
@@ -106,7 +110,7 @@ function TreeItem({ node, selected, onSelect, openPaths, onToggle, onHover, onLe
       </button>
       {isDir && open && children.length ? (
         <ul className="wiki-tree-children">
-          {children.map((child) => <TreeItem key={child.path} node={child} selected={selected} onSelect={onSelect} openPaths={openPaths} onToggle={onToggle} onHover={onHover} onLeave={onLeave} />)}
+          {children.map((child) => <TreeItem key={child.path} node={child} selected={selected} onSelect={onSelect} openPaths={openPaths} onToggle={onToggle} onHover={onHover} onLeave={onLeave} disableTooltip={disableTooltip} />)}
         </ul>
       ) : null}
     </li>
@@ -148,6 +152,7 @@ function WikiPage() {
   });
 
   const selectPath = (path: string) => {
+    setTreeTooltip(null);
     setSelectedPath(path);
     setFilesSheetOpen(false);
   };
@@ -163,9 +168,9 @@ function WikiPage() {
     </div>
   );
 
-  const treeList = tree.length ? (
+  const renderTreeList = (disableTooltip = false) => tree.length ? (
     <ul className="wiki-tree">
-      {tree.map((node) => <TreeItem key={node.path} node={node} selected={selectedPath} onSelect={selectPath} openPaths={openPaths} onToggle={togglePath} onHover={(name, rect) => setTreeTooltip({ name, x: rect.left + 34, y: rect.bottom + 4 })} onLeave={() => setTreeTooltip(null)} />)}
+      {tree.map((node) => <TreeItem key={node.path} node={node} selected={selectedPath} onSelect={selectPath} openPaths={openPaths} onToggle={togglePath} onHover={(name, rect) => setTreeTooltip({ name, x: rect.left + 34, y: rect.bottom + 4 })} onLeave={() => setTreeTooltip(null)} disableTooltip={disableTooltip} />)}
     </ul>
   ) : <p className="muted">No markdown files found.</p>;
 
@@ -175,7 +180,7 @@ function WikiPage() {
         <h3>Files</h3>
         {treeActions}
       </div>
-      {treeList}
+      {renderTreeList(false)}
     </>
   );
 
@@ -210,7 +215,7 @@ function WikiPage() {
                   </div>
                 </div>
                 <div className="mobile-sheet-body">
-                  {treeList}
+                  {renderTreeList(true)}
                 </div>
               </aside>
             </div>,

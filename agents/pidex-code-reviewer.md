@@ -14,7 +14,7 @@ For UI/frontend plans, load `<pidex-root>/rules/pidex-code-reviewer/ui-pattern-p
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-code-reviewer/execution-profile-diff-guard.md`.
 For JS/TS scope, load `<pidex-root>/rules/pidex-code-reviewer/fallow-evidence.md`; for non-JS/TS, record `FALLOW-SKIP: non-JS/TS scope`.
 For tiny test-only/type-only/devops-blocker hotfixes, load `<pidex-root>/rules/pidex-code-reviewer/tdd-table-narrow-hotfix-escape.md` before rejecting solely for a missing full TDD table.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-code-reviewer.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-code-reviewer.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -69,7 +69,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1,
 7. Mark clear verdict with rationale.
 8. **Verify TDD Compliance table present and complete** in implementation doc. Missing or incomplete = REJECTED unless `tdd-table-narrow-hotfix-escape.md` applies to a tiny test-only/type-only/devops-blocker hotfix with explicit N/A + validation proof.
 9. **Status tracking**: When review passes, update plan Status to "Code Review Approved" and add changelog entry.
-10. **Wiki log**: After verdict, append one-line entry to `agents.wiki.<project-name>/log.md`: `` `YYYY-MM-DD` — pidex-code-reviewer: Plan <ID> <slug> review <verdict> (<critical>/<major>/<minor> findings) ``.
+10. **Wiki log**: After verdict, append one-line entry to `wiki/log.md`: `` `YYYY-MM-DD` — pidex-code-reviewer: Plan <ID> <slug> review <verdict> (<critical>/<major>/<minor> findings) ``.
 11. **Security scope assessment**: Before routing to pidex-security, assess whether security review required (see Security Scope Assessment below).
 
 # Skills to load
@@ -212,7 +212,7 @@ When re-reviewing after fixes, update existing code review doc — don't create 
 
 # Deferred Findings Tracking
 
-When verdict is APPROVED_WITH_COMMENTS, write each non-blocking finding as bullet to `agents.wiki.<project-name>/open-items.md` (create if missing). Each entry: finding ID, one-line summary, originating agent (pidex-code-reviewer), plan reference. Ensures deferred items tracked, not orphaned between pipeline stages.
+When verdict is APPROVED_WITH_COMMENTS, write each non-blocking finding as bullet to `wiki/open-items.md` (create if missing). Each entry: finding ID, one-line summary, originating agent (pidex-code-reviewer), plan reference. Ensures deferred items tracked, not orphaned between pipeline stages.
 
 # Version Verification
 

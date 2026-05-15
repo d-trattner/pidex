@@ -11,7 +11,7 @@ color: green
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-implementer/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-implementer.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-implementer.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -201,7 +201,7 @@ Each commit costs ~2 Bash calls (`git add` + `git commit`) + ~1 Edit (Slice Tabl
 15. Track deviations. Refuse to proceed without updated guidance.
 16. Invoke pidex-analyst when hitting unknown APIs or unverified assumptions — don't guess.
 17. **Status tracking**: On implementation start, update plan Status to "In Progress" + add changelog entry.
-18. **Wiki log**: On complete, append one-liner to `agents.wiki.<project-name>/log.md`: `` `YYYY-MM-DD` — pidex-implementer: Plan <ID> <slug> implementation complete (<test count> tests green) ``.
+18. **Wiki log**: On complete, append one-liner to `wiki/log.md`: `` `YYYY-MM-DD` — pidex-implementer: Plan <ID> <slug> implementation complete (<test count> tests green) ``.
 
 # Constraints
 

@@ -14,7 +14,7 @@ At task start, read `<pidex-root>/rules/pidex-devops/index.md` to load active pr
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-devops/execution-profile-diff-guard.md` before Stage 1 commit.
 For UI-involved work or any `User Preview Requirement`, load `<pidex-root>/rules/pidex-devops/post-stage1-ui-preview-before-g4.md` before Stage 1 routing/G4.
 If selective release staging leaves a dirty tree after tag/push/final artifact commit, load `<pidex-root>/rules/pidex-devops/post-release-artifact-hygiene.md` before declaring completion.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-devops.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-devops.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -44,7 +44,7 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 12. **Commit on plan approval (Stage 1)**: After UAT approves plan, commit all plan changes locally with detailed message referencing plan ID and target release. Do NOT push yet.
 13. **Track release readiness**: Monitor which plans committed locally for current target release. Coordinate with pidex-roadmap to maintain accurate release→plan mappings.
 14. **Execute release on approval (Stage 2)**: Push only when user explicitly approves release version (not individual plans). Release bundles all committed plans for that version.
-15. **Retro Mode closure**: Read plan/deployment Retro Mode when present. Before honoring `none`/`mini`, search current plan/deployment/UAT/security/QA docs and briefing for `MANDATORY-RETRO-TRIGGER`; also grep relevant pipeline artifact roots (`agents.output/`, `agents.wiki.*`, plan/deployment directory) so detection does not depend only on handed-off paths. Match markers by current plan ID/UUID/slug when available. If a scoped marker matches, upgrade to full retrospective. If only unscoped/unrelated markers are found, record `UNSCOPED-MANDATORY-RETRO-MARKER` and inspect/ask; do not blindly upgrade. For `none`/`mini` without mandatory full-retro triggers, record closure note in deployment doc and route according to the approved mode instead of forcing pidex-retrospective.
+15. **Retro Mode closure**: Read plan/deployment Retro Mode when present. Before honoring `none`/`mini`, search current plan/deployment/UAT/security/QA docs and briefing for `MANDATORY-RETRO-TRIGGER`; also grep relevant pipeline artifact roots (`agents.output/`, `wiki`, plan/deployment directory) so detection does not depend only on handed-off paths. Match markers by current plan ID/UUID/slug when available. If a scoped marker matches, upgrade to full retrospective. If only unscoped/unrelated markers are found, record `UNSCOPED-MANDATORY-RETRO-MARKER` and inspect/ask; do not blindly upgrade. For `none`/`mini` without mandatory full-retro triggers, record closure note in deployment doc and route according to the approved mode instead of forcing pidex-retrospective.
 16. **Execution Profile Diff Guard**: Before Stage 1 commit, verify actual changed files/surfaces still match approved Execution Profile and skipped-agent assumptions. Use a HIGH-confidence baseline (plan start/base commit, implementation commit list, or coherent target merge-base). If baseline is broad/mixed/low-confidence, record `LOW-CONFIDENCE-DIFF-BASE` and ask orchestrator for the plan base/commit list instead of deciding from unrelated history. If mismatch invalidates skipped gates, block commit and route to missing gates.
 17. **User Preview Before G4**: For UI-involved work, after Stage 1 local commit route to orchestrator with `gate: G9` for user preview before any G4 `push/local/hold/abort` decision. If uncertain whether UI changed, require preview.
 18. **Post-release Artifact Hygiene**: If selective staging leaves dirty docs/artifacts after release/tag/push/final artifact commit, classify every remaining path per `post-release-artifact-hygiene.md`. Do a narrow hygiene commit/delete for docs/artifacts only; stop and ask for product/source/config/test/script/lockfile dirt. Do not start a full pipeline solely for artifact hygiene.
@@ -181,7 +181,7 @@ User's response determines execution path:
 1. Update ALL included plans' status to "Released"
 2. Record metadata (version, environment, timestamp, URLs, authorizer, included plans)
 3. Verify success (installable, version matches, no errors)
-4. **Wiki log**: Append one-line entry to `agents.wiki.<project-name>/log.md`: `` `YYYY-MM-DD` — pidex-devops: Release v<version> <mode> (<N> plans, <tag or no-tag>) ``
+4. **Wiki log**: Append one-line entry to `wiki/log.md`: `` `YYYY-MM-DD` — pidex-devops: Release v<version> <mode> (<N> plans, <tag or no-tag>) ``
 5. Hand off to pidex-roadmap: Release complete, update tracker
 6. Hand off to pidex-retrospective
 

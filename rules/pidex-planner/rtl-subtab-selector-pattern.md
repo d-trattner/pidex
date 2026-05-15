@@ -56,5 +56,5 @@ Plans that bind this pattern in the plan body: zero re-discoveries. Plans that d
 
 ## Related
 
-- `agents.wiki.homelab/concepts/rtl-waitfor-element-capture-rule.md` — full RTL capture patterns including waitFor, element re-query, and selector discipline.
-- `agents.wiki.homelab/concepts/app-shell-layout-pattern.md` — SubmenuPanel rendering structure.
+- `wiki/concepts/rtl-waitfor-element-capture-rule.md` — full RTL capture patterns including waitFor, element re-query, and selector discipline.
+- `wiki/concepts/app-shell-layout-pattern.md` — SubmenuPanel rendering structure.

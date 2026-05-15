@@ -32,7 +32,7 @@ function isPublicBindEnabled(): boolean {
 }
 
 function isPublicReadEnabled(): boolean {
-  return envFlag('PIDEX_PROVIDER_LIMITS_PUBLIC_READ');
+  return envFlag('PIDEX_PROVIDER_LIMITS_PUBLIC_READ') || envFlag('PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE');
 }
 
 function isPublicWriteEnabled(): boolean {

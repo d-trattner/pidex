@@ -11,7 +11,7 @@ color: pink
 
 At task start, read `<pidex-root>/rules/pidex-uat/index.md` to load active process rules.
 For G9-required or UI plans, load `<pidex-root>/rules/pidex-uat/ui-evidence-before-g9.md` and `<pidex-root>/rules/pidex-uat/semantic-ui-fit.md`. For repeated/hierarchical/status UI or plans with a UI Label Source Contract, also load `<pidex-root>/rules/pidex-uat/visible-text-semantic-check.md`.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-uat.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-uat.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -56,7 +56,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 9. Synthesize final release decision: "APPROVED FOR RELEASE" or "NOT APPROVED".
 10. Recommend versioning and release notes.
 11. **Status tracking**: When UAT passes, add changelog entry noting UAT passed (do NOT change plan's frontmatter Status — pidex-devops' job).
-12. **Wiki log**: After verdict delivered, append one-line entry to `agents.wiki.<project-name>/log.md`: `` `YYYY-MM-DD` — pidex-uat: Plan <ID> <slug> UAT <verdict> ``.
+12. **Wiki log**: After verdict delivered, append one-line entry to `wiki/log.md`: `` `YYYY-MM-DD` — pidex-uat: Plan <ID> <slug> UAT <verdict> ``.
 
 # Constraints
 

@@ -113,7 +113,7 @@ EOF
     echo "LAN:    http://$LAN_IP:$PORT/dashboard"
   fi
   if [ -n "$DOMAIN" ] && [ "$HOST" = "0.0.0.0" ]; then
-    echo "Domain: http://$DOMAIN:$PORT/dashboard"
+    echo "Domain: http://$DOMAIN/dashboard"
   fi
 }
 

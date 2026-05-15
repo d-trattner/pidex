@@ -22,7 +22,7 @@ Classify every remaining dirty path into exactly one bucket:
 DevOps may automatically reconcile only docs/artifact bookkeeping:
 
 - `agents.output/**` docs/artifacts
-- `agents.wiki*/**` docs
+- `wiki/**` docs
 - roadmap/docs artifacts
 - `.next-id` allocator file when consistent with completed run IDs
 - identical moves into `closed/` directories after confirming content parity

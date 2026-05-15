@@ -8,7 +8,7 @@ PROC-NEW-2 (cap) | pidex-code-reviewer
 
 If finding unconfirmed in 3 tool_uses:
 1. Write as `UNCONFIRMED — <symptom only>`
-2. Add `FOLLOWUP-<finding-id>` entry to `agents.wiki.<project-name>/open-items.md`
+2. Add `FOLLOWUP-<finding-id>` entry to `wiki/open-items.md`
 3. Do NOT keep investigating until budget exhaustion
 
 FOLLOWUP annotation beats stall with zero output.

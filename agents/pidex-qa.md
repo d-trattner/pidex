@@ -11,7 +11,7 @@ color: yellow
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-qa/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-qa.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-qa.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -65,7 +65,7 @@ Rationale: Two pidex-qa spawns in Plan 24 ran 30+ min of Playwright but produced
 9. Verify test effectiveness: validate real workflows, realistic edge cases.
 10. Flag when tests pass but implementation risky.
 11. **Status tracking**: When QA passes, add changelog entry noting QA passed (do NOT change plan frontmatter Status — that is pidex-devops' job).
-12. **Wiki log**: After Phase 2 (QA Complete), append one-line entry to `agents.wiki.<project-name>/log.md`: `` `YYYY-MM-DD` — pidex-qa: Plan <ID> <slug> QA complete (<test count> green, <coverage>% coverage) ``.
+12. **Wiki log**: After Phase 2 (QA Complete), append one-line entry to `wiki/log.md`: `` `YYYY-MM-DD` — pidex-qa: Plan <ID> <slug> QA complete (<test count> green, <coverage>% coverage) ``.
 
 # Constraints
 
@@ -274,7 +274,7 @@ If running via running-pi and verdict is `FAILED`, send Gate G2 using `scripts/t
 
 # Deferred Findings Tracking
 
-When QA completes, check `agents.wiki.<project-name>/open-items.md` for deferred findings from earlier agents (pidex-critic, pidex-code-reviewer). If any are testable gaps (e.g. uncovered branches flagged by code reviewer), write tests to close before reporting QA Complete. Update `open-items.md` to mark addressed items resolved.
+When QA completes, check `wiki/open-items.md` for deferred findings from earlier agents (pidex-critic, pidex-code-reviewer). If any are testable gaps (e.g. uncovered branches flagged by code reviewer), write tests to close before reporting QA Complete. Update `open-items.md` to mark addressed items resolved.
 
 # Version Verification
 

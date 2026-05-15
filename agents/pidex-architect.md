@@ -11,7 +11,7 @@ color: blue
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-architect/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-architect.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-architect.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -154,11 +154,11 @@ Workflow:
 
 When briefing explicitly requests an ADR for a significant arch decision (tech choice, pattern adoption, constraint, rejected alternative):
 
-1. Locate wiki: `agents.wiki.<project-name>/decisions/`
+1. Locate wiki: `wiki/decisions/`
 2. Number sequentially: `adr-NNN-<short-slug>.md` (check existing for next number)
 3. ADR format: Title, Date, Status (Proposed/Accepted/Deprecated/Superseded), Context, Decision, Consequences
-4. Update `agents.wiki.<project-name>/index.md` decisions table
-5. Append log entry to `agents.wiki.<project-name>/log.md`
+4. Update `wiki/index.md` decisions table
+5. Append log entry to `wiki/log.md`
 
 Write ADRs only for real choices between alternatives or newly discovered constraints that affect future work.
 

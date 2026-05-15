@@ -908,7 +908,7 @@ For architecture-first routes, the team prompt (see Rule 7 template in pidex-ins
 OPENING AGENT: pidex-architect
 After the pre-flight classifier determined this is a <Structural|Cross-cutting> task.
 pidex-architect MUST run before pidex-planner and produce:
-- An ADR in agents.wiki.<project>/decisions/ locking the structural decision
+- An ADR in wiki/decisions/ locking the structural decision
 - Findings in agents.output/architecture/<plan-id>-<slug>-architecture-findings.md
 pidex-planner then reads the ADR + findings as mandatory input.
 ```

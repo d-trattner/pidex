@@ -93,14 +93,23 @@ body.modal-open {
   z-index: 2;
 }
 
-.shader-background {
+.shader-background,
+.dust-particles {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 0;
   pointer-events: none;
   display: block;
+}
+
+.shader-background {
+  z-index: 0;
+}
+
+.dust-particles {
+  z-index: 2147483647;
+  opacity: 0.55;
 }
 
 .global-header {
@@ -124,9 +133,9 @@ body.modal-open {
 }
 
 .pidex-logo {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
   color: var(--text);
   filter: drop-shadow(0 0 8px rgba(0, 245, 255, 0.25));
 }

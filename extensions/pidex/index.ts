@@ -335,7 +335,7 @@ async function writeTempPrompt(agent: string, prompt: string): Promise<{ dir: st
 }
 
 function buildAgentSystemPrompt(agentName: string, body: string, provider: string): string {
-	return `${body}\n\n---\npidex adapter notes:\n- You are running as ${agentName} through provider '${provider}'.\n- You are a child pidex role agent, not the parent orchestrator. Complete only your assigned pidex-* role.\n- Do not start or invoke pidex recursively. Do not propose subagent fanout unless explicitly requested by the parent task.\n- Use pidex pidex-* names and conventions.\n- If you need user input, do not block; emit a ROUTING block with the appropriate gate and question for the orchestrator.\n- Write full artifacts to files under the requested agents.output/ or agents.wiki.* path; do not paste full documents into your final response.\n- Final response must be <= ${MAX_AGENT_FINAL_CHARS} characters and contain only: status, output path(s), next agent/route, concise evidence, and the ROUTING HTML comment.\n- Always finish with exactly one ROUTING HTML comment that includes context_file, then stop immediately after it.\n`;
+	return `${body}\n\n---\npidex adapter notes:\n- You are running as ${agentName} through provider '${provider}'.\n- You are a child pidex role agent, not the parent orchestrator. Complete only your assigned pidex-* role.\n- Do not start or invoke pidex recursively. Do not propose subagent fanout unless explicitly requested by the parent task.\n- Use pidex pidex-* names and conventions.\n- If you need user input, do not block; emit a ROUTING block with the appropriate gate and question for the orchestrator.\n- Write full artifacts to files under the requested agents.output/ or wiki path; do not paste full documents into your final response.\n- Final response must be <= ${MAX_AGENT_FINAL_CHARS} characters and contain only: status, output path(s), next agent/route, concise evidence, and the ROUTING HTML comment.\n- Always finish with exactly one ROUTING HTML comment that includes context_file, then stop immediately after it.\n`;
 }
 
 function buildCliDelegatePrompt(agentName: string, body: string, task: string, provider: string): string {
@@ -651,11 +651,51 @@ function appendOperatorEvent(cwd: string, planId: string, event: Record<string, 
 	}
 }
 
+function normalizeGate(value: string | undefined): string | undefined {
+	const gate = (value || "").trim();
+	if (!gate || gate.toLowerCase() === "none" || gate === "—" || gate === "-") return undefined;
+	return gate;
+}
+
+function notifyGate(cwd: string, planId: string, gate: string, routeTo: string | undefined, contextFile: string | undefined): void {
+	try {
+		if ((process.env.PIDEX_TELEGRAM_GATES || "1") === "0") return;
+		const key = `${path.resolve(cwd)}|${normalizePlanKey(planId)}|${gate}|${contextFile || ""}`;
+		const stateDir = path.join(PACKAGE_ROOT, "state", "telegram");
+		const stateFile = path.join(stateDir, "gate-notifications.json");
+		let state: Record<string, string> = {};
+		try { state = JSON.parse(fs.readFileSync(stateFile, "utf8")); } catch { state = {}; }
+		if (state[key]) return;
+		const script = path.join(PACKAGE_ROOT, "scripts", "telegram", "notify.sh");
+		if (!fs.existsSync(script)) return;
+		const context = [
+			`Gate: ${gate}`,
+			`Plan: ${normalizePlanKey(planId)}`,
+			routeTo ? `Route: ${routeTo}` : undefined,
+			contextFile ? `Context: ${contextFile}` : undefined,
+			"Action: return to the active Pi/PIDEX session and answer there.",
+		].filter(Boolean).join("\n");
+		const proc = spawnSync("bash", [script, "--optional", "--project", cwd, "--needs", `Gate ${gate} decision`, "--context", context], {
+			cwd: PACKAGE_ROOT,
+			encoding: "utf8",
+			timeout: 15_000,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		if (proc.status === 0) {
+			fs.mkdirSync(stateDir, { recursive: true });
+			state[key] = new Date().toISOString();
+			fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+		}
+	} catch {
+		// Gate notifications are best-effort and must never break pidex_agent.
+	}
+}
+
 function recordOperatorEvents(result: RpResult, cwd: string, task: string): string | undefined {
 	const routing = extractRoutingBlock(result.finalText);
 	const planId = extractPlanId(task, result.finalText);
 	const contextFile = extractRoutingField(routing, "context_file");
-	const gate = extractRoutingField(routing, "gate");
+	const gate = normalizeGate(extractRoutingField(routing, "gate"));
 	const routeTo = extractRoutingField(routing, "route_to");
 	let eventFile = appendOperatorEvent(cwd, planId, {
 		operator_type: "OpSpawn",
@@ -691,8 +731,62 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 			physical_action: { gate_detected: true, decision_pending_in_parent_session: true },
 			confidence: "medium",
 		}) ?? eventFile;
+		notifyGate(cwd, planId, gate, routeTo, contextFile);
 	}
 	return eventFile;
+}
+
+function simpleMessageText(message: any): string {
+	const content = message?.content;
+	if (typeof content === "string") return truncate(content, 1800);
+	if (Array.isArray(content)) {
+		return truncate(content.map((part: any) => part?.type === "text" ? part.text : "").filter(Boolean).join(" "), 1800);
+	}
+	return "";
+}
+
+function simpleSessionDigest(ctx: any, maxItems = 10): string {
+	const entries = ctx?.sessionManager?.getEntries?.() ?? [];
+	const messages = entries.filter((e: any) => e?.type === "message" && e?.message?.role).slice(-maxItems).map((e: any) => e.message);
+	if (!messages.length) return "- (no message digest available)";
+	return messages.map((m: any) => `- ${m.role === "assistant" ? "A" : m.role === "user" ? "U" : "M"}: ${simpleMessageText(m) || "(non-text message)"}`).join("\n");
+}
+
+function gitValue(cwd: string, args: string[]): string {
+	try {
+		return spawnSync("git", args, { cwd, encoding: "utf8", timeout: 5000 }).stdout.trim();
+	} catch {
+		return "";
+	}
+}
+
+function resolveProjectRoot(cwd: string): string {
+	const gitRoot = gitValue(cwd, ["rev-parse", "--show-toplevel"]);
+	return gitRoot || cwd || process.cwd();
+}
+
+function savePidexMemory(ctx: any, argsLine?: string): string {
+	const cwd = String(ctx?.cwd || process.cwd());
+	const projectRoot = resolveProjectRoot(cwd);
+	const projectName = path.basename(projectRoot);
+	const memoryDir = path.join(projectRoot, "wiki", "session-memory");
+	fs.mkdirSync(memoryDir, { recursive: true });
+	const now = new Date().toISOString();
+	const fileName = `${now.replace(/[:.]/g, "-")}.md`;
+	const filePath = path.join(memoryDir, fileName);
+	const hint = truncate(String(argsLine || ""), 700);
+	const title = hint || "PIDEX session memory";
+	const body = `---\ntitle: ${title.replace(/\n/g, " ")}\ntype: session-memory\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\nsource: pidex-session\n---\n\n# ${title}\n\n## Project\n\n- project_root: ${projectRoot}\n- project_name: ${projectName}\n- git_branch: ${gitValue(projectRoot, ["branch", "--show-current"]) || "unknown"}\n- git_commit: ${gitValue(projectRoot, ["rev-parse", "--short", "HEAD"]) || "unknown"}\n\n## Context\n\n- cwd: ${cwd}\n- session: ${ctx?.sessionManager?.getSessionFile?.() || "unknown"}\n- captured_at: ${now}\n\n## User note\n\n${hint || "(none)"}\n\n## Recent conversation digest\n\n${simpleSessionDigest(ctx)}\n`;
+	fs.writeFileSync(filePath, body, "utf8");
+	const indexPath = path.join(memoryDir, "index.md");
+	let index = "";
+	try { index = fs.readFileSync(indexPath, "utf8"); } catch {}
+	if (!index.trim()) {
+		index = `---\ntitle: ${projectName} Session Memory\ntype: session-memory-index\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\n---\n\n# ${projectName} Session Memory\n\n`;
+	}
+	index += `- ${now} — [[${fileName.replace(/\.md$/, "")}]] — ${title}\n`;
+	fs.writeFileSync(indexPath, index, "utf8");
+	return filePath;
 }
 
 function runPidexQualityReport(cwd: string, argsLine?: string): { ok: boolean; summary: string } {
@@ -1584,7 +1678,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			"You are the pidex orchestrator.",
 			`First read the orchestration skill at ${SKILL_PATH}.`,
 			"Use direct mode. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
-			"Use the pidex_agent tool for specialist handoffs. Keep project artifacts under agents.output/ and agents.wiki.<project>/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
+			"Use the pidex_agent tool for specialist handoffs. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			authPreflight.ok
 				? "Delegate auth preflight passed for configured non-Pi providers."
@@ -1605,6 +1699,18 @@ export default function runningPi(pi: ExtensionAPI) {
 		handler: async (argLine, ctx) => {
 			const result = runPidexQualityReport(ctx.cwd ?? PACKAGE_ROOT, argLine);
 			await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
+		},
+	});
+
+	pi.registerCommand("pdmem", {
+		description: "Save a simple PIDEX project session memory snapshot to <project-root>/wiki/session-memory/.",
+		handler: async (argLine, ctx) => {
+			try {
+				const filePath = savePidexMemory(ctx, argLine);
+				await ctx.ui.notify(`PIDEX memory saved: ${filePath}`, "info");
+			} catch (error: any) {
+				await ctx.ui.notify(`pdmem failed: ${error?.message ?? error}`, "error");
+			}
 		},
 	});
 

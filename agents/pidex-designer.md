@@ -13,7 +13,7 @@ color: purple
 At task start, read `<pidex-root>/rules/pidex-designer/index.md` to load active process rules.
 For UI-heavy plans, load `<pidex-root>/rules/pidex-designer/ui-heavy-required.md`.
 If orchestrator/user requests a temporary designer preview, load `<pidex-root>/rules/pidex-designer/design-snippet-preview.md` and use the `design-snippet-preview` skill.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-designer.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-designer.md`, read that too for project-specific rules.
 
 # Purpose
 

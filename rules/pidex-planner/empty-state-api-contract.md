@@ -56,4 +56,4 @@ Adding this check to the plan body breaks the recurrence: the implementer has th
 
 ## Reference
 
-`agents.wiki.homelab/concepts/interaction-state-atoms.md` — full EmptyState component spec including prop types, DESIGN.md §8 binding, and SSR safety rules.
+`wiki/concepts/interaction-state-atoms.md` — full EmptyState component spec including prop types, DESIGN.md §8 binding, and SSR safety rules.

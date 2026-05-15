@@ -22,7 +22,7 @@ Form an agent team with the following teammates and orchestrate them via shared 
 
 OPENING AGENT: <pidex-planner | pidex-architect>
 If the pre-flight classified the task as Structural or Cross-cutting-large, OPENING AGENT is
-pidex-architect: it writes an ADR to agents.wiki.<project>/decisions/ and findings to
+pidex-architect: it writes an ADR to wiki/decisions/ and findings to
 agents.output/architecture/, then routes to pidex-planner. pidex-planner reads the ADR as mandatory
 input. For Standard features and Bugfixes, OPENING AGENT is pidex-planner (normal flow).
 

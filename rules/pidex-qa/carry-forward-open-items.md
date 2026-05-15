@@ -6,7 +6,7 @@
 
 During QA, review the implementation doc for any items marked as "carry-forward", "deferred", "out of scope for this plan", or similar language. For each such item:
 
-1. Check whether an entry already exists in `agents.wiki.<project>/open-items.md`
+1. Check whether an entry already exists in `wiki/open-items.md`
 2. If NOT present: add an entry under the current plan's section
 3. Format: `- [OPEN] **<finding-id>** — <one-line summary> Carry-forward from Plan <N>; recommended for Plan <M> or next available. (pidex-qa, Plan <N>)`
 

@@ -8,7 +8,7 @@ When implementing an informative empty state or disabled feature that exists bec
 
 ```tsx
 // TODO: when UniFi adapter gains upgradeAvailable field, render non-empty UpdatesView here
-// See: agents.wiki.homelab/open-items.md CR41-L2
+// See: wiki/open-items.md CR41-L2
 {items.length === 0 && <EmptyState message="No firmware updates available from current adapter" />}
 ```
 
@@ -30,7 +30,7 @@ The plan or OQ resolution explicitly states one of:
 
 ```tsx
 // TODO(<plan-id>): when <condition>, add <behavior> here
-// Tracked: agents.wiki.<project>/open-items.md <finding-id>
+// Tracked: wiki/open-items.md <finding-id>
 ```
 
 The `<finding-id>` reference enables future planners to locate the tracking entry and close the TODO when the capability arrives.

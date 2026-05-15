@@ -11,7 +11,7 @@ color: purple
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-pi/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-pi.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-pi.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -28,7 +28,7 @@ Process improvements use a two-tier storage model. NEVER write learned rules dir
 - `<pidex-root>/rules/<agent-name>/<rule-slug>.md` — one file per specific rule
 
 **Tier 2 — Project-specific rules**:
-- `agents.wiki.<project>/rules/<agent-name>.md` — project-specific overrides/additions
+- `wiki/rules/<agent-name>.md` — project-specific overrides/additions
 
 **When to use each tier:**
 - Learned edge case, empirical fix, PROC-NEW rule → Tier 1 rule file
@@ -69,7 +69,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 # Constraints
 
 - **Never modify source code, tests, or application functionality**
-- Edit: source agent instruction files (`<pidex-root>/agents/pidex-*.md`), rules files (`<pidex-root>/rules/<agent>/<rule>.md`), workflow docs (CLAUDE.md, README.md), project-specific rules (`agents.wiki.<project>/rules/<agent>.md`)
+- Edit: source agent instruction files (`<pidex-root>/agents/pidex-*.md`), rules files (`<pidex-root>/rules/<agent>/<rule>.md`), workflow docs (CLAUDE.md, README.md), project-specific rules (`wiki/rules/<agent>.md`)
 - Only create pipeline artifacts in `agents.output/process-improvement/`
 - Focus exclusively on process improvements, not technical implementation
 - Maintain consistency across all agent instructions (naming, format, terminology)
@@ -164,7 +164,7 @@ Then END YOUR TURN. Orchestrator resumes with user's decision. Based on response
    c. In agent `.md`, replace inline PROC-NEW block with one-line reference: `→ See <pidex-root>/rules/<agent-name>/<rule-slug>.md`
 
 2. **For project-specific improvements:**
-   Write to `agents.wiki.<project>/rules/<agent-name>.md` (create if missing)
+   Write to `wiki/rules/<agent-name>.md` (create if missing)
 
 3. **ONLY update agent `.md` directly when change is truly core:**
    - Role definition
@@ -246,7 +246,7 @@ After Phase 5 done (or skipped if rejected/deferred), commit all remaining uncom
 
 0. First verify git repo: `git rev-parse --is-inside-work-tree`. If not (e.g., project scaffolding failed or git init was never run), skip commit step and note in PI doc: "Final commit skipped — project is not a git repository."
 1. Run `git status --short` to see uncommitted docs
-2. Stage all relevant files: `git add agents.output/ agents.wiki.*/`
+2. Stage all relevant files: `git add agents.output/ wiki/`
 3. Commit with message: `docs: retrospective + pi for Plan <id> (v<X.Y.Z>)`
 4. If G4 answered with "push" (check `agents.output/deployment/` doc for Status "Released"),
    also push this commit so remote has complete paper trail:

@@ -10,7 +10,7 @@ color: blue
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-planner/index.md` to load active process rules.
-If a project wiki exists with `agents.wiki.<project>/rules/pidex-planner.md`, read that too for project-specific rules.
+If a project wiki exists with `wiki/rules/pidex-planner.md`, read that too for project-specific rules.
 
 # Purpose
 
@@ -27,7 +27,7 @@ Produce implementation-ready plans translating roadmap epics into actionable, ve
 
 1. Write plan skeleton first; then read roadmap for epic/objective/release alignment.
 2. Read architecture only when plan touches architecture, APIs, integrations, data boundaries, migrations, or non-trivial design.
-3. Read `agents.wiki.<project-name>/out-of-scope.md` if present — do NOT re-propose rejected features/approaches unless user explicitly overrides.
+3. Read `wiki/out-of-scope.md` if present — do NOT re-propose rejected features/approaches unless user explicitly overrides.
 4. Validate alignment with Master Product Objective.
 5. Identify target release version from roadmap. Document in plan header as "Target Release: vX.Y.Z".
 6. Gather requirements, repo context, constraints.
@@ -267,13 +267,13 @@ Epic: <roadmap epic reference>
 
 # Project Wiki
 
-Project wiki lives at `agents.wiki.<project-name>/` in project root. Directory name derived from project directory name (e.g., `agents.wiki.my-app/` for project in `~/projects/my-app/`).
+Project wiki lives at `wiki/` in project root (e.g., `wiki/` for project in `~/projects/my-app/`).
 
-**On first run in new project**: if no `agents.wiki.*` directory exists, initialize:
+**On first run in new project**: if no `wiki` directory exists, initialize:
 1. Determine project name from current working directory basename
-2. Create `agents.wiki.<name>/` with subdirectories: `concepts/`, `decisions/`, `entities/`, `retrospectives/`
-3. Create `agents.wiki.<name>/index.md` from `<pidex-root>/templates/wiki/index.md` (replace `__PROJECT_NAME__` with project name and `__DATE__` with today's date)
-4. Create `agents.wiki.<name>/log.md` from `<pidex-root>/templates/wiki/log.md` (replace `__PROJECT_NAME__`)
+2. Create `wiki/` with subdirectories: `concepts/`, `decisions/`, `entities/`, `retrospectives/`
+3. Create `wiki/index.md` from `<pidex-root>/templates/wiki/index.md` (replace `__PROJECT_NAME__` with project name and `__DATE__` with today's date)
+4. Create `wiki/log.md` from `<pidex-root>/templates/wiki/log.md` (replace `__PROJECT_NAME__`)
 
 **On every plan**: check wiki index. If plan introduces new concept, technology, or pattern not yet documented, write concept page in `concepts/` and update index. Not a copy of plan — distilled knowledge entry explaining concept in project context, independent of any specific plan.
 

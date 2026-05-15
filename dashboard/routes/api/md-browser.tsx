@@ -29,7 +29,7 @@ async function rootDirs(projectRoot: string): Promise<Array<{ name: string; abs:
   const roots: Array<{ name: string; abs: string }> = [];
   for (const entry of await fs.readdir(projectRoot, { withFileTypes: true }).catch(() => [])) {
     if (!entry.isDirectory()) continue;
-    if (entry.name === 'agents.output' || entry.name.startsWith('agents.wiki.')) {
+    if (entry.name === 'agents.output' || entry.name === 'wiki' || entry.name.startsWith('agents.wiki.')) {
       roots.push({ name: entry.name, abs: path.join(projectRoot, entry.name) });
     }
   }
