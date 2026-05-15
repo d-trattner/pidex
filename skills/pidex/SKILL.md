@@ -922,7 +922,7 @@ This is a wiki hygiene / project memory maintenance task.
 Before invoking the specialist, run the deterministic read-only audit when applicable:
 python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
 Pass the generated report path to pidex-wiki-hygienist.
-pidex-wiki-hygienist MUST start read-only, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only.
+pidex-wiki-hygienist MUST start read-only, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only. For audit/report-only wiki hygiene, do not ask the user to commit by default; report/state files are generated/runtime artifacts unless the user explicitly asks to preserve them in Git.
 Canonical wiki path is <project-root>/wiki/.
 ```
 
@@ -1121,7 +1121,7 @@ If uncertain, ignore the skip and run the conservative default route. Never skip
 
 | Step | Agent / Gate | Route rule |
 |---|---|---|
-| 0W | `pidex-wiki-hygienist` | Specialist opening route for wiki hygiene / project memory maintenance. Orchestrator runs the deterministic `/pdwiki`-style audit first when applicable, passes the report path, and keeps the task read-only unless the user approves an explicit apply plan. Wiki hygiene must never mutate `<project-root>/pidex/**` except audit/cadence state at `<project-root>/pidex/state/wiki-hygiene.json`. `COMPLETE` routes to user or orchestrator; cleanup implementation is not automatic. |
+| 0W | `pidex-wiki-hygienist` | Specialist opening route for wiki hygiene / project memory maintenance. Orchestrator runs the deterministic `/pdwiki`-style audit first when applicable, passes the report path, and keeps the task read-only unless the user approves an explicit apply plan. Wiki hygiene must never mutate `<project-root>/pidex/**` except audit/cadence state at `<project-root>/pidex/state/wiki-hygiene.json`. Audit/report-only runs should not ask for commit by default; only future apply-mode wiki mutations require commit discussion. `COMPLETE` routes to user or orchestrator; cleanup implementation is not automatic. |
 | 1 | `pidex-planner` | Epic → implementation-ready plan. `COMPLETE` routes to `pidex-critic`; `BLOCKED` routes to `pidex-analyst`, `pidex-architect`, or user depending on reason. |
 | 2 | `pidex-critic` | `APPROVED*` + UI-heavy/frontend scope → `pidex-designer` unless approved profile explicitly permits skip; `APPROVED*` + no UI or approved designer skip → `pidex-implementer`; `REJECTED` → `pidex-planner` (G1). |
 | 2.5 | `pidex-designer` | UI plans only. `APPROVED*` → `pidex-implementer`; `REJECTED` → `pidex-planner`. |
