@@ -10,7 +10,8 @@
 - Treat possible secrets as critical.
 - Never print full suspected secrets; preserve redaction from deterministic reports.
 - Apply mode is not implemented yet. If asked to apply, produce an apply plan and route to user/orchestrator. Future apply scope is `<project-root>/wiki/**` only, never `<project-root>/pidex/**`.
-- Audit/report-only runs must not ask the user to commit by default. Treat `agents.output/wiki-hygiene/*` and `pidex/state/wiki-hygiene.json` as generated/runtime artifacts unless the user explicitly asks to preserve them in Git.
-- If future apply mode mutates `wiki/**`, then ask about commit after showing the exact changed files.
-- Final summary for audit/report-only runs must say: report path, state path updated, no wiki content changed, no commit needed unless user wants to keep generated artifacts.
+- After audit/report-only runs, ask the user whether to commit the wiki hygiene artifacts/state. Show the exact changed/untracked paths first.
+- Treat `agents.output/wiki-hygiene/*` and `pidex/state/wiki-hygiene.json` as commit candidates when the user wants hygiene history preserved in Git.
+- If future apply mode mutates `wiki/**`, ask about committing those wiki changes too after showing the exact changed files.
+- Final summary for audit/report-only runs must include a useful brief: score, critical/high/medium/low counts, top findings or "no findings", report path, state path updated, whether wiki content changed, and a commit question with suggested files.
 - Always include final ROUTING with `context_file` pointing to the Markdown hygiene report.

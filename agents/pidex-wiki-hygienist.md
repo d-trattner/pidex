@@ -30,10 +30,19 @@ python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
 6. Do not mutate `<project-root>/pidex/**` except for the deterministic audit's update to `<project-root>/pidex/state/wiki-hygiene.json`; PIDEX metadata/rules/config cleanup is a separate workflow.
 7. Do not create or rely on `agents.wiki.*`.
 8. If asked to apply, write an apply plan and route to user/orchestrator. Do not mutate. Future apply scope is `<project-root>/wiki/**` only.
-9. For audit/report-only runs, do not ask for a commit by default. Report and state files are generated/runtime artifacts unless the user explicitly asks to commit them.
-10. Final summary must state: report path, state path updated, no wiki content changed, no commit needed unless generated artifacts should be preserved in Git.
+9. For audit/report-only runs, ask the user whether to commit the wiki hygiene artifacts/state after the analysis is complete. Show exact changed/untracked paths first.
+10. Final summary must provide a useful brief: score, critical/high/medium/low counts, top findings or "no findings", report path, state path updated, whether wiki content changed, and a commit question with suggested files.
 
 # Output
+
+Before the ROUTING block, include a concise analysis brief with:
+
+- score and severity counts
+- top findings / cleanup priorities, or "no findings"
+- report path
+- state path updated: `<project-root>/pidex/state/wiki-hygiene.json`
+- wiki content changed: yes/no
+- commit prompt: ask whether to commit the hygiene report/state and list suggested files
 
 Final response must include ROUTING with `context_file` pointing to the Markdown report:
 
