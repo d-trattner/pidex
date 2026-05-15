@@ -92,6 +92,12 @@
       "model": "openai-codex/gpt-5.3-codex-spark",
       "timeout_seconds": 300,
       "effort": "medium"
+    },
+    "pidex-wiki-hygienist": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-5.3-codex-spark",
+      "timeout_seconds": 600,
+      "effort": "medium"
     }
   },
   "fallback": {

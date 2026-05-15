@@ -9,6 +9,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Dashboard](readme/dashboard.md)
 - [Provider limits and profiles](readme/provider-limits-and-profiles.md)
 - [Global Git security hook](readme/security-hooks.md)
+- [Wiki hygiene](readme/wiki-hygiene.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Project session memory](readme/project-memory.md)
 - [Future briefs](readme/future-briefs.md)
@@ -87,6 +88,10 @@ PIDEX tracks provider-native Codex quota windows, including Spark/no-Spark profi
 ## Global Git security hook
 
 PIDEX can optionally install a global Git pre-commit security hook for this Linux user. The hook saves/restores any previous global `core.hooksPath` and does not chain old hooks. See [Global Git security hook](readme/security-hooks.md).
+
+## Wiki hygiene
+
+Run a read-only wiki hygiene audit with `/pdwiki`. Reports are written to `agents.output/wiki-hygiene/`. See [Wiki hygiene](readme/wiki-hygiene.md).
 
 ## Automatic quality reports
 

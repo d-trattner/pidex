@@ -123,6 +123,7 @@ const TOOL_HEAVY_AGENTS = new Set([
 	"pidex-qa",
 	"pidex-security",
 	"pidex-devops",
+	"pidex-wiki-hygienist",
 	"pidex-pi",
 ]);
 const TOOL_FORWARDING_AGENTS = new Set(["pidex-implementer", "pidex-security", "pidex-qa"]);
@@ -1648,6 +1649,24 @@ function getGlobalGitHookStatus(): string {
 	return `not active; global core.hooksPath=${currentPath} (expected ${expected})`;
 }
 
+function runWikiHygieneAudit(projectRoot: string): { ok: boolean; summary: string; reportMd?: string } {
+	const script = path.join(PACKAGE_ROOT, "scripts", "wiki", "hygiene.py");
+	const proc = spawnSync("python3", [script, "audit", "--project", projectRoot], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const output = `${proc.stdout ?? ""}\n${proc.stderr ?? ""}`.trim();
+	const line = (proc.stdout ?? "").split(/\r?\n/).find((entry) => entry.startsWith("PIDEX_WIKI_HYGIENE_RESULT="));
+	if (proc.status !== 0 || !line) {
+		return { ok: false, summary: `Wiki hygiene audit failed${proc.status !== null ? ` exit=${proc.status}` : ""}: ${clipEnd(output, 1200)}` };
+	}
+	try {
+		const parsed = JSON.parse(line.slice("PIDEX_WIKI_HYGIENE_RESULT=".length));
+		const reportMd = parsed.report_md;
+		const summary = `Wiki hygiene audit complete: ${reportMd} (score=${parsed.score}, critical=${parsed.critical}, high=${parsed.high})`;
+		return { ok: true, summary, reportMd };
+	} catch (error: any) {
+		return { ok: false, summary: `Wiki hygiene audit result parse failed: ${error?.message ?? error}` };
+	}
+}
+
 function inspectBashForGitHookRisk(command: string): { block?: string; warn?: string } | undefined {
 	const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
 	if (!compact) return undefined;
@@ -1767,13 +1786,23 @@ export default function runningPi(pi: ExtensionAPI) {
 		},
 	});
 
+	pi.registerCommand("pdwiki", {
+		description: "Run a read-only PIDEX wiki hygiene audit for the current or given project root.",
+		handler: async (argLine, ctx) => {
+			const raw = argLine?.trim();
+			const projectRoot = raw ? path.resolve(ctx.cwd ?? process.cwd(), raw) : path.resolve(ctx.cwd ?? process.cwd());
+			const result = runWikiHygieneAudit(projectRoot);
+			await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
+		},
+	});
+
 	const rpAgentTool: any = {
 		name: "pidex_agent",
 		label: "pidex Agent",
 		description: "Run a bundled pidex-* specialist agent through config/agents.json. Defaults to lean Pi subprocesses, with optional Claude/Codex/Gemini CLI delegates for configured agents. Raw child logs are stored outside the parent Pi session.",
 		promptSnippet: "Run a bundled pidex-* specialist agent using pidex provider routing from config/agents.json.",
 		promptGuidelines: [
-			"Use pidex_agent for pidex specialist handoffs such as pidex-planner, pidex-critic, pidex-implementer, pidex-code-reviewer, pidex-qa, pidex-uat, pidex-devops, pidex-retrospective, and pidex-pi.",
+			"Use pidex_agent for pidex specialist handoffs such as pidex-planner, pidex-critic, pidex-implementer, pidex-code-reviewer, pidex-qa, pidex-uat, pidex-devops, pidex-wiki-hygienist, pidex-retrospective, and pidex-pi.",
 			"pidex_agent automatically honors <pidex-root>/config/agents.json unless provider/model/effort are explicitly overridden.",
 			"parallel_secondary entries in config/agents.json are orchestrator-owned: pidex_agent does not spawn nested agents. The orchestrator must launch primary and secondary lanes as separate visible pidex_agent calls with explicit provider/model overrides and unique expected output paths.",
 			"When using pidex_agent, pass complete context in the task, including project cwd, current epic, relevant agents.output paths, expected output file, and required ROUTING behavior. The final ROUTING block must include context_file, not doc. route_to may be an pidex-* agent, user, or orchestrator for deterministic internal follow-up.",

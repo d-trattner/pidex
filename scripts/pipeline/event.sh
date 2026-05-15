@@ -172,4 +172,22 @@ if event in terminal_events and not auto_pdq_disabled:
                 print(f'auto_pdq failed exit={proc.returncode}: {(proc.stderr or proc.stdout).strip()}', file=sys.stderr)
         except Exception as exc:
             print(f'auto_pdq failed: {exc}', file=sys.stderr)
+
+if event in terminal_events:
+    hygiene = Path(root) / 'scripts' / 'wiki' / 'hygiene.py'
+    if hygiene.exists():
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(hygiene), 'cadence', '--project', project_path, '--plan', plan_key, '--pipeline-id', pipeline_id, '--terminal-event', event],
+                cwd=str(root),
+                text=True,
+                capture_output=True,
+                timeout=int(os.environ.get('PIDEX_WIKI_HYGIENE_CADENCE_TIMEOUT_SECONDS', '30')),
+            )
+            if proc.stdout.strip():
+                print(proc.stdout.strip())
+            if proc.stderr.strip():
+                print(proc.stderr.strip(), file=sys.stderr)
+        except Exception as exc:
+            print(f'wiki_hygiene_cadence failed: {exc}', file=sys.stderr)
 PY
