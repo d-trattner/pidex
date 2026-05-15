@@ -1,3 +1,8 @@
+---
+name: pdmem
+description: Save a lightweight PIDEX project session memory snapshot to <project-root>/wiki/session-memory/ when the user invokes /pdmem.
+---
+
 # /pdmem — PIDEX Project Session Memory
 
 Use when the user invokes `/pdmem` or asks to save a PIDEX project session memory.
