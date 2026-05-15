@@ -41,6 +41,7 @@ export interface ProviderLimitsPayload {
 
 const ROOT = path.resolve(process.cwd(), '..');
 const PROFILE_DIR = path.resolve(ROOT, 'config', 'profiles');
+const AGENTS_CONFIG_FILE = path.resolve(ROOT, 'config', 'agents.json');
 const STATE_DIR = path.resolve(ROOT, 'state', 'provider-limits');
 const STATE_FILE = path.resolve(STATE_DIR, 'latest.json');
 const HISTORY_FILE = path.resolve(STATE_DIR, 'history.jsonl');
@@ -108,6 +109,20 @@ async function readState(): Promise<JsonObject | null> {
   } catch {
     return null;
   }
+}
+
+async function applyRoutingProfile(profile: string): Promise<void> {
+  const source = path.resolve(PROFILE_DIR, `${profile}.json`);
+  const relative = path.relative(PROFILE_DIR, source);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('invalid profile path');
+  }
+  const raw = await fs.readFile(source, 'utf-8');
+  JSON.parse(raw);
+  await fs.mkdir(path.dirname(AGENTS_CONFIG_FILE), { recursive: true });
+  const tmp = path.resolve(path.dirname(AGENTS_CONFIG_FILE), `.agents.json.${process.pid}.${Date.now()}.tmp`);
+  await fs.writeFile(tmp, raw.endsWith('\n') ? raw : `${raw}\n`, 'utf-8');
+  await fs.rename(tmp, AGENTS_CONFIG_FILE);
 }
 
 function stateAgeMs(state: JsonObject | null): number | null {
@@ -320,6 +335,7 @@ export async function setProfile(profile: string): Promise<ProviderLimitsPayload
     throw new Error('invalid profile');
   }
 
+  await applyRoutingProfile(profile);
   const current = await readState();
   const payload = {
     ...(current || {}),

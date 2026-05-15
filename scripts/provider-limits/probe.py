@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import subprocess
+import tempfile
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -290,10 +291,27 @@ def alert(dry_run: bool = False) -> dict:
     return {"sent": sent, "count": len(sent)}
 
 
+def apply_routing_profile(profile: str) -> None:
+    source = (PROFILES / f"{profile}.json").resolve()
+    try:
+        source.relative_to(PROFILES.resolve())
+    except ValueError:
+        raise ValueError(f"invalid profile path: {profile}")
+    raw = source.read_text(encoding="utf-8")
+    json.loads(raw)
+    target = ROOT / "config" / "agents.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=".agents.json.", suffix=".tmp", dir=target.parent, text=True)
+    with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+        tmp.write(raw if raw.endswith("\n") else raw + "\n")
+    os.replace(tmp_name, target)
+
+
 def set_profile(profile: str) -> dict:
     profiles = list_profiles()
     if profile not in profiles:
         raise ValueError(f"unknown profile: {profile}")
+    apply_routing_profile(profile)
     payload = latest_snapshot()
     payload["active_profile"] = profile
     payload.pop("recommended_profile", None)
