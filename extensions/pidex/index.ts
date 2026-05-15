@@ -1649,6 +1649,20 @@ function getGlobalGitHookStatus(): string {
 	return `not active; global core.hooksPath=${currentPath} (expected ${expected})`;
 }
 
+function runParallelAgentsCommand(args: string | undefined, cwd: string | undefined): { ok: boolean; summary: string } {
+	const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
+	const action = parts[0] || "status";
+	const script = path.join(PACKAGE_ROOT, "scripts", "parallel-agents", action === "test" ? "run-lane.py" : "status.py");
+	let commandArgs: string[];
+	if (action === "status") commandArgs = [script, "show"];
+	else if (action === "clear" && parts[1]) commandArgs = [script, "clear", "--lane", parts[1]];
+	else if (action === "test" && parts[1]) commandArgs = [script, "--lane", parts[1], "--project", path.resolve(cwd ?? process.cwd(), parts[2] || "."), "--task-text", "Read-only PIDEX parallel lane smoke test", "--force"];
+	else return { ok: false, summary: "Usage: /pdparallel status | clear <lane-id> | test <lane-id> [project-root]" };
+	const proc = spawnSync("python3", commandArgs, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const output = `${proc.stdout ?? ""}\n${proc.stderr ?? ""}`.trim();
+	return { ok: proc.status === 0, summary: clipEnd(output || `pdparallel ${action} exit=${proc.status}`, 1600) };
+}
+
 function runWikiHygieneAudit(projectRoot: string): { ok: boolean; summary: string; reportMd?: string } {
 	const script = path.join(PACKAGE_ROOT, "scripts", "wiki", "hygiene.py");
 	const proc = spawnSync("python3", [script, "audit", "--project", projectRoot], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
@@ -1793,6 +1807,14 @@ export default function runningPi(pi: ExtensionAPI) {
 			const projectRoot = raw ? path.resolve(ctx.cwd ?? process.cwd(), raw) : path.resolve(ctx.cwd ?? process.cwd());
 			const result = runWikiHygieneAudit(projectRoot);
 			await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
+		},
+	});
+
+	pi.registerCommand("pdparallel", {
+		description: "Inspect or test optional PIDEX parallel agent lanes.",
+		handler: async (argLine, ctx) => {
+			const result = runParallelAgentsCommand(argLine, ctx.cwd);
+			await ctx.ui.notify(result.summary, result.ok ? "info" : "warning");
 		},
 	});
 

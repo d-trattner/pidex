@@ -10,6 +10,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Provider limits and profiles](readme/provider-limits-and-profiles.md)
 - [Global Git security hook](readme/security-hooks.md)
 - [Wiki hygiene](readme/wiki-hygiene.md)
+- [Optional parallel agents](readme/parallel-agents.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Project session memory](readme/project-memory.md)
 - [Future briefs](readme/future-briefs.md)
@@ -93,6 +94,10 @@ PIDEX can optionally install a global Git pre-commit security hook for this Linu
 ## Wiki hygiene
 
 Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `python3 scripts/wiki/hygiene.py audit --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `wiki/.hygiene-state.json`. See [Wiki hygiene](readme/wiki-hygiene.md).
+
+## Optional parallel agents
+
+PIDEX can define optional secondary lanes in `config/parallel-agents.json`. They are disabled by default, editable in Settings, and non-blocking. Runtime warnings live in `state/parallel-agents/status.json`. See [Optional parallel agents](readme/parallel-agents.md).
 
 ## Automatic quality reports
 

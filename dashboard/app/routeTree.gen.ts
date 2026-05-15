@@ -40,6 +40,7 @@ import { Route as ApiProvider_limitsRouteImport } from './../routes/api/provider
 import { Route as ApiProviderLimitsRouteImport } from './../routes/api/provider-limits'
 import { Route as ApiProjectsRouteImport } from './../routes/api/projects'
 import { Route as ApiPipelinesRouteImport } from './../routes/api/pipelines'
+import { Route as ApiParallelAgentsRouteImport } from './../routes/api/parallel-agents'
 import { Route as ApiMdBrowserRouteImport } from './../routes/api/md-browser'
 import { Route as ApiMalformedRouteImport } from './../routes/api/malformed'
 import { Route as ApiLiveRouteImport } from './../routes/api/live'
@@ -47,6 +48,7 @@ import { Route as ApiDocumentRouteImport } from './../routes/api/document'
 import { Route as ApiAnalysisRouteImport } from './../routes/api/analysis'
 import { Route as ApiProvider_limitsProfileRouteImport } from './../routes/api/provider_limits/profile'
 import { Route as ApiProviderLimitsProfileRouteImport } from './../routes/api/provider-limits/profile'
+import { Route as ApiParallelAgentsModelsRouteImport } from './../routes/api/parallel-agents/models'
 import { Route as ApiChartsQualityRouteImport } from './../routes/api/charts/quality'
 import { Route as ApiChartsModelQualityRouteImport } from './../routes/api/charts/model-quality'
 import { Route as ApiAnalysisPlansRouteImport } from './../routes/api/analysis/plans'
@@ -207,6 +209,11 @@ const ApiPipelinesRoute = ApiPipelinesRouteImport.update({
   path: '/api/pipelines',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiParallelAgentsRoute = ApiParallelAgentsRouteImport.update({
+  id: '/api/parallel-agents',
+  path: '/api/parallel-agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMdBrowserRoute = ApiMdBrowserRouteImport.update({
   id: '/api/md-browser',
   path: '/api/md-browser',
@@ -244,6 +251,11 @@ const ApiProviderLimitsProfileRoute =
     path: '/profile',
     getParentRoute: () => ApiProviderLimitsRoute,
   } as any)
+const ApiParallelAgentsModelsRoute = ApiParallelAgentsModelsRouteImport.update({
+  id: '/models',
+  path: '/models',
+  getParentRoute: () => ApiParallelAgentsRoute,
+} as any)
 const ApiChartsQualityRoute = ApiChartsQualityRouteImport.update({
   id: '/api/charts/quality',
   path: '/api/charts/quality',
@@ -284,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
   '/api/md-browser': typeof ApiMdBrowserRoute
+  '/api/parallel-agents': typeof ApiParallelAgentsRouteWithChildren
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/provider-limits': typeof ApiProviderLimitsRouteWithChildren
@@ -306,6 +319,7 @@ export interface FileRoutesByFullPath {
   '/api/analysis/plans': typeof ApiAnalysisPlansRoute
   '/api/charts/model-quality': typeof ApiChartsModelQualityRoute
   '/api/charts/quality': typeof ApiChartsQualityRoute
+  '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
 }
@@ -327,6 +341,7 @@ export interface FileRoutesByTo {
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
   '/api/md-browser': typeof ApiMdBrowserRoute
+  '/api/parallel-agents': typeof ApiParallelAgentsRouteWithChildren
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/provider-limits': typeof ApiProviderLimitsRouteWithChildren
@@ -349,6 +364,7 @@ export interface FileRoutesByTo {
   '/api/analysis/plans': typeof ApiAnalysisPlansRoute
   '/api/charts/model-quality': typeof ApiChartsModelQualityRoute
   '/api/charts/quality': typeof ApiChartsQualityRoute
+  '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
 }
@@ -372,6 +388,7 @@ export interface FileRoutesById {
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
   '/api/md-browser': typeof ApiMdBrowserRoute
+  '/api/parallel-agents': typeof ApiParallelAgentsRouteWithChildren
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/provider-limits': typeof ApiProviderLimitsRouteWithChildren
@@ -394,6 +411,7 @@ export interface FileRoutesById {
   '/api/analysis/plans': typeof ApiAnalysisPlansRoute
   '/api/charts/model-quality': typeof ApiChartsModelQualityRoute
   '/api/charts/quality': typeof ApiChartsQualityRoute
+  '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
 }
@@ -418,6 +436,7 @@ export interface FileRouteTypes {
     | '/api/live'
     | '/api/malformed'
     | '/api/md-browser'
+    | '/api/parallel-agents'
     | '/api/pipelines'
     | '/api/projects'
     | '/api/provider-limits'
@@ -440,6 +459,7 @@ export interface FileRouteTypes {
     | '/api/analysis/plans'
     | '/api/charts/model-quality'
     | '/api/charts/quality'
+    | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
   fileRoutesByTo: FileRoutesByTo
@@ -461,6 +481,7 @@ export interface FileRouteTypes {
     | '/api/live'
     | '/api/malformed'
     | '/api/md-browser'
+    | '/api/parallel-agents'
     | '/api/pipelines'
     | '/api/projects'
     | '/api/provider-limits'
@@ -483,6 +504,7 @@ export interface FileRouteTypes {
     | '/api/analysis/plans'
     | '/api/charts/model-quality'
     | '/api/charts/quality'
+    | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
   id:
@@ -505,6 +527,7 @@ export interface FileRouteTypes {
     | '/api/live'
     | '/api/malformed'
     | '/api/md-browser'
+    | '/api/parallel-agents'
     | '/api/pipelines'
     | '/api/projects'
     | '/api/provider-limits'
@@ -527,6 +550,7 @@ export interface FileRouteTypes {
     | '/api/analysis/plans'
     | '/api/charts/model-quality'
     | '/api/charts/quality'
+    | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
   fileRoutesById: FileRoutesById
@@ -550,6 +574,7 @@ export interface RootRouteChildren {
   ApiLiveRoute: typeof ApiLiveRoute
   ApiMalformedRoute: typeof ApiMalformedRoute
   ApiMdBrowserRoute: typeof ApiMdBrowserRoute
+  ApiParallelAgentsRoute: typeof ApiParallelAgentsRouteWithChildren
   ApiPipelinesRoute: typeof ApiPipelinesRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiProviderLimitsRoute: typeof ApiProviderLimitsRouteWithChildren
@@ -782,6 +807,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPipelinesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/parallel-agents': {
+      id: '/api/parallel-agents'
+      path: '/api/parallel-agents'
+      fullPath: '/api/parallel-agents'
+      preLoaderRoute: typeof ApiParallelAgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/md-browser': {
       id: '/api/md-browser'
       path: '/api/md-browser'
@@ -830,6 +862,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/provider-limits/profile'
       preLoaderRoute: typeof ApiProviderLimitsProfileRouteImport
       parentRoute: typeof ApiProviderLimitsRoute
+    }
+    '/api/parallel-agents/models': {
+      id: '/api/parallel-agents/models'
+      path: '/models'
+      fullPath: '/api/parallel-agents/models'
+      preLoaderRoute: typeof ApiParallelAgentsModelsRouteImport
+      parentRoute: typeof ApiParallelAgentsRoute
     }
     '/api/charts/quality': {
       id: '/api/charts/quality'
@@ -904,6 +943,17 @@ const ApiAnalysisRouteWithChildren = ApiAnalysisRoute._addFileChildren(
   ApiAnalysisRouteChildren,
 )
 
+interface ApiParallelAgentsRouteChildren {
+  ApiParallelAgentsModelsRoute: typeof ApiParallelAgentsModelsRoute
+}
+
+const ApiParallelAgentsRouteChildren: ApiParallelAgentsRouteChildren = {
+  ApiParallelAgentsModelsRoute: ApiParallelAgentsModelsRoute,
+}
+
+const ApiParallelAgentsRouteWithChildren =
+  ApiParallelAgentsRoute._addFileChildren(ApiParallelAgentsRouteChildren)
+
 interface ApiProviderLimitsRouteChildren {
   ApiProviderLimitsProfileRoute: typeof ApiProviderLimitsProfileRoute
 }
@@ -945,6 +995,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLiveRoute: ApiLiveRoute,
   ApiMalformedRoute: ApiMalformedRoute,
   ApiMdBrowserRoute: ApiMdBrowserRoute,
+  ApiParallelAgentsRoute: ApiParallelAgentsRouteWithChildren,
   ApiPipelinesRoute: ApiPipelinesRoute,
   ApiProjectsRoute: ApiProjectsRoute,
   ApiProviderLimitsRoute: ApiProviderLimitsRouteWithChildren,
