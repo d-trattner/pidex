@@ -88,6 +88,7 @@ When invoked after pidex-pi:
 6. Update Active Release Tracker
 7. Rebuild wiki index
 8. List remaining open epics (Planned or In Progress) with priorities
+9. If post-pipeline artifacts mention follow-up/deferred/carry-forward/future work, group them as candidate future epics or open-items. Do not create new epics unless user/orchestrator asked; surface candidates for G10 decision.
 
 Emit summary:
 
@@ -98,6 +99,9 @@ Remaining open epics:
 - [P0] <epic 1> — <one-line summary>
 - [P1] <epic 2> — <one-line summary>
 - ...
+
+Candidate follow-up epics/open-items, if any:
+- <candidate> — source: <artifact/path> — suggested disposition: roadmap epic | maintenance epic | open-items | no action
 
 No remaining epics? → "Roadmap complete. All epics delivered."
 ```

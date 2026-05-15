@@ -1291,13 +1291,29 @@ Only invoke agents whose sections have content.
 
 **7. When the pipeline completes**
 
-After the final agent finishes (pidex-pi, post-retro agents, or devops with approved Retro Mode `none`/`mini` closure), summarize what was delivered:
+After the final agent finishes (pidex-pi, post-retro agents, devops with approved Retro Mode `none`/`mini` closure, or G10 roadmap update), summarize what was delivered:
 - Files created/modified
 - Test count and coverage
 - Commits made
 - Wiki pages written (if any)
 - PI proposals (accepted/rejected/deferred)
 - Post-retro handoffs executed (planning insights, project improvements, architecture patterns)
+
+Then load `<pidex-root>/rules/orchestrator/followup-roadmap-suggestion.md` and perform the follow-up closeout scan. Do not merely list follow-ups. Classify them and give an explicit next-action recommendation:
+- product/runtime/user-value follow-up → suggest creating/updating a roadmap epic
+- cross-cutting cleanup/test/reliability follow-up → suggest a maintenance epic or `wiki/open-items.md`
+- PIDEX/process follow-up → suggest `pidex-pi`/rule update path
+- already tracked/duplicate → say no new epic needed
+
+Final user prompt must include a compact choice set, for example:
+```text
+Follow-ups found:
+- <item> — class: <class> — source: <path>
+
+Recommendation: create a <roadmap|maintenance> epic for <reason>.
+Choose: A) create/update roadmap epic now B) track in wiki/open-items only C) defer/no action D) continue existing roadmap epic
+```
+If no follow-ups exist, say: `Follow-ups: none found. Recommendation: continue existing roadmap / stop.` Do not create a new epic without user confirmation.
 
 Then send a best-effort notify-only Telegram completion message when configured:
 
