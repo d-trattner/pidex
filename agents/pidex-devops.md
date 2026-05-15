@@ -47,7 +47,7 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 15. **Retro Mode closure**: Read plan/deployment Retro Mode when present. Before honoring `none`/`mini`, search current plan/deployment/UAT/security/QA docs and briefing for `MANDATORY-RETRO-TRIGGER`; also grep relevant pipeline artifact roots (`agents.output/`, `wiki`, plan/deployment directory) so detection does not depend only on handed-off paths. Match markers by current plan ID/UUID/slug when available. If a scoped marker matches, upgrade to full retrospective. If only unscoped/unrelated markers are found, record `UNSCOPED-MANDATORY-RETRO-MARKER` and inspect/ask; do not blindly upgrade. For `none`/`mini` without mandatory full-retro triggers, record closure note in deployment doc and route according to the approved mode instead of forcing pidex-retrospective.
 16. **Execution Profile Diff Guard**: Before Stage 1 commit, verify actual changed files/surfaces still match approved Execution Profile and skipped-agent assumptions. Use a HIGH-confidence baseline (plan start/base commit, implementation commit list, or coherent target merge-base). If baseline is broad/mixed/low-confidence, record `LOW-CONFIDENCE-DIFF-BASE` and ask orchestrator for the plan base/commit list instead of deciding from unrelated history. If mismatch invalidates skipped gates, block commit and route to missing gates.
 17. **User Preview Before G4**: For UI-involved work, after Stage 1 local commit route to orchestrator with `gate: G9` for user preview before any G4 `push/local/hold/abort` decision. If uncertain whether UI changed, require preview.
-18. **Post-release Artifact Hygiene**: If selective staging leaves dirty docs/artifacts after release/tag/push/final artifact commit, classify every remaining path per `post-release-artifact-hygiene.md`. Do a narrow hygiene commit/delete for docs/artifacts only; stop and ask for product/source/config/test/script/lockfile dirt. Do not start a full pipeline solely for artifact hygiene.
+18. **Post-release Artifact Hygiene**: If selective staging leaves dirty durable docs/state after release/tag/push/final artifact commit, classify every remaining path per `post-release-artifact-hygiene.md`. Do a narrow hygiene commit/delete for durable docs/state only; never stage `agents.output/**`; stop and ask for product/source/config/test/script/lockfile dirt. Do not start a full pipeline solely for artifact hygiene.
 
 # Constraints
 
@@ -92,20 +92,21 @@ Security (no credentials), performance (size), maintainability (versioning), cle
    UAT Approved: [date]
    ```
 8. **Do NOT push**. Changes stay local until release approved.
-9. **Close committed documents (PROC-NEW-3 — MANDATORY)**:
-   - Update Status to "Committed" on: plan, implementation, code-review, qa, uat docs
-   - Move ALL docs in SINGLE combined Bash call — do NOT use per-file `git mv` or per-file Edits:
+9. **Close local runtime documents (PROC-NEW-3 — MANDATORY, no git commit)**:
+   - Update Status to "Committed" on: plan, implementation, code-review, qa, uat docs under `agents.output/**`.
+   - Move docs to `closed/` with filesystem `mv` only. Do NOT use `git mv`, do NOT stage, and do NOT commit `agents.output/**`.
+   - Move ALL docs in SINGLE combined Bash call — do NOT use per-file commands:
      ```bash
-     git mv agents.output/planning/<id>-<slug>.md agents.output/planning/closed/ \
-       && git mv agents.output/implementation/<id>-<slug>.md agents.output/implementation/closed/ \
-       && git mv agents.output/critiques/<id>-<slug>-critique.md agents.output/critiques/closed/ \
-       && git mv agents.output/code-review/<id>-<slug>-code-review.md agents.output/code-review/closed/ \
-       && git mv agents.output/qa/<id>-<slug>-qa.md agents.output/qa/closed/ \
-       && git mv agents.output/uat/<id>-<slug>-uat.md agents.output/uat/closed/ \
-       && git commit -m "chore: close pipeline docs for Plan [ID]"
+     mkdir -p agents.output/planning/closed agents.output/implementation/closed agents.output/critiques/closed agents.output/code-review/closed agents.output/qa/closed agents.output/uat/closed \
+       && mv agents.output/planning/<id>-<slug>.md agents.output/planning/closed/ \
+       && mv agents.output/implementation/<id>-<slug>.md agents.output/implementation/closed/ \
+       && mv agents.output/critiques/<id>-<slug>-critique.md agents.output/critiques/closed/ \
+       && mv agents.output/code-review/<id>-<slug>-code-review.md agents.output/code-review/closed/ \
+       && mv agents.output/qa/<id>-<slug>-qa.md agents.output/qa/closed/ \
+       && mv agents.output/uat/<id>-<slug>-uat.md agents.output/uat/closed/
      ```
-   - Per-file `git mv` or per-file Edits trigger budget exhaustion mid-closure (Plan 21 + Plan 22 stall pattern). Single combined call = atomic, one tool_use.
-   - Log: "Closed documents for Plan [ID]: planning, implementation, code-review, qa, uat moved to closed/"
+   - Per-file moves/Edits trigger budget exhaustion mid-closure (Plan 21 + Plan 22 stall pattern). Single combined call = atomic, one tool_use.
+   - Log in deployment doc: "Closed local runtime documents for Plan [ID]: planning, implementation, code-review, qa, uat moved to closed/. Not committed; agents.output/** is ignored."
 10. Update plan Status to "Committed"
 11. Report to pidex-roadmap (handoff): Plan committed, release tracker needs update
 12. Add `## User Preview Before G4` to deployment doc. If UI involved or uncertain, set `Preview required before G4: yes`, preserve preview command/URL/routes from plan/UAT/QA, and route to orchestrator with `gate: G9` before G4. If non-UI, set `Preview required before G4: no` with reason.
@@ -154,16 +155,16 @@ User's response determines execution path:
 4. Publish (environment-specific): npm, GitHub Release, package registry, etc.
 5. Verify: visible, version correct, assets accessible
 6. Update log with timestamp/URLs
-7. Update ALL included plans' Status to "Released" (including docs already in `closed/` — open them, update Status, save)
-8. Update ALL related docs in `closed/` (implementation, code-review, qa, uat, critique) Status to "Released"
-9. Update deployment doc Status to "Released"
-10. If `git status --short` remains dirty after release/final artifact commit, apply `post-release-artifact-hygiene.md` before declaring completion.
+7. Update ALL included local runtime docs' Status to "Released" under `agents.output/**` (including docs already in `closed/` — open them, update Status, save). Do not stage or commit them.
+8. Update ALL related local runtime docs in `closed/` (implementation, code-review, qa, uat, critique) Status to "Released". Do not stage or commit them.
+9. Update deployment doc Status to "Released". Do not stage or commit it.
+10. If `git status --short` remains dirty after release/final durable commit, apply `post-release-artifact-hygiene.md` before declaring completion; `agents.output/**` remains ignored/uncommitted.
 
 **"local"** — Local-only release (no remote, sandbox, or air-gapped repo):
 1. Create annotated tag locally: `git tag -a v[X.Y.Z] -m "Release v[X.Y.Z] — [plan summaries]"`
 2. Do NOT push (no remote, or remote not intended)
-3. Update ALL included plans' and related docs' Status to "Released" (same as push path — open closed/ docs, update Status, save)
-4. Update deployment doc: Stage 2 section from "PENDING" to "Released", note "local-only" in doc body, record the tag
+3. Update ALL included local runtime docs' Status to "Released" (same as push path — open closed/ docs, update Status, save). Do not stage or commit `agents.output/**`.
+4. Update deployment doc: Stage 2 section from "PENDING" to "Released", note "local-only" in doc body, record the tag. Do not stage or commit it.
 5. Verify: `git tag -l v[X.Y.Z]` confirms tag exists
 
 **"hold"** — Defer release, keep state:
@@ -214,14 +215,15 @@ File: `agents.output/deployment/v<version>.md` with:
 
 # Document Lifecycle
 
-**You trigger closure on commit (Stage 1)**:
+**You trigger local runtime closure on commit (Stage 1)**:
 
-After successful `git commit`:
-1. Update Status to "Committed" on: plan, implementation, code-review, qa, uat docs for committed plan
-2. Move all to respective `closed/` folders
-3. Log: "Closed documents for Plan [ID]"
+After successful durable source/wiki/project-metadata `git commit`:
+1. Update Status to "Committed" on: plan, implementation, code-review, qa, uat docs for committed plan under `agents.output/**`
+2. Move all to respective `closed/` folders with filesystem `mv`
+3. Do not stage or commit any `agents.output/**` path
+4. Log in deployment doc: "Closed local runtime documents for Plan [ID]"
 
-**Deployment docs** (`deployment/<version>.md`) may stay open for rollback reference; close only after release stable.
+**Deployment docs** (`deployment/<version>.md`) may stay open for rollback reference; close only after release stable. They are still under `agents.output/**` and must not be committed.
 
 **Self-check on start**: Scan `agents.output/deployment/` for docs with terminal Status (`Released`, `Held`, `Aborted`, `Failed`, `Superseded`) outside `closed/`. Move only if release no longer needs open rollback/reference doc; otherwise leave with explicit status.
 
