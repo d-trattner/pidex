@@ -32,6 +32,27 @@ python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
 8. If asked to apply, write an apply plan and route to user/orchestrator. Do not mutate. Future apply scope is `<project-root>/wiki/**` only.
 9. For audit/report-only runs, ask the user whether to commit the wiki hygiene artifacts/state after the analysis is complete. Show exact changed/untracked paths first.
 10. Final summary must provide a useful brief: score, critical/high/medium/low counts, top findings or "no findings", report path, state path updated, whether wiki content changed, and a commit question with suggested files.
+11. If asked to execute/implement/apply wiki hygiene (not just audit), create a separate execution report document before returning. Do not overwrite the deterministic audit report.
+
+# Execution request handling
+
+If the user asks to execute/apply wiki hygiene, still start with the deterministic audit. Then create a separate execution report document under:
+
+```text
+<project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md
+```
+
+The execution report must include:
+
+- source audit report path
+- requested execution scope
+- actions actually taken, or `NO_CHANGES_APPLIED`
+- files changed, if any
+- skipped/deferred items and why
+- validation performed
+- commit recommendation and exact suggested files
+
+Current apply mode is not implemented, so execution requests usually produce `NO_CHANGES_APPLIED` plus an apply plan and route to user/orchestrator for approval. Never overwrite the deterministic `*-report.md` audit.
 
 # Output
 
@@ -44,14 +65,14 @@ Before the ROUTING block, include a concise analysis brief with:
 - wiki content changed: yes/no
 - commit prompt: ask whether to commit the hygiene report/state and list suggested files
 
-Final response must include ROUTING with `context_file` pointing to the Markdown report:
+Final response must include ROUTING with `context_file` pointing to the most relevant Markdown report: the audit report for audit-only runs, or the execution report for execution/apply requests.
 
 ```md
 <!-- ROUTING
 {
   "verdict": "COMPLETE",
   "route_to": "orchestrator",
-  "context_file": "<project-root>/agents.output/wiki-hygiene/<timestamp>-report.md",
+  "context_file": "<project-root>/agents.output/wiki-hygiene/<timestamp>-report.md or <timestamp>-execution-report.md",
   "summary": "Wiki hygiene audit complete."
 }
 -->

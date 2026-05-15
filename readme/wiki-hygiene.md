@@ -88,3 +88,11 @@ Project-specific PIDEX agent rules live in:
 ## Apply mode
 
 Apply mode is future work. Any mutation must require an explicit user gate, backups, validation, and a scoped commit. Future wiki hygiene apply mode may only mutate `<project-root>/wiki/**`; PIDEX metadata cleanup needs a separate workflow.
+
+If a user asks the wiki hygienist to execute/apply hygiene, the specialist must create a separate execution report:
+
+```text
+<project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md
+```
+
+The execution report must reference the source audit report, list actions taken or `NO_CHANGES_APPLIED`, changed files, skipped/deferred items, validation, and commit recommendation. It must not overwrite the deterministic audit report.
