@@ -32,3 +32,6 @@ secrets/
 state/runs/
 state/metrics/
 state/pipeline-events/
+
+# Wiki migration archives/backups
+.wiki-migration/
