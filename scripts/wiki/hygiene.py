@@ -292,6 +292,7 @@ def audit(args: argparse.Namespace) -> int:
     report_json.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     if not args.json_only:
         report_md.write_text(render_md(project, data), encoding="utf-8")
+    update_hygiene_state_after_audit(project, report_md, report_json, counts)
     result = {"ok": True, "report_md": str(report_md), "report_json": str(report_json), "critical": counts["critical"], "high": counts["high"], "score": score}
     print(f"Wiki hygiene audit complete: {report_md}")
     print("PIDEX_WIKI_HYGIENE_RESULT=" + json.dumps(result, separators=(",", ":")))
@@ -330,6 +331,39 @@ def hygiene_state_path(project: Path) -> Path:
     return project / "pidex" / "state" / "wiki-hygiene.json"
 
 
+def read_hygiene_state(state: Path) -> dict[str, Any]:
+    data = json.loads(state.read_text(encoding="utf-8")) if state.exists() else {}
+    data.setdefault("schema_version", 1)
+    data.setdefault("pipeline_runs_since_hygiene", 0)
+    data.setdefault("last_hygiene_at", None)
+    data.setdefault("last_hygiene_report", None)
+    data.setdefault("last_hygiene_status", "never-run")
+    data.setdefault("cadence_runs", 10)
+    return data
+
+
+def write_hygiene_state(project: Path, data: dict[str, Any]) -> None:
+    state = hygiene_state_path(project)
+    state.parent.mkdir(parents=True, exist_ok=True)
+    data["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    state.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def update_hygiene_state_after_audit(project: Path, report_md: Path, report_json: Path, counts: dict[str, int]) -> None:
+    try:
+        state = hygiene_state_path(project)
+        data = read_hygiene_state(state)
+        data["pipeline_runs_since_hygiene"] = 0
+        data["last_hygiene_at"] = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        data["last_hygiene_report"] = str(report_md)
+        data["last_hygiene_report_json"] = str(report_json)
+        data["last_hygiene_status"] = "critical-findings" if counts.get("critical", 0) else "complete"
+        data["last_hygiene_summary"] = {k: int(counts.get(k, 0)) for k in ("critical", "high", "medium", "low")}
+        write_hygiene_state(project, data)
+    except Exception as e:
+        print(f"wiki hygiene state update failed: {e}", file=sys.stderr)
+
+
 def cadence(args: argparse.Namespace) -> int:
     project = Path(args.project).expanduser().resolve()
     wiki = project / "wiki"
@@ -337,20 +371,12 @@ def cadence(args: argparse.Namespace) -> int:
         return 0
     state = hygiene_state_path(project)
     try:
-        state.parent.mkdir(parents=True, exist_ok=True)
-        data = json.loads(state.read_text(encoding="utf-8")) if state.exists() else {}
-        data.setdefault("schema_version", 1)
-        data.setdefault("pipeline_runs_since_hygiene", 0)
-        data.setdefault("last_hygiene_at", None)
-        data.setdefault("last_hygiene_report", None)
-        data.setdefault("last_hygiene_status", "never-run")
-        data.setdefault("cadence_runs", 10)
+        data = read_hygiene_state(state)
         data["pipeline_runs_since_hygiene"] = int(data.get("pipeline_runs_since_hygiene") or 0) + 1
         data["last_terminal_event"] = args.terminal_event
         data["last_plan"] = args.plan
         data["last_pipeline_id"] = args.pipeline_id
-        data["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
-        state.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        write_hygiene_state(project, data)
         if data["pipeline_runs_since_hygiene"] >= int(data.get("cadence_runs") or 10):
             print(f"wiki hygiene cadence reached for {project}: run /pdwiki {project}", file=sys.stderr)
         return 0

@@ -32,7 +32,7 @@ Reports are written to:
 <project-root>/agents.output/wiki-hygiene/YYYY-MM-DDTHH-MM-SSZ-report.json
 ```
 
-Audit mode does not edit `wiki/` and does not mutate `<project-root>/pidex/**`.
+Audit mode does not edit `wiki/`. It updates only `<project-root>/pidex/state/wiki-hygiene.json` as operational state and does not mutate any other `<project-root>/pidex/**` path.
 
 ## Checks
 
@@ -73,7 +73,7 @@ Terminal pipeline events can update:
 <project-root>/pidex/state/wiki-hygiene.json
 ```
 
-The cadence helper may update only that single PIDEX metadata file. Automatic cadence must never apply changes. When the counter reaches the configured threshold, run `/pdwiki` to create a fresh report.
+The audit and cadence helpers may update only that single PIDEX metadata file. Audit records `last_hygiene_at`, report paths, status, and resets the run counter. Automatic cadence must never apply changes. When the counter reaches the configured threshold, run `/pdwiki` to create a fresh report.
 
 Project-specific PIDEX agent rules live in:
 
