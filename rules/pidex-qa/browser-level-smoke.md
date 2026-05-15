@@ -28,6 +28,20 @@ For each representative route from plan AC/V-matrix:
 8. For data/persistence UI, reload and re-find the relevant state/data.
 9. For overlay/drawer/fixed UI, verify clickable element is topmost with `document.elementFromPoint`.
 10. Resize to mobile viewport (default 400×800) and repeat relevant checks.
+11. For navigation/API-backed UI, capture browser network failures and assert final `page.url()` or visible route state. Mocked click-handler assertions do not satisfy this check.
+
+## G9 rejection repro checks
+
+If the handoff includes `G9 Rejection Repro Contract` or user rejected a prior preview, QA MUST run the exact rejected flow against the live dev/preview server before `QA COMPLETE`:
+
+- open the reported preview route
+- click the reported selector/data-testid/text/role target
+- assert the expected final URL/visible state, not only that a mock navigate function was called
+- collect console errors
+- collect network failures and 401/403/5xx responses for the flow
+- capture screenshot if visual state matters
+
+If this exact live-browser repro is missing, emit `BLOCKED` to orchestrator for Playwright evidence. If it fails, emit `FAILED` to `pidex-implementer` with the Playwright evidence.
 
 ## Record
 

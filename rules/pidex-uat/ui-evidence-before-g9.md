@@ -19,9 +19,12 @@ For UI/G9-required plans, verify QA/design docs include:
 - mobile screenshot artifacts for responsive contract paths (or explicit `N/A` only when plan declares mobile not applicable)
 - user browser flow executed, not only route loaded
 - console error check result
+- network failure / 401 / 403 / 5xx check result for API-backed or navigation flows
+- final URL or visible route-state assertion for navigation flows
 - mobile viewport evidence when plan requires mobile/responsive behavior
 - accessibility baseline evidence for interactive UI
 - post-implementation designer audit result when design review required one
+- if prior G9 was rejected: exact G9 Rejection Repro Contract flow passed in live Playwright evidence
 
 ## UAT handling
 
@@ -46,6 +49,8 @@ Add `## UI Evidence Before G9` section for every G9-required plan:
 - Decision: G9 READY / BLOCKED / REJECTED
 
 If `Decision != G9 READY`, UAT status is `UAT BLOCKED`/`UAT Failed`; do not set `UAT Complete`.
+
+If a prior G9 rejection exists and exact live Playwright repro evidence is absent, UAT MUST block G9 and route to `pidex-qa` or `orchestrator`; G9 must not be used as the next test attempt.
 
 ## Empirical basis
 
