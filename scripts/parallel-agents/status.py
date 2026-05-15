@@ -143,6 +143,36 @@ def merge_status(root: Path) -> dict[str, Any]:
     return {"ok": not errors and config_path.exists(), "errors": errors, "config_path": str(config_path), "state_path": str(state_path), "enabled": cfg["enabled"], "updated_at": state.get("updated_at"), "agents": agents, "warnings": warnings}
 
 
+def eligible_lanes(root: Path, agent: str | None = None, trigger: str | None = None) -> dict[str, Any]:
+    """Return lanes that the orchestrator should launch automatically for a gate."""
+    status = merge_status(root)
+    lanes: list[dict[str, Any]] = []
+    if status.get("ok") and status.get("enabled"):
+        for a in status.get("agents", []):
+            if agent and a.get("agent") != agent:
+                continue
+            if trigger and a.get("trigger") != trigger:
+                continue
+            if not a.get("enabled"):
+                continue
+            for pm in a.get("provider_models", []):
+                if not pm.get("enabled", True):
+                    continue
+                lanes.append({
+                    "lane_id": pm.get("lane_id"),
+                    "agent": a.get("agent"),
+                    "trigger": a.get("trigger"),
+                    "provider": pm.get("provider"),
+                    "model": pm.get("model"),
+                    "effort": pm.get("effort") or "medium",
+                    "timeout_seconds": a.get("timeout_seconds"),
+                    "warning_active": bool(pm.get("warning_active", False)),
+                    "warning_type": pm.get("warning_type"),
+                    "last_status": pm.get("last_status"),
+                })
+    return {"ok": bool(status.get("ok")), "enabled": bool(status.get("enabled")), "agent": agent, "trigger": trigger, "lanes": lanes, "errors": status.get("errors", [])}
+
+
 def classify_msg(msg: str) -> str:
     s = msg.lower()
     if re.search(r"usage limit|rate limit|quota|insufficient balance|no balance|billing|payment required|subscription|limit reached|\b429\b", s): return "usage-limit-or-balance"
@@ -288,6 +318,7 @@ def main() -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ["show", "config", "models"]:
         s = sub.add_parser(name); s.add_argument("--json", action="store_true")
+    s = sub.add_parser("eligible"); s.add_argument("--agent"); s.add_argument("--trigger"); s.add_argument("--json", action="store_true")
     s = sub.add_parser("save-config"); s.add_argument("--config-json", required=True)
     s = sub.add_parser("classify"); s.add_argument("--message", required=True); s.add_argument("--json", action="store_true")
     s = sub.add_parser("warn"); s.add_argument("--lane", required=True); s.add_argument("--type", choices=sorted(WARNING_TYPES)); s.add_argument("--message", required=True); s.add_argument("--no-telegram", action="store_true")
@@ -301,6 +332,8 @@ def main() -> int:
         cfg, errors = load_config(root); out = {"ok": not errors and config_path.exists(), "errors": errors, "config": cfg}; print(json.dumps(out, indent=None if args.json else 2)); return 0 if out["ok"] else 1
     if args.cmd == "models":
         print(json.dumps(model_options(root), indent=None if args.json else 2)); return 0
+    if args.cmd == "eligible":
+        data = eligible_lanes(root, args.agent, args.trigger); print(json.dumps(data, indent=None if args.json else 2)); return 0 if data["ok"] else 1
     if args.cmd == "save-config":
         raw_arg = args.config_json
         raw = Path(raw_arg[1:]).read_text(encoding="utf-8") if raw_arg.startswith("@") else raw_arg

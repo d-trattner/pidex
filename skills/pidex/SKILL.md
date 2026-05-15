@@ -1151,26 +1151,33 @@ Optional early agents:
 
 Parallel implementer lanes are optional, not default. Use them only when the plan has explicit spawn/lane markers and slice independence is clear. Otherwise use sequential implementer spawns following the plan's `Spawn` annotations.
 
-**Parallel pidex_agent safety:** When emitting multiple `pidex_agent` calls in the same assistant turn (parallel implementer lanes, configured secondary review lanes, or post-retro handoffs), resolve `<pidex-root>/config/agents.json` first and pass explicit `provider`, `model`, and `effort` for every call. Do not rely on default routing in same-turn parallel calls. Never force `provider=pi` while leaving a delegate model alias such as `sonnet`/`opus`; if overriding to Pi, use a Pi-qualified model from config defaults (for example `openai-codex/gpt-5.3-codex`).
+**Parallel pidex_agent safety:** When emitting multiple `pidex_agent` calls in the same assistant turn (parallel implementer lanes, configured secondary review lanes, or post-retro handoffs), pass explicit `provider`, `model`, and `effort` for every secondary call. Do not rely on default routing in same-turn parallel calls. Never force `provider=pi` while leaving a delegate model alias such as `sonnet`/`opus`; if overriding to Pi, use a Pi-qualified model from config defaults (for example `openai-codex/gpt-5.3-codex`).
 
-**Orchestrator-owned parallel secondary review lanes:** For `pidex-critic`, `pidex-code-reviewer`, and `pidex-security`, inspect the agent route in `<pidex-root>/config/agents.json` before spawning. If it contains `parallel_secondary`, the orchestrator owns the fan-out. `pidex_agent` must not spawn nested agents.
+**Automatic configured parallel secondary review lanes:** PIDEX optional parallel agents are configured in `<pidex-root>/config/parallel-agents.json` and are orchestrator-owned. If global config, the agent container, and a provider/model entry are enabled, the orchestrator MUST automatically launch matching secondary lanes for these triggers unless the user explicitly requested a minimal/cheap/single-lane run:
+- `after-plan` → with the primary `pidex-critic` lane, launch enabled secondary `pidex-critic` lanes.
+- `after-implementation` → with the primary `pidex-code-reviewer` lane, launch enabled secondary `pidex-code-reviewer` lanes.
 
-When the gate is eligible, launch the primary lane and each configured secondary lane as separate visible `pidex_agent` calls in the same assistant turn:
-- Primary: use the route's configured provider/model.
-- Secondary: call the same `agent` but pass explicit `provider`/`model` overrides from `parallel_secondary`.
+Before spawning `pidex-critic` or `pidex-code-reviewer`, run:
+```bash
+python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent <agent> --trigger <trigger> --json
+```
+If `.lanes[]` is non-empty, launch the primary lane and every eligible secondary lane as separate visible `pidex_agent` calls in the same assistant turn. `pidex_agent` itself must not spawn nested agents.
+
+Lane launch rules:
+- Primary: call `pidex_agent` normally using configured primary routing from `<pidex-root>/config/agents.json`.
+- Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `config/parallel-agents.json` / `status.py eligible`.
 - Each lane must receive a unique expected output path; never let secondaries write the primary artifact.
+- Secondary failure is advisory and non-blocking. Record it with `status.py warn --lane <lane_id> --message <short reason>` and continue.
+- Secondary success should be recorded with `status.py success --lane <lane_id> --message success` after its output/ROUTING is verified.
 
 Secondary artifact suffixes:
-- `agents.output/critic/<id>-<slug>-critique.deepseek.md`
-- `agents.output/critic/<id>-<slug>-critique.minimax.md`
-- `agents.output/code-review/<id>-<slug>-code-review.deepseek.md`
-- `agents.output/code-review/<id>-<slug>-code-review.minimax.md`
-- `agents.output/security/<id>-<slug>-security.deepseek.md`
-- `agents.output/security/<id>-<slug>-security.minimax.md`
+- `agents.output/critic/<id>-<slug>-critique.<provider>.<model-slug>.md`
+- `agents.output/code-review/<id>-<slug>-code-review.<provider>.<model-slug>.md`
 
 Secondary lane brief requirements:
 ```text
-This is a secondary review lane.
+This is a configured secondary review lane for PIDEX parallel agents.
+Lane: <lane_id>.
 Do not overwrite the primary artifact.
 Write only to the expected secondary output path.
 Do not implement changes.
@@ -1180,11 +1187,11 @@ If no concrete findings exist, write NO_FINDINGS.
 Return a valid ROUTING block with context_file pointing to the secondary artifact.
 ```
 
-After all lanes return, read every returned `context_file`, deduplicate findings, and write a required merge/adjudication summary before continuing. Classification values: `confirmed-by-multiple-lanes`, `primary-only`, `secondary-only`, `duplicate`, `contradicted`, `no-evidence`. Disposition values: `accepted`, `rejected-no-evidence`, `duplicate`, `deferred`, `needs-primary-review`.
+After all lanes return, read every returned `context_file`, deduplicate findings, and write a required merge/adjudication summary before continuing. Suggested path: `agents.output/parallel-agents/<id>-<slug>-<agent>-merge.md`. Classification values: `confirmed-by-multiple-lanes`, `primary-only`, `secondary-only`, `duplicate`, `contradicted`, `no-evidence`. Disposition values: `accepted`, `rejected-no-evidence`, `duplicate`, `deferred`, `needs-primary-review`.
 
 Initial policy: advisory execution plus mandatory merge summary. Continue when primary approves and no secondary has concrete High/Critical evidence. Route to `pidex-implementer` or ask for primary-reviewer adjudication when a secondary reports High/Critical with concrete file/path/evidence. Record secondary timeout/failure/malformed ROUTING in the merge summary and continue with the primary result during rollout.
 
-Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or the user requested a minimal/cheap single-lane run.
+Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or the user requested a minimal/cheap/single-lane run.
 
 Before `pidex-security` or `pidex-qa` on JS/TS scopes, include the Fallow requirement in the brief:
 - `pidex-security`: read `<pidex-root>/rules/pidex-security/fallow-structural-signal.md`; record fallow evidence or `FALLOW-SKIP`.

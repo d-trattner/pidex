@@ -1,6 +1,6 @@
 # Optional Parallel Agents
 
-PIDEX supports optional, non-blocking secondary lanes for selected review agents.
+PIDEX supports optional, non-blocking secondary lanes for selected review agents. When globally enabled and configured for an agent, eligible lanes run automatically at the matching pipeline trigger unless the user explicitly requests a minimal/single-lane run.
 
 Supported agent containers:
 
@@ -39,8 +39,11 @@ You can enable/disable the subsystem, choose up to two authenticated provider/mo
 
 ```bash
 python3 <pidex-root>/scripts/parallel-agents/status.py show
+python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent pidex-critic --trigger after-plan --json
+python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent pidex-code-reviewer --trigger after-implementation --json
 python3 <pidex-root>/scripts/parallel-agents/status.py models --json
 python3 <pidex-root>/scripts/parallel-agents/status.py warn --lane 'pidex-code-reviewer:claude:sonnet' --message 'quota limit reached'
+python3 <pidex-root>/scripts/parallel-agents/status.py success --lane 'pidex-code-reviewer:claude:sonnet'
 python3 <pidex-root>/scripts/parallel-agents/status.py clear --lane 'pidex-code-reviewer:claude:sonnet'
 ```
 
@@ -61,6 +64,15 @@ Disable with:
 ```bash
 PIDEX_TELEGRAM_PARALLEL_WARNINGS=0
 ```
+
+## Automatic orchestration
+
+The PIDEX orchestrator checks configured lanes before supported review gates:
+
+- `after-plan` launches enabled `pidex-critic` secondary lanes alongside the primary critic.
+- `after-implementation` launches enabled `pidex-code-reviewer` secondary lanes alongside the primary reviewer.
+
+Each secondary is a visible `pidex_agent` call with explicit `provider`, `model`, and `effort`. Secondary artifacts must use unique paths under `agents.output/**` and are advisory. The orchestrator records lane success/failure in `state/parallel-agents/status.json`, writes a merge/adjudication summary, and continues primary flow unless a secondary reports concrete High/Critical evidence that needs adjudication.
 
 ## Guarantees
 
