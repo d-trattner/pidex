@@ -1225,6 +1225,21 @@ body.modal-open {
     grid-column: 2;
     max-height: 72vh;
   }
+
+  .wiki-viewer .markdown-body table {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    overflow-x: visible;
+    white-space: normal;
+  }
+
+  .wiki-viewer .markdown-body th,
+  .wiki-viewer .markdown-body td {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+  }
 }
 
 @media (min-width: 640px) {
