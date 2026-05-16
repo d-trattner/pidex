@@ -739,9 +739,9 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 
 function simpleMessageText(message: any): string {
 	const content = message?.content;
-	if (typeof content === "string") return truncate(content, 1800);
+	if (typeof content === "string") return clipEnd(content, 1800);
 	if (Array.isArray(content)) {
-		return truncate(content.map((part: any) => part?.type === "text" ? part.text : "").filter(Boolean).join(" "), 1800);
+		return clipEnd(content.map((part: any) => part?.type === "text" ? part.text : "").filter(Boolean).join(" "), 1800);
 	}
 	return "";
 }
@@ -775,7 +775,7 @@ function savePidexMemory(ctx: any, argsLine?: string): string {
 	const now = new Date().toISOString();
 	const fileName = `${now.replace(/[:.]/g, "-")}.md`;
 	const filePath = path.join(memoryDir, fileName);
-	const hint = truncate(String(argsLine || ""), 700);
+	const hint = clipEnd(String(argsLine || ""), 700);
 	const title = hint || "PIDEX session memory";
 	const body = `---\ntitle: ${title.replace(/\n/g, " ")}\ntype: session-memory\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\nsource: pidex-session\n---\n\n# ${title}\n\n## Project\n\n- project_root: ${projectRoot}\n- project_name: ${projectName}\n- git_branch: ${gitValue(projectRoot, ["branch", "--show-current"]) || "unknown"}\n- git_commit: ${gitValue(projectRoot, ["rev-parse", "--short", "HEAD"]) || "unknown"}\n\n## Context\n\n- cwd: ${cwd}\n- session: ${ctx?.sessionManager?.getSessionFile?.() || "unknown"}\n- captured_at: ${now}\n\n## User note\n\n${hint || "(none)"}\n\n## Recent conversation digest\n\n${simpleSessionDigest(ctx)}\n`;
 	fs.writeFileSync(filePath, body, "utf8");
