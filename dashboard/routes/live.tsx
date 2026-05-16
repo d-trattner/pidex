@@ -359,10 +359,15 @@ function LivePage() {
   };
 
   const openPipelines = toOpenPipelines(payload || {});
-  const runningPipelinesForTimeline = openPipelines
-    .filter((row) => toText(row.status).toLowerCase() === 'running' || row.is_running === true);
+  const recentOpenCutoffMs = 6 * 60 * 60 * 1000;
+  const pipelinesForTimeline = openPipelines
+    .filter((row) => {
+      if (toText(row.status).toLowerCase() === 'running' || row.is_running === true) return true;
+      const lastAt = new Date(String(row.last_at || '')).getTime();
+      return Number.isFinite(lastAt) && Date.now() - lastAt <= recentOpenCutoffMs;
+    });
   const allTimelineRuns = toAgentTimeline(payload || {});
-  const timelineRuns = runningPipelinesForTimeline.flatMap((pipeline) => {
+  const timelineRuns = pipelinesForTimeline.flatMap((pipeline) => {
     const projectName = toText(pipeline.project);
     const planKey = toText(pipeline.plan_key);
     const startedAt = new Date(String(pipeline.started_at || '')).getTime();
@@ -418,7 +423,7 @@ function LivePage() {
 
           <article className="glass-card glass enhanced-glass enhanced-glass--feature" style={{ gridColumn: '1 / -1' }}>
             <h3 className="icon-heading"><GitBranch size={18} aria-hidden="true" /> Pipeline Timeline</h3>
-            <p className="muted">Only currently running pipelines are shown. Agents are connected per project/plan. Hover a point to see verdict, route, and runtime.</p>
+            <p className="muted">Currently running and recently updated open pipelines are shown. Agents are connected per project/plan. Hover a point to see verdict, route, and runtime.</p>
             <PipelineTimeline rows={timelineRuns} onOpenContext={openContext} />
           </article>
 
