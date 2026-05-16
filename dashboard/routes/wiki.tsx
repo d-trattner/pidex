@@ -180,7 +180,9 @@ function WikiPage() {
         <h3>Files</h3>
         {treeActions}
       </div>
-      {renderTreeList(false)}
+      <div className="wiki-tree-scroll">
+        {renderTreeList(false)}
+      </div>
     </>
   );
 

@@ -1033,9 +1033,10 @@ body.modal-open {
 
 .wiki-nav {
   display: none;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   max-height: 72vh;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .wiki-viewer {
@@ -1070,6 +1071,14 @@ body.modal-open {
 
 .wiki-nav-header h3 {
   margin: 0;
+}
+
+.wiki-tree-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 2px;
 }
 
 .wiki-nav-actions,
@@ -1217,7 +1226,7 @@ body.modal-open {
   }
 
   .wiki-nav {
-    display: block;
+    display: grid;
     grid-column: 1;
   }
 
