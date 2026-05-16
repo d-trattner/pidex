@@ -156,13 +156,13 @@ function ContextPage() {
                   <button className="icon-button compact" type="button" aria-label="Remove entry" onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}><Trash2 size={14} /></button>
                 </div>
                 <label className="muted">Term
-                  <input className="themed-select" value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
+                  <input className="themed-input" value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
                 </label>
                 <label className="muted">Definition
-                  <textarea className="themed-select" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
+                  <textarea className="themed-textarea" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
                 </label>
                 <label className="muted">Avoid aliases
-                  <input className="themed-select" value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
+                  <input className="themed-input" value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
                 </label>
               </section>
             ))}
@@ -177,7 +177,7 @@ function ContextPage() {
           <button className="button" type="button" onClick={() => setRawOpen((value) => !value)}>{rawOpen ? 'Hide raw Markdown' : 'Show raw Markdown fallback'}</button>
           {rawOpen ? (
             <div style={{ marginTop: 12 }}>
-              <textarea className="themed-select" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
+              <textarea className="themed-textarea" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
               <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'save-raw', hash: payload.hash, raw })}>Save raw Markdown</button>
             </div>
           ) : null}

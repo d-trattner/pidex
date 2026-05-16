@@ -1407,7 +1407,9 @@ body.modal-open {
 }
 
 .toggle-card,
-.themed-select {
+.themed-select,
+.themed-input,
+.themed-textarea {
   position: relative;
   isolation: isolate;
   border: 1px solid rgba(134, 255, 239, 0.28);
@@ -1448,10 +1450,16 @@ body.modal-open {
   flex: 0 0 auto;
 }
 
-.themed-select {
+.themed-select,
+.themed-input,
+.themed-textarea {
   width: 100%;
   margin-top: 4px;
   border-radius: 10px;
+  font: inherit;
+}
+
+.themed-select {
   padding: 9px 36px 9px 12px;
   appearance: none;
   cursor: pointer;
@@ -1467,7 +1475,25 @@ body.modal-open {
   background-repeat: no-repeat;
 }
 
-.themed-select:focus {
+.themed-input,
+.themed-textarea {
+  padding: 9px 12px;
+  appearance: auto;
+  cursor: text;
+  background-image:
+    linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.035) 42%, rgba(0,245,255,0.08));
+  background-position: 0 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.themed-textarea {
+  resize: vertical;
+}
+
+.themed-select:focus,
+.themed-input:focus,
+.themed-textarea:focus {
   outline: none;
   border-color: rgba(0, 245, 255, 0.8);
   box-shadow: 0 0 0 3px rgba(0,245,255,0.16), inset 0 1px 0 rgba(255,255,255,0.16);
