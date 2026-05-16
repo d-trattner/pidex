@@ -1,6 +1,6 @@
 # pidex-planner Rules Index
 
-Last updated: 2026-05-13 (PROC-88-1)
+Last updated: 2026-05-16 (PROC-NEW-92-2)
 
 ## Active Rules
 
@@ -68,6 +68,7 @@ Last updated: 2026-05-13 (PROC-88-1)
 | Layout Parity Exact Element Reference | [layout-parity-element-ref.md](layout-parity-element-ref.md) | 034-2 | Layout parity tasks must specify exact element path (route → element + class list), not just page name |
 | Seed Data as Plan Prerequisite | [seed-data-prerequisite.md](seed-data-prerequisite.md) | 034-3 | Multi-step nav plans must declare seed data as explicit prerequisite with idempotent setup script |
 | Migration Contract Matrix | [migration-contract-matrix.md](migration-contract-matrix.md) | PROC-NEW-88-1 | Migration handoffs MUST include endpoint response-shape + action-contract matrix before implementation routing |
+| Collection Completeness AC for Parser-Heavy Plans | [collection-completeness-ac.md](collection-completeness-ac.md) | PROC-NEW-92-2 | Parser-heavy plans must include AC + validation rows proving per-item collection validation and item-level rejection paths |
 ## How to use
 
 Read this index at task start. Load specific rule files when relevant to current task.

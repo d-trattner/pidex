@@ -12,6 +12,7 @@ color: yellow
 
 At task start, read `<pidex-root>/rules/pidex-qa/index.md` to load active process rules.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-qa.md`, read that too.
+For release/version artifacts, load `<pidex-root>/rules/pidex-qa/version-coherence-gate.md` at QA Phase 2 start.
 
 # Purpose
 

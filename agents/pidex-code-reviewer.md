@@ -15,6 +15,7 @@ When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-c
 For JS/TS scope, load `<pidex-root>/rules/pidex-code-reviewer/fallow-evidence.md`; for non-JS/TS, record `FALLOW-SKIP: non-JS/TS scope`.
 For tiny test-only/type-only/devops-blocker hotfixes, load `<pidex-root>/rules/pidex-code-reviewer/tdd-table-narrow-hotfix-escape.md` before rejecting solely for a missing full TDD table.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-code-reviewer.md`, read that too.
+For lifecycle route/contract assertion scope, load `<pidex-root>/rules/pidex-code-reviewer/lifecycle-assertion-vocabulary-scan.md`.
 
 # Purpose
 

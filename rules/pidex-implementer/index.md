@@ -1,6 +1,6 @@
 # pidex-implementer Rules Index
 
-Last updated: 2026-05-13 (PROC-NEW-88-2)
+Last updated: 2026-05-16 (PROC-NEW-93-1)
 
 ## Active Rules
 
@@ -44,6 +44,8 @@ Last updated: 2026-05-13 (PROC-NEW-88-2)
 | Layout-Parity DOM Snapshot | [layout-parity-dom-snapshot.md](layout-parity-dom-snapshot.md) | 034-1 | For layout-parity tasks, snapshot DOM of reference element before writing code; never copy from sibling page; verify class list |
 | Dashboard Route Parity Pre-Review Smoke | [dashboard-route-parity-pre-review-smoke.md](dashboard-route-parity-pre-review-smoke.md) | DASHBOARD-PARITY-SMOKE | Dashboard parity/query work must include route/API smoke matrix for planned surfaces, weekly/monthly tokens, live filter, and project page-key reset before code review |
 | Bounded Fix Slice Plan | [bounded-fix-slice-plan.md](bounded-fix-slice-plan.md) | PROC-NEW-88-2 | Implementer MUST execute bounded spawn-ready slices with explicit objective, failure class, pass criteria, and next-slice trigger |
+| Pre-CR Contract Gate (Allowlist + Tool/Action + Each-Item Proof) | [pre-cr-contract-gate.md](pre-cr-contract-gate.md) | PROC-NEW-92-1 | Before first review handoff for contract/parser work, prove allowlist checks, action taxonomy checks, and every-item validation evidence |
+| Contract-Coherence Preflight | [contract-coherence-preflight.md](contract-coherence-preflight.md) | PROC-NEW-93-1 | Before first review handoff on contract/parser/lifecycle scope, verify status vocab, version lane, and route string coherence |
 ## How to use
 
 Read this index at task start. Load specific rule files when relevant to current task.

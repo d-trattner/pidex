@@ -1,6 +1,6 @@
 # pidex-code-reviewer Rules Index
 
-Last updated: 2026-05-13 (PROC-NEW-90-2)
+Last updated: 2026-05-16 (PROC-NEW-93-3)
 
 ## Active Rules
 
@@ -22,6 +22,8 @@ Last updated: 2026-05-13 (PROC-NEW-90-2)
 | 503 All-Unavailable Nav Assertion | [all-unavailable-nav-assertion.md](all-unavailable-nav-assertion.md) | 74-3 | Degraded-capable routes require explicit all-unavailable nav assertion; static fallback in valid unavailable payload is reject-level |
 | TDD Table Narrow Hotfix Escape | [tdd-table-narrow-hotfix-escape.md](tdd-table-narrow-hotfix-escape.md) | PIPELINE-ANALYST-1E | Tiny test-only/type-only/devops-blocker hotfixes may use explicit TDD N/A row with validation proof |
 | Async CTA Proof Gate | [async-cta-proof-gate.md](async-cta-proof-gate.md) | 80-1 | Before APPROVED, evidence must prove pending label, disabled state, and duplicate-click block for each async CTA |
+| Exact Taxonomy/Error-Code Assertions for Contract Scope | [exact-taxonomy-error-code-assertions.md](exact-taxonomy-error-code-assertions.md) | PROC-NEW-92-3 | Contract-scope reviews require exact deterministic code/taxonomy assertions; ambiguous checks are Major+ reject |
+| Lifecycle-vs-Legacy Assertion Vocabulary Scan | [lifecycle-assertion-vocabulary-scan.md](lifecycle-assertion-vocabulary-scan.md) | PROC-NEW-93-3 | Contract/lifecycle reviews must scan for mixed assertion vocabulary and lane drift; mixed semantics are reject-level |
 
 ## How to use
 

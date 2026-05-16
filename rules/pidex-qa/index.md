@@ -1,6 +1,6 @@
 # pidex-qa Rules Index
 
-Last updated: 2026-05-13 (PROC-NEW-88-3)
+Last updated: 2026-05-16 (PROC-NEW-93-2)
 
 ## Active Rules
 
@@ -21,7 +21,7 @@ Last updated: 2026-05-13 (PROC-NEW-88-3)
 | Screenshot Artifact Directory Enforcement | [screenshot-artifact-directory-enforcement.md](screenshot-artifact-directory-enforcement.md) | 54-4 | Any QA screenshot/snapshot artifact must be saved under project `.playwright/` (or plan-declared equivalent) and never committed outside ignored artifact path |
 | Fallow Static Audit Gate (JS/TS) | [fallow-static-audit-gate.md](fallow-static-audit-gate.md) | 61-QA | For JS/TS plans, run fallow audit and record evidence (or FALLOW-SKIP rationale) before QA COMPLETE |
 | Risk-Logic Coverage Follow-up | [risk-logic-coverage-followup.md](risk-logic-coverage-followup.md) | 61-3 | If touched risk-logic file branch coverage <50%, QA must file follow-up test task before QA COMPLETE/release close |
-| Version Coherence Gate | [version-coherence-gate.md](version-coherence-gate.md) | 1 | Before `QA Complete`, verify target version coherent across touched release artifacts and record evidence |
+| Version Coherence Gate | [version-coherence-gate.md](version-coherence-gate.md) | 1 / PROC-NEW-93-2 | Run gate at QA start, record PASS/FAIL token, re-check before `QA Complete` for touched artifacts |
 | NOT_CONFIGURED e2e Fallback Matrix + Artifact Existence Gate | [not-configured-e2e-fallback-matrix.md](not-configured-e2e-fallback-matrix.md) | 019-3 | QA may use NOT_CONFIGURED only with fallback matrix evidence and artifact existence checks; otherwise BLOCKED |
 | Visual Proof Sufficiency Gate | [visual-proof-sufficiency.md](visual-proof-sufficiency.md) | UI-VISUAL-PROOF | UI-heavy/G9-corrective QA must prove exact selector/container/placement/table claims, not just attach screenshots |
 | Dev Host / HMR Console Profile | [dev-host-console-profile.md](dev-host-console-profile.md) | UI-CONSOLE-PROFILE | Browser evidence on custom dev hosts must classify HMR/websocket/console noise before QA Complete |
