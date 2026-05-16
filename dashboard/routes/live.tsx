@@ -361,25 +361,26 @@ function LivePage() {
   const openPipelines = toOpenPipelines(payload || {});
   const runningPipelinesForTimeline = openPipelines
     .filter((row) => toText(row.status).toLowerCase() === 'running' || row.is_running === true);
-  const runningPipelineKeys = new Set(
-    runningPipelinesForTimeline.map((row) => `${toText(row.project)}::${toText(row.plan_key)}`),
-  );
-  const runningPipelineStarts = new Map(
-    runningPipelinesForTimeline
-      .map((row): [string, number] | null => {
-        const startedAt = new Date(String(row.started_at || '')).getTime();
-        if (!Number.isFinite(startedAt)) return null;
-        return [`${toText(row.project)}::${toText(row.plan_key)}`, startedAt];
-      })
-      .filter((row): row is [string, number] => Boolean(row)),
-  );
-  const timelineRuns = toAgentTimeline(payload || {}).filter((row) => {
-    const key = `${toText(row.project)}::${toText(row.plan_key)}`;
-    if (!runningPipelineKeys.has(key)) return false;
-    const startedAt = runningPipelineStarts.get(key);
-    if (!startedAt) return true;
-    const timestamp = new Date(String(row.timestamp || '')).getTime();
-    return Number.isFinite(timestamp) && timestamp >= startedAt - 60_000;
+  const allTimelineRuns = toAgentTimeline(payload || {});
+  const timelineRuns = runningPipelinesForTimeline.flatMap((pipeline) => {
+    const projectName = toText(pipeline.project);
+    const planKey = toText(pipeline.plan_key);
+    const startedAt = new Date(String(pipeline.started_at || '')).getTime();
+    const afterStart = (row: AgentRunRow) => {
+      if (!Number.isFinite(startedAt)) return true;
+      const timestamp = new Date(String(row.timestamp || '')).getTime();
+      return Number.isFinite(timestamp) && timestamp >= startedAt - 60_000;
+    };
+    const exact = allTimelineRuns.filter((row) => toText(row.project) === projectName && toText(row.plan_key) === planKey && afterStart(row));
+    if (exact.length > 0) return exact;
+
+    // Some active pipeline events carry a descriptive plan key while agent metrics still use
+    // the numeric plan key emitted by the agent runner. In that case, keep the running
+    // pipeline visible by falling back to same-project runs after pipeline start and label
+    // them with the pipeline event plan key.
+    return allTimelineRuns
+      .filter((row) => toText(row.project) === projectName && afterStart(row))
+      .map((row) => ({ ...row, plan_key: planKey }));
   });
   const latestByAgent = toLatestByAgent(payload || {});
   const recentSecondary = toRecentSecondary(payload || {});
