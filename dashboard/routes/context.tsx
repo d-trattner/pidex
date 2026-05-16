@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } from 'react';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { BookOpenCheck, Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2 } from 'lucide-react';
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
@@ -29,6 +29,33 @@ function aliasesToText(avoid: string[]): string {
 
 function textToAliases(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function AutoResizeTextarea({ value, onChange, className, rows = 3, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string }) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  const resize = () => {
+    const node = ref.current;
+    if (!node) return;
+    node.style.height = 'auto';
+    node.style.height = `${node.scrollHeight}px`;
+  };
+
+  useEffect(() => { resize(); }, [value]);
+
+  return (
+    <textarea
+      {...props}
+      ref={ref}
+      rows={rows}
+      value={value}
+      className={className}
+      onChange={(event) => {
+        onChange?.(event);
+        requestAnimationFrame(resize);
+      }}
+    />
+  );
 }
 
 function validateEntries(entries: ContextEntry[]): string[] {
@@ -120,15 +147,18 @@ function ContextPage() {
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>
-      <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-        <div className="metric-tile-head">
-          <span className="metric-icon" aria-hidden="true"><BookOpenCheck size={18} /></span>
-          <h2 className="h2">Project Context</h2>
+      <article className="glass-card glass context-page-header" style={{ gridColumn: '1 / -1' }}>
+        <div className="context-page-heading">
+          <div>
+            <h2 className="h2">Project Context</h2>
+            <p className="muted">Review and edit project domain glossary at <code>pidex/context/CONTEXT.md</code>.</p>
+          </div>
+          <dl className="context-file-meta" aria-label="Context file metadata">
+            {payload?.path ? <div><dt>Path</dt><dd>{payload.path}</dd></div> : null}
+            {payload?.mtimeMs ? <div><dt>Last modified</dt><dd>{new Date(payload.mtimeMs).toLocaleString()}</dd></div> : null}
+          </dl>
         </div>
-        <p className="muted">Review and edit project domain glossary at <code>pidex/context/CONTEXT.md</code>.</p>
         {!project ? <p className="settings-warning active">Select a project before editing context.</p> : null}
-        {payload?.path ? <p className="muted">Path: {payload.path}</p> : null}
-        {payload?.mtimeMs ? <p className="muted">Last modified: {new Date(payload.mtimeMs).toLocaleString()}</p> : null}
         {loading ? <LoadingIndicator label="Loading context…" /> : null}
         {message ? <pre className="muted" style={{ whiteSpace: 'pre-wrap' }}>{message}</pre> : null}
         {payload?.errors?.length ? <pre className="settings-warning active" style={{ whiteSpace: 'pre-wrap' }}>{payload.errors.join('\n')}</pre> : null}
@@ -165,10 +195,10 @@ function ContextPage() {
               <span></span>
             </div>
             {visibleEntries.map(({ entry, index }) => (
-              <section key={`${entry.term}-${index}`} className="settings-subcontainer context-entry-row">
+              <section key={index} className="settings-subcontainer context-entry-row">
                 <input className="themed-input context-entry-field" aria-label="Term" placeholder="Term" value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
-                <textarea className="themed-textarea context-entry-field context-definition-field" aria-label="Definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
-                <textarea className="themed-textarea context-entry-field" aria-label="Avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
+                <AutoResizeTextarea className="themed-textarea context-entry-field context-definition-field" aria-label="Definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
+                <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
                 <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove ${entry.term || `entry ${index + 1}`}`} onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}><Trash2 size={14} /></button>
               </section>
             ))}
@@ -184,7 +214,7 @@ function ContextPage() {
           <button className="button" type="button" onClick={() => setRawOpen((value) => !value)}>{rawOpen ? 'Hide raw Markdown' : 'Show raw Markdown fallback'}</button>
           {rawOpen ? (
             <div style={{ marginTop: 12 }}>
-              <textarea className="themed-textarea" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
+              <AutoResizeTextarea className="themed-textarea" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
               <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'save-raw', hash: payload.hash, raw })}>Save raw Markdown</button>
             </div>
           ) : null}

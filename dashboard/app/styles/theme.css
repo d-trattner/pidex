@@ -1508,24 +1508,69 @@ body.modal-open {
   color: rgba(230,242,255,0.38);
 }
 
+.context-page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.context-file-meta {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  max-width: min(560px, 48vw);
+  text-align: right;
+}
+
+.context-file-meta div {
+  display: grid;
+  gap: 2px;
+}
+
+.context-file-meta dt {
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.context-file-meta dd {
+  margin: 0;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .context-entries-toolbar {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .context-entries-actions {
   display: flex;
+  flex: 1 1 auto;
+  justify-content: flex-end;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.context-entries-actions .button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  white-space: nowrap;
 }
 
 .context-search-label {
   position: relative;
-  min-width: min(320px, 100%);
+  flex: 0 1 360px;
+  min-width: 220px;
   color: var(--muted);
 }
 
@@ -1569,6 +1614,9 @@ body.modal-open {
 
 .context-entry-row {
   padding: 12px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .context-entry-field {
@@ -1578,6 +1626,11 @@ body.modal-open {
   letter-spacing: normal;
   font-weight: 500;
   min-width: 0;
+}
+
+textarea.context-entry-field,
+textarea.themed-textarea {
+  overflow: hidden;
 }
 
 .context-definition-field {
@@ -1590,6 +1643,23 @@ body.modal-open {
 }
 
 @media (max-width: 900px) {
+  .context-page-heading,
+  .context-entries-toolbar,
+  .context-entries-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .context-file-meta {
+    max-width: none;
+    text-align: left;
+  }
+
+  .context-search-label {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .context-entry-header {
     display: none;
   }
