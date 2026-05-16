@@ -359,12 +359,28 @@ function LivePage() {
   };
 
   const openPipelines = toOpenPipelines(payload || {});
+  const runningPipelinesForTimeline = openPipelines
+    .filter((row) => toText(row.status).toLowerCase() === 'running' || row.is_running === true);
   const runningPipelineKeys = new Set(
-    openPipelines
-      .filter((row) => toText(row.status).toLowerCase() === 'running' || row.is_running === true)
-      .map((row) => `${toText(row.project)}::${toText(row.plan_key)}`),
+    runningPipelinesForTimeline.map((row) => `${toText(row.project)}::${toText(row.plan_key)}`),
   );
-  const timelineRuns = toAgentTimeline(payload || {}).filter((row) => runningPipelineKeys.has(`${toText(row.project)}::${toText(row.plan_key)}`));
+  const runningPipelineStarts = new Map(
+    runningPipelinesForTimeline
+      .map((row): [string, number] | null => {
+        const startedAt = new Date(String(row.started_at || '')).getTime();
+        if (!Number.isFinite(startedAt)) return null;
+        return [`${toText(row.project)}::${toText(row.plan_key)}`, startedAt];
+      })
+      .filter((row): row is [string, number] => Boolean(row)),
+  );
+  const timelineRuns = toAgentTimeline(payload || {}).filter((row) => {
+    const key = `${toText(row.project)}::${toText(row.plan_key)}`;
+    if (!runningPipelineKeys.has(key)) return false;
+    const startedAt = runningPipelineStarts.get(key);
+    if (!startedAt) return true;
+    const timestamp = new Date(String(row.timestamp || '')).getTime();
+    return Number.isFinite(timestamp) && timestamp >= startedAt - 60_000;
+  });
   const latestByAgent = toLatestByAgent(payload || {});
   const recentSecondary = toRecentSecondary(payload || {});
   const pendingGate = toArray<PendingGateRow>(payload?.pending_gate);
