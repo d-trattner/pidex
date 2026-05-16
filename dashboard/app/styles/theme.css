@@ -560,76 +560,6 @@ body.modal-open {
   gap: 4px;
 }
 
-.container-titlebar,
-.glass-card > h2.h2:first-child,
-.glass-card > h3:first-child,
-.glass-card > .icon-heading:first-child,
-.context-page-heading,
-.context-entries-toolbar,
-.wiki-nav-header,
-.wiki-viewer-header,
-.settings-subcontainer-header,
-.provider-limit-card__head,
-.chart-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(134, 255, 239, 0.22);
-  border-radius: 14px;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.026) 46%, rgba(0,245,255,0.07)),
-    rgba(3, 8, 20, 0.26);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 8px 20px rgba(0,0,0,0.12);
-}
-
-.glass-card > h2.h2:first-child,
-.glass-card > h3:first-child,
-.glass-card > .icon-heading:first-child {
-  justify-content: flex-start;
-}
-
-.container-titlebar h2,
-.container-titlebar h3,
-.context-page-heading h2,
-.context-page-heading h3,
-.context-entries-toolbar h3,
-.wiki-nav-header h3,
-.wiki-viewer-header h3,
-.settings-subcontainer-header h5,
-.provider-limit-card__head h3,
-.chart-card__header h3,
-.glass-card > h2.h2:first-child,
-.glass-card > h3:first-child,
-.glass-card > .icon-heading:first-child {
-  margin: 0;
-}
-
-.container-titlebar-actions,
-.context-entries-actions,
-.wiki-nav-actions,
-.wiki-mobile-sheet-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.chart-card__header {
-  align-items: flex-start;
-  flex-direction: column;
-}
-
-.chart-card__header .muted,
-.provider-limit-card__head .muted,
-.context-page-heading .muted {
-  margin: 4px 0 0;
-}
-
 .metric-tile-head,
 .nav-pill,
 .mobile-nav-item {
@@ -1127,7 +1057,7 @@ body.modal-open {
 }
 
 .wiki-viewer-header h3 {
-  margin: 0;
+  margin: 0 0 4px;
   overflow-wrap: anywhere;
 }
 
@@ -1862,8 +1792,14 @@ textarea.themed-textarea {
 }
 
 .settings-subcontainer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 -10px 10px;
   padding: 9px 10px;
+  border-bottom: 1px solid rgba(134, 255, 239, 0.18);
+  background: linear-gradient(90deg, rgba(0,245,255,0.08), rgba(190,96,255,0.08));
 }
 
 .settings-subcontainer-header h5 {
