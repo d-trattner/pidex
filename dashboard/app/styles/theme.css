@@ -1787,7 +1787,7 @@ textarea.themed-textarea {
 
 .settings-subcontainer {
   border-radius: 14px;
-  padding: 10px;
+  padding: 0 10px 10px;
   overflow: hidden;
 }
 
@@ -1795,24 +1795,17 @@ textarea.themed-textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-  margin: 0 0 12px;
+  gap: 8px;
+  margin: 0 -10px 10px;
   padding: 9px 10px;
-  border: 1px solid rgba(134, 255, 239, 0.22);
-  border-radius: 12px;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.026) 46%, rgba(0,245,255,0.07)),
-    rgba(3, 8, 20, 0.26);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), 0 8px 20px rgba(0,0,0,0.12);
+  border-bottom: 1px solid rgba(134, 255, 239, 0.18);
+  background: linear-gradient(90deg, rgba(0,245,255,0.08), rgba(190,96,255,0.08));
 }
 
 .settings-subcontainer-header h5 {
   margin: 0;
-  min-width: 0;
   font-size: 0.88rem;
   letter-spacing: 0.01em;
-  overflow-wrap: anywhere;
 }
 
 .icon-button.compact {
