@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { BookOpenCheck, Plus, Trash2 } from 'lucide-react';
+import { BookOpenCheck, Plus, Search, Trash2 } from 'lucide-react';
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
@@ -58,6 +58,7 @@ function ContextPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [rawOpen, setRawOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   const endpoint = useMemo(() => withProjectParam('/api/context', project), [project]);
 
@@ -112,6 +113,10 @@ function ContextPage() {
   const clientErrors = validateEntries(entries);
   const canStructuredSave = Boolean(payload?.structuredEditable) && clientErrors.length === 0;
   const modified = payload ? JSON.stringify(entries) !== JSON.stringify(payload.entries || []) : false;
+  const query = search.trim().toLowerCase();
+  const visibleEntries = entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => !query || [entry.term, entry.definition, aliasesToText(entry.avoid)].some((value) => value.toLowerCase().includes(query)));
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>
@@ -139,35 +144,37 @@ function ContextPage() {
 
       {payload?.exists ? (
         <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="context-entries-toolbar">
             <h3>Language entries</h3>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="context-entries-actions">
+              <label className="context-search-label" aria-label="Search context entries">
+                <Search size={14} aria-hidden="true" />
+                <input className="themed-input context-search-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search entries…" />
+              </label>
               <button className="button" type="button" onClick={() => setEntries([...entries, { term: '', definition: '', avoid: [] }])}><Plus size={14} /> Add entry</button>
               <button className="button" type="button" disabled={saving || !modified || !canStructuredSave} onClick={() => post({ action: 'save-entries', hash: payload.hash, entries })}>Save context</button>
             </div>
           </div>
           {!payload.structuredEditable ? <p className="settings-warning active">Structured editor disabled until Language syntax is fixed in raw Markdown.</p> : null}
           {clientErrors.length ? <pre className="settings-warning active" style={{ whiteSpace: 'pre-wrap' }}>{clientErrors.join('\n')}</pre> : null}
-          <div className="parallel-agents-grid" style={{ marginTop: 12 }}>
-            {entries.map((entry, index) => (
-              <section key={`${entry.term}-${index}`} className="settings-subcontainer parallel-agent-card">
-                <div className="settings-subcontainer-header">
-                  <h5>{entry.term || `New entry ${index + 1}`}</h5>
-                  <button className="icon-button compact" type="button" aria-label="Remove entry" onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}><Trash2 size={14} /></button>
-                </div>
-                <label className="muted">Term
-                  <input className="themed-input" value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
-                </label>
-                <label className="muted">Definition
-                  <textarea className="themed-textarea" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
-                </label>
-                <label className="muted">Avoid aliases
-                  <input className="themed-input" value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
-                </label>
+          <div className="context-entry-table" style={{ marginTop: 12 }}>
+            <div className="context-entry-header" aria-hidden="true">
+              <span>Term</span>
+              <span>Definition</span>
+              <span>Avoid aliases</span>
+              <span></span>
+            </div>
+            {visibleEntries.map(({ entry, index }) => (
+              <section key={`${entry.term}-${index}`} className="settings-subcontainer context-entry-row">
+                <input className="themed-input context-entry-field" aria-label="Term" placeholder="Term" value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
+                <textarea className="themed-textarea context-entry-field context-definition-field" aria-label="Definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
+                <textarea className="themed-textarea context-entry-field" aria-label="Avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
+                <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove ${entry.term || `entry ${index + 1}`}`} onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}><Trash2 size={14} /></button>
               </section>
             ))}
           </div>
           {entries.length === 0 ? <p className="muted">No glossary entries yet. Add one when a project-specific term is resolved.</p> : null}
+          {entries.length > 0 && visibleEntries.length === 0 ? <p className="muted">No entries match “{search}”.</p> : null}
           <p className="muted">Structured saves preserve Relationships, Example dialogue, Flagged ambiguities, and unknown sections outside <code>## Language</code>.</p>
         </article>
       ) : null}
