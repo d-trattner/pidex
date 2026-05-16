@@ -11,8 +11,8 @@ export function ChartCard({ title, subtitle, children }: ChartCardProps) {
     <article className="chart-card glass glass-card">
       <div className="chart-card__header">
         <h3 className="chart-card__title">{title}</h3>
-        {subtitle ? <p className="muted">{subtitle}</p> : null}
       </div>
+      {subtitle ? <p className="muted">{subtitle}</p> : null}
       <div>{children}</div>
     </article>
   );

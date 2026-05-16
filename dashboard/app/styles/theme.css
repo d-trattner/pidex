@@ -527,30 +527,52 @@ body.modal-open {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
+.glass-card > h2.h2:first-child,
+.glass-card > h3:first-child,
+.glass-card > .icon-heading:first-child,
 .container-section-header,
 .wiki-nav-header,
 .wiki-viewer-header,
 .provider-limit-card__head,
-.context-entries-toolbar {
+.context-entries-toolbar,
+.chart-card__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  margin: 0 0 10px;
-  padding: 9px 10px;
+  margin: -18px -18px 14px;
+  padding: 9px 18px;
   border-bottom: 1px solid rgba(134, 255, 239, 0.18);
   background: linear-gradient(90deg, rgba(0,245,255,0.08), rgba(190,96,255,0.08));
+}
+
+.glass-card > h2.h2:first-child,
+.glass-card > h3:first-child,
+.glass-card > .icon-heading:first-child {
+  justify-content: flex-start;
+}
+
+.glass-card > h2.h2:first-child,
+.glass-card > h3:first-child,
+.glass-card > .icon-heading:first-child,
+.container-section-header h3,
+.wiki-nav-header h3,
+.wiki-viewer-header h3,
+.provider-limit-card__head h3,
+.context-entries-toolbar h3,
+.chart-card__header h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .container-section-header h3,
 .wiki-nav-header h3,
 .wiki-viewer-header h3,
 .provider-limit-card__head h3,
-.context-entries-toolbar h3 {
+.context-entries-toolbar h3,
+.chart-card__header h3 {
   margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .container-section-actions {
@@ -1298,7 +1320,7 @@ body.modal-open {
 }
 
 .chart-card__title {
-  margin: 0 0 4px;
+  margin: 0;
 }
 
 .status-badge {
