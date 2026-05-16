@@ -128,9 +128,9 @@ export function TokensPage() {
           </article>
 
           <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div className="container-titlebar">
               <h3>Weekly view</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="container-titlebar-actions">
                 <button type="button" className="glass-btn" disabled={!payload?.weekly.has_newer} onClick={() => goPage('page_week', weekPage - 1)}>Newer</button>
                 <button type="button" className="glass-btn" disabled={!payload?.weekly.has_older} onClick={() => goPage('page_week', weekPage + 1)}>Older</button>
               </div>
@@ -170,9 +170,9 @@ export function TokensPage() {
           </article>
 
           <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div className="container-titlebar">
               <h3>Monthly view</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="container-titlebar-actions">
                 <button type="button" className="glass-btn" disabled={!payload?.monthly.has_newer} onClick={() => goPage('page_month', monthPage - 1)}>Newer</button>
                 <button type="button" className="glass-btn" disabled={!payload?.monthly.has_older} onClick={() => goPage('page_month', monthPage + 1)}>Older</button>
               </div>
