@@ -11,7 +11,7 @@ type Particle = {
   alpha: number;
 };
 
-const PARTICLE_COUNT = 72;
+const PARTICLE_COUNT = 34;
 
 function makeParticles(): Particle[] {
   return Array.from({ length: PARTICLE_COUNT }, () => ({
@@ -21,7 +21,7 @@ function makeParticles(): Particle[] {
     speed: 0.006 + Math.random() * 0.018,
     drift: -0.012 + Math.random() * 0.024,
     phase: Math.random() * Math.PI * 2,
-    alpha: 0.12 + Math.random() * 0.34,
+    alpha: 0.08 + Math.random() * 0.22,
   }));
 }
 
