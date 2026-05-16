@@ -1,0 +1,185 @@
+import { createHash } from 'node:crypto';
+import path from 'node:path';
+
+export interface ContextEntry {
+  term: string;
+  definition: string;
+  avoid: string[];
+}
+
+export interface ParsedContext {
+  raw: string;
+  beforeLanguage: string;
+  languageHeading: string | null;
+  entries: ContextEntry[];
+  afterLanguage: string;
+  errors: string[];
+  structuredEditable: boolean;
+  hash: string;
+  mtimeMs: number | null;
+}
+
+export const DEFAULT_CONTEXT_MARKDOWN = `# Project Context
+
+Project domain language and decisions that agents should use when planning work.
+
+## Language
+
+## Relationships
+
+## Example dialogue
+
+## Flagged ambiguities
+`;
+
+const LANGUAGE_HEADING_RE = /^##\s+Language\s*$/im;
+const NEXT_H2_RE = /^##\s+/m;
+const TERM_RE = /^\*\*([^*\n][^*\n]*?)\*\*:\s*$/;
+const AVOID_RE = /^_Avoid_:\s*(.*?)\s*$/i;
+
+export function contextHash(raw: string): string {
+  return `sha256:${createHash('sha256').update(raw).digest('hex')}`;
+}
+
+function splitLanguage(raw: string): { before: string; heading: string | null; section: string; after: string } {
+  const match = raw.match(LANGUAGE_HEADING_RE);
+  if (!match || match.index == null) return { before: raw, heading: null, section: '', after: '' };
+  const headingStart = match.index;
+  const headingEnd = headingStart + match[0].length;
+  const afterHeading = raw.slice(headingEnd);
+  const next = afterHeading.match(NEXT_H2_RE);
+  const sectionEnd = next && next.index != null ? headingEnd + next.index : raw.length;
+  return {
+    before: raw.slice(0, headingStart),
+    heading: match[0],
+    section: raw.slice(headingEnd, sectionEnd),
+    after: raw.slice(sectionEnd),
+  };
+}
+
+function cleanLines(section: string): string[] {
+  return section.replace(/^\r?\n/, '').split(/\r?\n/);
+}
+
+export function validateEntries(entries: ContextEntry[]): string[] {
+  const errors: string[] = [];
+  const seen = new Map<string, string>();
+  entries.forEach((entry, index) => {
+    const term = entry.term.trim();
+    const definition = entry.definition.trim();
+    if (!term) errors.push(`Entry ${index + 1}: term is required`);
+    if (!definition) errors.push(`Entry ${term || index + 1}: definition is required`);
+    const key = term.toLowerCase();
+    if (key) {
+      const previous = seen.get(key);
+      if (previous) errors.push(`Duplicate term: ${term} conflicts with ${previous}`);
+      else seen.set(key, term);
+    }
+  });
+  return errors;
+}
+
+export function parseContextMarkdown(raw: string, mtimeMs: number | null = null): ParsedContext {
+  const errors: string[] = [];
+  const split = splitLanguage(raw);
+  const entries: ContextEntry[] = [];
+
+  if (!split.heading) {
+    return {
+      raw,
+      beforeLanguage: raw,
+      languageHeading: null,
+      entries: [],
+      afterLanguage: '',
+      errors: ['Missing ## Language section'],
+      structuredEditable: true,
+      hash: contextHash(raw),
+      mtimeMs,
+    };
+  }
+
+  const lines = cleanLines(split.section);
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i += 1; continue; }
+    const termMatch = line.match(TERM_RE);
+    if (!termMatch) {
+      errors.push(`Unparseable content in ## Language near line: ${line.trim().slice(0, 80)}`);
+      i += 1;
+      continue;
+    }
+    const term = termMatch[1].trim();
+    i += 1;
+    const definitionLines: string[] = [];
+    let avoid: string[] = [];
+    while (i < lines.length) {
+      const current = lines[i];
+      if (TERM_RE.test(current)) break;
+      const avoidMatch = current.match(AVOID_RE);
+      if (avoidMatch) {
+        avoid = avoidMatch[1].split(',').map((item) => item.trim()).filter(Boolean);
+        i += 1;
+        continue;
+      }
+      if (current.trim()) definitionLines.push(current.trim());
+      i += 1;
+    }
+    entries.push({ term, definition: definitionLines.join('\n').trim(), avoid });
+  }
+
+  errors.push(...validateEntries(entries));
+  return {
+    raw,
+    beforeLanguage: split.before,
+    languageHeading: split.heading,
+    entries,
+    afterLanguage: split.after,
+    errors,
+    structuredEditable: errors.length === 0,
+    hash: contextHash(raw),
+    mtimeMs,
+  };
+}
+
+export function serializeLanguageSection(entries: ContextEntry[]): string {
+  const lines = ['## Language', ''];
+  for (const entry of entries) {
+    lines.push(`**${entry.term.trim()}**:`);
+    lines.push(entry.definition.trim());
+    const avoid = entry.avoid.map((item) => item.trim()).filter(Boolean);
+    if (avoid.length) lines.push(`_Avoid_: ${avoid.join(', ')}`);
+    lines.push('');
+  }
+  return lines.join('\n').replace(/\n+$/, '\n');
+}
+
+export function serializeStructuredContext(current: ParsedContext, entries: ContextEntry[]): { raw?: string; errors: string[] } {
+  if (!current.structuredEditable) return { errors: ['Structured editing disabled until ## Language syntax is fixed in raw mode'] };
+  const errors = validateEntries(entries);
+  if (errors.length) return { errors };
+  const language = serializeLanguageSection(entries);
+  const raw = current.languageHeading
+    ? `${current.beforeLanguage}${language}${current.afterLanguage.replace(/^\n?/, '\n')}`
+    : `${current.raw.replace(/\s*$/, '\n\n')}${language}`;
+  const reparsed = parseContextMarkdown(raw);
+  const reparsedTerms = reparsed.entries.map((entry) => entry.term.trim().toLowerCase());
+  const wantedTerms = entries.map((entry) => entry.term.trim().toLowerCase());
+  if (reparsed.errors.length || reparsedTerms.length !== wantedTerms.length || reparsedTerms.some((term, idx) => term !== wantedTerms[idx])) {
+    return { errors: ['Serialized context did not parse back to the same entries', ...reparsed.errors] };
+  }
+  return { raw: raw.endsWith('\n') ? raw : `${raw}\n`, errors: [] };
+}
+
+export function normalizeRawContext(raw: string): { raw: string; parsed: ParsedContext } {
+  const normalized = raw.endsWith('\n') ? raw : `${raw}\n`;
+  return { raw: normalized, parsed: parseContextMarkdown(normalized) };
+}
+
+export function safeContextTarget(projectRoot: string): { contextRoot: string; target: string } | null {
+  const contextRoot = path.resolve(projectRoot, 'pidex', 'context');
+  const target = path.resolve(contextRoot, 'CONTEXT.md');
+  const rel = path.relative(contextRoot, target);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return { contextRoot, target };
+}

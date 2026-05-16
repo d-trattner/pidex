@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
-import { Activity, BookOpen, Bot, FolderGit2, Gauge, Home, Menu as MenuIcon, Settings, ShieldCheck, X } from 'lucide-react';
+import { Activity, BookOpen, BookOpenCheck, Bot, FolderGit2, Gauge, Home, Menu as MenuIcon, Settings, ShieldCheck, X } from 'lucide-react';
 
 import { readProjectFromSearch, setProjectInSearch } from '../../lib/client/project-query';
 import { PidexLogo } from '../branding/pidex-logo';
@@ -14,6 +14,7 @@ export const NAV_LINKS = [
   { to: '/quality', label: 'Quality', icon: ShieldCheck },
   { to: '/usage', label: 'Usage', icon: Gauge },
   { to: '/wiki', label: 'Wiki', icon: BookOpen },
+  { to: '/context', label: 'Context', icon: BookOpenCheck },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 

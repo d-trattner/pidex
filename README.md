@@ -13,6 +13,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Optional parallel agents](readme/parallel-agents.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Project session memory](readme/project-memory.md)
+- [Project context](readme/project-context.md)
 - [Future briefs](readme/future-briefs.md)
 
 ## Install
@@ -81,7 +82,7 @@ cd <pidex-root>/dashboard
 ./start.sh
 ```
 
-The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, and Settings sections. See [Dashboard](readme/dashboard.md).
+The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
 
 ## Provider limits and profiles
 
@@ -94,6 +95,10 @@ PIDEX can optionally install a global Git pre-commit security hook for this Linu
 ## Wiki hygiene
 
 Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `python3 scripts/wiki/hygiene.py audit --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `pidex/state/wiki-hygiene.json`. Project-specific PIDEX rules live under `pidex/rules/`. See [Wiki hygiene](readme/wiki-hygiene.md).
+
+## Project context
+
+PIDEX stores project domain context in `<project-root>/pidex/context/`. The dashboard Context page lets users review and edit `CONTEXT.md` glossary entries produced by agents. See [Project context](readme/project-context.md).
 
 ## Optional parallel agents
 

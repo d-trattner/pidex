@@ -20,6 +20,7 @@ import { Route as OverviewRouteImport } from './../routes/overview'
 import { Route as LiveRouteImport } from './../routes/live'
 import { Route as LimitsRouteImport } from './../routes/limits'
 import { Route as DashboardRouteImport } from './../routes/dashboard'
+import { Route as ContextRouteImport } from './../routes/context'
 import { Route as AnalysisRouteImport } from './../routes/analysis'
 import { Route as IndexRouteImport } from './../routes/index'
 import { Route as DashboardIndexRouteImport } from './../routes/dashboard/index'
@@ -45,6 +46,7 @@ import { Route as ApiMdBrowserRouteImport } from './../routes/api/md-browser'
 import { Route as ApiMalformedRouteImport } from './../routes/api/malformed'
 import { Route as ApiLiveRouteImport } from './../routes/api/live'
 import { Route as ApiDocumentRouteImport } from './../routes/api/document'
+import { Route as ApiContextRouteImport } from './../routes/api/context'
 import { Route as ApiAnalysisRouteImport } from './../routes/api/analysis'
 import { Route as ApiProvider_limitsProfileRouteImport } from './../routes/api/provider_limits/profile'
 import { Route as ApiProviderLimitsProfileRouteImport } from './../routes/api/provider-limits/profile'
@@ -107,6 +109,11 @@ const LimitsRoute = LimitsRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContextRoute = ContextRouteImport.update({
+  id: '/context',
+  path: '/context',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalysisRoute = AnalysisRouteImport.update({
@@ -234,6 +241,11 @@ const ApiDocumentRoute = ApiDocumentRouteImport.update({
   path: '/api/document',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiContextRoute = ApiContextRouteImport.update({
+  id: '/api/context',
+  path: '/api/context',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAnalysisRoute = ApiAnalysisRouteImport.update({
   id: '/api/analysis',
   path: '/api/analysis',
@@ -280,6 +292,7 @@ const ApiAnalysisDocumentRoute = ApiAnalysisDocumentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
+  '/context': typeof ContextRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/limits': typeof LimitsRoute
   '/live': typeof LiveRoute
@@ -292,6 +305,7 @@ export interface FileRoutesByFullPath {
   '/usage': typeof UsageRoute
   '/wiki': typeof WikiRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
+  '/api/context': typeof ApiContextRoute
   '/api/document': typeof ApiDocumentRoute
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
@@ -326,6 +340,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
+  '/context': typeof ContextRoute
   '/limits': typeof LimitsRoute
   '/live': typeof LiveRoute
   '/overview': typeof OverviewRoute
@@ -337,6 +352,7 @@ export interface FileRoutesByTo {
   '/usage': typeof UsageRoute
   '/wiki': typeof WikiRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
+  '/api/context': typeof ApiContextRoute
   '/api/document': typeof ApiDocumentRoute
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
@@ -372,6 +388,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
+  '/context': typeof ContextRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/limits': typeof LimitsRoute
   '/live': typeof LiveRoute
@@ -384,6 +401,7 @@ export interface FileRoutesById {
   '/usage': typeof UsageRoute
   '/wiki': typeof WikiRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
+  '/api/context': typeof ApiContextRoute
   '/api/document': typeof ApiDocumentRoute
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
@@ -420,6 +438,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/analysis'
+    | '/context'
     | '/dashboard'
     | '/limits'
     | '/live'
@@ -432,6 +451,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/wiki'
     | '/api/analysis'
+    | '/api/context'
     | '/api/document'
     | '/api/live'
     | '/api/malformed'
@@ -466,6 +486,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/analysis'
+    | '/context'
     | '/limits'
     | '/live'
     | '/overview'
@@ -477,6 +498,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/wiki'
     | '/api/analysis'
+    | '/api/context'
     | '/api/document'
     | '/api/live'
     | '/api/malformed'
@@ -511,6 +533,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/analysis'
+    | '/context'
     | '/dashboard'
     | '/limits'
     | '/live'
@@ -523,6 +546,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/wiki'
     | '/api/analysis'
+    | '/api/context'
     | '/api/document'
     | '/api/live'
     | '/api/malformed'
@@ -558,6 +582,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalysisRoute: typeof AnalysisRoute
+  ContextRoute: typeof ContextRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   LimitsRoute: typeof LimitsRoute
   LiveRoute: typeof LiveRoute
@@ -570,6 +595,7 @@ export interface RootRouteChildren {
   UsageRoute: typeof UsageRoute
   WikiRoute: typeof WikiRoute
   ApiAnalysisRoute: typeof ApiAnalysisRouteWithChildren
+  ApiContextRoute: typeof ApiContextRoute
   ApiDocumentRoute: typeof ApiDocumentRoute
   ApiLiveRoute: typeof ApiLiveRoute
   ApiMalformedRoute: typeof ApiMalformedRoute
@@ -665,6 +691,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/context': {
+      id: '/context'
+      path: '/context'
+      fullPath: '/context'
+      preLoaderRoute: typeof ContextRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analysis': {
@@ -842,6 +875,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDocumentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/context': {
+      id: '/api/context'
+      path: '/api/context'
+      fullPath: '/api/context'
+      preLoaderRoute: typeof ApiContextRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/analysis': {
       id: '/api/analysis'
       path: '/api/analysis'
@@ -979,6 +1019,7 @@ const ApiProvider_limitsRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalysisRoute: AnalysisRoute,
+  ContextRoute: ContextRoute,
   DashboardRoute: DashboardRouteWithChildren,
   LimitsRoute: LimitsRoute,
   LiveRoute: LiveRoute,
@@ -991,6 +1032,7 @@ const rootRouteChildren: RootRouteChildren = {
   UsageRoute: UsageRoute,
   WikiRoute: WikiRoute,
   ApiAnalysisRoute: ApiAnalysisRouteWithChildren,
+  ApiContextRoute: ApiContextRoute,
   ApiDocumentRoute: ApiDocumentRoute,
   ApiLiveRoute: ApiLiveRoute,
   ApiMalformedRoute: ApiMalformedRoute,
