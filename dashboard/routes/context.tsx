@@ -149,15 +149,13 @@ function ContextPage() {
     <section className="grid" style={{ marginTop: 12 }}>
       <article className="glass-card glass context-page-header" style={{ gridColumn: '1 / -1' }}>
         <div className="context-page-heading">
-          <div>
-            <h2 className="h2">Project Context</h2>
-            <p className="muted">Review and edit project domain glossary at <code>pidex/context/CONTEXT.md</code>.</p>
-          </div>
+          <h2 className="h2">Project Context</h2>
           <dl className="context-file-meta" aria-label="Context file metadata">
             {payload?.path ? <div><dt>Path</dt><dd>{payload.path}</dd></div> : null}
             {payload?.mtimeMs ? <div><dt>Last modified</dt><dd>{new Date(payload.mtimeMs).toLocaleString()}</dd></div> : null}
           </dl>
         </div>
+        <p className="muted">Review and edit project domain glossary at <code>pidex/context/CONTEXT.md</code>.</p>
         {!project ? <p className="settings-warning active">Select a project before editing context.</p> : null}
         {loading ? <LoadingIndicator label="Loading context…" /> : null}
         {message ? <pre className="muted" style={{ whiteSpace: 'pre-wrap' }}>{message}</pre> : null}

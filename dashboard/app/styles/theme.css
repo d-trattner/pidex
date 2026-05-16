@@ -530,6 +530,7 @@ body.modal-open {
 .glass-card > h2.h2:first-child,
 .glass-card > h3:first-child,
 .glass-card > .icon-heading:first-child,
+.metric-tile-head,
 .context-page-heading,
 .container-section-header,
 .wiki-nav-header,
@@ -550,13 +551,15 @@ body.modal-open {
 
 .glass-card > h2.h2:first-child,
 .glass-card > h3:first-child,
-.glass-card > .icon-heading:first-child {
+.glass-card > .icon-heading:first-child,
+.metric-tile-head {
   justify-content: flex-start;
 }
 
 .glass-card > h2.h2:first-child,
 .glass-card > h3:first-child,
 .glass-card > .icon-heading:first-child,
+.metric-tile-head h3,
 .context-page-heading h2,
 .container-section-header h3,
 .wiki-nav-header h3,
@@ -568,6 +571,7 @@ body.modal-open {
   overflow-wrap: anywhere;
 }
 
+.metric-tile-head h3,
 .context-page-heading h2,
 .container-section-header h3,
 .wiki-nav-header h3,
@@ -619,7 +623,6 @@ body.modal-open {
   gap: 4px;
 }
 
-.metric-tile-head,
 .nav-pill,
 .mobile-nav-item {
   display: inline-flex;
@@ -636,10 +639,6 @@ body.modal-open {
   color: var(--accent);
   background: rgba(0, 245, 255, 0.1);
   border: 1px solid rgba(0, 245, 255, 0.18);
-}
-
-.metric-tile-head h3 {
-  margin: 0;
 }
 
 .metric-value {
