@@ -72,7 +72,7 @@ The PIDEX orchestrator checks configured lanes before supported review gates:
 - `after-plan` launches enabled `pidex-critic` secondary lanes alongside the primary critic.
 - `after-implementation` launches enabled `pidex-code-reviewer` secondary lanes alongside the primary reviewer.
 
-Each secondary is a visible `pidex_agent` call with explicit `provider`, `model`, and `effort`. Secondary artifacts must use unique paths under `agents.output/**` and are advisory. The orchestrator records lane success/failure in `state/parallel-agents/status.json`, writes a merge/adjudication summary, and continues primary flow unless a secondary reports concrete High/Critical evidence that needs adjudication.
+Each secondary is a visible `pidex_agent` call with explicit `provider`, `model`, and `effort` from `status.py eligible`. For Pi-auth providers such as DeepSeek or Minimax, `eligible` emits `runner_provider=pi` and `runner_model=<provider>/<model>` because `pidex_agent` direct provider overrides only support Pi/Claude/Codex/Gemini. Secondary artifacts must use unique paths under `agents.output/**` and are advisory. The orchestrator records lane success/failure in `state/parallel-agents/status.json`, writes a merge/adjudication summary, and continues primary flow unless a secondary reports concrete High/Critical evidence that needs adjudication.
 
 ## Guarantees
 

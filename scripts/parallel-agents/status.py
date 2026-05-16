@@ -147,6 +147,7 @@ def eligible_lanes(root: Path, agent: str | None = None, trigger: str | None = N
     """Return lanes that the orchestrator should launch automatically for a gate."""
     status = merge_status(root)
     lanes: list[dict[str, Any]] = []
+    direct_delegate_providers = {"pi", "claude", "codex", "gemini"}
     if status.get("ok") and status.get("enabled"):
         for a in status.get("agents", []):
             if agent and a.get("agent") != agent:
@@ -158,12 +159,26 @@ def eligible_lanes(root: Path, agent: str | None = None, trigger: str | None = N
             for pm in a.get("provider_models", []):
                 if not pm.get("enabled", True):
                     continue
+                configured_provider = str(pm.get("provider") or "")
+                configured_model = str(pm.get("model") or "")
+                if configured_provider in direct_delegate_providers:
+                    runner_provider = configured_provider
+                    runner_model = configured_model
+                else:
+                    # Pi can route authenticated provider/model IDs such as
+                    # deepseek/deepseek-v4-flash or minimax/MiniMax-M2.7, while
+                    # pidex_agent's direct delegate provider override only
+                    # supports pi/claude/codex/gemini.
+                    runner_provider = "pi"
+                    runner_model = f"{configured_provider}/{configured_model}"
                 lanes.append({
                     "lane_id": pm.get("lane_id"),
                     "agent": a.get("agent"),
                     "trigger": a.get("trigger"),
-                    "provider": pm.get("provider"),
-                    "model": pm.get("model"),
+                    "provider": configured_provider,
+                    "model": configured_model,
+                    "runner_provider": runner_provider,
+                    "runner_model": runner_model,
                     "effort": pm.get("effort") or "medium",
                     "timeout_seconds": a.get("timeout_seconds"),
                     "warning_active": bool(pm.get("warning_active", False)),
