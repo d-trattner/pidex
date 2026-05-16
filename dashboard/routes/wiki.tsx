@@ -117,6 +117,42 @@ function TreeItem({ node, selected, onSelect, openPaths, onToggle, onHover, onLe
   );
 }
 
+function wikiStateKey(project: string): string {
+  return `pidex:wiki-state:${project}`;
+}
+
+function readSavedWikiState(project: string): { selectedPath?: string; openPaths?: string[] } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(wikiStateKey(project));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { selectedPath?: unknown; openPaths?: unknown };
+    return {
+      selectedPath: typeof parsed.selectedPath === 'string' ? parsed.selectedPath : undefined,
+      openPaths: Array.isArray(parsed.openPaths) ? parsed.openPaths.filter((item): item is string => typeof item === 'string') : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedWikiState(project: string, selectedPath: string, openPaths: Set<string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(wikiStateKey(project), JSON.stringify({ selectedPath, openPaths: Array.from(openPaths) }));
+  } catch {
+    // Ignore localStorage quota/privacy failures; wiki browser still works without persistence.
+  }
+}
+
+function pathExists(nodes: TreeNode[], path: string): boolean {
+  for (const node of nodes) {
+    if (node.path === path) return true;
+    if (node.children && pathExists(node.children, path)) return true;
+  }
+  return false;
+}
+
 function WikiPage() {
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
@@ -129,8 +165,21 @@ function WikiPage() {
   const tree = useMemo(() => treeQuery.data?.tree || [], [treeQuery.data]);
 
   useEffect(() => {
-    setOpenPaths(defaultOpenPaths(tree));
-  }, [tree]);
+    if (!project) {
+      setSelectedPath('');
+      setOpenPaths(new Set());
+      return;
+    }
+    const saved = readSavedWikiState(project);
+    const nextOpenPaths = saved?.openPaths?.length ? new Set(saved.openPaths) : defaultOpenPaths(tree);
+    setOpenPaths(nextOpenPaths);
+    setSelectedPath(saved?.selectedPath && pathExists(tree, saved.selectedPath) ? saved.selectedPath : '');
+  }, [project, tree]);
+
+  useEffect(() => {
+    if (!project || tree.length === 0) return;
+    writeSavedWikiState(project, selectedPath, openPaths);
+  }, [project, selectedPath, openPaths, tree.length]);
 
   useEffect(() => {
     const open = () => setFilesSheetOpen(true);
