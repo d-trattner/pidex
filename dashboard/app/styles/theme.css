@@ -1614,6 +1614,9 @@ body.modal-open {
 
 .context-entry-row {
   padding: 12px;
+}
+
+.settings-subcontainer.context-entry-row {
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
