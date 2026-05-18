@@ -37,6 +37,18 @@ Phase 1 features:
 - stale-write protection when the file changed on disk
 - commit hint after save
 
+## PIDEX grill-with-docs
+
+For existing projects, `/pidex` may use the bundled `grill-with-docs` skill during pre-flight. It challenges user intent against existing code, docs, and `pidex/context/**` before planner handoff.
+
+Rules:
+
+- New/non-existing projects use `grill-me` instead.
+- Existing projects may use `grill-with-docs`.
+- Context files live under `pidex/context/**`, not root `CONTEXT.md` or root `docs/adr/`.
+- Agents may add glossary terms from confirmed user statements or clear code evidence.
+- ADRs are created only for hard-to-reverse, surprising trade-offs.
+
 ## Ownership
 
 Agents may update context during `grill-with-docs`, but the user/domain expert owns truth. Review context periodically to catch misunderstandings or unhelpful terms.

@@ -9,15 +9,22 @@ This skill is the entry point for every pidex pipeline run. The primary user-fac
 
 It ensures the task is precisely defined before any code is written. A vague epic is the single biggest source of wasted pipeline runs.
 
-## Supplemental questioning skill
+## Supplemental questioning skills
 
-If the fixed pre-flight interview below is not enough to remove ambiguity, load and apply the bundled `grill-me` skill (`~/.pi/agent/skills/grill-me/SKILL.md`). Use it to interview the user relentlessly about the plan or design until all decision branches needed for the pipeline are resolved.
+If the fixed pre-flight interview below is not enough to remove ambiguity, use the correct grilling skill for the project state:
 
-Rules for using `grill-me` inside pidex:
+- **New/non-existing/fresh projects:** load and apply `grill-me` (`~/.pi/agent/skills/grill-me/SKILL.md`).
+- **Existing projects with inspectable code/docs/context:** load and apply PIDEX `grill-with-docs` (`<pidex-root>/skills/grill-with-docs/SKILL.md`).
+
+Use these skills to interview the user relentlessly about the plan or design until all decision branches needed for the pipeline are resolved.
+
+Rules for grilling inside pidex:
 
 - Ask questions one at a time.
 - For every question, provide the recommended answer.
-- If a question can be answered by inspecting the codebase, inspect the codebase instead of asking.
+- If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
+- For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
+- Agents may update context from confirmed user statements or clear code evidence; the user/domain expert owns truth.
 - Stop grilling once you can write a crisp 3-5 sentence epic statement with explicit acceptance criteria, constraints, and out-of-scope items.
 - Do not invoke `pidex-planner` before this clarity threshold is met.
 
@@ -171,10 +178,12 @@ Walk through the appropriate interview flow to produce a crisp epic statement. T
 
 
 **Fresh project (Step 1 = "new" or empty directory):**
-→ Onboarding flow
+→ Onboarding flow, and use `grill-me` for extra ambiguity resolution.
 
-**Existing project with code:**
-→ Ask what the user wants to do, then route:
+**Existing project with code/docs/context:**
+→ Ask what the user wants to do, inspect code/docs/context when useful, and use PIDEX `grill-with-docs` for extra ambiguity resolution. `grill-with-docs` uses `<project-root>/pidex/context/**` for glossary/ADR context and must not default to root `CONTEXT.md` or root `docs/adr/`.
+
+Then route:
 
 1. **Is this a fresh project or an existing codebase?**
    - Fresh → Onboarding flow

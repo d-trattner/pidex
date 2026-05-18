@@ -98,7 +98,7 @@ Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly w
 
 ## Project context
 
-PIDEX stores project domain context in `<project-root>/pidex/context/`. The dashboard Context page lets users review and edit `CONTEXT.md` glossary entries produced by agents. See [Project context](readme/project-context.md).
+PIDEX stores project domain context in `<project-root>/pidex/context/`. The dashboard Context page lets users review and edit `CONTEXT.md` glossary entries produced by agents. For existing projects, `/pidex` may use `grill-with-docs` to challenge plans against code/docs/context before planner handoff. See [Project context](readme/project-context.md).
 
 ## Optional parallel agents
 
