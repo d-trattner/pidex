@@ -11,6 +11,7 @@ import argparse
 import datetime as dt
 import json
 import re
+import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -69,6 +70,15 @@ def iter_jsonl(root: Path) -> list[dict[str, Any]]:
     for path in sorted(root.rglob("*.jsonl")):
         rows.extend(read_jsonl(path))
     return rows
+
+
+def normalize_semantic_empty(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def is_real_gate(value: Any) -> bool:
+    normalized = normalize_semantic_empty(value)
+    return normalized not in {"", "none", "null", "n/a", "na", "-", "false"}
 
 
 def parse_routing(text: str) -> dict[str, str]:
@@ -144,6 +154,7 @@ def load_quality_data(project: Path) -> dict[str, Any]:
     rule_actions = [r for r in iter_jsonl(STATE / "rule-actions") if str(r.get("project_path") or "") in {str(project), str(project.resolve()), ""}]
     routing_artifacts = discover_artifact_routing(project)
     rules = discover_rules(project)
+    untracked_rule_changes = discover_untracked_rule_changes(project, rule_actions)
     return {
         "metrics": metrics,
         "pipeline_events": events,
@@ -151,6 +162,7 @@ def load_quality_data(project: Path) -> dict[str, Any]:
         "rule_actions": rule_actions,
         "routing_artifacts": routing_artifacts,
         "rules": rules,
+        "untracked_rule_changes": untracked_rule_changes,
     }
 
 
@@ -168,6 +180,56 @@ def discover_rules(project: Path) -> list[dict[str, Any]]:
         agent = rel.parts[1] if len(rel.parts) > 2 else rel.parent.name
         out.append({"path": str(rel), "agent": agent, "bytes": path.stat().st_size, "lines": text.count("\n") + 1})
     return out
+
+
+def normalize_rule_path(value: Any, project: Path | None = None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    path = Path(raw)
+    if path.is_absolute() and project:
+        try:
+            raw = str(path.resolve().relative_to(project.resolve()))
+        except Exception:
+            raw = str(path)
+    return raw.removeprefix("./")
+
+
+def parse_git_status_rules(status_text: str, project: Path, rule_actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ledger_paths = {normalize_rule_path(row.get("rule_path"), project) for row in rule_actions if row.get("rule_path")}
+    changes: list[dict[str, Any]] = []
+    for line in status_text.splitlines():
+        if not line.strip() or len(line) < 4:
+            continue
+        status = line[:2]
+        path_text = line[3:].strip()
+        if " -> " in path_text:
+            path_text = path_text.split(" -> ", 1)[1].strip()
+        rel = normalize_rule_path(path_text, project)
+        if not rel.startswith("rules/") or not rel.endswith(".md"):
+            continue
+        parts = rel.split("/")
+        owner = parts[1] if len(parts) > 1 else "unknown"
+        if rel in ledger_paths:
+            continue
+        changes.append({"path": rel, "git_status": status.strip() or "modified", "owning_agent": owner, "ledger_status": "untracked"})
+    return changes
+
+
+def discover_untracked_rule_changes(project: Path, rule_actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(project), "status", "--porcelain", "--", "rules"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0:
+        return []
+    return parse_git_status_rules(proc.stdout, project, rule_actions)
 
 
 def select_plans(metrics: list[dict[str, Any]], events: list[dict[str, Any]], plan: str | None, last: int) -> list[str]:
@@ -240,9 +302,9 @@ def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str,
                         "reason": "Metric ROUTING fields imply a route decision, but no structured OpRoute event exists.",
                         "evidence": row.get("context_file") or row.get("_source_path"),
                     })
-            if gate:
+            if is_real_gate(gate):
                 expected_count += 1
-                matching_gate = [e for e in orch if e.get("operator_type") == "OpGate" and (e.get("plan_key") in {plan, None, ""}) and (e.get("gate") in {gate, None, ""})]
+                matching_gate = [e for e in orch if e.get("operator_type") == "OpGate" and (e.get("plan_key") in {plan, None, ""}) and normalize_semantic_empty(e.get("gate")) == normalize_semantic_empty(gate)]
                 if matching_gate:
                     observed_required += 1
                 else:
@@ -278,12 +340,13 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     by_event = Counter(str(r.get("event_type") or "unknown") for r in events)
     by_rule_agent = Counter(str(r.get("agent") or "unknown") for r in data["rules"])
     rule_actions = data.get("rule_actions", [])
+    untracked_rule_changes = data.get("untracked_rule_changes", [])
     by_rule_action = Counter(str(r.get("action") or "unknown") for r in rule_actions)
     total_tokens = sum(int(r.get("input_tokens_estimate") or 0) + int(r.get("output_tokens_estimate") or 0) for r in metrics)
     total_cost = sum(float(r.get("cost_usd_estimate") or 0.0) for r in metrics)
     return {
         "plans_reviewed": plans,
-        "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "rule_actions": len(rule_actions), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
+        "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "rule_actions": len(rule_actions), "untracked_rule_changes": len(untracked_rule_changes), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
         "agent_runs_by_agent": dict(by_agent),
         "agent_verdicts": dict(by_verdict),
         "gates": dict(by_gate),
@@ -291,6 +354,7 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
         "rules_by_owner": dict(by_rule_agent),
         "rule_actions_by_action": dict(by_rule_action),
         "recent_rule_actions": rule_actions[-20:],
+        "untracked_rule_changes": untracked_rule_changes,
         "cost_tokens": {"estimated_tokens": total_tokens, "estimated_cost_usd": round(total_cost, 6)},
         "operator_trace": trace,
         "confidence": "descriptive-only" if trace["gap_count"] else "medium",
@@ -395,6 +459,13 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
             lines.append(f"- {row.get('timestamp')} `{row.get('action')}` `{row.get('status')}` {row.get('rule_path') or '—'} owner `{row.get('owning_agent')}` impact `{row.get('expected_impact_dimension')}` direction `{row.get('expected_direction')}`")
     else:
         lines.append("- No rule actions recorded yet.")
+    lines += ["", "## Untracked Rule Changes", ""]
+    if s.get("untracked_rule_changes"):
+        lines.append("Changed rule files without matching rule-action ledger entries:")
+        for row in s.get("untracked_rule_changes", [])[:50]:
+            lines.append(f"- `{row.get('git_status')}` `{row.get('path')}` owner `{row.get('owning_agent')}`")
+    else:
+        lines.append("- No untracked rule changes detected from git status.")
     lines += ["", "## Recommendation", "", "Phase 0 report is descriptive-only. Add/maintain typed operator events and rule-action ledger entries before causal self-improvement claims.", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")

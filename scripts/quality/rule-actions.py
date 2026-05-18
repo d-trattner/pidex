@@ -10,6 +10,7 @@ import argparse
 import datetime as dt
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -74,6 +75,22 @@ def ledger_path(project: Path) -> Path:
     return STATE / "rule-actions" / f"{slug(str(project))}.jsonl"
 
 
+def append_row(project: Path, row: dict[str, Any], dry_run: bool = False) -> Path | None:
+    errors = validate(row)
+    if errors:
+        for e in errors:
+            print(f"error: {e}", file=sys.stderr)
+        raise ValueError("invalid rule-action row")
+    if dry_run:
+        print(json.dumps(row, indent=2, sort_keys=True))
+        return None
+    path = ledger_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, separators=(",", ":"), sort_keys=True) + "\n")
+    return path
+
+
 def cmd_add(args: argparse.Namespace) -> int:
     project = Path(args.project).expanduser().resolve()
     row: dict[str, Any] = {
@@ -101,19 +118,118 @@ def cmd_add(args: argparse.Namespace) -> int:
         if not isinstance(extra, dict):
             raise SystemExit("--extra-json must be a JSON object")
         row.update(extra)
-    errors = validate(row)
-    if errors:
-        for e in errors:
-            print(f"error: {e}", file=sys.stderr)
+    try:
+        path = append_row(project, row, args.dry_run)
+    except ValueError:
         return 2
-    if args.dry_run:
-        print(json.dumps(row, indent=2, sort_keys=True))
+    if path:
+        print(str(path))
+    return 0
+
+
+def normalize_rule_path(value: Any, project: Path | None = None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    path = Path(raw)
+    if path.is_absolute() and project:
+        try:
+            raw = str(path.resolve().relative_to(project.resolve()))
+        except Exception:
+            raw = str(path)
+    return raw.removeprefix("./")
+
+
+def parse_git_status_rules(status_text: str, project: Path, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ledger_paths = {normalize_rule_path(row.get("rule_path"), project) for row in rows if row.get("rule_path")}
+    changes: list[dict[str, Any]] = []
+    for line in status_text.splitlines():
+        if not line.strip() or len(line) < 4:
+            continue
+        status = line[:2]
+        path_text = line[3:].strip()
+        if " -> " in path_text:
+            path_text = path_text.split(" -> ", 1)[1].strip()
+        rel = normalize_rule_path(path_text, project)
+        if not rel.startswith("rules/") or not rel.endswith(".md"):
+            continue
+        parts = rel.split("/")
+        owner = parts[1] if len(parts) > 1 else "unknown"
+        if rel in ledger_paths:
+            continue
+        changes.append({"path": rel, "git_status": status.strip() or "modified", "owning_agent": owner, "ledger_status": "untracked"})
+    return changes
+
+
+def scan_untracked(project: Path) -> list[dict[str, Any]]:
+    rows = load_rows(ledger_path(project))
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(project), "status", "--porcelain", "--", "rules"],
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0:
+        return []
+    return parse_git_status_rules(proc.stdout, project, rows)
+
+
+def cmd_scan_untracked(args: argparse.Namespace) -> int:
+    project = Path(args.project).expanduser().resolve()
+    changes = scan_untracked(project)
+    if args.json:
+        print(json.dumps(changes, indent=2, sort_keys=True))
         return 0
-    path = ledger_path(project)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, separators=(",", ":"), sort_keys=True) + "\n")
-    print(str(path))
+    print(f"# Untracked rule changes — {project}")
+    if not changes:
+        print("No untracked rule changes detected.")
+        return 0
+    for row in changes:
+        print(f"- {row.get('git_status')} {row.get('path')} owner={row.get('owning_agent')}")
+    return 0
+
+
+def cmd_bulk_add_from_git_status(args: argparse.Namespace) -> int:
+    project = Path(args.project).expanduser().resolve()
+    changes = scan_untracked(project)
+    if not changes:
+        print("No untracked rule changes detected.")
+        return 0
+    written: Path | None = None
+    for change in changes:
+        git_status = str(change.get("git_status") or "")
+        action = "add" if "??" in git_status or "A" in git_status else "monitor"
+        row: dict[str, Any] = {
+            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "project_path": str(project),
+            "action": action,
+            "status": args.status,
+            "rule_path": change["path"],
+            "owning_agent": change["owning_agent"],
+            "approval_source": args.approval_source,
+            "expected_impact_dimension": args.expected_impact_dimension,
+            "expected_direction": args.expected_direction,
+            "token_delta_estimate": None,
+            "linked_pipeline_id": args.linked_pipeline_id,
+            "plan_key": normalize_plan(args.plan),
+            "reason": args.reason,
+            "evidence": args.evidence or [],
+            "source": "rule-actions.py bulk-add-from-git-status",
+            "git_status_at_registration": git_status,
+        }
+        try:
+            path = append_row(project, row, args.dry_run)
+        except ValueError:
+            return 2
+        written = path or written
+    if args.dry_run:
+        print(f"Would register {len(changes)} rule changes.")
+    else:
+        print(f"Registered {len(changes)} rule changes in {written}")
     return 0
 
 
@@ -158,6 +274,24 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--last", type=int, default=20)
     ls.add_argument("--json", action="store_true")
     ls.set_defaults(func=cmd_list)
+
+    scan = sub.add_parser("scan-untracked")
+    scan.add_argument("--project", default=str(ROOT))
+    scan.add_argument("--json", action="store_true")
+    scan.set_defaults(func=cmd_scan_untracked)
+
+    bulk = sub.add_parser("bulk-add-from-git-status")
+    bulk.add_argument("--project", default=str(ROOT))
+    bulk.add_argument("--status", default="monitoring", choices=sorted(STATUSES))
+    bulk.add_argument("--approval-source", required=True)
+    bulk.add_argument("--expected-impact-dimension", required=True)
+    bulk.add_argument("--expected-direction", default="unknown", choices=sorted(DIRECTIONS))
+    bulk.add_argument("--linked-pipeline-id")
+    bulk.add_argument("--plan")
+    bulk.add_argument("--reason", required=True)
+    bulk.add_argument("--evidence", action="append")
+    bulk.add_argument("--dry-run", action="store_true")
+    bulk.set_defaults(func=cmd_bulk_add_from_git_status)
     return ap
 
 
