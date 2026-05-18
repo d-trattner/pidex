@@ -9,6 +9,7 @@ import { LoadingIndicator } from '../components/ui/loading-indicator';
 type ContextEntry = { term: string; definition: string; avoid: string[] };
 type ContextOpenQuestion = { index: number; text: string };
 type ContextReviewEntry = ContextEntry & { index: number };
+type ContextEditableSection = { heading: string; body: string };
 type ContextPayload = {
   ok?: boolean;
   project?: string | null;
@@ -20,6 +21,7 @@ type ContextPayload = {
   entries?: ContextEntry[];
   openQuestions?: ContextOpenQuestion[];
   reviewEntries?: ContextReviewEntry[];
+  editableSections?: ContextEditableSection[];
   structuredEditable?: boolean;
   hash?: string;
   mtimeMs?: number | null;
@@ -85,6 +87,7 @@ function ContextPage() {
   const [payload, setPayload] = useState<ContextPayload | null>(null);
   const [entries, setEntries] = useState<ContextEntry[]>([]);
   const [reviewEntries, setReviewEntries] = useState<ContextReviewEntry[]>([]);
+  const [editableSections, setEditableSections] = useState<ContextEditableSection[]>([]);
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -103,6 +106,7 @@ function ContextPage() {
       setPayload(json);
       setEntries(json.entries || []);
       setReviewEntries(json.reviewEntries || []);
+      setEditableSections(json.editableSections || []);
       setRaw(json.raw || '');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load context');
@@ -124,6 +128,7 @@ function ContextPage() {
           setPayload(json);
           setEntries(json.entries || []);
           setReviewEntries(json.reviewEntries || []);
+          setEditableSections(json.editableSections || []);
           setRaw(json.raw || '');
           throw new Error('Context changed on disk. Reloaded latest version; review before saving again.');
         }
@@ -132,6 +137,7 @@ function ContextPage() {
       setPayload(json);
       setEntries(json.entries || []);
       setReviewEntries(json.reviewEntries || []);
+      setEditableSections(json.editableSections || []);
       setRaw(json.raw || '');
       setMessage('Context saved. Commit candidate: pidex/context/CONTEXT.md');
     } catch (error) {
@@ -149,9 +155,13 @@ function ContextPage() {
     setReviewEntries((current) => current.map((entry, idx) => idx === index ? { ...entry, ...patch } : entry));
   }
 
+  function updateEditableSection(index: number, body: string) {
+    setEditableSections((current) => current.map((section, idx) => idx === index ? { ...section, body } : section));
+  }
+
   const clientErrors = validateEntries(entries);
   const canStructuredSave = Boolean(payload?.structuredEditable) && clientErrors.length === 0;
-  const modified = payload ? JSON.stringify(entries) !== JSON.stringify(payload.entries || []) : false;
+  const modified = payload ? JSON.stringify(entries) !== JSON.stringify(payload.entries || []) || JSON.stringify(editableSections) !== JSON.stringify(payload.editableSections || []) : false;
   const query = search.trim().toLowerCase();
   const visibleEntries = entries
     .map((entry, index) => ({ entry, index }))
@@ -159,6 +169,7 @@ function ContextPage() {
   const sectionNav = [
     { id: 'context-review', label: 'Needs Review', show: Boolean(payload?.exists && (reviewEntries.length || payload.openQuestions?.length)) },
     { id: 'context-language', label: 'Language', show: Boolean(payload?.exists) },
+    { id: 'context-sections', label: 'Sections', show: Boolean(payload?.exists && editableSections.length) },
     { id: 'context-raw', label: 'Raw Markdown', show: Boolean(payload?.exists) },
   ].filter((item) => item.show);
 
@@ -180,7 +191,7 @@ function ContextPage() {
                 <button key={item.id} className="button" type="button" onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{item.label}</button>
               ))}
             </div>
-            <button className="button" type="button" disabled={saving || !modified || !canStructuredSave} onClick={() => post({ action: 'save-entries', hash: payload.hash, entries })}>Save context</button>
+            <button className="button" type="button" disabled={saving || !modified || !canStructuredSave} onClick={() => post({ action: 'save-context', hash: payload.hash, entries, sections: editableSections })}>Save context</button>
           </div>
         ) : null}
         {!project ? <p className="settings-warning active">Select a project before editing context.</p> : null}
@@ -273,10 +284,26 @@ function ContextPage() {
           </div>
           {entries.length === 0 ? <p className="muted">No glossary entries yet. Add one when a project-specific term is resolved.</p> : null}
           {entries.length > 0 && visibleEntries.length === 0 ? <p className="muted">No entries match “{search}”.</p> : null}
-          <p className="muted">Structured saves preserve Relationships, Example dialogue, Flagged ambiguities, and unknown sections outside <code>## Language</code>.</p>
+          <p className="muted">Structured saves preserve unknown sections outside <code>## Language</code>.</p>
         </article>
       ) : null}
 
+      {payload?.exists && editableSections.length ? (
+        <article id="context-sections" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
+          <div className="context-entries-toolbar">
+            <h3>Other sections</h3>
+          </div>
+          <p className="muted">Flexible Markdown editors for non-glossary sections. Use the header Save context button to persist changes.</p>
+          <div style={{ display: 'grid', gap: 14, marginTop: 12 }}>
+            {editableSections.map((section, index) => (
+              <section key={section.heading} className="settings-subcontainer">
+                <div className="settings-subcontainer-header"><h5>{section.heading}</h5></div>
+                <AutoResizeTextarea className="themed-textarea" rows={5} value={section.body} onChange={(event) => updateEditableSection(index, event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
+              </section>
+            ))}
+          </div>
+        </article>
+      ) : null}
 
       {payload?.exists ? (
         <article id="context-raw" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>

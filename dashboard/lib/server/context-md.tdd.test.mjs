@@ -117,3 +117,16 @@ test('deletes structured review entry without approving it', () => {
   assert.equal(parsed.entries.length, 0);
   assert.deepEqual(parsed.reviewEntries, []);
 });
+
+test('extracts and saves editable non-language sections', () => {
+  const raw = `# Demo\n\n## Language\n\n**PIDEX**:\nConfirmed term.\n\n## Relationships\n\n- Old relationship.\n\n## Flagged Ambiguities\n\n- Old ambiguity.\n`;
+  const parsed = mod.parseContextMarkdown(raw);
+  assert.deepEqual(parsed.editableSections.map((section) => section.heading), ['Relationships', 'Flagged Ambiguities']);
+  const result = mod.serializeContextWithSections(parsed, parsed.entries, [
+    { heading: 'Relationships', body: '- New relationship.' },
+    { heading: 'Flagged Ambiguities', body: '- New ambiguity.' },
+  ]);
+  assert.equal(result.errors.length, 0);
+  assert.match(result.raw, /## Relationships\n\n- New relationship\./);
+  assert.match(result.raw, /## Flagged Ambiguities\n\n- New ambiguity\./);
+});

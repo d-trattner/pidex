@@ -16,6 +16,11 @@ export interface ContextReviewEntry extends ContextEntry {
   index: number;
 }
 
+export interface ContextEditableSection {
+  heading: string;
+  body: string;
+}
+
 interface EntryBlock {
   entry: ContextEntry;
   start: number;
@@ -29,6 +34,7 @@ export interface ParsedContext {
   entries: ContextEntry[];
   openQuestions: ContextOpenQuestion[];
   reviewEntries: ContextReviewEntry[];
+  editableSections: ContextEditableSection[];
   afterLanguage: string;
   errors: string[];
   structuredEditable: boolean;
@@ -54,6 +60,17 @@ const OPEN_QUESTIONS_HEADING_RE = /^##\s+Open Questions\s*\/\s*Needs User Review
 const APPROVED_NOTES_HEADING = '## Approved Context Notes';
 const OPEN_QUESTIONS_HEADING = '## Open Questions / Needs User Review';
 const NEXT_H2_RE = /^##\s+/m;
+const EDITABLE_SECTION_HEADINGS = [
+  'Project Identity',
+  'Relationships',
+  'Architecture Notes',
+  'Operational Constraints',
+  'Known Workflows',
+  'Evidence Sources',
+  'Example Dialogue',
+  'Flagged Ambiguities',
+  'Approved Context Notes',
+];
 const TERM_RE = /^\*\*([^*\n][^*\n]*?)\*\*:\s*$/;
 const AVOID_RE = /^_Avoid_:\s*(.*?)\s*$/i;
 
@@ -83,6 +100,29 @@ function splitLanguage(raw: string): { before: string; heading: string | null; s
 
 function cleanLines(section: string): string[] {
   return section.replace(/^\r?\n/, '').split(/\r?\n/);
+}
+
+function headingRegex(heading: string): RegExp {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^##\\s+${escaped}\\s*$`, 'im');
+}
+
+export function extractEditableSections(raw: string): ContextEditableSection[] {
+  const out: ContextEditableSection[] = [];
+  for (const heading of EDITABLE_SECTION_HEADINGS) {
+    const split = splitSection(raw, headingRegex(heading));
+    if (!split.heading) continue;
+    out.push({ heading, body: split.section.replace(/^\r?\n/, '').replace(/\s*$/, '') });
+  }
+  return out;
+}
+
+function replaceEditableSection(raw: string, section: ContextEditableSection): string {
+  const split = splitSection(raw, headingRegex(section.heading));
+  const body = section.body.replace(/\s*$/, '');
+  const rendered = `## ${section.heading}\n\n${body}\n`;
+  if (!split.heading) return `${raw.replace(/\s*$/, '\n\n')}${rendered}`;
+  return `${split.before}${rendered}${split.after.replace(/^\n?/, '\n')}`;
 }
 
 export function extractOpenQuestions(raw: string): ContextOpenQuestion[] {
@@ -243,6 +283,7 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
       entries: [],
       openQuestions: extractOpenQuestions(raw),
       reviewEntries: extractReviewEntries(raw),
+      editableSections: extractEditableSections(raw),
       afterLanguage: '',
       errors: ['Missing ## Language section'],
       structuredEditable: true,
@@ -262,6 +303,7 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
     entries,
     openQuestions: extractOpenQuestions(raw),
     reviewEntries: extractReviewEntries(raw),
+    editableSections: extractEditableSections(raw),
     afterLanguage: split.after,
     errors,
     structuredEditable: errors.length === 0,
@@ -296,6 +338,14 @@ export function serializeStructuredContext(current: ParsedContext, entries: Cont
   if (reparsed.errors.length || reparsedTerms.length !== wantedTerms.length || reparsedTerms.some((term, idx) => term !== wantedTerms[idx])) {
     return { errors: ['Serialized context did not parse back to the same entries', ...reparsed.errors] };
   }
+  return { raw: raw.endsWith('\n') ? raw : `${raw}\n`, errors: [] };
+}
+
+export function serializeContextWithSections(current: ParsedContext, entries: ContextEntry[], sections: ContextEditableSection[]): { raw?: string; errors: string[] } {
+  const structured = serializeStructuredContext(current, entries);
+  if (structured.errors.length || !structured.raw) return structured;
+  let raw = structured.raw;
+  for (const section of sections) raw = replaceEditableSection(raw, section);
   return { raw: raw.endsWith('\n') ? raw : `${raw}\n`, errors: [] };
 }
 
