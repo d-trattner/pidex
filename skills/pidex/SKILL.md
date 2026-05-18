@@ -24,7 +24,8 @@ Rules for grilling inside pidex:
 - For every question, provide the recommended answer.
 - If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
 - For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
-- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `<pidex-root>/scripts/project-context/init.py <project-root>`; keep inferred/uncertain facts under `Open Questions / Needs User Review` until confirmed.
+- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `<pidex-root>/scripts/project-context/init.py <project-root>`.
+- Put confirmed user statements and clear code/docs-evidenced terms directly into `## Language` when durable. Use `## Open Questions / Needs User Review` only for proposals the agent is genuinely uncertain about; do not require review for every normal context entry.
 - For fresh/new projects, create `pidex/context/CONTEXT.md` during the orchestrator preparation step before spawning agents so the first plan has a context home.
 - Agents may update context from confirmed user statements or clear code evidence; the user/domain expert owns truth.
 - Stop grilling once you can write a crisp 3-5 sentence epic statement with explicit acceptance criteria, constraints, and out-of-scope items.

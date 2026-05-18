@@ -53,4 +53,6 @@ _Avoid_: TODO ambiguous synonym
 
 ## Open Questions / Needs User Review
 
+<!-- Use only for genuinely uncertain agent proposals. Confirmed user statements and clear code/docs-evidenced terms may go directly into ## Language. -->
+
 - TODO

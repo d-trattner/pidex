@@ -172,6 +172,25 @@ function ContextPage() {
         </article>
       ) : null}
 
+      {payload?.exists && payload.openQuestions?.length ? (
+        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
+          <div className="context-entries-toolbar">
+            <h3>Needs Review</h3>
+          </div>
+          <p className="muted">Only uncertain agent proposals should appear here. Confirmed terms may go directly into <code>## Language</code>; approving a note records it under <code>## Approved Context Notes</code>.</p>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {payload.openQuestions.map((question) => (
+              <section key={`${question.index}-${question.text}`} className="settings-subcontainer context-entry-row" style={{ gridTemplateColumns: '1fr auto' }}>
+                <p style={{ margin: 0 }}>{question.text}</p>
+                <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-open-question', hash: payload.hash, questionIndex: question.index })}>
+                  <CheckCircle2 size={14} /> Approve
+                </button>
+              </section>
+            ))}
+          </div>
+        </article>
+      ) : null}
+
       {payload?.exists ? (
         <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
           <div className="context-entries-toolbar">
@@ -209,24 +228,6 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists && payload.openQuestions?.length ? (
-        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-          <div className="context-entries-toolbar">
-            <h3>Open Questions / Needs User Review</h3>
-          </div>
-          <p className="muted">Approve confirmed items to move them into <code>## Approved Context Notes</code>. Edit raw Markdown if an item belongs in a more specific section.</p>
-          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-            {payload.openQuestions.map((question) => (
-              <section key={`${question.index}-${question.text}`} className="settings-subcontainer context-entry-row" style={{ gridTemplateColumns: '1fr auto' }}>
-                <p style={{ margin: 0 }}>{question.text}</p>
-                <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-open-question', hash: payload.hash, questionIndex: question.index })}>
-                  <CheckCircle2 size={14} /> Approve
-                </button>
-              </section>
-            ))}
-          </div>
-        </article>
-      ) : null}
 
       {payload?.exists ? (
         <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
