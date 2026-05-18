@@ -201,11 +201,11 @@ function ContextPage() {
                   <input className="themed-input context-entry-field" aria-label="Review term" placeholder="Term" value={entry.term} onChange={(event) => updateReviewEntry(index, { term: event.target.value })} />
                   <AutoResizeTextarea className="themed-textarea context-entry-field context-definition-field" aria-label="Review definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateReviewEntry(index, { definition: event.target.value })} />
                   <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Review avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateReviewEntry(index, { avoid: textToAliases(event.target.value) })} />
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                    <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-review-entry', hash: payload.hash, reviewIndex: entry.index, entry: { term: entry.term, definition: entry.definition, avoid: entry.avoid } })}>
-                      <CheckCircle2 size={14} /> Approve
-                    </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', justifyContent: 'center' }}>
                     <button className="icon-button compact context-entry-remove" type="button" aria-label={`Delete review entry ${entry.term || index + 1}`} disabled={saving} onClick={() => post({ action: 'delete-review-entry', hash: payload.hash, reviewIndex: entry.index })}><Trash2 size={14} /></button>
+                    <button className="icon-button compact" type="button" aria-label={`Approve review entry ${entry.term || index + 1}`} disabled={saving} onClick={() => post({ action: 'approve-review-entry', hash: payload.hash, reviewIndex: entry.index, entry: { term: entry.term, definition: entry.definition, avoid: entry.avoid } })}>
+                      <CheckCircle2 size={14} />
+                    </button>
                   </div>
                 </section>
               ))}
