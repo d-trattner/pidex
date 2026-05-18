@@ -78,3 +78,15 @@ test('safe path helper targets pidex/context with relative containment', () => {
   assert.equal(result.target, path.resolve('/tmp/example/pidex/context/CONTEXT.md'));
   assert.equal(path.relative(result.contextRoot, result.target), 'CONTEXT.md');
 });
+
+test('extracts and approves open questions into approved notes', () => {
+  const raw = `# Demo\n\n## Language\n\n## Open Questions / Needs User Review\n\n- Confirm Forge means deployment builder.\n- TODO\n`;
+  const parsed = mod.parseContextMarkdown(raw);
+  assert.deepEqual(parsed.openQuestions, [{ index: 0, text: 'Confirm Forge means deployment builder.' }]);
+  const result = mod.approveOpenQuestion(raw, 0);
+  assert.equal(result.errors.length, 0);
+  assert.match(result.raw, /## Approved Context Notes/);
+  assert.match(result.raw, /- Confirm Forge means deployment builder\./);
+  const openSection = result.raw.split('## Approved Context Notes')[0];
+  assert.doesNotMatch(openSection, /Confirm Forge means deployment builder\./);
+});

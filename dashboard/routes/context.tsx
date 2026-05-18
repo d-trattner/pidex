@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } from 'react';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle2, Plus, Search, Trash2 } from 'lucide-react';
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 
 type ContextEntry = { term: string; definition: string; avoid: string[] };
+type ContextOpenQuestion = { index: number; text: string };
 type ContextPayload = {
   ok?: boolean;
   project?: string | null;
@@ -16,6 +17,7 @@ type ContextPayload = {
   path?: string;
   raw?: string;
   entries?: ContextEntry[];
+  openQuestions?: ContextOpenQuestion[];
   structuredEditable?: boolean;
   hash?: string;
   mtimeMs?: number | null;
@@ -204,6 +206,25 @@ function ContextPage() {
           {entries.length === 0 ? <p className="muted">No glossary entries yet. Add one when a project-specific term is resolved.</p> : null}
           {entries.length > 0 && visibleEntries.length === 0 ? <p className="muted">No entries match “{search}”.</p> : null}
           <p className="muted">Structured saves preserve Relationships, Example dialogue, Flagged ambiguities, and unknown sections outside <code>## Language</code>.</p>
+        </article>
+      ) : null}
+
+      {payload?.exists && payload.openQuestions?.length ? (
+        <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
+          <div className="context-entries-toolbar">
+            <h3>Open Questions / Needs User Review</h3>
+          </div>
+          <p className="muted">Approve confirmed items to move them into <code>## Approved Context Notes</code>. Edit raw Markdown if an item belongs in a more specific section.</p>
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {payload.openQuestions.map((question) => (
+              <section key={`${question.index}-${question.text}`} className="settings-subcontainer context-entry-row" style={{ gridTemplateColumns: '1fr auto' }}>
+                <p style={{ margin: 0 }}>{question.text}</p>
+                <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-open-question', hash: payload.hash, questionIndex: question.index })}>
+                  <CheckCircle2 size={14} /> Approve
+                </button>
+              </section>
+            ))}
+          </div>
         </article>
       ) : null}
 

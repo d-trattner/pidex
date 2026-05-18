@@ -7,11 +7,17 @@ export interface ContextEntry {
   avoid: string[];
 }
 
+export interface ContextOpenQuestion {
+  index: number;
+  text: string;
+}
+
 export interface ParsedContext {
   raw: string;
   beforeLanguage: string;
   languageHeading: string | null;
   entries: ContextEntry[];
+  openQuestions: ContextOpenQuestion[];
   afterLanguage: string;
   errors: string[];
   structuredEditable: boolean;
@@ -33,6 +39,8 @@ Project domain language and decisions that agents should use when planning work.
 `;
 
 const LANGUAGE_HEADING_RE = /^##\s+Language\s*$/im;
+const OPEN_QUESTIONS_HEADING_RE = /^##\s+Open Questions\s*\/\s*Needs User Review\s*$/im;
+const APPROVED_NOTES_HEADING = '## Approved Context Notes';
 const NEXT_H2_RE = /^##\s+/m;
 const TERM_RE = /^\*\*([^*\n][^*\n]*?)\*\*:\s*$/;
 const AVOID_RE = /^_Avoid_:\s*(.*?)\s*$/i;
@@ -41,8 +49,8 @@ export function contextHash(raw: string): string {
   return `sha256:${createHash('sha256').update(raw).digest('hex')}`;
 }
 
-function splitLanguage(raw: string): { before: string; heading: string | null; section: string; after: string } {
-  const match = raw.match(LANGUAGE_HEADING_RE);
+function splitSection(raw: string, headingRe: RegExp): { before: string; heading: string | null; section: string; after: string } {
+  const match = raw.match(headingRe);
   if (!match || match.index == null) return { before: raw, heading: null, section: '', after: '' };
   const headingStart = match.index;
   const headingEnd = headingStart + match[0].length;
@@ -57,8 +65,56 @@ function splitLanguage(raw: string): { before: string; heading: string | null; s
   };
 }
 
+function splitLanguage(raw: string): { before: string; heading: string | null; section: string; after: string } {
+  return splitSection(raw, LANGUAGE_HEADING_RE);
+}
+
 function cleanLines(section: string): string[] {
   return section.replace(/^\r?\n/, '').split(/\r?\n/);
+}
+
+export function extractOpenQuestions(raw: string): ContextOpenQuestion[] {
+  const split = splitSection(raw, OPEN_QUESTIONS_HEADING_RE);
+  if (!split.heading) return [];
+  const out: ContextOpenQuestion[] = [];
+  cleanLines(split.section).forEach((line, lineIndex) => {
+    const match = line.match(/^\s*[-*]\s+(.+?)\s*$/);
+    if (!match) return;
+    const text = match[1].trim();
+    if (!text || /^todo\b/i.test(text)) return;
+    out.push({ index: lineIndex, text });
+  });
+  return out;
+}
+
+function bulletForApprovedQuestion(text: string): string {
+  return `- ${text.replace(/^[-*]\s+/, '').trim()}`;
+}
+
+function appendApprovedNote(raw: string, text: string): string {
+  const bullet = bulletForApprovedQuestion(text);
+  const approvedRe = /^##\s+Approved Context Notes\s*$/im;
+  const split = splitSection(raw, approvedRe);
+  if (!split.heading) {
+    return `${raw.replace(/\s*$/, '\n\n')}${APPROVED_NOTES_HEADING}\n\n${bullet}\n`;
+  }
+  const section = split.section.replace(/\s*$/, '\n');
+  return `${split.before}${split.heading}${section}${bullet}\n${split.after.replace(/^\n?/, '\n')}`;
+}
+
+export function approveOpenQuestion(raw: string, questionIndex: number): { raw?: string; errors: string[] } {
+  const split = splitSection(raw, OPEN_QUESTIONS_HEADING_RE);
+  if (!split.heading) return { errors: ['Missing ## Open Questions / Needs User Review section'] };
+  const lines = cleanLines(split.section);
+  const line = lines[questionIndex];
+  const match = line?.match(/^\s*[-*]\s+(.+?)\s*$/);
+  if (!match) return { errors: ['Open question not found'] };
+  const text = match[1].trim();
+  if (!text || /^todo\b/i.test(text)) return { errors: ['Cannot approve empty/TODO open question'] };
+  lines.splice(questionIndex, 1);
+  const openSection = `\n${lines.join('\n').replace(/\s*$/, '')}\n`;
+  const withoutQuestion = `${split.before}${split.heading}${openSection}${split.after.replace(/^\n?/, '\n')}`;
+  return { raw: appendApprovedNote(withoutQuestion, text), errors: [] };
 }
 
 export function validateEntries(entries: ContextEntry[]): string[] {
@@ -90,6 +146,7 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
       beforeLanguage: raw,
       languageHeading: null,
       entries: [],
+      openQuestions: extractOpenQuestions(raw),
       afterLanguage: '',
       errors: ['Missing ## Language section'],
       structuredEditable: true,
@@ -134,6 +191,7 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
     beforeLanguage: split.before,
     languageHeading: split.heading,
     entries,
+    openQuestions: extractOpenQuestions(raw),
     afterLanguage: split.after,
     errors,
     structuredEditable: errors.length === 0,
