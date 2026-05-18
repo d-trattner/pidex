@@ -63,6 +63,12 @@ test('handles default context template', () => {
   assert.equal(parsed.entries.length, 0);
 });
 
+test('ignores guidance comments inside language section', () => {
+  const parsed = mod.parseContextMarkdown(`## Language\n\n<!--\nAdd project/domain terms here.\nFormat:\n-->\n\n**Forge**:\nA project-specific term.\n`);
+  assert.equal(parsed.structuredEditable, true);
+  assert.deepEqual(parsed.entries, [{ term: 'Forge', definition: 'A project-specific term.', avoid: [] }]);
+});
+
 test('marks structured editing disabled for unparseable language fragments', () => {
   const parsed = mod.parseContextMarkdown('## Language\n\nThis is not a glossary entry.\n');
   assert.equal(parsed.structuredEditable, false);

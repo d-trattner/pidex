@@ -157,9 +157,21 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
 
   const lines = cleanLines(split.section);
   let i = 0;
+  let inHtmlComment = false;
   while (i < lines.length) {
     const line = lines[i];
-    if (!line.trim()) { i += 1; continue; }
+    const trimmed = line.trim();
+    if (inHtmlComment) {
+      if (trimmed.includes('-->')) inHtmlComment = false;
+      i += 1;
+      continue;
+    }
+    if (trimmed.startsWith('<!--')) {
+      if (!trimmed.includes('-->')) inHtmlComment = true;
+      i += 1;
+      continue;
+    }
+    if (!trimmed) { i += 1; continue; }
     const termMatch = line.match(TERM_RE);
     if (!termMatch) {
       errors.push(`Unparseable content in ## Language near line: ${line.trim().slice(0, 80)}`);
