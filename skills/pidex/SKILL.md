@@ -24,6 +24,8 @@ Rules for grilling inside pidex:
 - For every question, provide the recommended answer.
 - If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
 - For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
+- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `<pidex-root>/scripts/project-context/init.py <project-root>`; keep inferred/uncertain facts under `Open Questions / Needs User Review` until confirmed.
+- For fresh/new projects, create `pidex/context/CONTEXT.md` during the orchestrator preparation step before spawning agents so the first plan has a context home.
 - Agents may update context from confirmed user statements or clear code evidence; the user/domain expert owns truth.
 - Stop grilling once you can write a crisp 3-5 sentence epic statement with explicit acceptance criteria, constraints, and out-of-scope items.
 - Do not invoke `pidex-planner` before this clarity threshold is met.
@@ -532,17 +534,18 @@ Read back to the user: "Here is the epic I would send to the pipeline. Does this
 
 **What the orchestrator does BEFORE starting the lead (for fresh projects only):**
 
-After the user confirms the epic, create the project directory and the minimal agents.output structure so the lead has somewhere to write, and ensure generated/runtime PIDEX folders are ignored before any agent creates files:
+After the user confirms the epic, create the project directory, project context template, and minimal agents.output structure so the lead has somewhere to write, and ensure generated/runtime PIDEX folders are ignored before any agent creates files:
 
 ```bash
 mkdir -p <project-path>/agents.output <project-path>/pidex/state <project-path>/pidex/rules <project-path>/pidex/config <project-path>/pidex/prompts
+python3 <pidex-root>/scripts/project-context/init.py <project-path>
 printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n' >> <project-path>/.gitignore
 echo 0 > <project-path>/agents.output/.next-id
 ```
 
 If `.gitignore` already exists, append only missing entries. `agents.output/**` must remain ignored/uncommitted; `pidex/state/wiki-hygiene.json` and other durable `pidex/` metadata may be committed when explicitly appropriate.
 
-Do NOT scaffold the project code (package.json, tsconfig, etc.) — that is the lead's job as part of the epic. The orchestrator only creates the directory, initializes agents.output, and ensures `.gitignore` protects generated PIDEX artifacts. Do not copy agent files; bundled agents are invoked through `pidex_agent`.
+Do NOT scaffold the project code (package.json, tsconfig, etc.) — that is the lead's job as part of the epic. The orchestrator only creates the directory, initializes `pidex/context/CONTEXT.md`, initializes agents.output, and ensures `.gitignore` protects generated PIDEX artifacts. Do not copy agent files; bundled agents are invoked through `pidex_agent`.
 
 Only proceed after explicit confirmation.
 
