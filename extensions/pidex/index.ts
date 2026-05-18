@@ -658,7 +658,17 @@ function normalizeGate(value: string | undefined): string | undefined {
 	return gate;
 }
 
-function notifyGate(cwd: string, planId: string, gate: string, routeTo: string | undefined, contextFile: string | undefined): void {
+function shouldSuppressAgentGateNotify(agent: string): boolean {
+	if ((process.env.PIDEX_SUPPRESS_AGENT_GATE_NOTIFY || "0") === "1") return true;
+	if ((process.env.PIDEX_PARALLEL_GATE_NOTIFY_AFTER_MERGE || "1") === "0") return false;
+	// Critic/code-reviewer can have orchestrator-owned parallel lanes. Their primary
+	// ROUTING block is not the final user-facing gate until secondary lanes have
+	// returned and the orchestrator has written the merge/adjudication summary.
+	return agent === "pidex-critic" || agent === "pidex-code-reviewer";
+}
+
+function notifyGate(cwd: string, planId: string, gate: string, routeTo: string | undefined, contextFile: string | undefined, agent: string): void {
+	if (shouldSuppressAgentGateNotify(agent)) return;
 	try {
 		if ((process.env.PIDEX_TELEGRAM_GATES || "1") === "0") return;
 		const key = `${path.resolve(cwd)}|${normalizePlanKey(planId)}|${gate}|${contextFile || ""}`;
@@ -732,7 +742,7 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 			physical_action: { gate_detected: true, decision_pending_in_parent_session: true },
 			confidence: "medium",
 		}) ?? eventFile;
-		notifyGate(cwd, planId, gate, routeTo, contextFile);
+		notifyGate(cwd, planId, gate, routeTo, contextFile, result.agent);
 	}
 	return eventFile;
 }

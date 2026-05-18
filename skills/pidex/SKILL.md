@@ -1202,6 +1202,8 @@ Return a valid ROUTING block with context_file pointing to the secondary artifac
 
 After all lanes return, read every returned `context_file`, deduplicate findings, and write a required merge/adjudication summary before continuing. Suggested path: `agents.output/parallel-agents/<id>-<slug>-<agent>-merge.md`. Classification values: `confirmed-by-multiple-lanes`, `primary-only`, `secondary-only`, `duplicate`, `contradicted`, `no-evidence`. Disposition values: `accepted`, `rejected-no-evidence`, `duplicate`, `deferred`, `needs-primary-review`.
 
+For agents with configured parallel lanes, do **not** send user/Telegram gate notifications from the primary lane result. Wait until every secondary lane has completed/timed out and the merge/adjudication summary exists. If the merged decision has a gate, notify/ask the user using the merge summary as the `context_file`, not the primary artifact.
+
 Initial policy: advisory execution plus mandatory merge summary. Continue when primary approves and no secondary has concrete High/Critical evidence. Route to `pidex-implementer` or ask for primary-reviewer adjudication when a secondary reports High/Critical with concrete file/path/evidence. Record secondary timeout/failure/malformed ROUTING in the merge summary and continue with the primary result during rollout.
 
 Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or the user requested a minimal/cheap/single-lane run.
