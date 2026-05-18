@@ -133,7 +133,6 @@ function ContextPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [rawOpen, setRawOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [sectionSearch, setSectionSearch] = useState('');
   const [activeSection, setActiveSection] = useState<string>('language');
@@ -231,7 +230,7 @@ function ContextPage() {
           <div className="context-header-actions" aria-label="Context sections and save actions">
             <div className="context-section-nav" aria-label="Context section navigation">
               {sectionNav.map((item) => (
-                <button key={item.id} className={`button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => setActiveSection(item.id)}>{item.label}</button>
+                <button key={item.id} className={`button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => { setActiveSection(item.id); if (item.id === 'raw') void load(); }}>{item.label}</button>
               ))}
             </div>
             <button className="button" type="button" disabled={saving || !modified || !canStructuredSave} onClick={() => post({ action: 'save-context', hash: payload.hash, entries, sections: editableSections })}>Save context</button>
@@ -402,13 +401,11 @@ function ContextPage() {
 
       {payload?.exists && activeSection === 'raw' ? (
         <article id="context-raw" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
-          <button className="button" type="button" onClick={() => setRawOpen((value) => !value)}>{rawOpen ? 'Hide raw Markdown' : 'Show raw Markdown fallback'}</button>
-          {rawOpen ? (
-            <div style={{ marginTop: 12 }}>
-              <AutoResizeTextarea className="themed-textarea" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
-              <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'save-raw', hash: payload.hash, raw })}>Save raw Markdown</button>
-            </div>
-          ) : null}
+          <div className="context-entries-toolbar"><h3>Raw Markdown</h3></div>
+          <div style={{ marginTop: 12 }}>
+            <AutoResizeTextarea className="themed-textarea" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
+            <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'save-raw', hash: payload.hash, raw })}>Save raw Markdown</button>
+          </div>
         </article>
       ) : null}
     </section>
