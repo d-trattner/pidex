@@ -1698,7 +1698,7 @@ body.modal-open {
 .context-pair-header,
 .context-pair-row {
   display: grid;
-  grid-template-columns: minmax(220px, 0.9fr) minmax(360px, 1.6fr) 42px;
+  grid-template-columns: minmax(320px, 1fr) 42px;
   gap: 12px;
   align-items: stretch;
 }

@@ -111,14 +111,11 @@ function isRenderableLine(line: string): boolean {
 }
 
 function parsePairs(body: string): SectionPair[] {
-  return body.split(/\r?\n/).filter(isRenderableLine).map(stripBullet).filter(Boolean).map((line) => {
-    const idx = line.indexOf(':');
-    return idx >= 0 ? { title: line.slice(0, idx).trim(), body: line.slice(idx + 1).trim() } : { title: line, body: '' };
-  });
+  return body.split(/\r?\n/).filter(isRenderableLine).map(stripBullet).filter(Boolean).map((line) => ({ title: line, body: '' }));
 }
 
 function serializePairs(pairs: SectionPair[]): string {
-  return pairs.map((pair) => pair.body.trim() ? `- ${pair.title.trim()}: ${pair.body.trim()}` : `- ${pair.title.trim()}`).join('\n');
+  return pairs.map((pair) => `- ${pair.title.trim()}`).join('\n');
 }
 
 function listItems(body: string): string[] {
@@ -138,6 +135,7 @@ function ContextPage() {
   const [message, setMessage] = useState('');
   const [rawOpen, setRawOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [sectionSearch, setSectionSearch] = useState('');
   const [activeSection, setActiveSection] = useState<string>('language');
 
   const endpoint = useMemo(() => withProjectParam('/api/context', project), [project]);
@@ -355,25 +353,26 @@ function ContextPage() {
             </div>
           ) : ['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
             <div className="context-entry-table" style={{ marginTop: 12 }}>
+              <div className="context-entries-actions">
+                <label className="context-search-label" aria-label={`Search ${section.heading}`}>
+                  <Search size={14} aria-hidden="true" />
+                  <input className="themed-input context-search-input" value={sectionSearch} onChange={(event) => setSectionSearch(event.target.value)} placeholder={`Search ${section.heading}…`} />
+                </label>
+                <button className="button" type="button" onClick={() => updateEditableSection(sectionIndex, serializePairs([...parsePairs(section.body), { title: '', body: '' }]))}><Plus size={14} /> Add entry</button>
+              </div>
               <div className="context-entry-header context-pair-header" aria-hidden="true">
-                <span>Item</span>
-                <span>Details</span>
+                <span>Entry</span>
                 <span></span>
               </div>
-              {parsePairs(section.body).map((pair, index, pairs) => (
+              {parsePairs(section.body).map((pair, index, pairs) => ({ pair, index, pairs })).filter(({ pair }) => !sectionSearch.trim() || pair.title.toLowerCase().includes(sectionSearch.trim().toLowerCase())).map(({ pair, index, pairs }) => (
                 <section key={`${pair.title}-${index}`} className="settings-subcontainer context-pair-row context-list-row">
                   <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label={`${section.heading} item`} rows={2} value={pair.title} onChange={(event) => {
                     const next = pairs.map((item, idx) => idx === index ? { ...item, title: event.target.value } : item);
                     updateEditableSection(sectionIndex, serializePairs(next));
                   }} />
-                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label={`${section.heading} details`} rows={2} value={pair.body} onChange={(event) => {
-                    const next = pairs.map((item, idx) => idx === index ? { ...item, body: event.target.value } : item);
-                    updateEditableSection(sectionIndex, serializePairs(next));
-                  }} />
                   <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove ${section.heading} item ${index + 1}`} onClick={() => updateEditableSection(sectionIndex, serializePairs(pairs.filter((_, idx) => idx !== index)))}><Trash2 size={14} /></button>
                 </section>
               ))}
-              <button className="button" type="button" onClick={() => updateEditableSection(sectionIndex, serializePairs([...parsePairs(section.body), { title: '', body: '' }]))}><Plus size={14} /> Add item</button>
             </div>
           ) : section.heading === 'Example Dialogue' ? (
             <AutoResizeTextarea className="themed-textarea" rows={10} value={section.body} onChange={(event) => updateEditableSection(sectionIndex, event.target.value)} style={{ marginTop: 12 }} />
