@@ -1695,6 +1695,14 @@ body.modal-open {
   align-items: stretch;
 }
 
+.context-pair-header,
+.context-pair-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(360px, 1.6fr) 42px;
+  gap: 12px;
+  align-items: stretch;
+}
+
 .context-entry-header {
   padding: 0 12px;
   color: var(--muted);
@@ -1736,6 +1744,29 @@ textarea.themed-textarea {
 .context-entry-remove {
   align-self: center;
   justify-self: end;
+}
+
+.context-identity-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.context-identity-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.5fr) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.context-rendered-list ul {
+  margin: 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 8px;
+}
+
+.context-rendered-list li {
+  line-height: 1.55;
 }
 
 .context-review-actions {
@@ -1782,7 +1813,9 @@ textarea.themed-textarea {
     display: none;
   }
 
-  .context-entry-row {
+  .context-entry-row,
+  .context-pair-row,
+  .context-identity-row {
     grid-template-columns: 1fr;
   }
 

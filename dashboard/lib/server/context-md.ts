@@ -108,13 +108,15 @@ function headingRegex(heading: string): RegExp {
 }
 
 export function extractEditableSections(raw: string): ContextEditableSection[] {
-  const out: ContextEditableSection[] = [];
-  for (const heading of EDITABLE_SECTION_HEADINGS) {
+  const known = new Set(EDITABLE_SECTION_HEADINGS);
+  const matches = [...raw.matchAll(/^##\s+(.+?)\s*$/gm)]
+    .map((match) => ({ heading: match[1].trim(), index: match.index ?? 0 }))
+    .filter((match) => known.has(match.heading))
+    .sort((a, b) => a.index - b.index);
+  return matches.map(({ heading }) => {
     const split = splitSection(raw, headingRegex(heading));
-    if (!split.heading) continue;
-    out.push({ heading, body: split.section.replace(/^\r?\n/, '').replace(/\s*$/, '') });
-  }
-  return out;
+    return { heading, body: split.section.replace(/^\r?\n/, '').replace(/\s*$/, '') };
+  });
 }
 
 function replaceEditableSection(raw: string, section: ContextEditableSection): string {

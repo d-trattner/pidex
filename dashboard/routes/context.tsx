@@ -81,6 +81,45 @@ function validateEntries(entries: ContextEntry[]): string[] {
   return errors;
 }
 
+type SectionPair = { title: string; body: string };
+type IdentityField = { key: string; value: string };
+
+function sectionTabId(heading: string): string {
+  return `section:${heading}`;
+}
+
+function stripBullet(line: string): string {
+  return line.replace(/^\s*[-*]\s+/, '').trim();
+}
+
+function parseIdentity(body: string): IdentityField[] {
+  return body.split(/\r?\n/).map(stripBullet).filter(Boolean).map((line) => {
+    const strong = line.match(/^\*\*(.+?)\*\*:\s*(.*)$/);
+    if (strong) return { key: strong[1].trim(), value: strong[2].trim() };
+    const idx = line.indexOf(':');
+    return idx >= 0 ? { key: line.slice(0, idx).trim(), value: line.slice(idx + 1).trim() } : { key: line, value: '' };
+  });
+}
+
+function serializeIdentity(fields: IdentityField[]): string {
+  return fields.map((field) => `- **${field.key.trim()}**: ${field.value.trim()}`).join('\n');
+}
+
+function parsePairs(body: string): SectionPair[] {
+  return body.split(/\r?\n/).map(stripBullet).filter(Boolean).map((line) => {
+    const idx = line.indexOf(':');
+    return idx >= 0 ? { title: line.slice(0, idx).trim(), body: line.slice(idx + 1).trim() } : { title: line, body: '' };
+  });
+}
+
+function serializePairs(pairs: SectionPair[]): string {
+  return pairs.map((pair) => pair.body.trim() ? `- ${pair.title.trim()}: ${pair.body.trim()}` : `- ${pair.title.trim()}`).join('\n');
+}
+
+function listItems(body: string): string[] {
+  return body.split(/\r?\n/).map(stripBullet).filter((line) => line && !/^<!--/.test(line));
+}
+
 function ContextPage() {
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
@@ -94,7 +133,7 @@ function ContextPage() {
   const [message, setMessage] = useState('');
   const [rawOpen, setRawOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [activeSection, setActiveSection] = useState<'review' | 'language' | 'sections' | 'raw'>('language');
+  const [activeSection, setActiveSection] = useState<string>('language');
 
   const endpoint = useMemo(() => withProjectParam('/api/context', project), [project]);
 
@@ -168,10 +207,10 @@ function ContextPage() {
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => !query || [entry.term, entry.definition, aliasesToText(entry.avoid)].some((value) => value.toLowerCase().includes(query)));
   const sectionNav = [
-    { id: 'review' as const, label: 'Needs Review', show: Boolean(payload?.exists && (reviewEntries.length || payload.openQuestions?.length)) },
-    { id: 'language' as const, label: 'Language', show: Boolean(payload?.exists) },
-    { id: 'sections' as const, label: 'Sections', show: Boolean(payload?.exists && editableSections.length) },
-    { id: 'raw' as const, label: 'Raw Markdown', show: Boolean(payload?.exists) },
+    { id: 'review', label: 'Needs Review', show: Boolean(payload?.exists && (reviewEntries.length || payload.openQuestions?.length)) },
+    { id: 'language', label: 'Language', show: Boolean(payload?.exists) },
+    ...editableSections.map((section) => ({ id: sectionTabId(section.heading), label: section.heading, show: Boolean(payload?.exists) })),
+    { id: 'raw', label: 'Raw Markdown', show: Boolean(payload?.exists) },
   ].filter((item) => item.show);
 
   return (
@@ -289,22 +328,57 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists && activeSection === 'sections' && editableSections.length ? (
-        <article id="context-sections" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
+      {payload?.exists && editableSections.map((section, sectionIndex) => activeSection === sectionTabId(section.heading) ? (
+        <article key={section.heading} id={sectionTabId(section.heading)} className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
           <div className="context-entries-toolbar">
-            <h3>Other sections</h3>
+            <h3>{section.heading}</h3>
           </div>
-          <p className="muted">Flexible Markdown editors for non-glossary sections. Use the header Save context button to persist changes.</p>
-          <div style={{ display: 'grid', gap: 14, marginTop: 12 }}>
-            {editableSections.map((section, index) => (
-              <section key={section.heading} className="settings-subcontainer">
-                <div className="settings-subcontainer-header"><h5>{section.heading}</h5></div>
-                <AutoResizeTextarea className="themed-textarea" rows={5} value={section.body} onChange={(event) => updateEditableSection(index, event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
-              </section>
-            ))}
-          </div>
+          {section.heading === 'Project Identity' ? (
+            <div className="context-identity-grid" style={{ marginTop: 12 }}>
+              {parseIdentity(section.body).map((field, index, fields) => (
+                <section key={`${field.key}-${index}`} className="settings-subcontainer context-identity-row">
+                  <input className="themed-input" aria-label="Identity field" value={field.key} onChange={(event) => {
+                    const next = fields.map((item, idx) => idx === index ? { ...item, key: event.target.value } : item);
+                    updateEditableSection(sectionIndex, serializeIdentity(next));
+                  }} />
+                  <input className="themed-input" aria-label="Identity value" value={field.value} onChange={(event) => {
+                    const next = fields.map((item, idx) => idx === index ? { ...item, value: event.target.value } : item);
+                    updateEditableSection(sectionIndex, serializeIdentity(next));
+                  }} />
+                </section>
+              ))}
+            </div>
+          ) : ['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
+            <div className="context-entry-table" style={{ marginTop: 12 }}>
+              <div className="context-entry-header context-pair-header" aria-hidden="true">
+                <span>Item</span>
+                <span>Details</span>
+                <span></span>
+              </div>
+              {parsePairs(section.body).map((pair, index, pairs) => (
+                <section key={`${pair.title}-${index}`} className="settings-subcontainer context-pair-row">
+                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label={`${section.heading} item`} rows={2} value={pair.title} onChange={(event) => {
+                    const next = pairs.map((item, idx) => idx === index ? { ...item, title: event.target.value } : item);
+                    updateEditableSection(sectionIndex, serializePairs(next));
+                  }} />
+                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label={`${section.heading} details`} rows={2} value={pair.body} onChange={(event) => {
+                    const next = pairs.map((item, idx) => idx === index ? { ...item, body: event.target.value } : item);
+                    updateEditableSection(sectionIndex, serializePairs(next));
+                  }} />
+                  <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove ${section.heading} item ${index + 1}`} onClick={() => updateEditableSection(sectionIndex, serializePairs(pairs.filter((_, idx) => idx !== index)))}><Trash2 size={14} /></button>
+                </section>
+              ))}
+              <button className="button" type="button" onClick={() => updateEditableSection(sectionIndex, serializePairs([...parsePairs(section.body), { title: '', body: '' }]))}><Plus size={14} /> Add item</button>
+            </div>
+          ) : section.heading === 'Example Dialogue' ? (
+            <AutoResizeTextarea className="themed-textarea" rows={10} value={section.body} onChange={(event) => updateEditableSection(sectionIndex, event.target.value)} style={{ marginTop: 12 }} />
+          ) : (
+            <div className="context-rendered-list" style={{ marginTop: 12 }}>
+              {listItems(section.body).length ? <ul>{listItems(section.body).map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="muted">No entries yet.</p>}
+            </div>
+          )}
         </article>
-      ) : null}
+      ) : null)}
 
       {payload?.exists && activeSection === 'raw' ? (
         <article id="context-raw" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
