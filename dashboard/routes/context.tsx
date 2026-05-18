@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } fro
 import { createPortal } from 'react-dom';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { CheckCircle2, Plus, Search, Trash2, X } from 'lucide-react';
+import { BookOpenCheck, CheckCircle2, Plus, Search, Trash2, X } from 'lucide-react';
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
@@ -230,9 +230,12 @@ function ContextPage() {
   ].filter((item) => item.show);
 
   const sectionMenu = (mobile = false) => (
-    <nav className="context-side-menu" aria-label="Context sections">
+    <nav className={mobile ? 'mobile-nav-list' : 'context-side-menu'} aria-label="Context sections">
       {sectionNav.map((item) => (
-        <button key={item.id} className={`button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => { setActiveSection(item.id); setSectionsSheetOpen(false); if (item.id === 'raw') void load(); }}>{item.label}</button>
+        <button key={item.id} className={mobile ? `mobile-nav-item${activeSection === item.id ? ' active' : ''}` : `button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => { setActiveSection(item.id); setSectionsSheetOpen(false); if (item.id === 'raw') void load(); }}>
+          {mobile ? <BookOpenCheck size={16} aria-hidden="true" /> : null}
+          <span>{item.label}</span>
+        </button>
       ))}
     </nav>
   );
@@ -276,7 +279,7 @@ function ContextPage() {
               <h2 className="h2">Sections</h2>
               <button type="button" className="icon-button" aria-label="Close sections" onClick={() => setSectionsSheetOpen(false)}><X size={20} aria-hidden="true" /></button>
             </div>
-            <div className="mobile-sheet-body">{sectionMenu(true)}</div>
+            <div className="mobile-sheet-body mobile-context-section-sheet">{sectionMenu(true)}</div>
           </aside>
         </div>,
         document.body,

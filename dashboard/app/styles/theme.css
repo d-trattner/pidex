@@ -1655,6 +1655,14 @@ body.modal-open {
   text-align: left;
 }
 
+.mobile-context-section-sheet .mobile-nav-list {
+  margin-top: 0;
+}
+
+.mobile-context-section-sheet .mobile-nav-item {
+  border-radius: 6px;
+}
+
 .context-header-actions {
   display: flex;
   gap: 10px;
