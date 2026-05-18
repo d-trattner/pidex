@@ -8,6 +8,7 @@ import { LoadingIndicator } from '../components/ui/loading-indicator';
 
 type ContextEntry = { term: string; definition: string; avoid: string[] };
 type ContextOpenQuestion = { index: number; text: string };
+type ContextReviewEntry = ContextEntry & { index: number };
 type ContextPayload = {
   ok?: boolean;
   project?: string | null;
@@ -18,6 +19,7 @@ type ContextPayload = {
   raw?: string;
   entries?: ContextEntry[];
   openQuestions?: ContextOpenQuestion[];
+  reviewEntries?: ContextReviewEntry[];
   structuredEditable?: boolean;
   hash?: string;
   mtimeMs?: number | null;
@@ -82,6 +84,7 @@ function ContextPage() {
   const project = readProjectFromSearch(location.search);
   const [payload, setPayload] = useState<ContextPayload | null>(null);
   const [entries, setEntries] = useState<ContextEntry[]>([]);
+  const [reviewEntries, setReviewEntries] = useState<ContextReviewEntry[]>([]);
   const [raw, setRaw] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -99,6 +102,7 @@ function ContextPage() {
       const json = await response.json();
       setPayload(json);
       setEntries(json.entries || []);
+      setReviewEntries(json.reviewEntries || []);
       setRaw(json.raw || '');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Failed to load context');
@@ -119,6 +123,7 @@ function ContextPage() {
         if (response.status === 409 && json?.stale_write) {
           setPayload(json);
           setEntries(json.entries || []);
+          setReviewEntries(json.reviewEntries || []);
           setRaw(json.raw || '');
           throw new Error('Context changed on disk. Reloaded latest version; review before saving again.');
         }
@@ -126,6 +131,7 @@ function ContextPage() {
       }
       setPayload(json);
       setEntries(json.entries || []);
+      setReviewEntries(json.reviewEntries || []);
       setRaw(json.raw || '');
       setMessage('Context saved. Commit candidate: pidex/context/CONTEXT.md');
     } catch (error) {
@@ -137,6 +143,10 @@ function ContextPage() {
 
   function updateEntry(index: number, patch: Partial<ContextEntry>) {
     setEntries((current) => current.map((entry, idx) => idx === index ? { ...entry, ...patch } : entry));
+  }
+
+  function updateReviewEntry(index: number, patch: Partial<ContextEntry>) {
+    setReviewEntries((current) => current.map((entry, idx) => idx === index ? { ...entry, ...patch } : entry));
   }
 
   const clientErrors = validateEntries(entries);
@@ -172,22 +182,47 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists && payload.openQuestions?.length ? (
+      {payload?.exists && (reviewEntries.length > 0 || Boolean(payload.openQuestions?.length)) ? (
         <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
           <div className="context-entries-toolbar">
             <h3>Needs Review</h3>
           </div>
-          <p className="muted">Only uncertain agent proposals should appear here. Confirmed terms may go directly into <code>## Language</code>; approving a note records it under <code>## Approved Context Notes</code>.</p>
-          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-            {payload.openQuestions.map((question) => (
-              <section key={`${question.index}-${question.text}`} className="settings-subcontainer context-entry-row" style={{ gridTemplateColumns: '1fr auto' }}>
-                <p style={{ margin: 0 }}>{question.text}</p>
-                <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-open-question', hash: payload.hash, questionIndex: question.index })}>
-                  <CheckCircle2 size={14} /> Approve
-                </button>
-              </section>
-            ))}
-          </div>
+          <p className="muted">Only genuinely uncertain agent proposals should appear here. Edit a proposal, then approve it to move it into <code>## Language</code>.</p>
+          {reviewEntries.length ? (
+            <div className="context-entry-table" style={{ marginTop: 12 }}>
+              <div className="context-entry-header" aria-hidden="true">
+                <span>Term</span>
+                <span>Definition</span>
+                <span>Avoid aliases</span>
+                <span></span>
+              </div>
+              {reviewEntries.map((entry, index) => (
+                <section key={`${entry.index}-${entry.term}`} className="settings-subcontainer context-entry-row">
+                  <input className="themed-input context-entry-field" aria-label="Review term" placeholder="Term" value={entry.term} onChange={(event) => updateReviewEntry(index, { term: event.target.value })} />
+                  <AutoResizeTextarea className="themed-textarea context-entry-field context-definition-field" aria-label="Review definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateReviewEntry(index, { definition: event.target.value })} />
+                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Review avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateReviewEntry(index, { avoid: textToAliases(event.target.value) })} />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-review-entry', hash: payload.hash, reviewIndex: entry.index, entry: { term: entry.term, definition: entry.definition, avoid: entry.avoid } })}>
+                      <CheckCircle2 size={14} /> Approve
+                    </button>
+                    <button className="icon-button compact context-entry-remove" type="button" aria-label={`Delete review entry ${entry.term || index + 1}`} disabled={saving} onClick={() => post({ action: 'delete-review-entry', hash: payload.hash, reviewIndex: entry.index })}><Trash2 size={14} /></button>
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : null}
+          {payload.openQuestions?.length ? (
+            <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+              {payload.openQuestions.map((question) => (
+                <section key={`${question.index}-${question.text}`} className="settings-subcontainer context-entry-row" style={{ gridTemplateColumns: '1fr auto' }}>
+                  <p style={{ margin: 0 }}>{question.text}</p>
+                  <button className="button" type="button" disabled={saving} onClick={() => post({ action: 'approve-open-question', hash: payload.hash, questionIndex: question.index })}>
+                    <CheckCircle2 size={14} /> Approve note
+                  </button>
+                </section>
+              ))}
+            </div>
+          ) : null}
         </article>
       ) : null}
 

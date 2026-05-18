@@ -12,12 +12,23 @@ export interface ContextOpenQuestion {
   text: string;
 }
 
+export interface ContextReviewEntry extends ContextEntry {
+  index: number;
+}
+
+interface EntryBlock {
+  entry: ContextEntry;
+  start: number;
+  end: number;
+}
+
 export interface ParsedContext {
   raw: string;
   beforeLanguage: string;
   languageHeading: string | null;
   entries: ContextEntry[];
   openQuestions: ContextOpenQuestion[];
+  reviewEntries: ContextReviewEntry[];
   afterLanguage: string;
   errors: string[];
   structuredEditable: boolean;
@@ -41,6 +52,7 @@ Project domain language and decisions that agents should use when planning work.
 const LANGUAGE_HEADING_RE = /^##\s+Language\s*$/im;
 const OPEN_QUESTIONS_HEADING_RE = /^##\s+Open Questions\s*\/\s*Needs User Review\s*$/im;
 const APPROVED_NOTES_HEADING = '## Approved Context Notes';
+const OPEN_QUESTIONS_HEADING = '## Open Questions / Needs User Review';
 const NEXT_H2_RE = /^##\s+/m;
 const TERM_RE = /^\*\*([^*\n][^*\n]*?)\*\*:\s*$/;
 const AVOID_RE = /^_Avoid_:\s*(.*?)\s*$/i;
@@ -89,6 +101,89 @@ export function extractOpenQuestions(raw: string): ContextOpenQuestion[] {
 
 function bulletForApprovedQuestion(text: string): string {
   return `- ${text.replace(/^[-*]\s+/, '').trim()}`;
+}
+
+function parseEntryBlocks(section: string): { blocks: EntryBlock[]; errors: string[] } {
+  const lines = cleanLines(section);
+  const blocks: EntryBlock[] = [];
+  const errors: string[] = [];
+  let i = 0;
+  let inHtmlComment = false;
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (inHtmlComment) {
+      if (trimmed.includes('-->')) inHtmlComment = false;
+      i += 1;
+      continue;
+    }
+    if (trimmed.startsWith('<!--')) {
+      if (!trimmed.includes('-->')) inHtmlComment = true;
+      i += 1;
+      continue;
+    }
+    if (!trimmed || /^[-*]\s*TODO\b/i.test(trimmed)) { i += 1; continue; }
+    if (/^[-*]\s+/.test(trimmed)) { i += 1; continue; }
+    const termMatch = line.match(TERM_RE);
+    if (!termMatch) {
+      errors.push(`Unparseable glossary entry near line: ${line.trim().slice(0, 80)}`);
+      i += 1;
+      continue;
+    }
+    const start = i;
+    const term = termMatch[1].trim();
+    i += 1;
+    const definitionLines: string[] = [];
+    let avoid: string[] = [];
+    while (i < lines.length) {
+      const current = lines[i];
+      if (TERM_RE.test(current)) break;
+      const avoidMatch = current.match(AVOID_RE);
+      if (avoidMatch) {
+        avoid = avoidMatch[1].split(',').map((item) => item.trim()).filter(Boolean);
+        i += 1;
+        continue;
+      }
+      if (current.trim()) definitionLines.push(current.trim());
+      i += 1;
+    }
+    blocks.push({ entry: { term, definition: definitionLines.join('\n').trim(), avoid }, start, end: i });
+  }
+  return { blocks, errors };
+}
+
+export function extractReviewEntries(raw: string): ContextReviewEntry[] {
+  const split = splitSection(raw, OPEN_QUESTIONS_HEADING_RE);
+  if (!split.heading) return [];
+  return parseEntryBlocks(split.section).blocks.map((block) => ({ ...block.entry, index: block.start }));
+}
+
+function removeReviewEntry(raw: string, entryIndex: number): { raw?: string; entry?: ContextEntry; errors: string[] } {
+  const split = splitSection(raw, OPEN_QUESTIONS_HEADING_RE);
+  if (!split.heading) return { errors: ['Missing ## Open Questions / Needs User Review section'] };
+  const lines = cleanLines(split.section);
+  const block = parseEntryBlocks(split.section).blocks.find((candidate) => candidate.start === entryIndex);
+  if (!block) return { errors: ['Review entry not found'] };
+  lines.splice(block.start, block.end - block.start);
+  const section = `\n${lines.join('\n').replace(/\s*$/, '')}\n`;
+  return { raw: `${split.before}${split.heading}${section}${split.after.replace(/^\n?/, '\n')}`, entry: block.entry, errors: [] };
+}
+
+export function deleteReviewEntry(raw: string, entryIndex: number): { raw?: string; errors: string[] } {
+  const result = removeReviewEntry(raw, entryIndex);
+  return { raw: result.raw, errors: result.errors };
+}
+
+export function approveReviewEntry(raw: string, entryIndex: number, approvedEntry?: ContextEntry): { raw?: string; errors: string[] } {
+  const removed = removeReviewEntry(raw, entryIndex);
+  if (removed.errors.length || !removed.raw || !removed.entry) return { errors: removed.errors };
+  const entry = approvedEntry || removed.entry;
+  const entryErrors = validateEntries([entry]);
+  if (entryErrors.length) return { errors: entryErrors };
+  const parsed = parseContextMarkdown(removed.raw);
+  const result = serializeStructuredContext(parsed, [...parsed.entries, entry]);
+  if (result.errors.length || !result.raw) return { errors: result.errors };
+  return { raw: result.raw, errors: [] };
 }
 
 function appendApprovedNote(raw: string, text: string): string {
@@ -147,6 +242,7 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
       languageHeading: null,
       entries: [],
       openQuestions: extractOpenQuestions(raw),
+      reviewEntries: extractReviewEntries(raw),
       afterLanguage: '',
       errors: ['Missing ## Language section'],
       structuredEditable: true,
@@ -155,48 +251,9 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
     };
   }
 
-  const lines = cleanLines(split.section);
-  let i = 0;
-  let inHtmlComment = false;
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (inHtmlComment) {
-      if (trimmed.includes('-->')) inHtmlComment = false;
-      i += 1;
-      continue;
-    }
-    if (trimmed.startsWith('<!--')) {
-      if (!trimmed.includes('-->')) inHtmlComment = true;
-      i += 1;
-      continue;
-    }
-    if (!trimmed) { i += 1; continue; }
-    const termMatch = line.match(TERM_RE);
-    if (!termMatch) {
-      errors.push(`Unparseable content in ## Language near line: ${line.trim().slice(0, 80)}`);
-      i += 1;
-      continue;
-    }
-    const term = termMatch[1].trim();
-    i += 1;
-    const definitionLines: string[] = [];
-    let avoid: string[] = [];
-    while (i < lines.length) {
-      const current = lines[i];
-      if (TERM_RE.test(current)) break;
-      const avoidMatch = current.match(AVOID_RE);
-      if (avoidMatch) {
-        avoid = avoidMatch[1].split(',').map((item) => item.trim()).filter(Boolean);
-        i += 1;
-        continue;
-      }
-      if (current.trim()) definitionLines.push(current.trim());
-      i += 1;
-    }
-    entries.push({ term, definition: definitionLines.join('\n').trim(), avoid });
-  }
-
+  const parsedEntries = parseEntryBlocks(split.section);
+  entries.push(...parsedEntries.blocks.map((block) => block.entry));
+  errors.push(...parsedEntries.errors.map((error) => error.replace('Unparseable glossary entry', 'Unparseable content in ## Language')));
   errors.push(...validateEntries(entries));
   return {
     raw,
@@ -204,6 +261,7 @@ export function parseContextMarkdown(raw: string, mtimeMs: number | null = null)
     languageHeading: split.heading,
     entries,
     openQuestions: extractOpenQuestions(raw),
+    reviewEntries: extractReviewEntries(raw),
     afterLanguage: split.after,
     errors,
     structuredEditable: errors.length === 0,

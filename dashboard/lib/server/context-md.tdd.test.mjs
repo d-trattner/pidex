@@ -96,3 +96,24 @@ test('extracts and approves open questions into approved notes', () => {
   const openSection = result.raw.split('## Approved Context Notes')[0];
   assert.doesNotMatch(openSection, /Confirm Forge means deployment builder\./);
 });
+
+test('approves structured review entry into language entries', () => {
+  const raw = `# Demo\n\n## Language\n\n**PIDEX**:\nConfirmed term.\n\n## Open Questions / Needs User Review\n\n**Forge**:\nUncertain deployment term.\n_Avoid_: build thing\n`;
+  const parsed = mod.parseContextMarkdown(raw);
+  assert.deepEqual(parsed.reviewEntries, [{ index: 0, term: 'Forge', definition: 'Uncertain deployment term.', avoid: ['build thing'] }]);
+  const result = mod.approveReviewEntry(raw, 0, { term: 'Forge', definition: 'A confirmed deployment term.', avoid: ['build thing'] });
+  assert.equal(result.errors.length, 0);
+  const approved = mod.parseContextMarkdown(result.raw);
+  assert.deepEqual(approved.entries.map((entry) => entry.term), ['PIDEX', 'Forge']);
+  assert.equal(approved.entries[1].definition, 'A confirmed deployment term.');
+  assert.deepEqual(approved.reviewEntries, []);
+});
+
+test('deletes structured review entry without approving it', () => {
+  const raw = `# Demo\n\n## Language\n\n## Open Questions / Needs User Review\n\n**Forge**:\nUncertain deployment term.\n`;
+  const result = mod.deleteReviewEntry(raw, 0);
+  assert.equal(result.errors.length, 0);
+  const parsed = mod.parseContextMarkdown(result.raw);
+  assert.equal(parsed.entries.length, 0);
+  assert.deepEqual(parsed.reviewEntries, []);
+});

@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { createFileRoute } from '@tanstack/react-router';
 
-import { DEFAULT_CONTEXT_MARKDOWN, approveOpenQuestion, normalizeRawContext, parseContextMarkdown, safeContextTarget, serializeStructuredContext, type ContextEntry } from '../../lib/server/context-md';
+import { DEFAULT_CONTEXT_MARKDOWN, approveOpenQuestion, approveReviewEntry, deleteReviewEntry, normalizeRawContext, parseContextMarkdown, safeContextTarget, serializeStructuredContext, type ContextEntry } from '../../lib/server/context-md';
 import { queryRows } from '../../lib/server/db';
 import { errorResponse, jsonResponse } from '../../lib/server/response';
 
@@ -71,6 +71,7 @@ function toPayload(args: { project: string | null; projectRoot: string | null; c
     raw: parsed?.raw ?? '',
     entries: parsed?.entries ?? [],
     openQuestions: parsed?.openQuestions ?? [],
+    reviewEntries: parsed?.reviewEntries ?? [],
     structuredEditable: parsed?.structuredEditable ?? true,
     hash: parsed?.hash,
     mtimeMs: parsed?.mtimeMs ?? null,
@@ -111,7 +112,7 @@ export const Route = createFileRoute('/api/context')({
         const root = await projectPath(project);
         if (!root) return errorResponse('project is required', 400);
         const current = await readContext(root);
-        const body = (await request.json().catch(() => ({}))) as { action?: string; hash?: string; entries?: ContextEntry[]; raw?: string; questionIndex?: number };
+        const body = (await request.json().catch(() => ({}))) as { action?: string; hash?: string; entries?: ContextEntry[]; raw?: string; questionIndex?: number; reviewIndex?: number; entry?: ContextEntry };
         const action = body.action || 'save-entries';
 
         if (action !== 'create' && body.hash && body.hash !== current.parsed.hash) {
@@ -132,6 +133,14 @@ export const Route = createFileRoute('/api/context')({
           await writeAtomic(current.safe.target, result.raw);
         } else if (action === 'approve-open-question') {
           const result = approveOpenQuestion(current.parsed.raw, Number(body.questionIndex));
+          if (result.errors.length || !result.raw) return jsonResponse({ ok: false, errors: result.errors }, 400);
+          await writeAtomic(current.safe.target, result.raw);
+        } else if (action === 'approve-review-entry') {
+          const result = approveReviewEntry(current.parsed.raw, Number(body.reviewIndex), body.entry);
+          if (result.errors.length || !result.raw) return jsonResponse({ ok: false, errors: result.errors }, 400);
+          await writeAtomic(current.safe.target, result.raw);
+        } else if (action === 'delete-review-entry') {
+          const result = deleteReviewEntry(current.parsed.raw, Number(body.reviewIndex));
           if (result.errors.length || !result.raw) return jsonResponse({ ok: false, errors: result.errors }, 400);
           await writeAtomic(current.safe.target, result.raw);
         } else {
