@@ -335,6 +335,15 @@ function ContextPage() {
         <article key={section.heading} id={sectionTabId(section.heading)} className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
           <div className="context-entries-toolbar">
             <h3>{section.heading}</h3>
+            {['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
+              <div className="context-entries-actions">
+                <label className="context-search-label" aria-label={`Search ${section.heading}`}>
+                  <Search size={14} aria-hidden="true" />
+                  <input className="themed-input context-search-input" value={sectionSearch} onChange={(event) => setSectionSearch(event.target.value)} placeholder={`Search ${section.heading}…`} />
+                </label>
+                <button className="button" type="button" onClick={() => updateEditableSection(sectionIndex, serializePairs([...parsePairs(section.body), { title: '', body: '' }]))}><Plus size={14} /> Add entry</button>
+              </div>
+            ) : null}
           </div>
           {section.heading === 'Project Identity' ? (
             <div className="context-identity-grid" style={{ marginTop: 12 }}>
@@ -353,13 +362,6 @@ function ContextPage() {
             </div>
           ) : ['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
             <div className="context-entry-table" style={{ marginTop: 12 }}>
-              <div className="context-entries-actions">
-                <label className="context-search-label" aria-label={`Search ${section.heading}`}>
-                  <Search size={14} aria-hidden="true" />
-                  <input className="themed-input context-search-input" value={sectionSearch} onChange={(event) => setSectionSearch(event.target.value)} placeholder={`Search ${section.heading}…`} />
-                </label>
-                <button className="button" type="button" onClick={() => updateEditableSection(sectionIndex, serializePairs([...parsePairs(section.body), { title: '', body: '' }]))}><Plus size={14} /> Add entry</button>
-              </div>
               <div className="context-entry-header context-pair-header" aria-hidden="true">
                 <span>Entry</span>
                 <span></span>
