@@ -25,10 +25,6 @@ Definition.
 _Avoid_: Ambiguous synonym, old term
 -->
 
-**TODO-Term**:
-TODO definition.
-_Avoid_: TODO ambiguous synonym
-
 ## Relationships
 
 <!-- Express relationships between project/domain concepts. -->
@@ -78,6 +74,3 @@ _Avoid_: TODO ambiguous synonym
 
 <!-- Use only for genuinely uncertain agent proposals. Confirmed user statements and clear code/docs-evidenced terms may go directly into ## Language. Use the same structure as Language entries so the dashboard can edit/approve/delete proposals. -->
 
-**TODO-Proposed-Term**:
-TODO uncertain definition.
-_Avoid_: TODO ambiguous synonym
