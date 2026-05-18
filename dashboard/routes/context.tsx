@@ -94,6 +94,7 @@ function ContextPage() {
   const [message, setMessage] = useState('');
   const [rawOpen, setRawOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [activeSection, setActiveSection] = useState<'review' | 'language' | 'sections' | 'raw'>('language');
 
   const endpoint = useMemo(() => withProjectParam('/api/context', project), [project]);
 
@@ -167,10 +168,10 @@ function ContextPage() {
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => !query || [entry.term, entry.definition, aliasesToText(entry.avoid)].some((value) => value.toLowerCase().includes(query)));
   const sectionNav = [
-    { id: 'context-review', label: 'Needs Review', show: Boolean(payload?.exists && (reviewEntries.length || payload.openQuestions?.length)) },
-    { id: 'context-language', label: 'Language', show: Boolean(payload?.exists) },
-    { id: 'context-sections', label: 'Sections', show: Boolean(payload?.exists && editableSections.length) },
-    { id: 'context-raw', label: 'Raw Markdown', show: Boolean(payload?.exists) },
+    { id: 'review' as const, label: 'Needs Review', show: Boolean(payload?.exists && (reviewEntries.length || payload.openQuestions?.length)) },
+    { id: 'language' as const, label: 'Language', show: Boolean(payload?.exists) },
+    { id: 'sections' as const, label: 'Sections', show: Boolean(payload?.exists && editableSections.length) },
+    { id: 'raw' as const, label: 'Raw Markdown', show: Boolean(payload?.exists) },
   ].filter((item) => item.show);
 
   return (
@@ -188,7 +189,7 @@ function ContextPage() {
           <div className="context-header-actions" aria-label="Context sections and save actions">
             <div className="context-section-nav" aria-label="Context section navigation">
               {sectionNav.map((item) => (
-                <button key={item.id} className="button" type="button" onClick={() => document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{item.label}</button>
+                <button key={item.id} className={`button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => setActiveSection(item.id)}>{item.label}</button>
               ))}
             </div>
             <button className="button" type="button" disabled={saving || !modified || !canStructuredSave} onClick={() => post({ action: 'save-context', hash: payload.hash, entries, sections: editableSections })}>Save context</button>
@@ -208,7 +209,7 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists && (reviewEntries.length > 0 || Boolean(payload.openQuestions?.length)) ? (
+      {payload?.exists && activeSection === 'review' && (reviewEntries.length > 0 || Boolean(payload.openQuestions?.length)) ? (
         <article id="context-review" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
           <div className="context-entries-toolbar">
             <h3>Needs Review</h3>
@@ -252,7 +253,7 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists ? (
+      {payload?.exists && activeSection === 'language' ? (
         <article id="context-language" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
           <div className="context-entries-toolbar">
             <h3>Language entries</h3>
@@ -288,7 +289,7 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists && editableSections.length ? (
+      {payload?.exists && activeSection === 'sections' && editableSections.length ? (
         <article id="context-sections" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
           <div className="context-entries-toolbar">
             <h3>Other sections</h3>
@@ -305,7 +306,7 @@ function ContextPage() {
         </article>
       ) : null}
 
-      {payload?.exists ? (
+      {payload?.exists && activeSection === 'raw' ? (
         <article id="context-raw" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
           <button className="button" type="button" onClick={() => setRawOpen((value) => !value)}>{rawOpen ? 'Hide raw Markdown' : 'Show raw Markdown fallback'}</button>
           {rawOpen ? (
