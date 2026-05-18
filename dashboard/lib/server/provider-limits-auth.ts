@@ -50,6 +50,18 @@ function isSameOrigin(requestUrl: URL, origin: string): boolean {
   }
 }
 
+function isSameOriginBrowserRead(request: Request, requestUrl: URL, method: string): boolean {
+  if (method !== 'GET') return false;
+  const origin = request.headers.get('origin');
+  if (origin && isSameOrigin(requestUrl, origin)) return true;
+
+  const referer = request.headers.get('referer');
+  if (referer && isSameOrigin(requestUrl, referer)) return true;
+
+  const fetchSite = (request.headers.get('sec-fetch-site') || '').toLowerCase();
+  return fetchSite === 'same-origin';
+}
+
 export function authorizeProviderLimitsRequest(request: Request, options: { method: string }): ProviderLimitsAuthResult {
   const requestUrl = new URL(request.url);
   const isLocal = isLoopbackHost(requestUrl.hostname);
@@ -57,8 +69,9 @@ export function authorizeProviderLimitsRequest(request: Request, options: { meth
 
   const method = options.method.toUpperCase();
   const origin = request.headers.get('origin');
+  const sameOriginReadAllowed = isSameOriginBrowserRead(request, requestUrl, method);
   const sameOriginWriteAllowed = method !== 'GET' && isPublicWriteEnabled() && origin && isSameOrigin(requestUrl, origin);
-  if (requiresToken && !hasValidToken(request) && !(method === 'GET' && isPublicReadEnabled()) && !sameOriginWriteAllowed) {
+  if (requiresToken && !hasValidToken(request) && !(method === 'GET' && (isPublicReadEnabled() || sameOriginReadAllowed)) && !sameOriginWriteAllowed) {
     return { allowed: false, status: 403, error: 'provider-limits access denied' };
   }
 

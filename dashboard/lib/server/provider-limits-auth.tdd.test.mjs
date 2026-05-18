@@ -50,6 +50,19 @@ test('public bind allows read with valid token', () => {
   assert.equal(result.allowed, true);
 });
 
+test('public bind allows same-origin browser reads without public token', () => {
+  process.env.PIDEX_DASHBOARD_PUBLIC_BIND = '1';
+  const read = new Request('http://pi.lan:18777/api/provider-limits', {
+    headers: { referer: 'http://pi.lan:18777/usage' },
+  });
+  assert.equal(authorizeProviderLimitsRequest(read, { method: 'GET' }).allowed, true);
+
+  const fetchRead = new Request('http://pi.lan:18777/api/provider-limits', {
+    headers: { 'sec-fetch-site': 'same-origin' },
+  });
+  assert.equal(authorizeProviderLimitsRequest(fetchRead, { method: 'GET' }).allowed, true);
+});
+
 test('public bind can opt into public read while keeping writes protected', () => {
   process.env.PIDEX_DASHBOARD_PUBLIC_BIND = '1';
   process.env.PIDEX_PROVIDER_LIMITS_PUBLIC_READ = '1';
