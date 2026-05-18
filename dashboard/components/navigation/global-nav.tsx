@@ -289,7 +289,7 @@ export function MobileMenuSheet() {
   return (
     <>
       <div className="mobile-menu-trigger-full" aria-label="Mobile dashboard controls">
-        <div className={`mobile-bottom-bar${showFilesButton ? ' mobile-bottom-bar--wiki' : ''}`}>
+        <div className={`mobile-bottom-bar${showFilesButton || showSectionsButton ? ' mobile-bottom-bar--three' : ''}`}>
           <button
             ref={projectTriggerRef}
             type="button"

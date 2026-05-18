@@ -201,7 +201,8 @@ body.modal-open {
   -webkit-backdrop-filter: blur(10px) saturate(1.18);
 }
 
-.mobile-bottom-bar--wiki {
+.mobile-bottom-bar--wiki,
+.mobile-bottom-bar--three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -854,9 +855,11 @@ body.modal-open {
 .glass-btn.active,
 .project-pill.active,
 .pill.active,
+.button.active,
 .mobile-nav-item.active {
   border-color: rgba(0, 245, 255, 0.72);
-  box-shadow: inset 0 -2px 0 var(--accent), inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 22px rgba(0,0,0,0.18);
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent), inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 22px rgba(0,0,0,0.18), 0 0 18px rgba(0,245,255,0.18);
 }
 
 .button::after,
@@ -1624,7 +1627,7 @@ body.modal-open {
 }
 
 .context-grid {
-  grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
   align-items: start;
 }
 
