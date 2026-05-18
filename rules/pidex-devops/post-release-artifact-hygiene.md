@@ -17,6 +17,16 @@ Classify every remaining dirty path into exactly one bucket:
 | `LEAVE_DIRTY` | Intentionally retained dirty state | Must name owner, reason, and next action |
 | `ASK_USER` | Ambiguous or outside automatic cleanup scope | Stop and ask user |
 
+## Durable PIDEX context protection
+
+`pidex/context/**` is durable project context, not generated spillover. DevOps must never classify it as `DELETE_NOW` and must never remove it during artifact hygiene.
+
+If `pidex/context/**` is dirty or untracked:
+
+- classify as `COMMIT_NOW` only when the pipeline explicitly created/updated project context and user/project policy allows committing it;
+- otherwise classify as `LEAVE_DIRTY` with owner `orchestrator/context-owner` and next action `review in Context dashboard`;
+- use `ASK_USER` if unsure whether it should be committed.
+
 ## Automatic cleanup scope
 
 DevOps may automatically reconcile only non-generated docs/bookkeeping:
@@ -51,6 +61,7 @@ Record a table in the deployment/devops artifact:
 | Path | Git status | Classification | Action | Rationale |
 |------|------------|----------------|--------|-----------|
 | pidex/state/wiki-hygiene.json | M | COMMIT_NOW | stage | durable hygiene cadence state |
+| pidex/context/CONTEXT.md | ?? | LEAVE_DIRTY | keep | durable project context; review in Context dashboard |
 | agents.output/architecture/1-architect-findings.md | ?? | LEAVE_DIRTY | ignore | generated runtime artifact; never commit |
 ```
 
