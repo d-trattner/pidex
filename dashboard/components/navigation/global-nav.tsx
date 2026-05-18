@@ -232,6 +232,7 @@ export function MobileMenuSheet() {
   const location = useLocation();
   const currentProject = readProjectFromSearch(location.search);
   const showFilesButton = location.pathname === '/wiki';
+  const showSectionsButton = location.pathname === '/context';
   const open = openSheet !== null;
 
   const openDialog = (sheet: 'menu' | 'project', ref: RefObject<HTMLButtonElement | null>) => {
@@ -311,6 +312,17 @@ export function MobileMenuSheet() {
             >
               <BookOpen size={16} aria-hidden="true" />
               <span>Files</span>
+            </button>
+          ) : null}
+          {showSectionsButton ? (
+            <button
+              type="button"
+              className="mobile-bottom-button"
+              aria-label="Open context sections"
+              onClick={() => window.dispatchEvent(new CustomEvent('pidex:context-sections-open'))}
+            >
+              <BookOpen size={16} aria-hidden="true" />
+              <span>Section</span>
             </button>
           ) : null}
           <button

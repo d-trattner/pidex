@@ -1623,24 +1623,45 @@ body.modal-open {
   flex-wrap: nowrap;
 }
 
+.context-grid {
+  grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.context-page-header {
+  grid-column: 1 / -1;
+}
+
+.context-sidebar {
+  position: sticky;
+  top: 132px;
+  grid-column: 1;
+}
+
+.context-main-panel {
+  grid-column: 2;
+}
+
+.context-side-menu {
+  display: grid;
+  gap: 8px;
+}
+
+.context-side-menu .button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .context-header-actions {
   display: flex;
   gap: 10px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   margin-top: 12px;
 }
 
-.context-section-nav {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.context-header-actions .button,
-.context-section-nav .button {
+.context-header-actions .button {
   min-height: 36px;
 }
 
@@ -1820,9 +1841,20 @@ textarea.themed-textarea {
 }
 
 @media (max-width: 900px) {
+  .context-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .context-sidebar {
+    display: none;
+  }
+
+  .context-main-panel {
+    grid-column: 1 / -1;
+  }
+
   .context-page-heading,
   .context-header-actions,
-  .context-section-nav,
   .context-entries-toolbar,
   .context-entries-actions {
     align-items: stretch;

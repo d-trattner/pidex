@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type TextareaHTMLAttributes } from 'react';
+import { createPortal } from 'react-dom';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { CheckCircle2, Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle2, Plus, Search, Trash2, X } from 'lucide-react';
 
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
@@ -136,6 +137,7 @@ function ContextPage() {
   const [search, setSearch] = useState('');
   const [sectionSearch, setSectionSearch] = useState('');
   const [activeSection, setActiveSection] = useState<string>('language');
+  const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false);
 
   const endpoint = useMemo(() => withProjectParam('/api/context', project), [project]);
 
@@ -158,6 +160,18 @@ function ContextPage() {
   }
 
   useEffect(() => { void load(); }, [endpoint]);
+
+  useEffect(() => {
+    const open = () => setSectionsSheetOpen(true);
+    window.addEventListener('pidex:context-sections-open', open);
+    return () => window.removeEventListener('pidex:context-sections-open', open);
+  }, []);
+
+  useEffect(() => {
+    if (!sectionsSheetOpen) return;
+    document.body.classList.add('modal-open');
+    return () => document.body.classList.remove('modal-open');
+  }, [sectionsSheetOpen]);
 
   async function post(body: Record<string, unknown>) {
     setSaving(true);
@@ -215,8 +229,16 @@ function ContextPage() {
     { id: 'raw', label: 'Raw Markdown', show: Boolean(payload?.exists) },
   ].filter((item) => item.show);
 
+  const sectionMenu = (mobile = false) => (
+    <nav className="context-side-menu" aria-label="Context sections">
+      {sectionNav.map((item) => (
+        <button key={item.id} className={`button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => { setActiveSection(item.id); setSectionsSheetOpen(false); if (item.id === 'raw') void load(); }}>{item.label}</button>
+      ))}
+    </nav>
+  );
+
   return (
-    <section className="grid" style={{ marginTop: 12 }}>
+    <section className="grid context-grid" style={{ marginTop: 12 }}>
       <article className="glass-card glass context-page-header" style={{ gridColumn: '1 / -1' }}>
         <div className="context-page-heading">
           <h2 className="h2">Project Context</h2>
@@ -228,11 +250,6 @@ function ContextPage() {
         <p className="muted">Review and edit project domain glossary at <code>pidex/context/CONTEXT.md</code>.</p>
         {payload?.exists ? (
           <div className="context-header-actions" aria-label="Context sections and save actions">
-            <div className="context-section-nav" aria-label="Context section navigation">
-              {sectionNav.map((item) => (
-                <button key={item.id} className={`button ${activeSection === item.id ? 'active' : ''}`} type="button" onClick={() => { setActiveSection(item.id); if (item.id === 'raw') void load(); }}>{item.label}</button>
-              ))}
-            </div>
             <button className="button" type="button" disabled={saving || !modified || !canStructuredSave} onClick={() => post({ action: 'save-context', hash: payload.hash, entries, sections: editableSections })}>Save context</button>
           </div>
         ) : null}
@@ -250,8 +267,23 @@ function ContextPage() {
         </article>
       ) : null}
 
+      {payload?.exists ? <aside className="glass-card glass context-sidebar">{sectionMenu(false)}</aside> : null}
+
+      {sectionsSheetOpen ? createPortal(
+        <div className="mobile-sheet-overlay mobile-sheet-enter" role="dialog" aria-modal="true" aria-label="Context sections" onClick={() => setSectionsSheetOpen(false)}>
+          <aside className="glass mobile-sheet" onClick={(event) => event.stopPropagation()}>
+            <div className="mobile-sheet-head">
+              <h2 className="h2">Sections</h2>
+              <button type="button" className="icon-button" aria-label="Close sections" onClick={() => setSectionsSheetOpen(false)}><X size={20} aria-hidden="true" /></button>
+            </div>
+            <div className="mobile-sheet-body">{sectionMenu(true)}</div>
+          </aside>
+        </div>,
+        document.body,
+      ) : null}
+
       {payload?.exists && activeSection === 'review' && (reviewEntries.length > 0 || Boolean(payload.openQuestions?.length)) ? (
-        <article id="context-review" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
+        <article id="context-review" className="glass-card glass context-main-panel" style={{ scrollMarginTop: 150 }}>
           <div className="context-entries-toolbar">
             <h3>Needs Review</h3>
           </div>
@@ -295,7 +327,7 @@ function ContextPage() {
       ) : null}
 
       {payload?.exists && activeSection === 'language' ? (
-        <article id="context-language" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
+        <article id="context-language" className="glass-card glass context-main-panel" style={{ scrollMarginTop: 150 }}>
           <div className="context-entries-toolbar">
             <h3>Language entries</h3>
             <div className="context-entries-actions">
@@ -331,7 +363,7 @@ function ContextPage() {
       ) : null}
 
       {payload?.exists && editableSections.map((section, sectionIndex) => activeSection === sectionTabId(section.heading) ? (
-        <article key={section.heading} id={sectionTabId(section.heading)} className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
+        <article key={section.heading} id={sectionTabId(section.heading)} className="glass-card glass context-main-panel">
           <div className="context-entries-toolbar">
             <h3>{section.heading}</h3>
             {['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
@@ -400,7 +432,7 @@ function ContextPage() {
       ) : null)}
 
       {payload?.exists && activeSection === 'raw' ? (
-        <article id="context-raw" className="glass-card glass" style={{ gridColumn: '1 / -1', scrollMarginTop: 150 }}>
+        <article id="context-raw" className="glass-card glass context-main-panel" style={{ scrollMarginTop: 150 }}>
           <div className="context-entries-toolbar"><h3>Raw Markdown</h3></div>
           <div style={{ marginTop: 12 }}>
             <AutoResizeTextarea className="themed-textarea" rows={18} value={raw} onChange={(event) => setRaw(event.target.value)} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
