@@ -155,6 +155,12 @@ def load_quality_data(project: Path) -> dict[str, Any]:
     routing_artifacts = discover_artifact_routing(project)
     rules = discover_rules(project)
     untracked_rule_changes = discover_untracked_rule_changes(project, rule_actions)
+    pidex_root_rule_actions: list[dict[str, Any]] = []
+    pidex_root_untracked_rule_changes: list[dict[str, Any]] = []
+    if project.resolve() != ROOT.resolve():
+        pidex_root = ROOT.resolve()
+        pidex_root_rule_actions = [r for r in iter_jsonl(STATE / "rule-actions") if str(r.get("project_path") or "") in {str(pidex_root), ""}]
+        pidex_root_untracked_rule_changes = discover_untracked_rule_changes(pidex_root, pidex_root_rule_actions)
     return {
         "metrics": metrics,
         "pipeline_events": events,
@@ -163,6 +169,8 @@ def load_quality_data(project: Path) -> dict[str, Any]:
         "routing_artifacts": routing_artifacts,
         "rules": rules,
         "untracked_rule_changes": untracked_rule_changes,
+        "pidex_root_rule_actions": pidex_root_rule_actions,
+        "pidex_root_untracked_rule_changes": pidex_root_untracked_rule_changes,
     }
 
 
@@ -341,12 +349,14 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     by_rule_agent = Counter(str(r.get("agent") or "unknown") for r in data["rules"])
     rule_actions = data.get("rule_actions", [])
     untracked_rule_changes = data.get("untracked_rule_changes", [])
+    pidex_root_rule_actions = data.get("pidex_root_rule_actions", [])
+    pidex_root_untracked_rule_changes = data.get("pidex_root_untracked_rule_changes", [])
     by_rule_action = Counter(str(r.get("action") or "unknown") for r in rule_actions)
     total_tokens = sum(int(r.get("input_tokens_estimate") or 0) + int(r.get("output_tokens_estimate") or 0) for r in metrics)
     total_cost = sum(float(r.get("cost_usd_estimate") or 0.0) for r in metrics)
     return {
         "plans_reviewed": plans,
-        "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "rule_actions": len(rule_actions), "untracked_rule_changes": len(untracked_rule_changes), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
+        "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "rule_actions": len(rule_actions), "untracked_rule_changes": len(untracked_rule_changes), "pidex_root_rule_actions": len(pidex_root_rule_actions), "pidex_root_untracked_rule_changes": len(pidex_root_untracked_rule_changes), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
         "agent_runs_by_agent": dict(by_agent),
         "agent_verdicts": dict(by_verdict),
         "gates": dict(by_gate),
@@ -355,6 +365,7 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
         "rule_actions_by_action": dict(by_rule_action),
         "recent_rule_actions": rule_actions[-20:],
         "untracked_rule_changes": untracked_rule_changes,
+        "pidex_root_untracked_rule_changes": pidex_root_untracked_rule_changes,
         "cost_tokens": {"estimated_tokens": total_tokens, "estimated_cost_usd": round(total_cost, 6)},
         "operator_trace": trace,
         "confidence": "descriptive-only" if trace["gap_count"] else "medium",
@@ -466,6 +477,13 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
             lines.append(f"- `{row.get('git_status')}` `{row.get('path')}` owner `{row.get('owning_agent')}`")
     else:
         lines.append("- No untracked rule changes detected from git status.")
+    lines += ["", "## PIDEX Root Rule Hygiene", ""]
+    if s.get("pidex_root_untracked_rule_changes"):
+        lines.append("PIDEX-root rule files changed without matching rule-action ledger entries:")
+        for row in s.get("pidex_root_untracked_rule_changes", [])[:50]:
+            lines.append(f"- `{row.get('git_status')}` `{row.get('path')}` owner `{row.get('owning_agent')}`")
+    else:
+        lines.append("- No untracked PIDEX-root rule changes detected from git status.")
     lines += ["", "## Recommendation", "", "Phase 0 report is descriptive-only. Add/maintain typed operator events and rule-action ledger entries before causal self-improvement claims.", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")

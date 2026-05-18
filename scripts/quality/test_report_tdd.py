@@ -118,9 +118,13 @@ def test_markdown_and_json_report_shape():
         "routing_artifacts": [],
         "rules": [],
         "untracked_rule_changes": [{"path": "rules/pidex-qa/new.md", "git_status": "??", "owning_agent": "pidex-qa"}],
+        "pidex_root_rule_actions": [{"action": "add", "rule_path": "rules/pidex-planner/root.md"}],
+        "pidex_root_untracked_rule_changes": [{"path": "rules/pidex-planner/root-new.md", "git_status": "??", "owning_agent": "pidex-planner"}],
     }
     summary = mod.summarize(data, [])
     assert summary["confidence"] == "medium"
+    assert summary["sample_size"]["pidex_root_rule_actions"] == 1
+    assert summary["sample_size"]["pidex_root_untracked_rule_changes"] == 1
     with tempfile.TemporaryDirectory() as td:
         out = Path(td) / "report.md"
         mod.write_markdown({"generated_at": "now", "project_path": "/tmp/project", "summary": summary}, out)
@@ -129,7 +133,9 @@ def test_markdown_and_json_report_shape():
         assert "Expected-vs-Observed Operator Trace" in text
         assert "Rule-Action Ledger" in text
         assert "Untracked Rule Changes" in text
+        assert "PIDEX Root Rule Hygiene" in text
         assert "rules/pidex-qa/new.md" in text
+        assert "rules/pidex-planner/root-new.md" in text
         assert "routing-correctness" in text
 
 
