@@ -105,8 +105,13 @@ function serializeIdentity(fields: IdentityField[]): string {
   return fields.map((field) => `- **${field.key.trim()}**: ${field.value.trim()}`).join('\n');
 }
 
+function isRenderableLine(line: string): boolean {
+  const trimmed = line.trim();
+  return Boolean(trimmed) && !trimmed.startsWith('<!--') && !trimmed.endsWith('-->') && !trimmed.startsWith('-->');
+}
+
 function parsePairs(body: string): SectionPair[] {
-  return body.split(/\r?\n/).map(stripBullet).filter(Boolean).map((line) => {
+  return body.split(/\r?\n/).filter(isRenderableLine).map(stripBullet).filter(Boolean).map((line) => {
     const idx = line.indexOf(':');
     return idx >= 0 ? { title: line.slice(0, idx).trim(), body: line.slice(idx + 1).trim() } : { title: line, body: '' };
   });
@@ -117,7 +122,7 @@ function serializePairs(pairs: SectionPair[]): string {
 }
 
 function listItems(body: string): string[] {
-  return body.split(/\r?\n/).map(stripBullet).filter((line) => line && !/^<!--/.test(line));
+  return body.split(/\r?\n/).filter(isRenderableLine).map(stripBullet).filter(Boolean);
 }
 
 function ContextPage() {
@@ -336,7 +341,7 @@ function ContextPage() {
           {section.heading === 'Project Identity' ? (
             <div className="context-identity-grid" style={{ marginTop: 12 }}>
               {parseIdentity(section.body).map((field, index, fields) => (
-                <section key={`${field.key}-${index}`} className="settings-subcontainer context-identity-row">
+                <section key={`${field.key}-${index}`} className="settings-subcontainer context-identity-row context-list-row">
                   <input className="themed-input" aria-label="Identity field" value={field.key} onChange={(event) => {
                     const next = fields.map((item, idx) => idx === index ? { ...item, key: event.target.value } : item);
                     updateEditableSection(sectionIndex, serializeIdentity(next));
@@ -356,7 +361,7 @@ function ContextPage() {
                 <span></span>
               </div>
               {parsePairs(section.body).map((pair, index, pairs) => (
-                <section key={`${pair.title}-${index}`} className="settings-subcontainer context-pair-row">
+                <section key={`${pair.title}-${index}`} className="settings-subcontainer context-pair-row context-list-row">
                   <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label={`${section.heading} item`} rows={2} value={pair.title} onChange={(event) => {
                     const next = pairs.map((item, idx) => idx === index ? { ...item, title: event.target.value } : item);
                     updateEditableSection(sectionIndex, serializePairs(next));
@@ -372,6 +377,20 @@ function ContextPage() {
             </div>
           ) : section.heading === 'Example Dialogue' ? (
             <AutoResizeTextarea className="themed-textarea" rows={10} value={section.body} onChange={(event) => updateEditableSection(sectionIndex, event.target.value)} style={{ marginTop: 12 }} />
+          ) : section.heading === 'Evidence Sources' || section.heading === 'Flagged Ambiguities' ? (
+            <div className="context-rendered-table" style={{ marginTop: 12 }}>
+              {listItems(section.body).length ? (
+                <table>
+                  <thead><tr><th>{section.heading === 'Evidence Sources' ? 'Source' : 'Ambiguity'}</th><th>Details</th></tr></thead>
+                  <tbody>{listItems(section.body).map((item, index) => {
+                    const idx = item.indexOf(':');
+                    const title = idx >= 0 ? item.slice(0, idx).trim() : item;
+                    const details = idx >= 0 ? item.slice(idx + 1).trim() : '';
+                    return <tr key={index}><td>{title}</td><td>{details}</td></tr>;
+                  })}</tbody>
+                </table>
+              ) : <p className="muted">No entries yet.</p>}
+            </div>
           ) : (
             <div className="context-rendered-list" style={{ marginTop: 12 }}>
               {listItems(section.body).length ? <ul>{listItems(section.body).map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="muted">No entries yet.</p>}
