@@ -28,6 +28,10 @@ _Avoid_: commit artifact, source document
 A structured PIDEX run that routes work through planner, implementer, critic/code-reviewer, QA/UAT, DevOps, retrospective, or other specialist agents as needed.
 _Avoid_: single chat, ad hoc task
 
+**Orcha**:
+Alias for the PIDEX orchestrator: the host Pi session that coordinates the `pidex-*` agents, reads ROUTING blocks, handles gates, and decides next route.
+_Avoid_: separate specialist agent, Forge-only term
+
 **Parallel lane**:
 An optional non-blocking secondary agent run configured in `config/parallel-agents.json`. Parallel lanes provide extra review signals and must be merged/adjudicated before their findings are treated as accepted.
 _Avoid_: required gate, primary reviewer
@@ -69,3 +73,8 @@ Agent: "Human-facing durable knowledge belongs in `wiki/`; PIDEX operational con
 - Whether future `CONTEXT-MAP.md` support should be exposed in the dashboard as tabs, a tree, or separate route pages.
 - Whether context saves should offer an optional one-click Git commit after explicit user approval.
 - How much agent-written context should be auto-suggested versus requiring a user review queue.
+
+## Open Questions / Needs User Review
+
+
+
