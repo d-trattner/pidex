@@ -1,6 +1,14 @@
-# pidex
+# PIDEX
 
-Codex-only fork of Running Pi, normalized to `pidex-*` agents and hardened against non-PIDEX providers.
+PIDEX is my personal LLM exploration project: a place where I try to understand how to use Codex-oriented LLMs effectively in a software-delivery pipeline. It keeps evolving over time and now includes many principles I learned along the way. The LLM world moves so fast that trying to follow every “new” and “best” approach can be overwhelming and exhausting. At some point, you just have to try things, measure what happens, and see where it goes.
+
+Metrics are a useful way to test what works and what does not, so PIDEX includes a local dashboard for pipeline state, quality signals, provider usage, and project context. PIDEX also follows the LLM Wiki direction: durable project knowledge should be explicit, reviewable, and close to the source instead of hidden behind opaque retrieval machinery. I tried RAG too, but for this project I prefer fewer dependencies and more explicit context.
+
+The pipeline is self-improving through rules. Every project can split refinements into global PIDEX rules and project-specific rules. If you have refinements you think would help, feel free to add them in a PR.
+
+Like many people, I was initially driven by the excitement of creating things with little effort. Over time, that feeling had to give way to a more disciplined process, so most of the refinement now happens at the user-model level. Having an orchestrator question you in detail is the most important step. You can use the `grill-me` skill for that, or rely on the predefined orchestrator instructions. It is a journey, but a fun one. :)
+
+Status: **experimental direct-mode MVP**. Direct mode is the supported path today.
 
 ## Detailed feature docs
 
@@ -55,7 +63,7 @@ In Pi:
 /pidex Add a small helper in ~/my-project
 ```
 
-`/pd` is available as a short alias. The orchestrator flow is inherited from Running Pi, but constrained to Codex models and `pidex-*` role names.
+`/pd` is available as a short alias. The orchestrator routes work through Codex-oriented `pidex-*` specialist agents.
 
 Project session memory:
 
