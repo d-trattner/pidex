@@ -1,11 +1,12 @@
 # pidex-planner Rules Index
 
-Last updated: 2026-05-16 (PROC-NEW-92-2)
+Last updated: 2026-05-18 (PROC-NEW-7-1)
 
 ## Active Rules
 
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
+| Release-Artifact Milestone Owner + Gate Binding | [release-artifact-owner-gate-binding.md](release-artifact-owner-gate-binding.md) | PROC-NEW-94-1 | Release-artifact/version milestones must declare owner + target gate + closure proof before Stage 2 |
 | Artifact Authority Test Matrix | [artifact-authority-test-matrix.md](artifact-authority-test-matrix.md) | 1 | Resolver/path authority plans must include runtime-root, test override, fixture-isolation matrix with validation rows |
 | Cross-Lane Synthesis Checkpoint | [cross-lane-synthesis-checkpoint.md](cross-lane-synthesis-checkpoint.md) | 029-PI-1 | Structural contract plans with multi-lane findings must merge overlaps/conflicts into one synthesis table before G1 close |
 | Format/Footer Contradiction Scan | [format-footer-contradiction-scan.md](format-footer-contradiction-scan.md) | 029-PI-2 | Plans changing output-format/footer/last-line rules must contradiction-scan impossible pairs before critic/implementer route |
@@ -56,6 +57,7 @@ Last updated: 2026-05-16 (PROC-NEW-92-2)
 | Plan Pre-Submission Checklist | [plan-pre-submission-checklist.md](plan-pre-submission-checklist.md) | 53-2 | Self-audit checklist before critic submission: WHAT-not-HOW ACs, BD-* naming, AC-N format, scope table, env var naming |
 | Screenshot Artifact Directory Contract | [screenshot-artifact-directory-contract.md](screenshot-artifact-directory-contract.md) | 54-3 | Plans requiring screenshots must bind a single project-local artifact dir (default `.playwright/`) and enforce `.gitignore` coverage |
 | Route Security Contract Table | [route-security-contract-table.md](route-security-contract-table.md) | 61-1 | Plans adding/changing API routes must include compact Route Security Contract table (status, sanitized outward error string, non-leak proof) |
+| API Security Match Boundary Table | [api-security-match-boundary-table.md](api-security-match-boundary-table.md) | PROC-NEW-7-1 | API-security plans with matcher/risk branches must include non-match boundary matrix and branch-specific action/category mapping |
 | Monorepo Migration Pre-Checks | [monorepo-migration-prechecks.md](monorepo-migration-prechecks.md) | extracted | Plans moving code across directory/runtime cwd boundaries must audit path-sensitive primitives before implementation |
 | Third-Party Registry Check | [third-party-registry-check.md](third-party-registry-check.md) | extracted | Plans adding exact third-party packages must verify active/canonical registry name/version |
 | Multi-Slice Budget Risk | [multi-slice-budget-risk.md](multi-slice-budget-risk.md) | PROC-7 | Plans >4 slices or >30 estimated tool-calls need split/spawn/risk strategy and spawn markers |
@@ -69,6 +71,7 @@ Last updated: 2026-05-16 (PROC-NEW-92-2)
 | Seed Data as Plan Prerequisite | [seed-data-prerequisite.md](seed-data-prerequisite.md) | 034-3 | Multi-step nav plans must declare seed data as explicit prerequisite with idempotent setup script |
 | Migration Contract Matrix | [migration-contract-matrix.md](migration-contract-matrix.md) | PROC-NEW-88-1 | Migration handoffs MUST include endpoint response-shape + action-contract matrix before implementation routing |
 | Collection Completeness AC for Parser-Heavy Plans | [collection-completeness-ac.md](collection-completeness-ac.md) | PROC-NEW-92-2 | Parser-heavy plans must include AC + validation rows proving per-item collection validation and item-level rejection paths |
+| Release-Coherence Matcher Grammar | [release-coherence-matcher-grammar.md](release-coherence-matcher-grammar.md) | PROC-NEW-1 | Terminal-close/release-coherence plans must define matcher grammar, negative examples, and AC evidence before critic handoff |
 ## How to use
 
 Read this index at task start. Load specific rule files when relevant to current task.

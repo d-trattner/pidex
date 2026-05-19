@@ -1,12 +1,13 @@
 # pidex-architect Rules Index
 
-Last updated: 2026-05-01 (PROC-NEW-60-1)
+Last updated: 2026-05-18 (PROC-NEW-7-3)
 
 ## Active Rules
 
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Security + API Contract Preflight | [security-api-contract-preflight.md](security-api-contract-preflight.md) | 60-1 | For route/contract changes, findings must include explicit auth boundary, contract mapping, and scripted verification bindings before APPROVED verdict |
+| Boundary Error Conversion Note | [boundary-error-conversion-note.md](boundary-error-conversion-note.md) | PROC-NEW-7-3 | Plans touching boundary error conversion must document typed conversion helper policy, deterministic next_action/category mapping, and reusable note snippet |
 | Scripted Validation Matrix | [scripted-validation-matrix.md](scripted-validation-matrix.md) | ARCH-SCRIPTED-VALIDATION | User-visible behavior requires scripted non-interactive verification; no manual-optional loopholes |
 | ADR Creation Boundary | (inline in agent .md) | 5 | Do NOT write ADRs unless briefing explicitly says so; tag ADR-CANDIDATE inline instead |
 

@@ -1,6 +1,6 @@
 # pidex-code-reviewer Rules Index
 
-Last updated: 2026-05-16 (PROC-NEW-93-3)
+Last updated: 2026-05-18 (PROC-104-D)
 
 ## Active Rules
 
@@ -14,6 +14,7 @@ Last updated: 2026-05-16 (PROC-NEW-93-3)
 | Deferred Scope Check | [deferred-scope-check.md](deferred-scope-check.md) | 13 | Before rejecting for missing item, check plan's Out of Scope section |
 | Release-Prep Not Blocking | [release-prep-not-blocking.md](release-prep-not-blocking.md) | 50-8 | version bump and CHANGELOG absence is an n-level reminder, not an M-level blocking finding — pidex-devops Stage 1 pre-flight is the appropriate gate for release-prep completeness |
 | Live-Only MSW Fallback Check | [live-only-msw-fallback-check.md](live-only-msw-fallback-check.md) | 61-2 | For live-only endpoint work, reviewer must verify target endpoint has no global MSW fallback handler and confirm test-local evidence |
+| Write-Path Triad First-Pass | [write-path-triad-first-pass.md](write-path-triad-first-pass.md) | PROC-104-D-2 | For first-pass review of write-path routes, require topology invariant, strict parse fail-closed, and non-leak outward error checks |
 | UI Pattern Parity Review | [ui-pattern-parity-review.md](ui-pattern-parity-review.md) | UI-PATTERN-PARITY | UI implementations must be reviewed against UI Quality Contract/source pattern before QA |
 | Execution Profile Diff Guard | [execution-profile-diff-guard.md](execution-profile-diff-guard.md) | EXECUTION-PROFILE-DIFF | Code review compares actual changed files/surfaces against approved profile/skipped-agent assumptions |
 | Fallow Evidence for JS/TS Review | [fallow-evidence.md](fallow-evidence.md) | FALLOW-CODE-REVIEW | For JS/TS code review, run Fallow or document `FALLOW-SKIP`; for non-JS/TS, record explicit skip |

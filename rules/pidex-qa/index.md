@@ -1,12 +1,13 @@
 # pidex-qa Rules Index
 
-Last updated: 2026-05-16 (PROC-NEW-93-2)
+Last updated: 2026-05-18 (PROC-NEW-7-2)
 
 ## Active Rules
 
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Authority Change Full-Suite + Fixture Isolation Gate | [authority-change-full-suite-isolation-gate.md](authority-change-full-suite-isolation-gate.md) | 2 | Resolver/path authority changes require early full-suite run and explicit fixture-isolation evidence before QA COMPLETE |
+| Combined Command + Fixture Isolation Gate | [combined-command-fixture-isolation-gate.md](combined-command-fixture-isolation-gate.md) | PROC-NEW-3 | Fixture/catalog artifact edits require combined-command parity, artifact-root isolation, and cross-command consistency evidence at QA close |
 | Docs-Only Release Reconciliation Triad Audit | [docs-only-release-reconciliation-triad-audit.md](docs-only-release-reconciliation-triad-audit.md) | 027-PI-3 | Docs-only release reconciliation QA must audit remote tag proof, roadmap shipped status, and dirty-tree provenance before QA COMPLETE |
 | Fan-out Mandatory Smoke + All-Fail Evidence | [fanout-mandatory-smoke-all-fail.md](fanout-mandatory-smoke-all-fail.md) | 71-2 | Fan-out QA requires browser smoke proof plus explicit all-fail evidence before QA COMPLETE |
 | Coverage Tool Readiness Preflight | [coverage-tool-readiness-preflight.md](coverage-tool-readiness-preflight.md) | 020-3 | Coverage-dependent QA must run readiness preflight and report canonical PASS/FAIL/SKIPPED/NOT_CONFIGURED/BLOCKED tokens |
@@ -21,8 +22,10 @@ Last updated: 2026-05-16 (PROC-NEW-93-2)
 | Screenshot Artifact Directory Enforcement | [screenshot-artifact-directory-enforcement.md](screenshot-artifact-directory-enforcement.md) | 54-4 | Any QA screenshot/snapshot artifact must be saved under project `.playwright/` (or plan-declared equivalent) and never committed outside ignored artifact path |
 | Fallow Static Audit Gate (JS/TS) | [fallow-static-audit-gate.md](fallow-static-audit-gate.md) | 61-QA | For JS/TS plans, run fallow audit and record evidence (or FALLOW-SKIP rationale) before QA COMPLETE |
 | Risk-Logic Coverage Follow-up | [risk-logic-coverage-followup.md](risk-logic-coverage-followup.md) | 61-3 | If touched risk-logic file branch coverage <50%, QA must file follow-up test task before QA COMPLETE/release close |
+| Route-Service Branch-Risk Command | [route-service-branch-risk-command.md](route-service-branch-risk-command.md) | PROC-NEW-7-2 | QA close for route/service changes must run dedicated EACCES/read-error branch-risk command bundle and branch payload assertions |
 | Version Coherence Gate | [version-coherence-gate.md](version-coherence-gate.md) | 1 / PROC-NEW-93-2 | Run gate at QA start, record PASS/FAIL token, re-check before `QA Complete` for touched artifacts |
 | NOT_CONFIGURED e2e Fallback Matrix + Artifact Existence Gate | [not-configured-e2e-fallback-matrix.md](not-configured-e2e-fallback-matrix.md) | 019-3 | QA may use NOT_CONFIGURED only with fallback matrix evidence and artifact existence checks; otherwise BLOCKED |
+| No-Live-Write Assertion Block | [no-live-write-assertion-block.md](no-live-write-assertion-block.md) | PROC-104-D-3 | QA for write-path slices must prove mock/stub path and zero live adapter writes before QA COMPLETE |
 | Visual Proof Sufficiency Gate | [visual-proof-sufficiency.md](visual-proof-sufficiency.md) | UI-VISUAL-PROOF | UI-heavy/G9-corrective QA must prove exact selector/container/placement/table claims, not just attach screenshots |
 | Dev Host / HMR Console Profile | [dev-host-console-profile.md](dev-host-console-profile.md) | UI-CONSOLE-PROFILE | Browser evidence on custom dev hosts must classify HMR/websocket/console noise before QA Complete |
 | Pre-Code-Review UI Proof Packet | [pre-cr-ui-proof-packet.md](pre-cr-ui-proof-packet.md) | 69-1 | Corrective UI/G9/parity plans require browser proof for selectors, geometry, clickability, enabled/disabled transitions, validation, and live/degraded state before QA Complete |

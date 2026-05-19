@@ -81,6 +81,14 @@ Keep orchestrator context lean by default:
    - Expand to other files only if roadmap data is missing or the user asks for deeper detail.
 4. Default summary depth: top 3-5 actionable items, then ask whether to drill deeper.
 
+### Project boundary write guard (mandatory)
+
+Before any direct-mode pipeline mutation or `pidex-*` spawn, load and apply `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`.
+
+A pipeline may only mutate its declared `<project-root>` / allowed write root. Other repositories, including `<pidex-root>` when the active project is not PIDEX itself, are read-only references unless the user explicitly switches project and starts a new pipeline for that root.
+
+Every specialist handoff must include a `PROJECT BOUNDARY` block naming current project root, allowed write root, read-only external reference roots, and the rule: do not edit/commit/tag/push outside allowed write root.
+
 ### Pre-spawn context pack (mandatory)
 
 Before every `pidex-*` spawn, build a compact context pack with policy + auto-snippets:
@@ -1104,8 +1112,8 @@ Before each spawn:
 
 1. Build compact context pack with `spawn-with-budget.sh`.
 2. Emit `pipeline_stage_started` with `scripts/pipeline/event.sh` (`--actor <pidex-agent>`, `--status running`).
-3. Pass complete task context to `pidex_agent`: project cwd, current epic/plan, relevant artifact paths, expected output path, gate/ROUTING expectations.
-4. Set `cwd` to the project root (or lane worktree for implementer lanes).
+3. Pass complete task context to `pidex_agent`: project cwd, current epic/plan, relevant artifact paths, expected output path, gate/ROUTING expectations, and the mandatory `PROJECT BOUNDARY` block from `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`.
+4. Set `cwd` to the project root (or lane worktree for implementer lanes). The `cwd` must be inside the allowed write root unless the lane worktree is explicitly declared for the same project pipeline.
 5. After return, parse the final `<!-- ROUTING -->` block. The authoritative artifact path field is `context_file:`.
 6. Emit `pipeline_stage_completed` with the route/verdict summary in `--message` or `--metadata-json`; keep pipeline status `running` unless the whole pipeline is waiting/blocked. Reserve `--status completed` for `pipeline_completed`.
 7. If the route blocks on user/orchestrator, emit `pipeline_waiting` or `pipeline_blocked`; if `pidex_agent` reports missing ROUTING or invalid `context_file`, treat as stall/format failure and recover per section 4b.
@@ -1116,7 +1124,7 @@ Minimal call shape:
 pidex_agent(
   agent=<pidex-agent>,
   cwd=<project-root>,
-  task=<compact context pack + precise objective + expected output path + routing rules>
+  task=<compact context pack + PROJECT BOUNDARY block + precise objective + expected output path + routing rules>
 )
 ```
 

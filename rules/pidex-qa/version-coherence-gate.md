@@ -10,6 +10,14 @@ At QA start (Phase 2 step 2/3), run version/artifact coherence gate before deep 
 4. If environment installs deps during validation, verify installed version matches plan spec; record divergence.
 5. Before final status, confirm no version artifact changed since start-gate pass; if changed, re-run gate.
 
-## Fail condition
+## Interim fail-soft note (limited)
 
-If any version mismatch unresolved, do not set `QA Complete`. Mark `QA Failed` with mismatch list and handoff.
+Before final QA gate, QA may record interim `FAIL-SOFT NOTE` only if both true:
+1. mismatch belongs to intentionally deferred artifact slice
+2. defer owner is assigned in artifact with closure condition
+
+Interim note does not clear gate.
+
+## Fail condition (final gate hard-fail)
+
+If any version mismatch unresolved at final QA decision, do not set `QA Complete`. Mark `QA Failed` with mismatch list and handoff.

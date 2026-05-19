@@ -1,6 +1,6 @@
 # pidex-implementer Rules Index
 
-Last updated: 2026-05-16 (PROC-NEW-93-1)
+Last updated: 2026-05-18 (PROC-NEW-2)
 
 ## Active Rules
 
@@ -9,6 +9,7 @@ Last updated: 2026-05-16 (PROC-NEW-93-1)
 | Final ROUTING Parser Fixture Pack | [final-routing-parser-fixture-pack.md](final-routing-parser-fixture-pack.md) | 029-PI-3 | Prompt-contract/parser work must reuse shared final-ROUTING fixture pack with positive + required negative cases |
 | API Fan-out Pre-CR Checklist | [api-fanout-pre-cr-checklist.md](api-fanout-pre-cr-checklist.md) | 71-1 | Fan-out API work requires pre-CR checklist for origin trust, dynamic port, timeout bounds, KPI truthfulness, sanitized errors |
 | Mutation-Route Security/Authz Checklist | [mutation-route-security-authz-checklist.md](mutation-route-security-authz-checklist.md) | 026-1 | State-mutating API routes require session + ownership + cross-project negative proof before first review handoff |
+| Write-Path Security Checklist | [write-path-security-checklist.md](write-path-security-checklist.md) | PROC-104-D-1 | Write-path mutations must prove fail-closed parse, topology invariants, non-leak outward errors, and rollback path before first CR |
 | Skip-Safety Pre-Review Checklist | [skip-safety-pre-review-checklist.md](skip-safety-pre-review-checklist.md) | 021-2 | When skip logic touched, require pre-review safety checklist + negative-test proof before first review handoff |
 | Security Remediation Dual Proof | [security-remediation-dual-proof.md](security-remediation-dual-proof.md) | 020-2 | Security remediation slices must show both adversarial block proof and fresh-run happy-path proof |
 | Shared UI Primitives Default | [shared-ui-primitives-default.md](shared-ui-primitives-default.md) | UI-SHARED-PRIMITIVES | Inventory existing shared primitives before bespoke UI markup; semantic tables default to Table*/real table primitives |
@@ -46,6 +47,7 @@ Last updated: 2026-05-16 (PROC-NEW-93-1)
 | Bounded Fix Slice Plan | [bounded-fix-slice-plan.md](bounded-fix-slice-plan.md) | PROC-NEW-88-2 | Implementer MUST execute bounded spawn-ready slices with explicit objective, failure class, pass criteria, and next-slice trigger |
 | Pre-CR Contract Gate (Allowlist + Tool/Action + Each-Item Proof) | [pre-cr-contract-gate.md](pre-cr-contract-gate.md) | PROC-NEW-92-1 | Before first review handoff for contract/parser work, prove allowlist checks, action taxonomy checks, and every-item validation evidence |
 | Contract-Coherence Preflight | [contract-coherence-preflight.md](contract-coherence-preflight.md) | PROC-NEW-93-1 | Before first review handoff on contract/parser/lifecycle scope, verify status vocab, version lane, and route string coherence |
+| Fixture-Catalog Combined Regression Command | [fixture-catalog-combined-regression-command.md](fixture-catalog-combined-regression-command.md) | PROC-NEW-2 | Fixture/catalog edits must run focused + combined regression command pair with root-isolation evidence before CR handoff |
 ## How to use
 
 Read this index at task start. Load specific rule files when relevant to current task.
