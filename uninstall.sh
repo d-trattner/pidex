@@ -2,6 +2,7 @@
 # pidex installer removal helper.
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
 TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
 UNINSTALL_GLOBAL_GIT_HOOK="${PIDEX_UNINSTALL_GLOBAL_GIT_HOOK:-ask}"
@@ -42,6 +43,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [ "$SCRIPT_DIR" != "$TARGET_DIR" ]; then
+  fail "pidex v0.1 must be uninstalled from exactly $TARGET_DIR; this script is at $SCRIPT_DIR"
+fi
 
 if [ ! -d "$TARGET_DIR" ]; then
   fail "target path does not exist: $TARGET_DIR"
