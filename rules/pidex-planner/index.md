@@ -6,6 +6,7 @@ Last updated: 2026-05-18 (PROC-NEW-7-1)
 
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
+| Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
 | Release-Artifact Milestone Owner + Gate Binding | [release-artifact-owner-gate-binding.md](release-artifact-owner-gate-binding.md) | PROC-NEW-94-1 | Release-artifact/version milestones must declare owner + target gate + closure proof before Stage 2 |
 | Artifact Authority Test Matrix | [artifact-authority-test-matrix.md](artifact-authority-test-matrix.md) | 1 | Resolver/path authority plans must include runtime-root, test override, fixture-isolation matrix with validation rows |
 | Cross-Lane Synthesis Checkpoint | [cross-lane-synthesis-checkpoint.md](cross-lane-synthesis-checkpoint.md) | 029-PI-1 | Structural contract plans with multi-lane findings must merge overlaps/conflicts into one synthesis table before G1 close |

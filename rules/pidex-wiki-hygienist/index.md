@@ -1,5 +1,6 @@
 # pidex-wiki-hygienist rules
 
+- For structural code searches, load [../shared/structural-code-search.md](../shared/structural-code-search.md): prefer ast-grep for code structure and rg for literal text.
 - Default mode is `audit`.
 - Audit mode may write reports under `<project-root>/agents.output/wiki-hygiene/*` and update only `<project-root>/pidex/state/wiki-hygiene.json` as operational state.
 - Scan canonical `<project-root>/wiki/` only.

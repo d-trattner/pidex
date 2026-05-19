@@ -4,7 +4,9 @@ Last updated: 2026-04-25
 
 ## Active Rules
 
-*No extracted rules yet. pidex-analyst has no learned PROC-NEW edge cases beyond Output Discipline (core, stays inline).*
+| Rule | File | PROC-NEW | Summary |
+|------|------|----------|---------|
+| Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
 
 ## How to use
 
