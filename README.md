@@ -6,7 +6,7 @@ Metrics are a useful way to test what works and what does not, so PIDEX includes
 
 The pipeline is self-improving through rules. Every project can split refinements into global PIDEX rules and project-specific rules. If you have refinements you think would help, feel free to add them in a PR.
 
-Like many people, I was initially driven by the excitement of creating things with little effort. Over time, that feeling had to give way to a more disciplined process, so most of the refinement now happens at the user-model level. Having an orchestrator question you in detail is the most important step. You can use the `grill-me` skill for that, or rely on the predefined orchestrator instructions. It is a journey, but a fun one. :)
+Like many devs, I was initially driven by the excitement of creating things with little effort. Over time, that feeling had to give way to a more disciplined process, so most of the refinement now happens at the user-model level. Having an orchestrator question you in detail is the most important step. You can use the `grill-me` skill for that, or rely on the predefined orchestrator instructions. It is a journey, but a fun one. :)
 
 Status: **experimental direct-mode MVP**. Direct mode is the supported path today.
 
