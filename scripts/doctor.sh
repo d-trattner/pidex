@@ -12,10 +12,10 @@ warn() { WARN=$((WARN+1)); printf '⚠ %s\n' "$*"; }
 fail() { FAIL=$((FAIL+1)); printf '✗ %s\n' "$*"; }
 
 if [ "$ROOT" = "$EXPECTED" ]; then
-  ok "installed at <pidex-root>"
+  ok "installed at ~/pidex"
 else
   fail "repo is at $ROOT, but pidex expects $EXPECTED"
-  printf '  Fix: git clone <pidex-repo-url> <pidex-root> && cd <pidex-root> && pi install .\n'
+  printf '  Fix: git clone <pidex-repo-url> ~/pidex && cd ~/pidex && ./install.sh\n'
 fi
 
 if command -v node >/dev/null 2>&1; then ok "node found: $(node --version)"; else fail "node not found"; fi

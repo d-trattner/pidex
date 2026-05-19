@@ -23,8 +23,8 @@ http://pi.lan/dashboard
 
 ## App locations
 
-- Current TanStack Start app: `<pidex-root>/dashboard/`
-- Legacy archive: `<pidex-root>/dashboard-old/` — reference/validation only
+- TanStack Start app: `<pidex-root>/dashboard/`
+- Dashboard ingest helper: `<pidex-root>/scripts/dashboard/ingest.py`
 
 ## Sections
 

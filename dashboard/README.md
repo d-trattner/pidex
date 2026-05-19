@@ -43,7 +43,6 @@ Security note: `--public-read` allows unauthenticated provider-limits `GET` requ
 - `/_dashboard/live`
 - `/_dashboard/limits`
 
-## Migration-Ziele
+## Migration status
 
-- API- und Datenadapter werden in separaten Sprint-Paketen nachgerüstet (siehe `obsidian-wikis/pidex/plans/`).
-- Legacy-Implementierung liegt unter `../dashboard-old` (read-only Referenz).
+The legacy dashboard archive has been removed. Runtime ingest now lives at `../scripts/dashboard/ingest.py`.

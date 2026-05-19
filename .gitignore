@@ -1,7 +1,8 @@
 state/
+pidex/state/**
+!pidex/state/.gitkeep
 logs/
 dashboard/data/
-dashboard-old/data/
 dashboard/.playwright/
 dashboard/.fallow/
 dashboard/dist/

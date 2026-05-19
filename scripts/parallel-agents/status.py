@@ -147,7 +147,7 @@ def eligible_lanes(root: Path, agent: str | None = None, trigger: str | None = N
     """Return lanes that the orchestrator should launch automatically for a gate."""
     status = merge_status(root)
     lanes: list[dict[str, Any]] = []
-    direct_delegate_providers = {"pi", "claude", "codex", "gemini"}
+    direct_delegate_providers = {"pi", "codex"}
     if status.get("ok") and status.get("enabled"):
         for a in status.get("agents", []):
             if agent and a.get("agent") != agent:
@@ -168,7 +168,7 @@ def eligible_lanes(root: Path, agent: str | None = None, trigger: str | None = N
                     # Pi can route authenticated provider/model IDs such as
                     # deepseek/deepseek-v4-flash or minimax/MiniMax-M2.7, while
                     # pidex_agent's direct delegate provider override only
-                    # supports pi/claude/codex/gemini.
+                    # supports pi/codex. Other provider/model IDs are routed via Pi.
                     runner_provider = "pi"
                     runner_model = f"{configured_provider}/{configured_model}"
                 lanes.append({

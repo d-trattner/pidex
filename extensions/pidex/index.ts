@@ -5,8 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGzip, gunzipSync } from "node:zlib";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 type AgentFrontmatter = {
@@ -222,7 +222,7 @@ function isPiProvider(provider: string): boolean {
 }
 
 function supportsDelegateToolLoop(provider: string): boolean {
-	return provider === "claude" || provider === "codex";
+	return provider === "codex";
 }
 
 function isToolHeavyAgent(agent: string): boolean {
@@ -1446,10 +1446,10 @@ async function runCliDelegate(params: {
 	const agent = loadAgent(params.agent);
 	const provider = normalizeProvider(params.provider);
 	const script = path.join(DELEGATE_DIR, `${provider}.sh`);
-	if (!["claude", "codex", "gemini"].includes(provider)) {
-		throw new Error(`Unsupported pidex delegate provider '${provider}' for ${params.agent}`);
+	if (provider !== "codex") {
+		throw new Error(`Unsupported pidex delegate provider '${provider}' for ${params.agent}. PIDEX currently supports provider=pi and provider=codex only; use provider=pi for Pi-routed models.`);
 	}
-	if (!fs.existsSync(script)) throw new Error(`Delegate script not found: ${script}`);
+	if (!fs.existsSync(script)) throw new Error(`Delegate provider '${provider}' is configured but not installed: missing ${script}`);
 
 	const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pidex-delegate-"));
 	const promptFile = path.join(tmp, `${params.agent}.prompt.md`);
@@ -1715,9 +1715,9 @@ const RpAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
 	cwd: Type.Optional(Type.String({ description: "Project working directory. Defaults to current Pi cwd." })),
-	provider: Type.Optional(Type.String({ description: "Optional provider override: pi, claude, codex, or gemini. Defaults to config/agents.json." })),
-	model: Type.Optional(Type.String({ description: "Optional model override. For claude, MODEL may also be model:effort, e.g. sonnet:high." })),
-	effort: Type.Optional(Type.String({ description: "Optional reasoning-effort override. Claude: low/medium/high/xhigh/max; Codex: low/medium/high/xhigh (mapped to reasoning_effort)." })),
+	provider: Type.Optional(Type.String({ description: "Optional provider override: pi or codex. Defaults to config/agents.json. Use provider=pi for Pi-routed provider/model IDs such as deepseek/... or minimax/...." })),
+	model: Type.Optional(Type.String({ description: "Optional model override. For provider=pi this may be a Pi-routed model ID; for provider=codex it is passed to the Codex CLI." })),
+	effort: Type.Optional(Type.String({ description: "Optional reasoning-effort override. For Codex/Pi-routed Codex models: low/medium/high/xhigh where supported." })),
 	tools: Type.Optional(Type.Array(Type.String(), { description: "Optional Pi tool allowlist override (only used by provider=pi/subagent)." })),
 });
 
@@ -1831,7 +1831,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	const rpAgentTool: any = {
 		name: "pidex_agent",
 		label: "pidex Agent",
-		description: "Run a bundled pidex-* specialist agent through config/agents.json. Defaults to lean Pi subprocesses, with optional Claude/Codex/Gemini CLI delegates for configured agents. Raw child logs are stored outside the parent Pi session.",
+		description: "Run a bundled pidex-* specialist agent through config/agents.json. Defaults to lean Pi subprocesses, with optional Codex CLI delegates for configured agents. Raw child logs are stored outside the parent Pi session.",
 		promptSnippet: "Run a bundled pidex-* specialist agent using pidex provider routing from config/agents.json.",
 		promptGuidelines: [
 			"Use pidex_agent for pidex specialist handoffs such as pidex-planner, pidex-critic, pidex-implementer, pidex-code-reviewer, pidex-qa, pidex-uat, pidex-devops, pidex-wiki-hygienist, pidex-retrospective, and pidex-pi.",

@@ -20,7 +20,7 @@ export const DB_PATH = process.env.PIDEX_DASHBOARD_DB
   : path.resolve(DASHBOARD_DIR, 'data', 'pidex.sqlite');
 
 const PYTHON_QUERY = path.resolve(DASHBOARD_DIR, 'lib/server/sqlite-query.py');
-const INGEST_SCRIPT = path.resolve(DASHBOARD_DIR, '../dashboard-old/scripts/ingest.py');
+const INGEST_SCRIPT = path.resolve(DASHBOARD_DIR, '../scripts/dashboard/ingest.py');
 let lastIngestAt = 0;
 let ingestFailedAt = 0;
 

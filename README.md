@@ -16,20 +16,35 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Project context](readme/project-context.md)
 - [Future briefs](readme/future-briefs.md)
 
+Project/process docs:
+
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
 ## Install
 
+PIDEX v0.1 expects the checkout at exactly `~/pidex`. Other checkout paths are not supported yet.
+
 ```bash
-pi install <pidex-root>
+git clone <pidex-repo-url> ~/pidex
+cd ~/pidex
+./install.sh
 # simulate without changing Pi settings:
-<pidex-root>/install.sh --dry-run
+./install.sh --dry-run
 ```
+
+`install.sh` runs `pi install ~/pidex` and may optionally install the global Git security hook after an interactive prompt. Non-interactive installs skip the hook unless `PIDEX_INSTALL_GLOBAL_GIT_HOOK=1` is set.
+
+In the detailed docs, `<pidex-root>` means `~/pidex` for v0.1.
 
 Uninstall:
 
 ```bash
-pi uninstall <pidex-root>
+cd ~/pidex
+./uninstall.sh
 # simulate without changing Pi settings:
-<pidex-root>/uninstall.sh --dry-run
+./uninstall.sh --dry-run
 ```
 
 ## Quick start
@@ -68,17 +83,17 @@ Project session memory:
 ## Smoke checks
 
 ```bash
-cd <pidex-root>
+cd ~/pidex
 bash scripts/doctor.sh
 npm run check
 bash scripts/smoke-test.sh
-python3 scripts/wiki/hygiene.py audit --project <pidex-root>
+python3 scripts/wiki/hygiene.py audit --project ~/pidex
 ```
 
 ## Dashboard
 
 ```bash
-cd <pidex-root>/dashboard
+cd ~/pidex/dashboard
 ./start.sh
 ```
 

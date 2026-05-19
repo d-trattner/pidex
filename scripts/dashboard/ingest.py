@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ingest Running Pi metrics/artifacts into SQLite.
+"""Ingest PIDEX metrics/artifacts into SQLite.
 
 No third-party deps. Re-runnable; uses upserts keyed by source path.
 """
