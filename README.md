@@ -1,6 +1,6 @@
 # PIDEX
 
-PIDEX is my personal LLM exploration project: a place where I try to understand how to use Codex-oriented LLMs effectively in a software-delivery pipeline. It keeps evolving over time and now includes many principles I learned along the way. The LLM world moves so fast that trying to follow every “new” and “best” approach can be overwhelming and exhausting. At some point, you just have to try things, measure what happens, and see where it goes.
+PIDEX is my personal LLM exploration project: a place where I try to understand how to use Codex-oriented LLMs effectively in a software-delivery pipeline. It is in constant development and refinement, keeps evolving over time, and now includes many principles I learned along the way. The LLM world moves so fast that trying to follow every “new” and “best” approach can be overwhelming and exhausting. At some point, you just have to try things, measure what happens, and see where it goes.
 
 Metrics are a useful way to test what works and what does not, so PIDEX includes a local dashboard for pipeline state, quality signals, provider usage, and project context. PIDEX also follows the LLM Wiki direction: durable project knowledge should be explicit, reviewable, and close to the source instead of hidden behind opaque retrieval machinery. I tried RAG too, but for this project I prefer fewer dependencies and more explicit context.
 
