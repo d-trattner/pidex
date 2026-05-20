@@ -228,6 +228,7 @@ function AgentBalanceCard() {
   const [provider, setProvider] = useState('deepseek');
   const [label, setLabel] = useState('DeepSeek');
   const [balance, setBalance] = useState('');
+  const [providerBalances, setProviderBalances] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const providerOptions = useMemo(() => {
@@ -243,18 +244,19 @@ function AgentBalanceCard() {
     return [...providers.entries()].map(([value, text]) => ({ value, text }));
   }, [balancesQuery.data?.providers, modelsQuery.data?.models]);
 
-  const record = async (kind: 'balance_update' | 'balance_top_up') => {
-    const value = Number(balance);
+  const record = async (kind: 'balance_update' | 'balance_top_up', targetProvider = provider, targetLabel = label, valueText = balance) => {
+    const value = Number(valueText);
     if (!Number.isFinite(value) || value < 0) {
       setMessage('Enter a non-negative current balance.');
       return;
     }
     setSaving(true); setMessage('');
     try {
-      const response = await fetch('/api/agent-balances', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'record-snapshot', provider, label, kind, balance_usd: value }) });
+      const response = await fetch('/api/agent-balances', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'record-snapshot', provider: targetProvider, label: targetLabel, kind, balance_usd: value }) });
       if (!response.ok) throw new Error(await response.text());
-      setBalance('');
-      setMessage(kind === 'balance_top_up' ? 'Top-up balance recorded.' : 'Balance update recorded.');
+      if (targetProvider === provider) setBalance('');
+      setProviderBalances((current) => ({ ...current, [targetProvider]: '' }));
+      setMessage(`${targetLabel || targetProvider} ${kind === 'balance_top_up' ? 'top-up balance' : 'balance update'} recorded.`);
       await balancesQuery.refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Save failed');
@@ -309,6 +311,16 @@ function AgentBalanceCard() {
               <InfoPill label="Confidence" value={item.confidence} />
               <InfoPill label="Snapshots" value={item.snapshots?.length || 0} />
               <InfoPill label="Days left" value={item.days_remaining == null ? '—' : item.days_remaining} />
+            </div>
+            <div className="settings-subcontainer" style={{ marginTop: 10 }}>
+              <h5>Record {item.label} balance</h5>
+              <label className="muted">Current remaining balance (USD)
+                <input className="themed-input" value={providerBalances[item.provider] || ''} onChange={(event) => setProviderBalances((current) => ({ ...current, [item.provider]: event.target.value }))} placeholder={item.latest_balance_usd == null ? '21.34' : String(item.latest_balance_usd)} inputMode="decimal" />
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                <button className="button" type="button" disabled={saving} onClick={() => record('balance_update', item.provider, item.label, providerBalances[item.provider] || '')}>Balance update</button>
+                <button className="button ghost" type="button" disabled={saving} onClick={() => record('balance_top_up', item.provider, item.label, providerBalances[item.provider] || '')}>Balance top up</button>
+              </div>
             </div>
           </div>
         ))}
