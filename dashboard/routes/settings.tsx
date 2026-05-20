@@ -225,9 +225,8 @@ function ParallelAgentsCard() {
 function AgentBalanceCard() {
   const balancesQuery = useDashboardQuery<BalancesPayload>(['agent-balances'], '/api/agent-balances');
   const modelsQuery = useDashboardQuery<ModelsPayload>(['parallel-agent-models', 'balances'], '/api/parallel-agents/models');
-  const [provider, setProvider] = useState('deepseek');
-  const [label, setLabel] = useState('DeepSeek');
-  const [balance, setBalance] = useState('');
+  const [newProvider, setNewProvider] = useState('');
+  const [newLabel, setNewLabel] = useState('');
   const [providerBalances, setProviderBalances] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -237,14 +236,12 @@ function AgentBalanceCard() {
       if (model.provider) providers.set(model.provider, model.provider);
     }
     for (const item of balancesQuery.data?.providers || []) providers.set(item.provider, item.label || item.provider);
-    if (providers.size === 0) {
-      providers.set('deepseek', 'deepseek');
-      providers.set('minimax', 'minimax');
-    }
     return [...providers.entries()].map(([value, text]) => ({ value, text }));
   }, [balancesQuery.data?.providers, modelsQuery.data?.models]);
+  const trackedProviders = new Set((balancesQuery.data?.providers || []).map((item) => item.provider));
+  const addableProviders = providerOptions.filter((option) => !trackedProviders.has(option.value));
 
-  const record = async (kind: 'balance_update' | 'balance_top_up', targetProvider = provider, targetLabel = label, valueText = balance) => {
+  const record = async (kind: 'balance_update' | 'balance_top_up', targetProvider: string, targetLabel: string, valueText: string) => {
     const value = Number(valueText);
     if (!Number.isFinite(value) || value < 0) {
       setMessage('Enter a non-negative current balance.');
@@ -254,13 +251,24 @@ function AgentBalanceCard() {
     try {
       const response = await fetch('/api/agent-balances', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'record-snapshot', provider: targetProvider, label: targetLabel, kind, balance_usd: value }) });
       if (!response.ok) throw new Error(await response.text());
-      if (targetProvider === provider) setBalance('');
       setProviderBalances((current) => ({ ...current, [targetProvider]: '' }));
       setMessage(`${targetLabel || targetProvider} ${kind === 'balance_top_up' ? 'top-up balance' : 'balance update'} recorded.`);
       await balancesQuery.refetch();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Save failed');
     } finally { setSaving(false); }
+  };
+
+  const addProvider = async () => {
+    const providerName = newProvider.trim();
+    if (!providerName) {
+      setMessage('Select a provider to add.');
+      return;
+    }
+    const labelText = newLabel.trim() || providerName;
+    await record('balance_update', providerName, labelText, '0');
+    setNewProvider('');
+    setNewLabel('');
   };
 
   const removeProvider = async (name: string) => {
@@ -275,30 +283,24 @@ function AgentBalanceCard() {
         <span className="metric-icon" aria-hidden="true"><Coins size={18} /></span>
         <h3>Agent Balance</h3>
       </div>
-      <p className="muted">Estimate-only balance tracking for Pi-supported providers without usage APIs. One input always means the current remaining provider balance.</p>
+      <p className="muted">Estimate-only balance tracking for Pi-supported providers without usage APIs. Providers used by parallel agents appear as individual cards. One input always means the current remaining provider balance.</p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10, alignItems: 'end' }}>
+        <label className="muted" style={{ minWidth: 220 }}>Add provider
+          <select className="themed-select" value={newProvider} onChange={(event) => {
+            setNewProvider(event.target.value);
+            setNewLabel(event.target.options[event.target.selectedIndex]?.text || event.target.value);
+          }}>
+            <option value="">Select provider…</option>
+            {addableProviders.map((option) => <option key={option.value} value={option.value}>{option.text}</option>)}
+          </select>
+        </label>
+        <label className="muted" style={{ minWidth: 180 }}>Label
+          <input className="themed-input" value={newLabel} onChange={(event) => setNewLabel(event.target.value)} placeholder="Provider label" />
+        </label>
+        <button className="button ghost" type="button" disabled={saving || !newProvider} onClick={addProvider}>Add provider</button>
+      </div>
+      {message ? <p className="muted" style={{ marginTop: 8 }}>{message}</p> : null}
       <div className="parallel-agents-grid" style={{ marginTop: 12 }}>
-        <div className="glass-card parallel-status-card" style={{ padding: 14 }}>
-          <h4>Record balance</h4>
-          <label className="muted">Provider
-            <select className="themed-select" value={provider} onChange={(event) => {
-              setProvider(event.target.value);
-              setLabel(event.target.options[event.target.selectedIndex]?.text || event.target.value);
-            }}>
-              {providerOptions.map((option) => <option key={option.value} value={option.value}>{option.text}</option>)}
-            </select>
-          </label>
-          <label className="muted">Label
-            <input className="themed-input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="DeepSeek" />
-          </label>
-          <label className="muted">Current remaining balance (USD)
-            <input className="themed-input" value={balance} onChange={(event) => setBalance(event.target.value)} placeholder="16.89" inputMode="decimal" />
-          </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-            <button className="button" type="button" disabled={saving} onClick={() => record('balance_update')}>Balance update</button>
-            <button className="button ghost" type="button" disabled={saving} onClick={() => record('balance_top_up')}>Balance top up</button>
-          </div>
-          {message ? <p className="muted" style={{ marginTop: 8 }}>{message}</p> : null}
-        </div>
         {(balancesQuery.data?.providers || []).map((item) => (
           <div key={item.provider} className="glass-card parallel-agent-card" style={{ padding: 14 }}>
             <div className="settings-subcontainer-header">
