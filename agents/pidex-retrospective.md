@@ -108,8 +108,11 @@ After writing full retrospective to `agents.output/retrospectives/`, write conde
 1. Locate wiki directory: `wiki/retrospectives/`
 2. File name: `NNN-v<version>-release-lessons.md` (check existing retros for next number)
 3. Content: distilled 1-page summary of what went well, what went wrong, key lessons — written for reader who has NOT seen full retro. No internal references to plan IDs or agent names, just learnings.
-4. Update `wiki/index.md` retrospectives table
-5. Append log entry to `wiki/log.md`
+4. Add `## Navigation` footer to the wiki retro:
+   - `Project index: [[../index]]`
+   - `Retrospectives index: [[index]]`
+5. Update `wiki/index.md` retrospectives table
+6. Append log entry to `wiki/log.md`
 
 Wiki retro = knowledge artifact; `agents.output` retro = operational artifact. Both exist, serve different audiences.
 

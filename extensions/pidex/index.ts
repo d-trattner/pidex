@@ -787,13 +787,13 @@ function savePidexMemory(ctx: any, argsLine?: string): string {
 	const filePath = path.join(memoryDir, fileName);
 	const hint = clipEnd(String(argsLine || ""), 700);
 	const title = hint || "PIDEX session memory";
-	const body = `---\ntitle: ${title.replace(/\n/g, " ")}\ntype: session-memory\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\nsource: pidex-session\n---\n\n# ${title}\n\n## Project\n\n- project_root: ${projectRoot}\n- project_name: ${projectName}\n- git_branch: ${gitValue(projectRoot, ["branch", "--show-current"]) || "unknown"}\n- git_commit: ${gitValue(projectRoot, ["rev-parse", "--short", "HEAD"]) || "unknown"}\n\n## Context\n\n- cwd: ${cwd}\n- session: ${ctx?.sessionManager?.getSessionFile?.() || "unknown"}\n- captured_at: ${now}\n\n## User note\n\n${hint || "(none)"}\n\n## Recent conversation digest\n\n${simpleSessionDigest(ctx)}\n`;
+	const body = `---\ntitle: ${title.replace(/\n/g, " ")}\ntype: session-memory\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\nsource: pidex-session\n---\n\n# ${title}\n\n## Project\n\n- project_root: ${projectRoot}\n- project_name: ${projectName}\n- git_branch: ${gitValue(projectRoot, ["branch", "--show-current"]) || "unknown"}\n- git_commit: ${gitValue(projectRoot, ["rev-parse", "--short", "HEAD"]) || "unknown"}\n\n## Context\n\n- cwd: ${cwd}\n- session: ${ctx?.sessionManager?.getSessionFile?.() || "unknown"}\n- captured_at: ${now}\n\n## User note\n\n${hint || "(none)"}\n\n## Recent conversation digest\n\n${simpleSessionDigest(ctx)}\n\n## Navigation\n\n- Session memory index: [[index]]\n- Project index: [[../index]]\n`;
 	fs.writeFileSync(filePath, body, "utf8");
 	const indexPath = path.join(memoryDir, "index.md");
 	let index = "";
 	try { index = fs.readFileSync(indexPath, "utf8"); } catch {}
 	if (!index.trim()) {
-		index = `---\ntitle: ${projectName} Session Memory\ntype: session-memory-index\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\n---\n\n# ${projectName} Session Memory\n\n`;
+		index = `---\ntitle: ${projectName} Session Memory\ntype: session-memory-index\nstatus: active\ncreated: ${now.slice(0, 10)}\nupdated: ${now.slice(0, 10)}\n---\n\n# ${projectName} Session Memory\n\n## Navigation\n\n- Project index: [[../index]]\n\n`;
 	}
 	index += `- ${now} — [[${fileName.replace(/\.md$/, "")}]] — ${title}\n`;
 	fs.writeFileSync(indexPath, index, "utf8");

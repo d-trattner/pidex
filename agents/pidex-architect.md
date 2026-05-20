@@ -157,8 +157,11 @@ When briefing explicitly requests an ADR for a significant arch decision (tech c
 1. Locate wiki: `wiki/decisions/`
 2. Number sequentially: `adr-NNN-<short-slug>.md` (check existing for next number)
 3. ADR format: Title, Date, Status (Proposed/Accepted/Deprecated/Superseded), Context, Decision, Consequences
-4. Update `wiki/index.md` decisions table
-5. Append log entry to `wiki/log.md`
+4. Add `## Navigation` footer to the ADR:
+   - `Project index: [[../index]]`
+   - `Decisions index: [[index]]`
+5. Update `wiki/index.md` decisions table
+6. Append log entry to `wiki/log.md`
 
 Write ADRs only for real choices between alternatives or newly discovered constraints that affect future work.
 

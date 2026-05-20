@@ -11,6 +11,7 @@ Behavior is implemented by the PIDEX extension command `/pdmem`.
 
 - Saves a lightweight session snapshot to `<project-root>/wiki/session-memory/`.
 - Updates `<project-root>/wiki/session-memory/index.md`.
+- Generated session-memory pages include `## Navigation` links back to the session-memory index and project wiki index.
 - Uses the git root of the current cwd as project root when available.
 - Does not perform automatic prompt injection, shutdown capture, topic scoring, or compression.
 - Do not store secrets or credential values.
