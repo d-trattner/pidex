@@ -7,7 +7,6 @@ TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
 INSTALL_GLOBAL_GIT_HOOK="${PIDEX_INSTALL_GLOBAL_GIT_HOOK:-ask}"
 STATE_DIR="$TARGET_DIR/state/skills"
-AST_GREP_SKILL_MARKER="$STATE_DIR/ast-grep-skill-installed-by-pidex"
 AST_GREP_CLI_MARKER="$STATE_DIR/ast-grep-cli-installed-by-pidex"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -27,8 +26,8 @@ Environment:
   PIDEX_INSTALL_GLOBAL_GIT_HOOK=0  skip PIDEX global Git hook prompt
 
 Notes:
-  Installs ast-grep CLI if missing and the bundled ast-grep skill if no global
-  ast-grep skill exists. PIDEX records only PIDEX-created installs for uninstall.
+  Installs ast-grep CLI if missing. PIDEX exposes bundled skills through
+  the pi package install; it does not copy bundled skills into global skill dirs.
 EOF
 }
 
@@ -78,19 +77,6 @@ ensure_ast_grep_cli() {
   printf 'installed_at=%s\nsource=@ast-grep/cli\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$AST_GREP_CLI_MARKER"
 }
 
-ensure_ast_grep_skill() {
-  if [ -f "$HOME/.agents/skills/ast-grep/SKILL.md" ]; then
-    say "global ast-grep skill already installed"
-    return
-  fi
-  command -v npx >/dev/null 2>&1 || fail "missing prerequisite: npx (required to install bundled ast-grep skill)"
-  [ -f "$TARGET_DIR/skills/ast-grep/SKILL.md" ] || fail "bundled ast-grep skill missing: $TARGET_DIR/skills/ast-grep/SKILL.md"
-  say "installing bundled ast-grep skill"
-  npx skills add "$TARGET_DIR/skills/ast-grep" -g -y --copy
-  mkdir -p "$STATE_DIR"
-  printf 'installed_at=%s\nsource=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TARGET_DIR/skills/ast-grep" > "$AST_GREP_SKILL_MARKER"
-}
-
 say "checking extension TypeScript/runtime checks"
 if command -v npm >/dev/null 2>&1; then
   if [ -f "$TARGET_DIR/package.json" ]; then
@@ -112,7 +98,6 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 ensure_ast_grep_cli
-ensure_ast_grep_skill
 
 say "installing package into Pi settings"
 "${CMD[@]}"

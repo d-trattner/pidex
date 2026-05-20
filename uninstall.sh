@@ -7,7 +7,6 @@ TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
 UNINSTALL_GLOBAL_GIT_HOOK="${PIDEX_UNINSTALL_GLOBAL_GIT_HOOK:-ask}"
 STATE_DIR="$TARGET_DIR/state/skills"
-AST_GREP_SKILL_MARKER="$STATE_DIR/ast-grep-skill-installed-by-pidex"
 AST_GREP_CLI_MARKER="$STATE_DIR/ast-grep-cli-installed-by-pidex"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -27,8 +26,8 @@ Environment:
   PIDEX_UNINSTALL_GLOBAL_GIT_HOOK=0  leave global Git hook config unchanged
 
 Notes:
-  Removes ast-grep skill/CLI only when PIDEX installed them during install.sh.
-  Pre-existing user installs are preserved.
+  Removes ast-grep CLI only when PIDEX installed it during install.sh.
+  PIDEX does not copy bundled skills into global skill dirs.
 EOF
 }
 
@@ -65,24 +64,6 @@ fi
 
 command -v pi >/dev/null 2>&1 || fail "missing prerequisite: pi"
 
-remove_pidex_ast_grep_skill() {
-  if [ ! -f "$AST_GREP_SKILL_MARKER" ]; then
-    say "preserving ast-grep skill (not installed by PIDEX)"
-    return
-  fi
-  if command -v npx >/dev/null 2>&1; then
-    say "removing PIDEX-installed ast-grep skill"
-    npx skills remove ast-grep -g -y || say "skills remove failed; removing known PIDEX ast-grep skill paths directly"
-  else
-    say "npx unavailable; removing known PIDEX ast-grep skill paths directly"
-  fi
-  rm -rf "$HOME/.agents/skills/ast-grep"
-  if [ -L "$HOME/.pi/agent/skills/ast-grep" ]; then
-    rm -f "$HOME/.pi/agent/skills/ast-grep"
-  fi
-  rm -f "$AST_GREP_SKILL_MARKER"
-}
-
 remove_pidex_ast_grep_cli() {
   if [ ! -f "$AST_GREP_CLI_MARKER" ]; then
     say "preserving ast-grep CLI (not installed by PIDEX)"
@@ -109,7 +90,6 @@ fi
 
 "${CMD[@]}"
 
-remove_pidex_ast_grep_skill
 remove_pidex_ast_grep_cli
 
 if [ -x "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh" ] && [ -f "$TARGET_DIR/state/git-hooks/global-state.json" ]; then
