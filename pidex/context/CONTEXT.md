@@ -36,6 +36,10 @@ _Avoid_: separate specialist agent, Forge-only term
 An optional non-blocking secondary agent run configured in `config/parallel-agents.json`. Parallel lanes provide extra review signals and must be merged/adjudicated before their findings are treated as accepted.
 _Avoid_: required gate, primary reviewer
 
+**Agent balance tracker**:
+A provider-wide estimate feature for Pi-supported providers without a local usage API. The user records balance updates and top-ups; PIDEX combines those snapshots with provider token metrics to learn rough effective cost and estimate remaining runway.
+_Avoid_: exact billing truth, original deposit, provider API balance, per-model balance, user-entered token pricing
+
 **Provider profile**:
 A routing preset in `config/profiles/*.json` that is applied to `config/agents.json`. Switching a profile should change actual agent routing, not just dashboard state.
 _Avoid_: display-only profile, quota label

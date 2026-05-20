@@ -48,6 +48,7 @@ import { Route as ApiLiveRouteImport } from './../routes/api/live'
 import { Route as ApiDocumentRouteImport } from './../routes/api/document'
 import { Route as ApiContextRouteImport } from './../routes/api/context'
 import { Route as ApiAnalysisRouteImport } from './../routes/api/analysis'
+import { Route as ApiAgentBalancesRouteImport } from './../routes/api/agent-balances'
 import { Route as ApiProvider_limitsProfileRouteImport } from './../routes/api/provider_limits/profile'
 import { Route as ApiProviderLimitsProfileRouteImport } from './../routes/api/provider-limits/profile'
 import { Route as ApiParallelAgentsModelsRouteImport } from './../routes/api/parallel-agents/models'
@@ -251,6 +252,11 @@ const ApiAnalysisRoute = ApiAnalysisRouteImport.update({
   path: '/api/analysis',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentBalancesRoute = ApiAgentBalancesRouteImport.update({
+  id: '/api/agent-balances',
+  path: '/api/agent-balances',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProvider_limitsProfileRoute =
   ApiProvider_limitsProfileRouteImport.update({
     id: '/profile',
@@ -304,6 +310,7 @@ export interface FileRoutesByFullPath {
   '/tokens': typeof TokensRoute
   '/usage': typeof UsageRoute
   '/wiki': typeof WikiRoute
+  '/api/agent-balances': typeof ApiAgentBalancesRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
   '/api/context': typeof ApiContextRoute
   '/api/document': typeof ApiDocumentRoute
@@ -351,6 +358,7 @@ export interface FileRoutesByTo {
   '/tokens': typeof TokensRoute
   '/usage': typeof UsageRoute
   '/wiki': typeof WikiRoute
+  '/api/agent-balances': typeof ApiAgentBalancesRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
   '/api/context': typeof ApiContextRoute
   '/api/document': typeof ApiDocumentRoute
@@ -400,6 +408,7 @@ export interface FileRoutesById {
   '/tokens': typeof TokensRoute
   '/usage': typeof UsageRoute
   '/wiki': typeof WikiRoute
+  '/api/agent-balances': typeof ApiAgentBalancesRoute
   '/api/analysis': typeof ApiAnalysisRouteWithChildren
   '/api/context': typeof ApiContextRoute
   '/api/document': typeof ApiDocumentRoute
@@ -450,6 +459,7 @@ export interface FileRouteTypes {
     | '/tokens'
     | '/usage'
     | '/wiki'
+    | '/api/agent-balances'
     | '/api/analysis'
     | '/api/context'
     | '/api/document'
@@ -497,6 +507,7 @@ export interface FileRouteTypes {
     | '/tokens'
     | '/usage'
     | '/wiki'
+    | '/api/agent-balances'
     | '/api/analysis'
     | '/api/context'
     | '/api/document'
@@ -545,6 +556,7 @@ export interface FileRouteTypes {
     | '/tokens'
     | '/usage'
     | '/wiki'
+    | '/api/agent-balances'
     | '/api/analysis'
     | '/api/context'
     | '/api/document'
@@ -594,6 +606,7 @@ export interface RootRouteChildren {
   TokensRoute: typeof TokensRoute
   UsageRoute: typeof UsageRoute
   WikiRoute: typeof WikiRoute
+  ApiAgentBalancesRoute: typeof ApiAgentBalancesRoute
   ApiAnalysisRoute: typeof ApiAnalysisRouteWithChildren
   ApiContextRoute: typeof ApiContextRoute
   ApiDocumentRoute: typeof ApiDocumentRoute
@@ -889,6 +902,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAnalysisRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent-balances': {
+      id: '/api/agent-balances'
+      path: '/api/agent-balances'
+      fullPath: '/api/agent-balances'
+      preLoaderRoute: typeof ApiAgentBalancesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/provider_limits/profile': {
       id: '/api/provider_limits/profile'
       path: '/profile'
@@ -1031,6 +1051,7 @@ const rootRouteChildren: RootRouteChildren = {
   TokensRoute: TokensRoute,
   UsageRoute: UsageRoute,
   WikiRoute: WikiRoute,
+  ApiAgentBalancesRoute: ApiAgentBalancesRoute,
   ApiAnalysisRoute: ApiAnalysisRouteWithChildren,
   ApiContextRoute: ApiContextRoute,
   ApiDocumentRoute: ApiDocumentRoute,

@@ -52,6 +52,26 @@ type LimitsPayload = {
   history?: LimitRecord[];
 };
 
+type AgentBalance = {
+  provider: string;
+  label: string;
+  latest_balance_usd: number | null;
+  latest_observed_at: string | null;
+  estimated_current_balance_usd: number | null;
+  estimated_spend_since_latest_usd: number | null;
+  learned_cost_per_1m_weighted_tokens: number | null;
+  learned_intervals: number;
+  confidence: string;
+  burn_24h_usd: number | null;
+  burn_3d_usd: number | null;
+  burn_7d_usd: number | null;
+  primary_daily_burn_usd: number | null;
+  days_remaining: number | null;
+  trend: Array<{ date: string; weighted_tokens: number; estimated_spend_usd: number | null }>;
+};
+
+type AgentBalancesPayload = { providers?: AgentBalance[] };
+
 type ChartPoint = {
   ts: number;
   label: string;
@@ -236,6 +256,67 @@ function ProviderChart({ provider, current, history }: { provider: string; curre
   );
 }
 
+function formatUsd(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `$${value.toFixed(2)}`;
+}
+
+function BalanceTrendChart({ balance }: { balance: AgentBalance }) {
+  const data = (balance.trend || []).filter((point) => point.estimated_spend_usd != null);
+  if (data.length < 2) return <p className="muted">Not enough learned balance history for a spend chart yet.</p>;
+  return (
+    <div className="limit-chart" role="img" aria-label={`${balance.label} estimated spend chart`}>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 18, right: 20, bottom: 10, left: 0 }}>
+          <CartesianGrid stroke="rgba(34, 255, 225, 0.14)" />
+          <XAxis dataKey="date" stroke="var(--muted)" minTickGap={18} />
+          <YAxis stroke="var(--muted)" tickFormatter={(value) => `$${Number(value).toFixed(2)}`} />
+          <Tooltip
+            contentStyle={{ background: 'rgba(3, 8, 20, 0.96)', border: '1px solid rgba(34, 255, 225, 0.24)', color: 'var(--text)' }}
+            formatter={(value) => [formatUsd(Number(value)), 'estimated spend']}
+          />
+          <Line type="monotone" dataKey="estimated_spend_usd" stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function AgentBalancesContainer({ balances }: { balances: AgentBalance[] }) {
+  return (
+    <article className="glass-card glass provider-limit-card" style={{ gridColumn: '1 / -1' }}>
+      <div className="provider-limit-card__head">
+        <div>
+          <h3 style={{ margin: 0 }}>Parallel Agents</h3>
+          <p className="muted" style={{ margin: '4px 0 0' }}>Estimate-only balance runway from manual snapshots and PIDEX token metrics.</p>
+        </div>
+        <span className="pill">estimated</span>
+      </div>
+      {balances.length === 0 ? <p className="muted">No agent balances configured yet. Add DeepSeek/MiniMax balances in Settings → Agent Balance.</p> : null}
+      <div className="limit-window-grid">
+        {balances.map((balance) => (
+          <div key={balance.provider} className="limit-window">
+            <div className="limit-window__head"><strong>{balance.label}</strong><span className="pill">{balance.confidence}</span></div>
+            <p className="muted" style={{ margin: '8px 0 0' }}>Estimated current balance</p>
+            <div className="metric-value" style={{ fontSize: '1.6rem' }}>{formatUsd(balance.estimated_current_balance_usd ?? balance.latest_balance_usd)}</div>
+            <p className="muted" style={{ margin: '4px 0 0' }}>Latest observed: {formatUsd(balance.latest_balance_usd)} · {formatDateTime(balance.latest_observed_at)}</p>
+            <p className="muted" style={{ margin: '4px 0 0' }}>Spend since latest: {formatUsd(balance.estimated_spend_since_latest_usd)}</p>
+            <p className="muted" style={{ margin: '4px 0 0' }}>Effective cost: {balance.learned_cost_per_1m_weighted_tokens == null ? 'learning' : `${formatUsd(balance.learned_cost_per_1m_weighted_tokens)} / 1M weighted tokens`}</p>
+            <p className="muted" style={{ margin: '8px 0 0' }}>Burn: 24h {formatUsd(balance.burn_24h_usd)} · 3d/day {formatUsd(balance.burn_3d_usd)} · 7d/day {formatUsd(balance.burn_7d_usd)}</p>
+            <p className="muted" style={{ margin: '4px 0 0' }}>Runway: <strong>{balance.days_remaining == null ? 'learning' : `~${balance.days_remaining} days`}</strong></p>
+          </div>
+        ))}
+      </div>
+      {balances.map((balance) => (
+        <div key={`${balance.provider}-chart`} style={{ marginTop: 18 }}>
+          <h4 style={{ margin: '0 0 8px' }}>{balance.label} 7-day estimated spend</h4>
+          <BalanceTrendChart balance={balance} />
+        </div>
+      ))}
+    </article>
+  );
+}
+
 function ProviderContainer({ provider, title, records, history }: { provider: string; title: string; records: LimitRecord[]; history?: LimitRecord[] }) {
   const providerRecords = records.filter((record) => record.provider === provider);
   const byWindow = new Map(providerRecords.map((record) => [record.window || '', record]));
@@ -276,6 +357,7 @@ export function LimitsPage() {
   const [mutationError, setMutationError] = useState('');
   const queryClient = useQueryClient();
   const limitsQuery = useDashboardQuery<LimitsPayload>(['provider-limits'], '/api/provider-limits');
+  const balancesQuery = useDashboardQuery<AgentBalancesPayload>(['agent-balances', 'usage'], '/api/agent-balances');
   const payload = limitsQuery.data ?? null;
   const loading = limitsQuery.isLoading;
   const error = mutationError || (limitsQuery.isError ? 'Limits could not be loaded.' : '');
@@ -333,6 +415,8 @@ export function LimitsPage() {
             </div>
             {error ? <p style={{ color: '#f8a' }}>{error}</p> : null}
           </article>
+
+          <AgentBalancesContainer balances={balancesQuery.data?.providers || []} />
 
           {PROVIDERS.map((provider) => (
             <ProviderContainer

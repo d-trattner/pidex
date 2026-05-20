@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AlertTriangle, Gauge, RefreshCcw, Settings as SettingsIcon, ToggleLeft, ToggleRight, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, Coins, Gauge, RefreshCcw, Settings as SettingsIcon, ToggleLeft, ToggleRight, Trash2, Users } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
@@ -16,6 +16,9 @@ type ParallelProviderModel = { laneId?: string; provider: string; model: string;
 type ParallelAgent = { agent: string; enabled: boolean; trigger?: string | null; mode?: string; timeoutSeconds?: number; notifyOnUnavailable?: boolean; providerModels: ParallelProviderModel[] };
 type ParallelPayload = { ok: boolean; enabled: boolean; agents: ParallelAgent[]; warnings: unknown[]; updatedAt?: string | null };
 type ModelsPayload = { ok: boolean; models: ProviderModel[]; source?: string };
+type BalanceSnapshot = { kind: 'balance_update' | 'balance_top_up'; balance_usd: number; captured_at: string };
+type BalanceProvider = { provider: string; label: string; latest_balance_usd: number | null; estimated_current_balance_usd: number | null; confidence: string; learned_intervals: number; days_remaining: number | null; snapshots: BalanceSnapshot[] };
+type BalancesPayload = { ok: boolean; providers: BalanceProvider[]; config?: { providers?: Array<{ provider: string; label?: string }> } };
 
 function newestCapture(rows: Array<{ captured_at?: string | null }>): string {
   const newest = rows
@@ -219,6 +222,101 @@ function ParallelAgentsCard() {
   );
 }
 
+function AgentBalanceCard() {
+  const balancesQuery = useDashboardQuery<BalancesPayload>(['agent-balances'], '/api/agent-balances');
+  const modelsQuery = useDashboardQuery<ModelsPayload>(['parallel-agent-models', 'balances'], '/api/parallel-agents/models');
+  const [provider, setProvider] = useState('deepseek');
+  const [label, setLabel] = useState('DeepSeek');
+  const [balance, setBalance] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const providerOptions = useMemo(() => {
+    const providers = new Map<string, string>();
+    for (const model of modelsQuery.data?.models || []) {
+      if (model.provider) providers.set(model.provider, model.provider);
+    }
+    for (const item of balancesQuery.data?.providers || []) providers.set(item.provider, item.label || item.provider);
+    if (providers.size === 0) {
+      providers.set('deepseek', 'deepseek');
+      providers.set('minimax', 'minimax');
+    }
+    return [...providers.entries()].map(([value, text]) => ({ value, text }));
+  }, [balancesQuery.data?.providers, modelsQuery.data?.models]);
+
+  const record = async (kind: 'balance_update' | 'balance_top_up') => {
+    const value = Number(balance);
+    if (!Number.isFinite(value) || value < 0) {
+      setMessage('Enter a non-negative current balance.');
+      return;
+    }
+    setSaving(true); setMessage('');
+    try {
+      const response = await fetch('/api/agent-balances', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'record-snapshot', provider, label, kind, balance_usd: value }) });
+      if (!response.ok) throw new Error(await response.text());
+      setBalance('');
+      setMessage(kind === 'balance_top_up' ? 'Top-up balance recorded.' : 'Balance update recorded.');
+      await balancesQuery.refetch();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Save failed');
+    } finally { setSaving(false); }
+  };
+
+  const removeProvider = async (name: string) => {
+    if (!window.confirm(`Remove balance tracker for ${name}?`)) return;
+    await fetch('/api/agent-balances', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'delete-provider', provider: name }) });
+    await balancesQuery.refetch();
+  };
+
+  return (
+    <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
+      <div className="metric-tile-head">
+        <span className="metric-icon" aria-hidden="true"><Coins size={18} /></span>
+        <h3>Agent Balance</h3>
+      </div>
+      <p className="muted">Estimate-only balance tracking for Pi-supported providers without usage APIs. One input always means the current remaining provider balance.</p>
+      <div className="parallel-agents-grid" style={{ marginTop: 12 }}>
+        <div className="glass-card parallel-status-card" style={{ padding: 14 }}>
+          <h4>Record balance</h4>
+          <label className="muted">Provider
+            <select className="themed-select" value={provider} onChange={(event) => {
+              setProvider(event.target.value);
+              setLabel(event.target.options[event.target.selectedIndex]?.text || event.target.value);
+            }}>
+              {providerOptions.map((option) => <option key={option.value} value={option.value}>{option.text}</option>)}
+            </select>
+          </label>
+          <label className="muted">Label
+            <input className="themed-input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="DeepSeek" />
+          </label>
+          <label className="muted">Current remaining balance (USD)
+            <input className="themed-input" value={balance} onChange={(event) => setBalance(event.target.value)} placeholder="16.89" inputMode="decimal" />
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            <button className="button" type="button" disabled={saving} onClick={() => record('balance_update')}>Balance update</button>
+            <button className="button ghost" type="button" disabled={saving} onClick={() => record('balance_top_up')}>Balance top up</button>
+          </div>
+          {message ? <p className="muted" style={{ marginTop: 8 }}>{message}</p> : null}
+        </div>
+        {(balancesQuery.data?.providers || []).map((item) => (
+          <div key={item.provider} className="glass-card parallel-agent-card" style={{ padding: 14 }}>
+            <div className="settings-subcontainer-header">
+              <h4>{item.label}</h4>
+              <button className="icon-button compact" type="button" aria-label="Remove balance tracker" onClick={() => removeProvider(item.provider)}><Trash2 size={14} /></button>
+            </div>
+            <div className="settings-info-grid">
+              <InfoPill label="Current est." value={item.estimated_current_balance_usd == null ? 'learning' : `$${item.estimated_current_balance_usd.toFixed(2)}`} />
+              <InfoPill label="Latest seen" value={item.latest_balance_usd == null ? '—' : `$${item.latest_balance_usd.toFixed(2)}`} />
+              <InfoPill label="Confidence" value={item.confidence} />
+              <InfoPill label="Snapshots" value={item.snapshots?.length || 0} />
+              <InfoPill label="Days left" value={item.days_remaining == null ? '—' : item.days_remaining} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function SettingsPage() {
   const limitsQuery = useDashboardQuery<LimitsPayload>(['provider-limits', 'settings'], '/api/provider-limits');
   const payload = limitsQuery.data;
@@ -259,6 +357,7 @@ function SettingsPage() {
       </article>
 
       <ParallelAgentsCard />
+      <AgentBalanceCard />
     </section>
   );
 }
