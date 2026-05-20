@@ -58,6 +58,12 @@ def validate_event(rec: dict[str, Any]) -> list[str]:
         for key in ["rule_path", "action", "approval_source", "expected_impact_dimension"]:
             if not rec.get(key):
                 errors.append(f"OpRuleAction missing {key}")
+    if rec.get("operator_type") == "OpUserCorrection":
+        if not (rec.get("reason") or (rec.get("logical_decision") or {}).get("summary")):
+            errors.append("OpUserCorrection requires --reason or logical_json.summary")
+    if rec.get("operator_type") == "OpReleaseDecision":
+        if not (rec.get("reason") or rec.get("source_artifact") or rec.get("physical_action")):
+            errors.append("OpReleaseDecision requires --reason, --source-artifact, or --physical-json")
     return errors
 
 

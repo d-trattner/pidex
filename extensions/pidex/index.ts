@@ -658,6 +658,67 @@ function normalizeGate(value: string | undefined): string | undefined {
 	return gate;
 }
 
+function estimateContextSizeClass(chars: number): "small" | "medium" | "large" {
+	if (chars < 8_000) return "small";
+	if (chars < 32_000) return "medium";
+	return "large";
+}
+
+function extractContextPathsFromTask(task: string): string[] {
+	const matches = task.match(/(?:^|[\s`"'(<])((?:\.\/|\.\.\/|\/)?(?:agents\.output|rules|pidex\/context|wiki|scripts|config|templates|skills|extensions|dashboard)\/[A-Za-z0-9._/@:+-]+(?:\/[A-Za-z0-9._/@:+-]+)*\.(?:md|json|jsonl|ts|tsx|js|mjs|py|sh|yml|yaml|txt))/g) || [];
+	const paths = matches
+		.map((m) => m.trim().replace(/^[`"'(<]+|[`"'),>]+$/g, ""))
+		.map((m) => m.replace(/^\.\//, ""));
+	return Array.from(new Set(paths)).slice(0, 30);
+}
+
+function classifyInitialTask(task: string | undefined): string {
+	const text = (task || "").toLowerCase();
+	if (!text.trim()) return "unknown";
+	if (/fix|bug|error|fail|broken|regression/.test(text)) return "bugfix";
+	if (/ui|ux|design|screen|page|dashboard|mobile/.test(text)) return "ui";
+	if (/release|publish|tag|push|deploy/.test(text)) return "release";
+	if (/refactor|cleanup|hygiene|remove|rename/.test(text)) return "cleanup";
+	if (/test|qa|coverage|playwright|smoke/.test(text)) return "qa";
+	return "feature";
+}
+
+function recordPreflightSkeleton(cwd: string, task: string | undefined, authOk: boolean, gitHookStatus: string): string | undefined {
+	const initialTask = task?.trim() || "";
+	return appendOperatorEvent(cwd, "unknown-plan", {
+		operator_type: "OpPreflight",
+		logical_decision: {
+			initial_task_provided: Boolean(initialTask),
+			task_class: classifyInitialTask(initialTask),
+			existing_project: fs.existsSync(path.join(cwd, ".git")) || fs.existsSync(path.join(cwd, "package.json")) || fs.existsSync(path.join(cwd, "pidex", "context")),
+			preflight_required: true,
+		},
+		physical_action: {
+			kickoff_sent: true,
+			fixed_interview_required: true,
+			grill_decision_pending: true,
+			delegate_auth_ok: authOk,
+			git_hook_status: gitHookStatus,
+		},
+		confidence: "low",
+		reason: "PIDEX direct-mode kickoff emitted preflight skeleton before interactive interview completion.",
+	});
+}
+
+function isReviewAgent(agent: string): boolean {
+	return new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa", "pidex-uat"]).has(agent);
+}
+
+function extractFindingCounts(text: string): Record<string, number> {
+	const out: Record<string, number> = {};
+	for (const severity of ["critical", "major", "minor", "high", "medium", "low"] as const) {
+		const re = new RegExp(`\\b${severity}\\b`, "gi");
+		const count = text.match(re)?.length || 0;
+		if (count) out[severity] = count;
+	}
+	return out;
+}
+
 function shouldSuppressAgentGateNotify(agent: string): boolean {
 	if ((process.env.PIDEX_SUPPRESS_AGENT_GATE_NOTIFY || "0") === "1") return true;
 	if ((process.env.PIDEX_PARALLEL_GATE_NOTIFY_AFTER_MERGE || "1") === "0") return false;
@@ -708,7 +769,15 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 	const contextFile = extractRoutingField(routing, "context_file");
 	const gate = normalizeGate(extractRoutingField(routing, "gate"));
 	const routeTo = extractRoutingField(routing, "route_to");
+	const contextPaths = extractContextPathsFromTask(task);
 	let eventFile = appendOperatorEvent(cwd, planId, {
+		operator_type: "OpContextPack",
+		agent: result.agent,
+		logical_decision: { agent: result.agent, task_chars: task.length, context_paths_detected: contextPaths.length },
+		physical_action: { context_paths: contextPaths, estimated_token_class: estimateContextSizeClass(task.length), budget_warning: task.length >= 32_000 },
+		confidence: contextPaths.length ? "medium" : "low",
+	});
+	eventFile = appendOperatorEvent(cwd, planId, {
 		operator_type: "OpSpawn",
 		agent: result.agent,
 		provider: result.provider,
@@ -721,6 +790,16 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 		logical_decision: { agent: result.agent },
 		physical_action: { provider: result.provider, model: normalizeModelForPricing(result.model), exit_code: result.exitCode },
 	});
+	if (isReviewAgent(result.agent)) {
+		eventFile = appendOperatorEvent(cwd, planId, {
+			operator_type: "OpReview",
+			agent: result.agent,
+			source_artifact: contextFile,
+			logical_decision: { review_agent: result.agent, expected_verdict_in_routing: true },
+			physical_action: { verdict: extractRoutingField(routing, "verdict") || "unknown", gate: gate || undefined, route_to: routeTo, finding_counts: extractFindingCounts(result.finalText) },
+			confidence: routing ? "medium" : "low",
+		}) ?? eventFile;
+	}
 	if (routeTo || gate) {
 		eventFile = appendOperatorEvent(cwd, planId, {
 			operator_type: "OpRoute",
@@ -1769,6 +1848,7 @@ export default function runningPi(pi: ExtensionAPI) {
 		} else if (authPreflight.output) {
 			ctx.ui.notify("pidex delegate auth preflight OK", "info");
 		}
+		recordPreflightSkeleton(ctx.cwd ?? PACKAGE_ROOT, task, authPreflight.ok, gitHookStatus);
 		const kickoff = [
 			"You are the pidex orchestrator.",
 			`First read the orchestration skill at ${SKILL_PATH}.`,

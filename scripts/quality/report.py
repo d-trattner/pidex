@@ -256,6 +256,38 @@ def select_plans(metrics: list[dict[str, Any]], events: list[dict[str, Any]], pl
     return ordered[:last] if last > 0 else ordered
 
 
+def rule_action_plan(row: dict[str, Any]) -> str | None:
+    value = row.get("plan_key") or row.get("plan")
+    return normalize_plan(str(value)) if value else None
+
+
+def terminal_event_plan(row: dict[str, Any]) -> str:
+    return infer_plan_from_record(row)
+
+
+def rule_actions_as_operator_facts(rule_actions: list[dict[str, Any]], plans: list[str]) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    plan_set = set(plans)
+    for row in rule_actions:
+        plan = rule_action_plan(row)
+        if plan and plan_set and plan not in plan_set:
+            continue
+        facts.append({
+            "operator_type": "OpRuleAction",
+            "plan_key": plan,
+            "rule_path": row.get("rule_path"),
+            "action": row.get("action"),
+            "status": row.get("status"),
+            "owning_agent": row.get("owning_agent"),
+            "approval_source": row.get("approval_source"),
+            "expected_impact_dimension": row.get("expected_impact_dimension"),
+            "expected_direction": row.get("expected_direction"),
+            "source": "rule-action-ledger",
+            "_ledger_row": row,
+        })
+    return facts
+
+
 def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     metrics_by_plan: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in data["metrics"]:
@@ -266,9 +298,18 @@ def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str,
         rows.sort(key=lambda r: str(r.get("timestamp") or ""))
 
     orch = data["orchestrator_events"]
+    rule_operator_facts = rule_actions_as_operator_facts(data.get("rule_actions", []), plans)
     observed_ops = Counter(str(r.get("operator_type") or r.get("event_type") or "unknown") for r in orch)
+    observed_ops.update(str(r.get("operator_type") or "unknown") for r in rule_operator_facts)
     findings: list[dict[str, Any]] = []
     expected_count = observed_required = 0
+
+    terminal_events_by_plan: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in data.get("pipeline_events", []):
+        if row.get("event_type") in TERMINAL_EVENTS:
+            plan = terminal_event_plan(row)
+            if plan in plans:
+                terminal_events_by_plan[plan].append(row)
 
     for plan, rows in sorted(metrics_by_plan.items()):
         for idx, row in enumerate(rows):
@@ -328,6 +369,22 @@ def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str,
                         "evidence": row.get("context_file") or row.get("_source_path"),
                     })
 
+    for plan, rows in sorted(terminal_events_by_plan.items()):
+        expected_count += 1
+        matching_quality = [e for e in orch if e.get("operator_type") == "OpQualityReview" and (e.get("plan_key") in {plan, None, ""} or plan in set(e.get("plans_reviewed") or []))]
+        if matching_quality:
+            observed_required += 1
+        else:
+            findings.append({
+                "type": "unlogged_operator",
+                "operator_type": "OpQualityReview",
+                "plan_key": plan,
+                "confidence": "probably-unlogged",
+                "severity": "low",
+                "reason": "A terminal pipeline event exists, but no structured OpQualityReview event was found.",
+                "evidence": rows[-1].get("_source_path") if rows else None,
+            })
+
     return {
         "expected_required": expected_count,
         "observed_required": observed_required,
@@ -348,6 +405,26 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     by_event = Counter(str(r.get("event_type") or "unknown") for r in events)
     by_rule_agent = Counter(str(r.get("agent") or "unknown") for r in data["rules"])
     rule_actions = data.get("rule_actions", [])
+    rule_operator_facts = rule_actions_as_operator_facts(rule_actions, plans)
+    user_corrections = [r for r in data.get("orchestrator_events", []) if r.get("operator_type") == "OpUserCorrection" and (r.get("plan_key") in set(plans) or r.get("plan_key") in {None, ""})]
+    by_user_correction_type = Counter(str((r.get("logical_decision") or {}).get("correction_type") or r.get("correction_type") or "unknown") for r in user_corrections)
+    by_user_correction_severity = Counter(str(r.get("severity") or "unknown") for r in user_corrections)
+    release_decisions = [r for r in data.get("orchestrator_events", []) if r.get("operator_type") == "OpReleaseDecision" and (r.get("plan_key") in set(plans) or r.get("plan_key") in {None, ""})]
+    by_release_action = Counter(str((r.get("physical_action") or {}).get("release_action") or (r.get("logical_decision") or {}).get("release_action") or r.get("release_action") or "unknown") for r in release_decisions)
+    by_release_outcome = Counter(str((r.get("physical_action") or {}).get("outcome") or r.get("outcome") or "unknown") for r in release_decisions)
+    context_packs = [r for r in data.get("orchestrator_events", []) if r.get("operator_type") == "OpContextPack" and (r.get("plan_key") in set(plans) or r.get("plan_key") in {None, ""})]
+    by_context_size = Counter(str((r.get("physical_action") or {}).get("estimated_token_class") or "unknown") for r in context_packs)
+    context_budget_warnings = sum(1 for r in context_packs if (r.get("physical_action") or {}).get("budget_warning"))
+    preflights = [r for r in data.get("orchestrator_events", []) if r.get("operator_type") == "OpPreflight" and (r.get("plan_key") in set(plans) or r.get("plan_key") in {None, "", "unknown-plan"})]
+    by_preflight_task_class = Counter(str((r.get("logical_decision") or {}).get("task_class") or "unknown") for r in preflights)
+    preflight_grill_pending = sum(1 for r in preflights if (r.get("physical_action") or {}).get("grill_decision_pending"))
+    reviews = [r for r in data.get("orchestrator_events", []) if r.get("operator_type") == "OpReview" and (r.get("plan_key") in set(plans) or r.get("plan_key") in {None, ""})]
+    by_review_agent = Counter(str(r.get("agent") or "unknown") for r in reviews)
+    by_review_verdict = Counter(str((r.get("physical_action") or {}).get("verdict") or "unknown") for r in reviews)
+    review_finding_counts: Counter[str] = Counter()
+    for row in reviews:
+        for severity, count in ((row.get("physical_action") or {}).get("finding_counts") or {}).items():
+            review_finding_counts[str(severity)] += int(count or 0)
     untracked_rule_changes = data.get("untracked_rule_changes", [])
     pidex_root_rule_actions = data.get("pidex_root_rule_actions", [])
     pidex_root_untracked_rule_changes = data.get("pidex_root_untracked_rule_changes", [])
@@ -364,6 +441,23 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
         "rules_by_owner": dict(by_rule_agent),
         "rule_actions_by_action": dict(by_rule_action),
         "recent_rule_actions": rule_actions[-20:],
+        "rule_actions_as_operators": rule_operator_facts[-20:],
+        "user_corrections": user_corrections[-20:],
+        "user_corrections_by_type": dict(by_user_correction_type),
+        "user_corrections_by_severity": dict(by_user_correction_severity),
+        "release_decisions": release_decisions[-20:],
+        "release_decisions_by_action": dict(by_release_action),
+        "release_decisions_by_outcome": dict(by_release_outcome),
+        "context_packs": context_packs[-20:],
+        "context_packs_by_size": dict(by_context_size),
+        "context_pack_budget_warnings": context_budget_warnings,
+        "preflights": preflights[-20:],
+        "preflights_by_task_class": dict(by_preflight_task_class),
+        "preflight_grill_pending": preflight_grill_pending,
+        "reviews": reviews[-20:],
+        "reviews_by_agent": dict(by_review_agent),
+        "reviews_by_verdict": dict(by_review_verdict),
+        "review_finding_counts": dict(review_finding_counts),
         "untracked_rule_changes": untracked_rule_changes,
         "pidex_root_untracked_rule_changes": pidex_root_untracked_rule_changes,
         "cost_tokens": {"estimated_tokens": total_tokens, "estimated_cost_usd": round(total_cost, 6)},
@@ -470,6 +564,63 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
             lines.append(f"- {row.get('timestamp')} `{row.get('action')}` `{row.get('status')}` {row.get('rule_path') or '—'} owner `{row.get('owning_agent')}` impact `{row.get('expected_impact_dimension')}` direction `{row.get('expected_direction')}`")
     else:
         lines.append("- No rule actions recorded yet.")
+    lines += ["", "## Rule Actions as Operators", ""]
+    if s.get("rule_actions_as_operators"):
+        for row in s.get("rule_actions_as_operators", [])[-10:]:
+            lines.append(f"- `OpRuleAction` plan `{row.get('plan_key') or 'unscoped'}` `{row.get('action')}` `{row.get('status')}` {row.get('rule_path') or '—'} owner `{row.get('owning_agent')}` impact `{row.get('expected_impact_dimension')}`")
+    else:
+        lines.append("- No rule-action operator facts in reviewed scope.")
+    lines += ["", "## User Corrections", ""]
+    if s.get("user_corrections"):
+        lines.append("By type: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("user_corrections_by_type", {}).items())))
+        lines.append("By severity: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("user_corrections_by_severity", {}).items())))
+        for row in s.get("user_corrections", [])[-10:]:
+            logical = row.get("logical_decision") or {}
+            lines.append(f"- {row.get('timestamp')} severity `{row.get('severity') or 'unknown'}` type `{logical.get('correction_type') or row.get('correction_type') or 'unknown'}` — {row.get('reason') or logical.get('summary') or 'no summary'}")
+    else:
+        lines.append("- No user corrections recorded in reviewed scope.")
+    lines += ["", "## Release Decisions", ""]
+    if s.get("release_decisions"):
+        lines.append("By action: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("release_decisions_by_action", {}).items())))
+        lines.append("By outcome: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("release_decisions_by_outcome", {}).items())))
+        for row in s.get("release_decisions", [])[-10:]:
+            logical = row.get("logical_decision") or {}
+            physical = row.get("physical_action") or {}
+            action = physical.get("release_action") or logical.get("release_action") or row.get("release_action") or "unknown"
+            outcome = physical.get("outcome") or row.get("outcome") or "unknown"
+            lines.append(f"- {row.get('timestamp')} action `{action}` outcome `{outcome}` evidence `{row.get('source_artifact') or physical.get('evidence') or '—'}` — {row.get('reason') or logical.get('summary') or 'no summary'}")
+    else:
+        lines.append("- No release decisions recorded in reviewed scope.")
+    lines += ["", "## Context Packs", ""]
+    if s.get("context_packs"):
+        lines.append("By estimated size: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("context_packs_by_size", {}).items())))
+        lines.append(f"Budget warnings: {s.get('context_pack_budget_warnings', 0)}")
+        for row in s.get("context_packs", [])[-10:]:
+            logical = row.get("logical_decision") or {}
+            physical = row.get("physical_action") or {}
+            lines.append(f"- {row.get('timestamp')} agent `{row.get('agent') or 'unknown'}` size `{physical.get('estimated_token_class') or 'unknown'}` paths `{logical.get('context_paths_detected') or len(physical.get('context_paths') or [])}` confidence `{row.get('confidence') or 'unknown'}`")
+    else:
+        lines.append("- No context-pack events recorded in reviewed scope.")
+    lines += ["", "## Preflight", ""]
+    if s.get("preflights"):
+        lines.append("By task class: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("preflights_by_task_class", {}).items())))
+        lines.append(f"Grill decisions pending at kickoff: {s.get('preflight_grill_pending', 0)}")
+        for row in s.get("preflights", [])[-10:]:
+            logical = row.get("logical_decision") or {}
+            physical = row.get("physical_action") or {}
+            lines.append(f"- {row.get('timestamp')} task_class `{logical.get('task_class') or 'unknown'}` initial_task `{logical.get('initial_task_provided')}` existing_project `{logical.get('existing_project')}` auth_ok `{physical.get('delegate_auth_ok')}` confidence `{row.get('confidence') or 'unknown'}`")
+    else:
+        lines.append("- No preflight events recorded in reviewed scope.")
+    lines += ["", "## Reviews", ""]
+    if s.get("reviews"):
+        lines.append("By agent: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("reviews_by_agent", {}).items())))
+        lines.append("By verdict: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("reviews_by_verdict", {}).items())))
+        lines.append("Finding words: " + ", ".join(f"{k}={v}" for k, v in sorted(s.get("review_finding_counts", {}).items())))
+        for row in s.get("reviews", [])[-10:]:
+            physical = row.get("physical_action") or {}
+            lines.append(f"- {row.get('timestamp')} agent `{row.get('agent') or 'unknown'}` verdict `{physical.get('verdict') or 'unknown'}` gate `{physical.get('gate') or 'none'}` confidence `{row.get('confidence') or 'unknown'}`")
+    else:
+        lines.append("- No review events recorded in reviewed scope.")
     lines += ["", "## Untracked Rule Changes", ""]
     if s.get("untracked_rule_changes"):
         lines.append("Changed rule files without matching rule-action ledger entries:")

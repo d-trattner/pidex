@@ -55,7 +55,45 @@ Important operators:
 - `OpContextPack`
 - `OpUserCorrection`
 - `OpRuleAction`
+- `OpQualityReview`
 - `OpReleaseDecision`
+
+Phase 2 notes:
+
+- `OpRuleAction` is bridged from the rule-action ledger into PDQ operator facts.
+- `OpContextPack` is emitted by `pidex_agent` as a skeleton context/task-size event before `OpSpawn`.
+- `OpPreflight` is emitted by `/pidex`/`/pd` kickoff as a low-confidence skeleton before the interactive interview completes.
+- `OpReview` is emitted by review-class agents (`pidex-critic`, `pidex-code-reviewer`, `pidex-security`, `pidex-qa`, `pidex-uat`) as a skeleton verdict/finding event.
+- `OpQualityReview` is emitted by auto-PDQ after terminal pipeline events.
+- `OpUserCorrection` is manual for now; do not infer corrections from arbitrary chat text.
+
+Record a user correction manually:
+
+```bash
+python3 scripts/quality/orchestrator-events.py \
+  --project <project-root> \
+  --pipeline-id <pipeline-id> \
+  --plan <plan-key> \
+  --operator-type OpUserCorrection \
+  --severity medium \
+  --reason "User corrected route/status/evidence handling" \
+  --logical-json '{"correction_type":"routing","expected_behavior":"pause at user gate"}' \
+  --physical-json '{"actual_behavior":"continued to next agent","disposition":"accepted"}'
+```
+
+Record a release decision manually:
+
+```bash
+python3 scripts/quality/orchestrator-events.py \
+  --project <project-root> \
+  --pipeline-id <pipeline-id> \
+  --plan <plan-key> \
+  --operator-type OpReleaseDecision \
+  --source-artifact agents.output/devops/<artifact>.md \
+  --reason "User approved push/tag after clean validation" \
+  --logical-json '{"release_action":"push-tag","approval_required":true,"approved_by":"user"}' \
+  --physical-json '{"release_action":"push-tag","outcome":"completed","dirty_state":"clean"}'
+```
 
 ## Rule-action ledger
 
