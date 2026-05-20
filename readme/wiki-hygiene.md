@@ -45,6 +45,11 @@ The audit checks for:
 - orphan pages
 - stale pages/open items
 - duplicate titles
+- project-wiki graph convention diagnostics:
+  - missing folder indexes for active top-level wiki folders
+  - missing `## Navigation` on priority index/hub pages
+  - unexpected non-index hubs with high inbound link counts
+  - connected component, inbound, outbound, frontmatter, and navigation counts
 - legacy `agents.wiki.*` references
 - possible secrets, redacted in reports
 
@@ -53,7 +58,7 @@ The audit checks for:
 - critical: possible secrets, missing canonical structure, active legacy write instructions
 - high: broken index links, missing `log.md`, contradictory active decision-page hints
 - medium: broken non-index links, orphans with useful content, stale decisions/open items
-- low: minor formatting/staleness/legacy references
+- low: minor formatting/staleness/legacy references and report-only graph convention findings
 
 ## Specialist agent
 

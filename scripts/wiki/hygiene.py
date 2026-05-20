@@ -142,15 +142,29 @@ def resolve_md_link(project: Path, wiki: Path, source: Path, target: str, md_fil
     return False, target, False
 
 
-def resolve_wikilink(project: Path, wiki: Path, target: str, md_files: list[Path]) -> tuple[bool, str, bool]:
+def resolve_wikilink(project: Path, wiki: Path, source: Path, target: str, md_files: list[Path]) -> tuple[bool, str, bool]:
     target = target.split("|", 1)[0].split("#", 1)[0].strip()
     if not target:
         return True, target, False
-    cands = [wiki / target, wiki / (target + ".md")]
+    raw = target[:-3] if target.endswith(".md") else target
+    cands: list[Path] = []
+    if raw.startswith("./") or raw.startswith("../"):
+        cands.extend([source.parent / raw, source.parent / f"{raw}.md"])
+    else:
+        cands.extend([wiki / raw, wiki / f"{raw}.md", source.parent / raw, source.parent / f"{raw}.md"])
     for c in cands:
-        if c.exists():
-            return True, rel(project, c), False
-    stem = Path(target).stem.lower()
+        try:
+            if c.resolve().exists() and c.resolve().is_relative_to(wiki.resolve()):
+                return True, rel(project, c.resolve()), False
+        except Exception:
+            continue
+    needle = raw.lower().strip("/")
+    suffix_matches = [p for p in md_files if p.relative_to(wiki).with_suffix("").as_posix().lower().endswith(needle)] if "/" in needle else []
+    if len(suffix_matches) == 1:
+        return True, rel(project, suffix_matches[0]), False
+    if len(suffix_matches) > 1:
+        return False, target, True
+    stem = Path(raw).stem.lower()
     matches = [p for p in md_files if p.stem.lower() == stem]
     if len(matches) == 1:
         return True, rel(project, matches[0]), False
@@ -237,7 +251,7 @@ def audit(args: argparse.Namespace) -> int:
                 add_finding(findings, counts, sev, "broken-link", rp, text[:m.start()].count("\n")+1, target, "Update or remove broken Markdown link")
         for m in WIKI_LINK_RE.finditer(text):
             target = m.group(2).strip()
-            ok, resolved, ambiguous = resolve_wikilink(project, wiki, target, md_files)
+            ok, resolved, ambiguous = resolve_wikilink(project, wiki, p, target, md_files)
             links_checked += 1
             if ok:
                 if resolved.startswith("wiki/"):
@@ -261,6 +275,14 @@ def audit(args: argparse.Namespace) -> int:
             active_decisions = [p for p in paths if inv_by_path.get(p, {}).get("classification") in {"decision", "adr"} and (inv_by_path.get(p, {}).get("status") in {"active", None, ""})]
             add_finding(findings, counts, "high" if len(active_decisions) > 1 else "medium", "duplicate-normalized-title", paths[0], None, f"Similar title/path in: {', '.join(paths)}", "Review possible duplicate/conflict")
     now = dt.datetime.now(dt.timezone.utc).date()
+    graph = graph_convention_summary(project, wiki, md_files, inventory, outgoing, incoming, file_texts)
+    for folder in graph["missing_folder_indexes"]:
+        add_finding(findings, counts, "low", "graph-missing-folder-index", f"wiki/{folder}/index.md", None, f"{folder}/ has markdown pages but no index.md", "Create a folder index page with navigation to wiki/index.md")
+    for rp in graph["missing_navigation_priority"]:
+        add_finding(findings, counts, "low", "graph-missing-navigation", rp, None, "Missing ## Navigation section on graph hub/index page", "Add a small ## Navigation section linking to project/folder index")
+    for hub in graph["unexpected_hubs"][:10]:
+        add_finding(findings, counts, "low", "graph-unexpected-hub", hub["path"], None, f"{hub['inbound']} inbound links on non-index page", "Ensure page links back to its folder/project index; create/strengthen index hub if needed")
+
     for item in inventory:
         rp = item["path"]
         if not ROOT_EXEMPT_RE.match(rp) and item["linked_from_count"] == 0:
@@ -287,6 +309,7 @@ def audit(args: argparse.Namespace) -> int:
         "schema_version": 1, "project_root": str(project), "wiki_root": str(wiki), "created_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
         "mode": "audit", "score": score,
         "summary": {"files_scanned": len(md_files), "links_checked": links_checked, **counts},
+        "graph_conventions": graph,
         "findings": findings, "inventory": inventory, "safe_fixes": [],
     }
     report_json.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -300,6 +323,90 @@ def audit(args: argparse.Namespace) -> int:
         return 1
     return 0
 
+
+
+
+def graph_convention_summary(project: Path, wiki: Path, md_files: list[Path], inventory: list[dict[str, Any]], outgoing: dict[str, set[str]], incoming: dict[str, set[str]], file_texts: dict[str, str]) -> dict[str, Any]:
+    """Return report-only Obsidian/project-wiki graph convention diagnostics."""
+    rel_paths = [rel(project, p) for p in md_files]
+    wiki_rel_paths = [rp.removeprefix("wiki/") for rp in rel_paths if rp.startswith("wiki/")]
+    existing = set(wiki_rel_paths)
+    approved_hubs = {
+        "index.md",
+        "concepts/index.md",
+        "decisions/index.md",
+        "entities/index.md",
+        "retrospectives/index.md",
+        "session-memory/index.md",
+    }
+    folder_rows: list[dict[str, Any]] = []
+    missing_folder_indexes: list[str] = []
+    folders: dict[str, int] = {}
+    for rp in wiki_rel_paths:
+        if "/" not in rp or rp.endswith("/index.md"):
+            continue
+        folder = rp.split("/", 1)[0]
+        folders[folder] = folders.get(folder, 0) + 1
+    for folder, count in sorted(folders.items()):
+        has_index = f"{folder}/index.md" in existing
+        folder_rows.append({"folder": folder, "markdown_files": count + (1 if has_index else 0), "index_present": has_index})
+        if count >= 2 and not has_index:
+            missing_folder_indexes.append(folder)
+
+    no_navigation = sorted(rp.removeprefix("wiki/") for rp, text in file_texts.items() if rp.startswith("wiki/") and "## Navigation" not in text)
+    no_frontmatter = sorted(rp.removeprefix("wiki/") for rp, text in file_texts.items() if rp.startswith("wiki/") and not parse_frontmatter(text))
+    top_hubs = sorted(
+        ({"path": rp.removeprefix("wiki/"), "inbound": len(srcs), "approved_hub": rp.removeprefix("wiki/") in approved_hubs} for rp, srcs in incoming.items() if rp.startswith("wiki/")),
+        key=lambda x: (-int(x["inbound"]), str(x["path"])),
+    )
+    unexpected_hubs = [h for h in top_hubs if int(h["inbound"]) >= 3 and not h["approved_hub"]]
+    priority_missing_nav: list[str] = []
+    for rp in sorted(approved_hubs):
+        full = f"wiki/{rp}"
+        if full in file_texts and "## Navigation" not in file_texts[full]:
+            priority_missing_nav.append(full)
+    for hub in unexpected_hubs[:10]:
+        full = f"wiki/{hub['path']}"
+        if full in file_texts and "## Navigation" not in file_texts[full]:
+            priority_missing_nav.append(full)
+
+    # Undirected component count over wiki links.
+    nodes = set(rel_paths)
+    adjacency: dict[str, set[str]] = {n: set() for n in nodes}
+    for src, dests in outgoing.items():
+        adjacency.setdefault(src, set())
+        for dest in dests:
+            adjacency[src].add(dest)
+            adjacency.setdefault(dest, set()).add(src)
+    seen: set[str] = set()
+    components: list[list[str]] = []
+    for node in sorted(nodes):
+        if node in seen:
+            continue
+        stack = [node]
+        seen.add(node)
+        comp: list[str] = []
+        while stack:
+            cur = stack.pop()
+            comp.append(cur)
+            for nxt in adjacency.get(cur, set()):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        components.append(comp)
+
+    return {
+        "folder_indexes": folder_rows,
+        "missing_folder_indexes": missing_folder_indexes,
+        "missing_navigation_count": len(no_navigation),
+        "missing_navigation_priority": priority_missing_nav,
+        "missing_frontmatter_count": len(no_frontmatter),
+        "top_hubs": top_hubs[:20],
+        "unexpected_hubs": unexpected_hubs,
+        "connected_components": len(components),
+        "pages_without_inbound_links": len([rp for rp in rel_paths if not incoming.get(rp) and not ROOT_EXEMPT_RE.match(rp)]),
+        "pages_without_outbound_links": len([rp for rp in rel_paths if not outgoing.get(rp)]),
+    }
 
 def render_md(project: Path, data: dict[str, Any]) -> str:
     name = project.name
@@ -319,6 +426,39 @@ def render_md(project: Path, data: dict[str, Any]) -> str:
     for title, cat in [("Broken links", "broken"), ("Orphans", "orphan"), ("Stale pages", "stale"), ("Legacy path references", "legacy-path"), ("Possible secrets", "possible-secret")]:
         lines += [f"## {title}", ""]
         fs = [f for f in data["findings"] if cat in f["category"]]
+        if not fs: lines += ["None.", ""]
+        else:
+            for f in fs[:50]: lines += [f"- {f['id']} `{f['file']}` — {f['recommendation']}"]
+            lines.append("")
+    graph = data.get("graph_conventions") or {}
+    lines += ["## Graph convention diagnostics", "", "Report-only; no graph fixes executed.", ""]
+    if graph:
+        lines += [
+            f"- connected components: {graph.get('connected_components')}",
+            f"- pages without inbound links: {graph.get('pages_without_inbound_links')}",
+            f"- pages without outbound links: {graph.get('pages_without_outbound_links')}",
+            f"- missing folder indexes: {len(graph.get('missing_folder_indexes') or [])}",
+            f"- missing navigation sections: {graph.get('missing_navigation_count')}",
+            f"- missing frontmatter: {graph.get('missing_frontmatter_count')}",
+            "",
+        ]
+        lines += ["### Folder indexes", "", "| Folder | Markdown files | index.md |", "|---|---:|---|"]
+        for row in graph.get("folder_indexes") or []:
+            lines.append(f"| `{row['folder']}/` | {row['markdown_files']} | {'yes' if row['index_present'] else 'no'} |")
+        lines += ["", "### Top hubs", "", "| Inbound | Page | Approved hub? |", "|---:|---|---|"]
+        for hub in graph.get("top_hubs") or []:
+            lines.append(f"| {hub['inbound']} | `{hub['path']}` | {'yes' if hub['approved_hub'] else 'no'} |")
+        lines += ["", "### Unexpected hubs", ""]
+        unexpected = graph.get("unexpected_hubs") or []
+        if not unexpected:
+            lines += ["None.", ""]
+        else:
+            for hub in unexpected[:25]:
+                lines.append(f"- `{hub['path']}` — {hub['inbound']} inbound links")
+            lines.append("")
+    for title, cat in [("Graph missing folder indexes", "graph-missing-folder-index"), ("Graph missing navigation", "graph-missing-navigation"), ("Graph unexpected hubs", "graph-unexpected-hub")]:
+        lines += [f"## {title}", ""]
+        fs = [f for f in data["findings"] if f["category"] == cat]
         if not fs: lines += ["None.", ""]
         else:
             for f in fs[:50]: lines += [f"- {f['id']} `{f['file']}` — {f['recommendation']}"]

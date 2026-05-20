@@ -25,7 +25,7 @@ python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
 ```
 
 3. Read the generated JSON/Markdown report if needed.
-4. Summarize critical/high findings.
+4. Summarize critical/high findings and the report-only graph convention diagnostics (`graph_conventions` in JSON): missing folder indexes, priority missing navigation, unexpected hubs, and connected components.
 5. Do not edit `wiki/` in audit mode.
 6. Do not mutate `<project-root>/pidex/**` except for the deterministic audit's update to `<project-root>/pidex/state/wiki-hygiene.json`; PIDEX metadata/rules/config cleanup is a separate workflow.
 7. Do not create or rely on `agents.wiki.*`.
@@ -61,6 +61,7 @@ Before the ROUTING block, include a concise analysis brief with:
 
 - score and severity counts
 - top findings / cleanup priorities, or "no findings"
+- graph convention brief when present: connected components, missing folder indexes, priority missing navigation, unexpected hubs
 - report path
 - state path updated: `<project-root>/pidex/state/wiki-hygiene.json`
 - wiki content changed: yes/no
