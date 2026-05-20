@@ -260,6 +260,61 @@ def test_preflights_are_summarized():
     assert summary["preflight_grill_pending"] == 1
 
 
+def test_phase2b_does_not_expect_new_operator_for_old_metric():
+    data = {
+        "metrics": [{"plan": "4", "timestamp": "2026-05-20T20:00:00Z", "agent": "pidex-qa", "_source_path": "state/metrics/x.jsonl"}],
+        "pipeline_events": [],
+        "orchestrator_events": [],
+        "rule_actions": [],
+    }
+    trace = mod.build_expected_observed(data, ["plan-004"])
+    assert trace["expected_required"] == 1
+    assert not any(f["operator_type"] in {"OpContextPack", "OpReview"} for f in trace["findings"])
+
+
+def test_phase2b_expects_context_and_review_for_new_review_metric():
+    data = {
+        "metrics": [{"plan": "4", "timestamp": "2026-05-20T21:30:00Z", "agent": "pidex-qa", "_source_path": "state/metrics/x.jsonl"}],
+        "pipeline_events": [],
+        "orchestrator_events": [],
+        "rule_actions": [],
+    }
+    trace = mod.build_expected_observed(data, ["plan-004"])
+    assert trace["expected_required"] == 3
+    assert any(f["operator_type"] == "OpContextPack" for f in trace["findings"])
+    assert any(f["operator_type"] == "OpReview" for f in trace["findings"])
+
+
+def test_phase2b_expects_preflight_for_new_pipeline_start():
+    data = {
+        "metrics": [],
+        "pipeline_events": [{"plan": "4", "event_type": "pipeline_started", "timestamp": "2026-05-20T21:30:00Z", "_source_path": "state/pipeline-events/x.jsonl"}],
+        "orchestrator_events": [],
+        "rule_actions": [],
+    }
+    trace = mod.build_expected_observed(data, ["plan-004"])
+    assert trace["expected_required"] == 1
+    assert any(f["operator_type"] == "OpPreflight" for f in trace["findings"])
+
+
+def test_phase2b_new_operator_events_are_observed():
+    data = {
+        "metrics": [{"plan": "4", "timestamp": "2026-05-20T21:30:00Z", "agent": "pidex-qa", "_source_path": "state/metrics/x.jsonl"}],
+        "pipeline_events": [{"plan": "4", "event_type": "pipeline_started", "timestamp": "2026-05-20T21:30:00Z"}],
+        "orchestrator_events": [
+            {"operator_type": "OpPreflight", "plan_key": "unknown-plan"},
+            {"operator_type": "OpSpawn", "plan_key": "plan-004", "agent": "pidex-qa"},
+            {"operator_type": "OpContextPack", "plan_key": "plan-004", "agent": "pidex-qa"},
+            {"operator_type": "OpReview", "plan_key": "plan-004", "agent": "pidex-qa"},
+        ],
+        "rule_actions": [],
+    }
+    trace = mod.build_expected_observed(data, ["plan-004"])
+    assert trace["expected_required"] == 4
+    assert trace["observed_required"] == 4
+    assert not trace["findings"]
+
+
 def test_reviews_are_summarized():
     data = {
         "metrics": [],
@@ -290,6 +345,31 @@ def test_reviews_are_summarized():
     assert summary["reviews_by_agent"] == {"pidex-qa": 1, "pidex-security": 1}
     assert summary["reviews_by_verdict"] == {"APPROVED": 1, "REJECTED": 1}
     assert summary["review_finding_counts"] == {"critical": 3, "minor": 2}
+
+
+def test_coordination_comparability_windows_and_detectors():
+    data = {
+        "metrics": [
+            {"plan": "4", "timestamp": "2026-01-01T00:00:00Z", "agent": "pidex-planner", "route_to": "pidex-critic"},
+            {"plan": "4", "timestamp": "2026-01-01T00:01:00Z", "agent": "pidex-critic", "route_to": "pidex-implementer", "agent_verdict": "REJECTED"},
+            {"plan": "4", "timestamp": "2026-01-01T00:02:00Z", "agent": "pidex-implementer", "route_to": "pidex-critic"},
+            {"plan": "4", "timestamp": "2026-01-01T00:03:00Z", "agent": "pidex-critic", "route_to": "pidex-qa", "gate": "G9"},
+            {"plan": "5", "timestamp": "2026-01-01T00:04:00Z", "agent": "pidex-planner"},
+        ],
+        "pipeline_events": [{"plan": "4", "event_type": "pipeline_completed", "timestamp": "2026-01-01T00:05:00Z"}],
+        "orchestrator_events": [{"operator_type": "OpQualityReview", "plan_key": "plan-004"}],
+        "rule_actions": [{"timestamp": "2026-01-01T00:02:30Z", "action": "monitor", "owning_agent": "pidex-critic", "expected_impact_dimension": "review-quality", "expected_direction": "increase"}],
+        "routing_artifacts": [],
+        "rules": [],
+        "untracked_rule_changes": [{"path": "rules/x.md"}],
+        "pidex_root_rule_actions": [],
+        "pidex_root_untracked_rule_changes": [],
+    }
+    summary = mod.summarize(data, ["plan-004", "plan-005"])
+    assert summary["coordination_specs"]["plan-004"]["topology"] == "review-loop"
+    assert summary["comparability"]["label"] == "insufficient-data"
+    assert summary["rule_action_windows"][0]["label"] == "insufficient-data"
+    assert any(r["dimension"] == "rule-lifecycle" for r in summary["regression_detectors"])
 
 
 def test_markdown_and_json_report_shape():
@@ -345,6 +425,11 @@ if __name__ == "__main__":
     test_release_decisions_are_summarized()
     test_context_packs_are_summarized()
     test_preflights_are_summarized()
+    test_phase2b_does_not_expect_new_operator_for_old_metric()
+    test_phase2b_expects_context_and_review_for_new_review_metric()
+    test_phase2b_expects_preflight_for_new_pipeline_start()
+    test_phase2b_new_operator_events_are_observed()
     test_reviews_are_summarized()
+    test_coordination_comparability_windows_and_detectors()
     test_markdown_and_json_report_shape()
     print("ok")

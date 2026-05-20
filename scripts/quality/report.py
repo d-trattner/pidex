@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[2]
 STATE = ROOT / "state"
 
 TERMINAL_EVENTS = {"pipeline_completed", "pipeline_failed", "pipeline_aborted", "pipeline_cancelled"}
+PHASE2B_OPERATOR_EXPECTATION_START = dt.datetime.fromisoformat("2026-05-20T21:28:00+00:00")
+REVIEW_AGENTS = {"pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa", "pidex-uat"}
 OPERATOR_TYPES = {
     "OpPreflight",
     "OpContextPack",
@@ -74,6 +76,30 @@ def iter_jsonl(root: Path) -> list[dict[str, Any]]:
 
 def normalize_semantic_empty(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def parse_timestamp(value: Any) -> dt.datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        parsed = dt.datetime.fromisoformat(raw)
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def requires_phase2b_operator(row: dict[str, Any]) -> bool:
+    ts = parse_timestamp(row.get("timestamp"))
+    return bool(ts and ts >= PHASE2B_OPERATOR_EXPECTATION_START)
+
+
+def is_review_agent(agent: Any) -> bool:
+    return str(agent or "") in REVIEW_AGENTS
 
 
 def is_real_gate(value: Any) -> bool:
@@ -305,11 +331,31 @@ def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str,
     expected_count = observed_required = 0
 
     terminal_events_by_plan: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    pipeline_starts_by_plan: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in data.get("pipeline_events", []):
+        plan = terminal_event_plan(row)
+        if plan not in plans:
+            continue
         if row.get("event_type") in TERMINAL_EVENTS:
-            plan = terminal_event_plan(row)
-            if plan in plans:
-                terminal_events_by_plan[plan].append(row)
+            terminal_events_by_plan[plan].append(row)
+        if row.get("event_type") == "pipeline_started" and requires_phase2b_operator(row):
+            pipeline_starts_by_plan[plan].append(row)
+
+    for plan, rows in sorted(pipeline_starts_by_plan.items()):
+        expected_count += 1
+        matching_preflight = [e for e in orch if e.get("operator_type") == "OpPreflight" and e.get("plan_key") in {plan, "unknown-plan", None, ""}]
+        if matching_preflight:
+            observed_required += 1
+        else:
+            findings.append({
+                "type": "unlogged_operator",
+                "operator_type": "OpPreflight",
+                "plan_key": plan,
+                "confidence": "probably-unlogged",
+                "severity": "low",
+                "reason": "A post-Phase-2B pipeline start exists, but no structured OpPreflight event exists.",
+                "evidence": rows[0].get("_source_path") if rows else None,
+            })
 
     for plan, rows in sorted(metrics_by_plan.items()):
         for idx, row in enumerate(rows):
@@ -330,6 +376,38 @@ def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str,
                     "reason": "Agent metrics prove the agent ran, but no structured OpSpawn event exists.",
                     "evidence": row.get("_source_path"),
                 })
+            if requires_phase2b_operator(row):
+                expected_count += 1
+                matching_context = [e for e in orch if e.get("operator_type") == "OpContextPack" and e.get("agent") == agent and (e.get("plan_key") in {plan, None, ""})]
+                if matching_context:
+                    observed_required += 1
+                else:
+                    findings.append({
+                        "type": "unlogged_operator",
+                        "operator_type": "OpContextPack",
+                        "plan_key": plan,
+                        "agent": agent,
+                        "confidence": "probably-unlogged",
+                        "severity": "low",
+                        "reason": "A post-Phase-2B agent metric exists, but no structured OpContextPack event exists.",
+                        "evidence": row.get("_source_path"),
+                    })
+                if is_review_agent(agent):
+                    expected_count += 1
+                    matching_review = [e for e in orch if e.get("operator_type") == "OpReview" and e.get("agent") == agent and (e.get("plan_key") in {plan, None, ""})]
+                    if matching_review:
+                        observed_required += 1
+                    else:
+                        findings.append({
+                            "type": "unlogged_operator",
+                            "operator_type": "OpReview",
+                            "plan_key": plan,
+                            "agent": agent,
+                            "confidence": "probably-unlogged",
+                            "severity": "low",
+                            "reason": "A post-Phase-2B review-agent metric exists, but no structured OpReview event exists.",
+                            "evidence": row.get("context_file") or row.get("_source_path"),
+                        })
             route_to = row.get("route_to")
             gate = row.get("gate")
             if route_to:
@@ -395,6 +473,129 @@ def build_expected_observed(data: dict[str, Any], plans: list[str]) -> dict[str,
     }
 
 
+def plan_rows(data: dict[str, Any], plan: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    metrics = [r for r in data["metrics"] if infer_plan_from_record(r) == plan]
+    events = [r for r in data["pipeline_events"] if infer_plan_from_record(r) == plan]
+    orch = [r for r in data.get("orchestrator_events", []) if r.get("plan_key") in {plan, None, ""}]
+    return metrics, events, orch
+
+
+def build_coordination_specs(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
+    specs: dict[str, Any] = {}
+    for plan in plans:
+        metrics, events, orch = plan_rows(data, plan)
+        agents = [str(r.get("agent") or "unknown") for r in metrics]
+        gates = [r.get("gate") for r in metrics if is_real_gate(r.get("gate"))]
+        terminal = next((str(r.get("event_type")) for r in reversed(events) if r.get("event_type") in TERMINAL_EVENTS), "unknown")
+        repeated_agents = [agent for agent, count in Counter(agents).items() if count > 1 and agent != "unknown"]
+        has_parallel = any(count > 1 for (_agent, ts), count in Counter((r.get("agent"), r.get("timestamp")) for r in metrics).items() if ts)
+        if has_parallel:
+            topology = "parallel-secondary"
+        elif repeated_agents:
+            topology = "review-loop" if any(a in REVIEW_AGENTS for a in repeated_agents) else "retry-loop"
+        elif len(gates) >= 3:
+            topology = "gate-heavy"
+        else:
+            topology = "sequential" if metrics else "unknown"
+        authority = ["agent-routing" if any(r.get("route_to") for r in metrics) else "unknown"]
+        if gates:
+            authority.append("user")
+        if any(r.get("operator_type") in {"OpPreflight", "OpQualityReview", "OpReleaseDecision"} for r in orch):
+            authority.append("orchestrator")
+        synchronization = []
+        if gates:
+            synchronization.append("gate")
+        if repeated_agents:
+            synchronization.append("retry")
+        if has_parallel:
+            synchronization.append("parallel-join")
+        aggregation = next((str(r.get("context_file")) for r in reversed(metrics) if r.get("context_file")), "unknown")
+        failure_handling = []
+        if any(int(r.get("exit_code") or 0) != 0 for r in metrics):
+            failure_handling.append("retry")
+        if repeated_agents:
+            failure_handling.append("fix-loop")
+        if not failure_handling:
+            failure_handling.append("none-observed")
+        specs[plan] = {
+            "topology": topology,
+            "authority": sorted(set(authority)),
+            "synchronization": synchronization or ["none-observed"],
+            "aggregation": aggregation,
+            "termination": terminal.removeprefix("pipeline_"),
+            "failure_handling": sorted(set(failure_handling)),
+            "agent_runs": len(metrics),
+            "gates": len(gates),
+        }
+    return specs
+
+
+def build_comparability(summary_seed: dict[str, Any], coordination_specs: dict[str, Any]) -> dict[str, Any]:
+    plans = summary_seed.get("plans_reviewed", [])
+    topologies = {spec.get("topology") for spec in coordination_specs.values() if spec.get("topology") != "unknown"}
+    if len(plans) < 6:
+        label = "insufficient-data"
+        reasons = ["fewer than 6 reviewed plans"]
+    elif len(topologies) > 2:
+        label = "descriptive-only"
+        reasons = ["mixed route topologies"]
+    else:
+        label = "partially-comparable"
+        reasons = ["same project report scope", "task class/model/context comparability not yet fully classified"]
+    return {"label": label, "sample_size": len(plans), "topologies": sorted(topologies), "reasons": reasons}
+
+
+def row_ts(row: dict[str, Any]) -> dt.datetime | None:
+    return parse_timestamp(row.get("timestamp"))
+
+
+def build_rule_action_windows(rule_actions: list[dict[str, Any]], metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows_with_ts = [(row_ts(r), r) for r in metrics]
+    rows_with_ts = [(ts, r) for ts, r in rows_with_ts if ts]
+    windows: list[dict[str, Any]] = []
+    for action in rule_actions[-20:]:
+        ats = row_ts(action)
+        if not ats:
+            continue
+        owner = str(action.get("owning_agent") or "")
+        related = [(ts, r) for ts, r in rows_with_ts if not owner or r.get("agent") == owner]
+        before = [r for ts, r in related if ts < ats][-10:]
+        after = [r for ts, r in related if ts > ats][:10]
+        label = "partially-comparable" if len(before) >= 3 and len(after) >= 3 else "insufficient-data"
+        windows.append({
+            "rule_path": action.get("rule_path"),
+            "action": action.get("action"),
+            "owning_agent": owner or "unknown",
+            "expected_impact_dimension": action.get("expected_impact_dimension"),
+            "expected_direction": action.get("expected_direction"),
+            "before_count": len(before),
+            "after_count": len(after),
+            "label": label,
+            "before_trace_proxy_gates": sum(1 for r in before if is_real_gate(r.get("gate"))),
+            "after_trace_proxy_gates": sum(1 for r in after if is_real_gate(r.get("gate"))),
+            "before_rejections": sum(1 for r in before if "REJECT" in str(r.get("agent_verdict") or "").upper()),
+            "after_rejections": sum(1 for r in after if "REJECT" in str(r.get("agent_verdict") or "").upper()),
+        })
+    return windows
+
+
+def build_regression_detectors(summary_seed: dict[str, Any], coordination_specs: dict[str, Any]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    trace = summary_seed.get("operator_trace", {})
+    if trace.get("critical_missing_operators"):
+        findings.append({"dimension": "operator-trace", "severity": "high", "confidence": "medium", "reason": "critical missing operators detected", "count": trace.get("critical_missing_operators")})
+    if summary_seed.get("untracked_rule_changes"):
+        findings.append({"dimension": "rule-lifecycle", "severity": "medium", "confidence": "high", "reason": "untracked rule changes detected", "count": len(summary_seed.get("untracked_rule_changes") or [])})
+    if summary_seed.get("user_corrections"):
+        findings.append({"dimension": "user-corrections", "severity": "medium", "confidence": "high", "reason": "user corrections recorded", "count": len(summary_seed.get("user_corrections") or [])})
+    if summary_seed.get("context_pack_budget_warnings"):
+        findings.append({"dimension": "context-budget", "severity": "medium", "confidence": "medium", "reason": "context-pack budget warnings recorded", "count": summary_seed.get("context_pack_budget_warnings")})
+    loop_plans = [plan for plan, spec in coordination_specs.items() if spec.get("topology") in {"review-loop", "retry-loop"}]
+    if loop_plans:
+        findings.append({"dimension": "rework-loops", "severity": "low", "confidence": "descriptive-only", "reason": "review/retry loop topology observed", "plans": loop_plans[:10], "count": len(loop_plans)})
+    return findings
+
+
 def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     metrics = [r for r in data["metrics"] if infer_plan_from_record(r) in plans]
     events = [r for r in data["pipeline_events"] if infer_plan_from_record(r) in plans]
@@ -431,6 +632,17 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
     by_rule_action = Counter(str(r.get("action") or "unknown") for r in rule_actions)
     total_tokens = sum(int(r.get("input_tokens_estimate") or 0) + int(r.get("output_tokens_estimate") or 0) for r in metrics)
     total_cost = sum(float(r.get("cost_usd_estimate") or 0.0) for r in metrics)
+    coordination_specs = build_coordination_specs(data, plans)
+    summary_seed = {
+        "plans_reviewed": plans,
+        "operator_trace": trace,
+        "untracked_rule_changes": untracked_rule_changes,
+        "user_corrections": user_corrections,
+        "context_pack_budget_warnings": context_budget_warnings,
+    }
+    comparability = build_comparability(summary_seed, coordination_specs)
+    rule_action_windows = build_rule_action_windows(rule_actions, metrics)
+    regression_detectors = build_regression_detectors(summary_seed, coordination_specs)
     return {
         "plans_reviewed": plans,
         "sample_size": {"agent_runs": len(metrics), "pipeline_events": len(events), "orchestrator_events": len(data["orchestrator_events"]), "rule_actions": len(rule_actions), "untracked_rule_changes": len(untracked_rule_changes), "pidex_root_rule_actions": len(pidex_root_rule_actions), "pidex_root_untracked_rule_changes": len(pidex_root_untracked_rule_changes), "routing_artifacts": len(data["routing_artifacts"]), "rules": len(data["rules"])},
@@ -462,6 +674,11 @@ def summarize(data: dict[str, Any], plans: list[str]) -> dict[str, Any]:
         "pidex_root_untracked_rule_changes": pidex_root_untracked_rule_changes,
         "cost_tokens": {"estimated_tokens": total_tokens, "estimated_cost_usd": round(total_cost, 6)},
         "operator_trace": trace,
+        "operator_expectation_start": PHASE2B_OPERATOR_EXPECTATION_START.isoformat(),
+        "coordination_specs": coordination_specs,
+        "comparability": comparability,
+        "rule_action_windows": rule_action_windows,
+        "regression_detectors": regression_detectors,
         "confidence": "descriptive-only" if trace["gap_count"] else "medium",
     }
 
@@ -545,6 +762,7 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
     lines.append(f"- estimated_tokens: {s['cost_tokens']['estimated_tokens']}")
     lines.append(f"- estimated_cost_usd: {s['cost_tokens']['estimated_cost_usd']}")
     lines += ["", "## Expected-vs-Observed Operator Trace", ""]
+    lines.append(f"- phase2b_operator_expectation_start: `{s.get('operator_expectation_start')}`")
     lines.append(f"- required operators expected: {trace['expected_required']}")
     lines.append(f"- required operators observed as structured events: {trace['observed_required']}")
     lines.append(f"- trace gaps: {trace['gap_count']}")
@@ -554,6 +772,30 @@ def write_markdown(report: dict[str, Any], path: Path) -> None:
         lines.append(f"- **{f.get('type')}** `{f.get('operator_type')}` plan `{f.get('plan_key')}` severity `{f.get('severity')}` confidence `{f.get('confidence')}` — {f.get('reason')} Evidence: `{f.get('evidence')}`")
     if not trace["findings"]:
         lines.append("- No trace gaps detected from available evidence.")
+    lines += ["", "## Coordination Specs", ""]
+    if s.get("coordination_specs"):
+        for plan, spec in s.get("coordination_specs", {}).items():
+            lines.append(f"- `{plan}` topology `{spec.get('topology')}` termination `{spec.get('termination')}` agents `{spec.get('agent_runs')}` gates `{spec.get('gates')}` sync `{', '.join(spec.get('synchronization') or [])}`")
+    else:
+        lines.append("- No coordination specs available.")
+    lines += ["", "## Comparability", ""]
+    comp = s.get("comparability") or {}
+    lines.append(f"- label: `{comp.get('label') or 'unknown'}`")
+    lines.append(f"- sample_size: {comp.get('sample_size')}")
+    lines.append("- reasons: " + "; ".join(comp.get("reasons") or []))
+    lines.append("- topologies: " + ", ".join(comp.get("topologies") or []))
+    lines += ["", "## Rule-Action Impact Windows", ""]
+    if s.get("rule_action_windows"):
+        for row in s.get("rule_action_windows", [])[-10:]:
+            lines.append(f"- `{row.get('label')}` `{row.get('action')}` {row.get('rule_path') or '—'} owner `{row.get('owning_agent')}` before `{row.get('before_count')}` after `{row.get('after_count')}` impact `{row.get('expected_impact_dimension')}`")
+    else:
+        lines.append("- No rule-action impact windows available in reviewed scope.")
+    lines += ["", "## Regression Detectors", ""]
+    if s.get("regression_detectors"):
+        for row in s.get("regression_detectors", []):
+            lines.append(f"- `{row.get('dimension')}` severity `{row.get('severity')}` confidence `{row.get('confidence')}` count `{row.get('count')}` — {row.get('reason')}")
+    else:
+        lines.append("- No regression detector findings in reviewed scope.")
     lines += ["", "## Rule Inventory", ""]
     for k, v in sorted(s["rules_by_owner"].items()):
         lines.append(f"- {k}: {v} rule docs")
