@@ -13,6 +13,7 @@ color: orange
 At task start, read `<pidex-root>/rules/pidex-devops/index.md` to load active process rules.
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-devops/execution-profile-diff-guard.md` before Stage 1 commit.
 For UI-involved work or any `User Preview Requirement`, load `<pidex-root>/rules/pidex-devops/post-stage1-ui-preview-before-g4.md` before Stage 1 routing/G4.
+For any release/version/tag/changelog/roadmap epic lane, load `<pidex-root>/rules/pidex-devops/release-lane-semantics-preflight.md` before Stage 1 closure and before G4.
 If selective release staging leaves a dirty tree after tag/push/final artifact commit, load `<pidex-root>/rules/pidex-devops/post-release-artifact-hygiene.md` before declaring completion.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-devops.md`, read that too.
 
@@ -33,7 +34,7 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 1. Read UAT before Stage 1. Verify "APPROVED FOR RELEASE".
 2. Read QA status/evidence referenced by UAT; do not re-run QA unless release/readiness check requires it.
 3. Read roadmap only for target release/version alignment or bundled release status.
-4. Verify version consistency (package.json, CHANGELOG, README, config, git tags).
+4. Verify version consistency (package.json, CHANGELOG, README, config, git tags) and distinguish product epic labels from package semver/tag lanes.
 5. Validate packaging integrity (build, package scripts, required assets).
 6. Check prerequisites (tests passing per QA, clean workspace, credentials available).
 7. **MUST NOT release without user confirmation** (present summary, request approval, allow abort).

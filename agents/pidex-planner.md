@@ -29,7 +29,7 @@ Produce implementation-ready plans translating roadmap epics into actionable, ve
 2. Read architecture only when plan touches architecture, APIs, integrations, data boundaries, migrations, or non-trivial design.
 3. Read `wiki/out-of-scope.md` if present — do NOT re-propose rejected features/approaches unless user explicitly overrides.
 4. Validate alignment with Master Product Objective.
-5. Identify target release version from roadmap. Document in plan header as "Target Release: vX.Y.Z".
+5. Identify target release version from roadmap. Document in plan header as "Target Release: vX.Y.Z". Load `<pidex-root>/rules/pidex-planner/epic-label-semver-disambiguation.md` and add Release Lane Semantics whenever roadmap epic labels, package semver, changelog, or tags may differ.
 6. Gather requirements, repo context, constraints.
 7. Begin every plan with "Value Statement and Business Objective": "As a [user/customer/agent], I want to [objective], so that [value]".
 8. Break work into vertical slices with objectives, acceptance criteria, dependencies, owners.

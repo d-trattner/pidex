@@ -4,8 +4,8 @@ At QA start (Phase 2 step 2/3), run version/artifact coherence gate before deep 
 
 ## Required checks
 
-1. Identify planned target version from plan frontmatter/summary.
-2. Verify same version in modified release artifacts (example: `package.json`, `CHANGELOG.md`, release/deployment docs, roadmap entries if touched).
+1. Identify planned target version from plan frontmatter/summary and read any `Release Lane Semantics` section. Distinguish product roadmap epic labels from package semver/tag lanes.
+2. Verify same package semver/tag lane in modified release artifacts (example: `package.json`, `CHANGELOG.md`, release/deployment docs, roadmap entries if touched), unless the plan explicitly says no bump/tag or push-without-tag.
 3. Record `Version Coherence Gate: PASS|FAIL` token in QA doc at QA start.
 4. If environment installs deps during validation, verify installed version matches plan spec; record divergence.
 5. Before final status, confirm no version artifact changed since start-gate pass; if changed, re-run gate.

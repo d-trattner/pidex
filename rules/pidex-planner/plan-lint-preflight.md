@@ -25,6 +25,7 @@ Planner MUST add a compact `Plan Lint Preflight` section and resolve all FAIL ro
 | Skipped Agents declaration | Section exists and each skip has reason + critic-safe condition, or says `none` | Missing section when profile mentions skips |
 | Retro Mode consistency | `full` when mandatory trigger exists (G9 rejection, security risk acceptance/finding, process/multi-agent failure); otherwise declared `none|mini|full` with rationale | Mandatory trigger present but retro mode is `none`/`mini`, or missing retro mode |
 | Target release/version coherence | Target release matches current repo release line or explicitly declares next bump/hold policy with artifact paths | Stale release copied from older plan, mismatch with package/changelog without rationale |
+| Epic label vs semver taxonomy | Product epic label is explicitly distinguished from package semver/tag lane | Treating `Epic 11.5` as package tag `v11.5.0` without explicit user decision |
 | G9 applicability | UI plans declare G9 required or not applicable with reason | UI plan lacks G9 decision |
 | Artifact path uniqueness | Parallel/secondary lane output paths are unique when specified | Multiple lanes instructed to write same artifact path |
 
