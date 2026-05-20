@@ -1336,7 +1336,9 @@ Follow-ups found:
 Recommendation: create a <roadmap|maintenance> epic for <reason>.
 Choose: A) create/update roadmap epic now B) track in wiki/open-items only C) defer/no action D) continue existing roadmap epic
 ```
-If no follow-ups exist, say: `Follow-ups: none found. Recommendation: continue existing roadmap / stop.` Do not create a new epic without user confirmation.
+If no follow-ups exist, do not stop at a passive summary. Say that no follow-ups were found, then provide a compact next-action choice set with at least: A) show more detail on the next roadmap epic, B) start pre-flight for the next roadmap epic, C) run a quick roadmap/open-work status check, D) stop here. Do not create a new epic without user confirmation.
+
+Every terminal closeout must include a `Choose next:` block. When a roadmap exists, include an option to get more detail on the next epic before starting it.
 
 Then send a best-effort notify-only Telegram completion message when configured:
 

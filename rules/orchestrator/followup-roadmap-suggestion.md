@@ -4,11 +4,11 @@ PROC-NEW-FOLLOWUP-G10 | orchestrator
 
 ## Trigger
 
-Run when a PIDEX pipeline reaches terminal completion, release hold, or G10 next-epic decision and any artifact mentions follow-up / deferred / carry-forward / open item / future work.
+Run when a PIDEX pipeline reaches terminal completion, release hold, or G10 next-epic decision. Always give the user a next-action choice set, even when no follow-ups are found. Also run the follow-up scan when any artifact mentions follow-up / deferred / carry-forward / open item / future work.
 
 ## Rule
 
-Do not merely report follow-ups. Give the user an explicit recommended next action.
+Do not merely report follow-ups. Give the user an explicit recommended next action and a compact choice set. Never end a pipeline closeout with only "done" or a passive summary; include what the user can do next.
 
 If follow-ups are product/runtime/user-value work, suggest creating or updating a roadmap epic. If follow-ups are small technical debt or test gaps, suggest adding to `wiki/open-items.md` or bundling into a maintenance epic. If follow-ups are process/rule improvements, suggest routing to `pidex-pi` or applying the approved rule update path.
 
@@ -62,8 +62,17 @@ D) Continue with existing next roadmap epic
 If no follow-ups exist:
 
 ```text
-Follow-ups: none found. Recommendation: continue with existing roadmap / stop.
+Follow-ups: none found.
+Recommendation: continue with the existing roadmap, inspect the next epic, or stop.
+
+Choose next:
+A) Show more detail on the next roadmap epic
+B) Start pre-flight for the next roadmap epic
+C) Run a quick roadmap/open-work status check
+D) Stop here
 ```
+
+When follow-ups do exist, still include an option that lets the user inspect the next existing roadmap epic before committing to work.
 
 ## Important
 
