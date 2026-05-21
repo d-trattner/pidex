@@ -89,9 +89,9 @@ A pipeline may only mutate its declared `<project-root>` / allowed write root. O
 
 Every specialist handoff must include a `PROJECT BOUNDARY` block naming current project root, allowed write root, read-only external reference roots, and the rule: do not edit/commit/tag/push outside allowed write root.
 
-### Pre-spawn context pack (mandatory)
+### Pre-spawn context pack (preferred; helper optional)
 
-Before every `pidex-*` spawn, build a compact context pack with policy + auto-snippets:
+Before every `pidex-*` spawn, use a compact context pack instead of pasting broad/full artifacts. If a PIDEX context-budget helper exists, prefer it:
 
 ```bash
 bash <pidex-root>/scripts/pre-spawn/spawn-with-budget.sh \
@@ -103,7 +103,9 @@ bash <pidex-root>/scripts/pre-spawn/spawn-with-budget.sh \
 
 Use the emitted pack path in the `pidex_agent` briefing.
 
-Budget check is **soft by default** (warn-only). Use `--hard` only when you explicitly want blocking behavior.
+If the helper is unavailable, do **not** block the pipeline. Create a compact manual context pack/brief instead, include only targeted artifact paths/snippets, and mention `CONTEXT-PACK-MANUAL: helper unavailable` in the handoff.
+
+Budget check is **soft by default** (warn-only). Use `--hard` only when you explicitly want blocking behavior and the helper exists.
 
 ### Step 0 — Recent projects shortlist
 
@@ -1110,7 +1112,7 @@ Use the `pidex_agent` tool for every specialist handoff. Do **not** use legacy `
 
 Before each spawn:
 
-1. Build compact context pack with `spawn-with-budget.sh`.
+1. Build compact context pack with `spawn-with-budget.sh` when available; otherwise create a compact manual pack and mark `CONTEXT-PACK-MANUAL: helper unavailable`.
 2. Emit `pipeline_stage_started` with `scripts/pipeline/event.sh` (`--actor <pidex-agent>`, `--status running`).
 3. Pass complete task context to `pidex_agent`: project cwd, current epic/plan, relevant artifact paths, expected output path, gate/ROUTING expectations, and the mandatory `PROJECT BOUNDARY` block from `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`.
 4. Set `cwd` to the project root (or lane worktree for implementer lanes). The `cwd` must be inside the allowed write root unless the lane worktree is explicitly declared for the same project pipeline.
@@ -1132,7 +1134,7 @@ Provider overrides are exceptional debugging tools only. Prefer config-driven ro
 
 **2. Pipeline sequence**
 
-**Context-pack enforcement:** before each `pidex_agent` call, run `spawn-with-budget.sh` and pass the emitted pack path/content in the task briefing. Budget warnings are non-blocking by default; use `--hard` only when needed.
+**Context-pack enforcement:** before each `pidex_agent` call, prefer `spawn-with-budget.sh` if it exists and pass the emitted pack path/content in the task briefing. If the helper is unavailable, create a compact manual pack instead and mark `CONTEXT-PACK-MANUAL: helper unavailable`. Budget warnings are non-blocking by default; use `--hard` only when needed and the helper exists.
 
 **Legacy plan migration:** when resuming an active plan that lacks `Execution Profile`, `Skipped Agents`, or `Retro Mode`, read `<pidex-root>/rules/orchestrator/legacy-plan-profile-migration.md`. Prefer a small pidex-planner revision before implementation; if late-stage, run conservative full path and brief `LEGACY-PROFILE-SKIP: no skips honored`.
 
@@ -1200,7 +1202,9 @@ Secondary lane brief requirements:
 This is a configured secondary review lane for PIDEX parallel agents.
 Lane: <lane_id>.
 Do not overwrite the primary artifact.
-Write only to the expected secondary output path.
+Write only the assigned secondary artifact file.
+Do not write any other path: no `wiki/open-items.md`, `wiki/**`, roadmap docs, source files, rules, configs, primary artifacts, temp helper files, or extra outputs.
+If you find deferred/non-blocking work, include it as a candidate in the assigned artifact; the merge/adjudication step decides whether to write follow-ups elsewhere.
 Do not implement changes.
 Do not invent findings.
 Every finding must include file path, line/range if possible, risk, evidence, and proposed fix.

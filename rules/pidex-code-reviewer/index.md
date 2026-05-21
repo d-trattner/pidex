@@ -26,6 +26,7 @@ Last updated: 2026-05-18 (PROC-104-D)
 | Async CTA Proof Gate | [async-cta-proof-gate.md](async-cta-proof-gate.md) | 80-1 | Before APPROVED, evidence must prove pending label, disabled state, and duplicate-click block for each async CTA |
 | Exact Taxonomy/Error-Code Assertions for Contract Scope | [exact-taxonomy-error-code-assertions.md](exact-taxonomy-error-code-assertions.md) | PROC-NEW-92-3 | Contract-scope reviews require exact deterministic code/taxonomy assertions; ambiguous checks are Major+ reject |
 | Lifecycle-vs-Legacy Assertion Vocabulary Scan | [lifecycle-assertion-vocabulary-scan.md](lifecycle-assertion-vocabulary-scan.md) | PROC-NEW-93-3 | Contract/lifecycle reviews must scan for mixed assertion vocabulary and lane drift; mixed semantics are reject-level |
+| Secondary Lane Write Fence | [secondary-lane-write-fence.md](secondary-lane-write-fence.md) | PARALLEL-LANE-WRITE-FENCE | Secondary code-review lanes may write only their expected secondary artifact; deferred findings stay in the secondary artifact for merge/adjudication, not `wiki/open-items.md` |
 
 ## How to use
 

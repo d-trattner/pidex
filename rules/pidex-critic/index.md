@@ -19,6 +19,7 @@ Last updated: 2026-04-28 (PROC-NEW-48-1)
 | Retro Mode Safety Check | [retro-mode-safety-check.md](retro-mode-safety-check.md) | RETRO-MODE-SAFETY | Critic verifies none/mini/full retro mode and post-retro handoffs are safe for risk |
 | UI Intent + Proof Contract Check | [ui-intent-proof-contract-check.md](ui-intent-proof-contract-check.md) | UI-INTENT-PROOF | Reject UI plans with ambiguous placement, missing visual proof criteria, table checklist, or copy semantics contract |
 | Enumeration Completeness Check | [enumeration-completeness-check.md](enumeration-completeness-check.md) | PIPELINE-ANALYST-1D | Plans with fixed domains/states/steps must bind every enumerated item or declare applies-to-all behavior |
+| Secondary Lane Write Fence | [secondary-lane-write-fence.md](secondary-lane-write-fence.md) | PARALLEL-LANE-WRITE-FENCE | Secondary critic lanes may write only their expected secondary artifact; deferred findings stay in the secondary artifact for merge/adjudication, not `wiki/open-items.md` |
 
 ## How to use
 

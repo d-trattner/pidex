@@ -215,6 +215,8 @@ When re-reviewing after fixes, update existing code review doc — don't create 
 
 When verdict is APPROVED_WITH_COMMENTS, write each non-blocking finding as bullet to `wiki/open-items.md` (create if missing). Each entry: finding ID, one-line summary, originating agent (pidex-code-reviewer), plan reference. Ensures deferred items tracked, not orphaned between pipeline stages.
 
+Exception: if running as a configured secondary/parallel code-review lane, write **only** the assigned artifact file. Do not write `wiki/open-items.md`, project memory, source files, rules, configs, temp helper files, or any other path. Put deferred findings as candidates inside the assigned artifact; the orchestrator merge/adjudication step decides whether to write follow-ups elsewhere.
+
 # Version Verification
 
 Before writing verdict, compare key dependency versions actually installed (`package.json` / lock file / `go.mod` / `pyproject.toml`) against plan spec. Version diverges from plan (e.g. plan says "Next.js 15" but `package.json` has `next@16.x`) → document as finding. Silent version drift must not pass code review.

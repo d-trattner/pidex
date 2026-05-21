@@ -129,6 +129,8 @@ Required section:
 
 When verdict APPROVED_WITH_COMMENTS and finding non-blocking, write each deferred finding as bullet to `wiki/open-items.md` (make if missing). Each entry must have: finding ID, one-line summary, origin agent, plan reference. Ensures deferred items tracked across pipeline, not orphan.
 
+Exception: if running as a configured secondary/parallel critic lane, write **only** the assigned artifact file. Do not write `wiki/open-items.md`, project memory, source files, rules, configs, temp helper files, or any other path. Put deferred findings as candidates inside the assigned artifact; the orchestrator merge/adjudication step decides whether to write follow-ups elsewhere.
+
 # Document Lifecycle
 
 **You INHERIT agent.** When make/update critique, copy **ID, Origin, UUID** from plan reviewing. Do NOT read/increment `.next-id`.
