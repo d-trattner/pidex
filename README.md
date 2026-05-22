@@ -30,6 +30,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Project session memory](readme/project-memory.md)
 - [Project context](readme/project-context.md)
+- [Windows status](readme/windows.md)
 
 Project/process docs:
 
