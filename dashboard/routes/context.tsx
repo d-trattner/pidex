@@ -83,7 +83,6 @@ function validateEntries(entries: ContextEntry[]): string[] {
 }
 
 type SectionPair = { title: string; body: string };
-type IdentityField = { key: string; value: string };
 
 function sectionTabId(heading: string): string {
   return `section:${heading}`;
@@ -91,19 +90,6 @@ function sectionTabId(heading: string): string {
 
 function stripBullet(line: string): string {
   return line.replace(/^\s*[-*]\s+/, '').trim();
-}
-
-function parseIdentity(body: string): IdentityField[] {
-  return body.split(/\r?\n/).map(stripBullet).filter(Boolean).map((line) => {
-    const strong = line.match(/^\*\*(.+?)\*\*:\s*(.*)$/);
-    if (strong) return { key: strong[1].trim(), value: strong[2].trim() };
-    const idx = line.indexOf(':');
-    return idx >= 0 ? { key: line.slice(0, idx).trim(), value: line.slice(idx + 1).trim() } : { key: line, value: '' };
-  });
-}
-
-function serializeIdentity(fields: IdentityField[]): string {
-  return fields.map((field) => `- **${field.key.trim()}**: ${field.value.trim()}`).join('\n');
 }
 
 function isRenderableLine(line: string): boolean {
@@ -301,7 +287,7 @@ function ContextPage() {
               </div>
               {reviewEntries.map((entry, index) => (
                 <section key={`${entry.index}-${entry.term}`} className="settings-subcontainer context-entry-row">
-                  <input className="themed-input context-entry-field" aria-label="Review term" placeholder="Term" value={entry.term} onChange={(event) => updateReviewEntry(index, { term: event.target.value })} />
+                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Review term" placeholder="Term" rows={3} value={entry.term} onChange={(event) => updateReviewEntry(index, { term: event.target.value })} />
                   <AutoResizeTextarea className="themed-textarea context-entry-field context-definition-field" aria-label="Review definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateReviewEntry(index, { definition: event.target.value })} />
                   <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Review avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateReviewEntry(index, { avoid: textToAliases(event.target.value) })} />
                   <div className="context-review-actions">
@@ -352,7 +338,7 @@ function ContextPage() {
             </div>
             {visibleEntries.map(({ entry, index }) => (
               <section key={index} className="settings-subcontainer context-entry-row">
-                <input className="themed-input context-entry-field" aria-label="Term" placeholder="Term" value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
+                <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Term" placeholder="Term" rows={3} value={entry.term} onChange={(event) => updateEntry(index, { term: event.target.value })} disabled={!payload.structuredEditable} />
                 <AutoResizeTextarea className="themed-textarea context-entry-field context-definition-field" aria-label="Definition" placeholder="Definition" rows={3} value={entry.definition} onChange={(event) => updateEntry(index, { definition: event.target.value })} disabled={!payload.structuredEditable} />
                 <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Avoid aliases" placeholder="Avoid aliases" rows={3} value={aliasesToText(entry.avoid)} onChange={(event) => updateEntry(index, { avoid: textToAliases(event.target.value) })} disabled={!payload.structuredEditable} />
                 <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove ${entry.term || `entry ${index + 1}`}`} onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}><Trash2 size={14} /></button>
@@ -369,32 +355,17 @@ function ContextPage() {
         <article key={section.heading} id={sectionTabId(section.heading)} className="glass-card glass context-main-panel">
           <div className="context-entries-toolbar">
             <h3>{section.heading}</h3>
-            {['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
+            {section.heading === 'Relationships' ? (
               <div className="context-entries-actions">
-                <label className="context-search-label" aria-label={`Search ${section.heading}`}>
+                <label className="context-search-label" aria-label="Search Relationships">
                   <Search size={14} aria-hidden="true" />
-                  <input className="themed-input context-search-input" value={sectionSearch} onChange={(event) => setSectionSearch(event.target.value)} placeholder={`Search ${section.heading}…`} />
+                  <input className="themed-input context-search-input" value={sectionSearch} onChange={(event) => setSectionSearch(event.target.value)} placeholder="Search Relationships…" />
                 </label>
                 <button className="button" type="button" onClick={() => updateEditableSection(sectionIndex, serializePairs([...parsePairs(section.body), { title: '', body: '' }]))}><Plus size={14} /> Add entry</button>
               </div>
             ) : null}
           </div>
-          {section.heading === 'Project Identity' ? (
-            <div className="context-identity-grid" style={{ marginTop: 12 }}>
-              {parseIdentity(section.body).map((field, index, fields) => (
-                <section key={`${field.key}-${index}`} className="settings-subcontainer context-identity-row context-list-row">
-                  <input className="themed-input" aria-label="Identity field" value={field.key} onChange={(event) => {
-                    const next = fields.map((item, idx) => idx === index ? { ...item, key: event.target.value } : item);
-                    updateEditableSection(sectionIndex, serializeIdentity(next));
-                  }} />
-                  <input className="themed-input" aria-label="Identity value" value={field.value} onChange={(event) => {
-                    const next = fields.map((item, idx) => idx === index ? { ...item, value: event.target.value } : item);
-                    updateEditableSection(sectionIndex, serializeIdentity(next));
-                  }} />
-                </section>
-              ))}
-            </div>
-          ) : ['Relationships', 'Architecture Notes', 'Operational Constraints'].includes(section.heading) ? (
+          {section.heading === 'Relationships' ? (
             <div className="context-entry-table" style={{ marginTop: 12 }}>
               <div className="context-entry-header context-pair-header" aria-hidden="true">
                 <span>Entry</span>
@@ -402,21 +373,21 @@ function ContextPage() {
               </div>
               {parsePairs(section.body).map((pair, index, pairs) => ({ pair, index, pairs })).filter(({ pair }) => !sectionSearch.trim() || pair.title.toLowerCase().includes(sectionSearch.trim().toLowerCase())).map(({ pair, index, pairs }) => (
                 <section key={`${pair.title}-${index}`} className="settings-subcontainer context-pair-row context-list-row">
-                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label={`${section.heading} item`} rows={2} value={pair.title} onChange={(event) => {
+                  <AutoResizeTextarea className="themed-textarea context-entry-field" aria-label="Relationship item" rows={2} value={pair.title} onChange={(event) => {
                     const next = pairs.map((item, idx) => idx === index ? { ...item, title: event.target.value } : item);
                     updateEditableSection(sectionIndex, serializePairs(next));
                   }} />
-                  <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove ${section.heading} item ${index + 1}`} onClick={() => updateEditableSection(sectionIndex, serializePairs(pairs.filter((_, idx) => idx !== index)))}><Trash2 size={14} /></button>
+                  <button className="icon-button compact context-entry-remove" type="button" aria-label={`Remove relationship item ${index + 1}`} onClick={() => updateEditableSection(sectionIndex, serializePairs(pairs.filter((_, idx) => idx !== index)))}><Trash2 size={14} /></button>
                 </section>
               ))}
             </div>
           ) : section.heading === 'Example Dialogue' ? (
             <AutoResizeTextarea className="themed-textarea" rows={10} value={section.body} onChange={(event) => updateEditableSection(sectionIndex, event.target.value)} style={{ marginTop: 12 }} />
-          ) : section.heading === 'Evidence Sources' || section.heading === 'Flagged Ambiguities' ? (
+          ) : section.heading === 'Flagged Ambiguities' ? (
             <div className="context-rendered-table" style={{ marginTop: 12 }}>
               {listItems(section.body).length ? (
                 <table>
-                  <thead><tr><th>{section.heading === 'Evidence Sources' ? 'Source' : 'Ambiguity'}</th><th>Details</th></tr></thead>
+                  <thead><tr><th>Ambiguity</th><th>Details</th></tr></thead>
                   <tbody>{listItems(section.body).map((item, index) => {
                     const idx = item.indexOf(':');
                     const title = idx >= 0 ? item.slice(0, idx).trim() : item;

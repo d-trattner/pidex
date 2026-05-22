@@ -2,6 +2,8 @@
 
 Use these templates to initialize `<project-root>/pidex/context/` for existing projects before running `/pd` with `grill-with-docs`.
 
+PIDEX context follows Matt Pocock's `CONTEXT.md` shape exactly: language, relationships, example dialogue, and flagged ambiguities. It is not a project database, task spec, roadmap, workflow document, architecture document, or operational runbook.
+
 ## Single-context project
 
 Most projects should start here:
@@ -10,8 +12,6 @@ Most projects should start here:
 mkdir -p <project-root>/pidex/context
 cp <pidex-root>/templates/project-context/CONTEXT.md <project-root>/pidex/context/CONTEXT.md
 ```
-
-Then open the dashboard Context page and fill only facts you know. Put guesses in **Open Questions / Needs User Review**.
 
 ## Multi-context project
 
@@ -26,6 +26,6 @@ cp -r <pidex-root>/templates/project-context/contexts/example <project-root>/pid
 ## Truth policy
 
 - User/domain expert owns truth.
-- Agents may add confirmed facts or code-evidenced facts.
-- Uncertain statements must stay under **Open Questions / Needs User Review**.
-- Do not add general programming concepts; only project/domain language and constraints.
+- Agents may add confirmed terms from user statements or clear code evidence.
+- If unsure, ask or record the ambiguity under `Flagged Ambiguities`.
+- Do not add general programming concepts; only project/domain language belongs here.

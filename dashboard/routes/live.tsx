@@ -217,9 +217,10 @@ function PipelineTimeline({ rows, onOpenContext }: { rows: AgentRunRow[]; onOpen
       .filter((item) => Number.isFinite(item.time))
       .sort((a, b) => a.time - b.time);
     const keys = Array.from(new Set(valid.map((item) => item.key)));
-    const min = valid[0]?.time ?? Date.now();
-    const max = valid[valid.length - 1]?.time ?? min + 1;
-    return { valid, keys, min, max: max === min ? min + 1 : max };
+    const lanes = new Map<string, typeof valid>();
+    for (const key of keys) lanes.set(key, valid.filter((item) => item.key === key));
+    const maxLaneLength = Math.max(1, ...Array.from(lanes.values()).map((lane) => lane.length));
+    return { valid, keys, lanes, maxLaneLength };
   }, [rows]);
 
   const width = 1000;
@@ -228,26 +229,26 @@ function PipelineTimeline({ rows, onOpenContext }: { rows: AgentRunRow[]; onOpen
   const left = 180;
   const right = 30;
   const height = Math.max(180, top + chart.keys.length * laneHeight + 56);
-  const x = (time: number) => left + ((time - chart.min) / (chart.max - chart.min)) * (width - left - right);
+  const xStep = (index: number) => {
+    const span = width - left - right;
+    return left + (chart.maxLaneLength <= 1 ? span / 2 : (index / (chart.maxLaneLength - 1)) * span);
+  };
   const y = (key: string) => top + chart.keys.indexOf(key) * laneHeight + 34;
-  const quarterHourMs = 15 * 60 * 1000;
-  const ticks = Array.from({ length: Math.max(0, Math.floor(Math.ceil(chart.max / quarterHourMs) - Math.ceil(chart.min / quarterHourMs)) + 1) }, (_, index) => (Math.ceil(chart.min / quarterHourMs) + index) * quarterHourMs)
-    .filter((tick) => tick >= chart.min && tick <= chart.max);
-  const axisTicks = ticks.length > 0 ? ticks : [chart.min, chart.max];
+  const axisTicks = Array.from({ length: chart.maxLaneLength }, (_, index) => index);
 
   return (
     <div className="pipeline-timeline-wrap">
       <svg width={width} height={height} role="img" aria-label="Pipeline timeline" onMouseLeave={() => setTooltip(null)}>
         {axisTicks.map((tick) => (
           <g key={tick}>
-            <line x1={x(tick)} x2={x(tick)} y1={top - 46} y2={height - 30} stroke="rgba(255,255,255,.08)" />
-            <text x={x(tick)} y={height - 10} fill="rgba(255,255,255,.56)" fontSize="12" textAnchor="middle">{formatClockTime(tick).replace(/:\d{2}$/, '')}</text>
+            <line x1={xStep(tick)} x2={xStep(tick)} y1={top - 46} y2={height - 30} stroke="rgba(255,255,255,.08)" />
+            <text x={xStep(tick)} y={height - 10} fill="rgba(255,255,255,.56)" fontSize="12" textAnchor="middle">Step {tick + 1}</text>
           </g>
         ))}
         {chart.keys.map((key, index) => {
           const laneY = y(key);
-          const lane = chart.valid.filter((item) => item.key === key);
-          const points = lane.map((item) => `${x(item.time)},${laneY}`).join(' ');
+          const lane = chart.lanes.get(key) || [];
+          const points = lane.map((_item, index) => `${xStep(index)},${laneY}`).join(' ');
           const color = COLORS[index % COLORS.length];
           return (
             <g key={key}>
@@ -255,7 +256,7 @@ function PipelineTimeline({ rows, onOpenContext }: { rows: AgentRunRow[]; onOpen
               <text x={12} y={laneY + 5} fill="rgba(255,255,255,.72)" fontSize="13">{key}</text>
               {points ? <polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" /> : null}
               {lane.map((item, pointIndex) => {
-                const cx = x(item.time);
+                const cx = xStep(pointIndex);
                 const lines = [
                   toText(item.row.agent),
                   `Verdict: ${toText(item.row.verdict)}`,
@@ -362,7 +363,7 @@ function LivePage() {
   const recentOpenCutoffMs = 6 * 60 * 60 * 1000;
   const pipelinesForTimeline = openPipelines
     .filter((row) => {
-      if (toText(row.status).toLowerCase() === 'running' || row.is_running === true) return true;
+      if (row.is_running === true) return true;
       const lastAt = new Date(String(row.last_at || '')).getTime();
       return Number.isFinite(lastAt) && Date.now() - lastAt <= recentOpenCutoffMs;
     });

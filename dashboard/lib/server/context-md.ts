@@ -44,19 +44,7 @@ export interface ParsedContext {
 
 export const DEFAULT_CONTEXT_MARKDOWN = `# Project Context
 
-Short description of what this project is and why it exists.
-
-> Truth policy: user/domain expert owns meaning. Agents may add confirmed facts or clear code-evidenced facts. Guesses stay in **Open Questions / Needs User Review**.
-
-## Project Identity
-
-- **Name**: TODO
-- **Root**: TODO
-- **Purpose**: TODO
-- **Primary users/operators**: TODO
-- **Runtime/deployment**: TODO
-- **Canonical wiki**: \`wiki/\`
-- **PIDEX metadata**: \`pidex/\`
+Short description of what this context covers.
 
 ## Language
 
@@ -73,35 +61,7 @@ _Avoid_: Ambiguous synonym, old term
 
 <!-- Express relationships between project/domain concepts. -->
 
-- TODO: **Concept A** relates to **Concept B** because ...
-
-## Architecture Notes
-
-<!-- High-level architecture, important modules, boundaries, and ownership. Prefer facts with paths/evidence. -->
-
-- TODO
-
-## Operational Constraints
-
-<!-- Security, deployment, testing, data, performance, release, or environment constraints. -->
-
-- TODO
-
-## Known Workflows
-
-<!-- Common commands and routines. Keep commands project-local and verified. -->
-
-- Install: TODO
-- Test: TODO
-- Build: TODO
-- Run/dev: TODO
-- Deploy/release: TODO
-
-## Evidence Sources
-
-<!-- Files/docs/code paths that support this context. -->
-
-- TODO: \`README.md\`
+- An **Example Term** relates to another **Example Term** because ...
 
 ## Example Dialogue
 
@@ -114,11 +74,7 @@ _Avoid_: Ambiguous synonym, old term
 
 - TODO: term/behavior needing clarification.
 
-## Open Questions / Needs User Review
-
-<!-- Use only for genuinely uncertain agent proposals. Confirmed user statements and clear code/docs-evidenced terms may go directly into ## Language. Use the same structure as Language entries so the dashboard can edit/approve/delete proposals. -->
-
-`;
+`; 
 
 const LANGUAGE_HEADING_RE = /^##\s+Language\s*$/im;
 const OPEN_QUESTIONS_HEADING_RE = /^##\s+Open Questions\s*\/\s*Needs User Review\s*$/im;
@@ -126,15 +82,9 @@ const APPROVED_NOTES_HEADING = '## Approved Context Notes';
 const OPEN_QUESTIONS_HEADING = '## Open Questions / Needs User Review';
 const NEXT_H2_RE = /^##\s+/m;
 const EDITABLE_SECTION_HEADINGS = [
-  'Project Identity',
   'Relationships',
-  'Architecture Notes',
-  'Operational Constraints',
-  'Known Workflows',
-  'Evidence Sources',
   'Example Dialogue',
   'Flagged Ambiguities',
-  'Approved Context Notes',
 ];
 const TERM_RE = /^\*\*([^*\n][^*\n]*?)\*\*:\s*$/;
 const AVOID_RE = /^_Avoid_:\s*(.*?)\s*$/i;

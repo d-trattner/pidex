@@ -137,8 +137,12 @@ def db_connect(path: Path) -> sqlite3.Connection:
     return conn
 
 
+def canonical_path(value: str | Path) -> str:
+    return str(Path(value).expanduser().resolve(strict=False))
+
+
 def project_id(conn: sqlite3.Connection, project_path: str) -> int:
-    p = str(Path(project_path).expanduser())
+    p = canonical_path(project_path)
     name = Path(p).name or p.replace("/", "-")
     conn.execute("INSERT OR IGNORE INTO projects(path, name) VALUES (?, ?)", (p, name))
     row = conn.execute("SELECT id FROM projects WHERE path = ?", (p,)).fetchone()
@@ -354,7 +358,8 @@ def parse_markdown_table_rows(text: str) -> Iterable[list[str]]:
 
 
 def ingest_merge_rows(conn: sqlite3.Connection, path: Path, pid: int, plan_key: str | None, text: str) -> int:
-    conn.execute("DELETE FROM merge_findings WHERE artifact_path = ?", (str(path),))
+    artifact_path = canonical_path(path)
+    conn.execute("DELETE FROM merge_findings WHERE artifact_path = ?", (artifact_path,))
     count = 0
     for idx, cells in enumerate(parse_markdown_table_rows(text), 1):
         joined = " | ".join(cells)
@@ -373,7 +378,7 @@ def ingest_merge_rows(conn: sqlite3.Connection, path: Path, pid: int, plan_key: 
             INSERT OR REPLACE INTO merge_findings(artifact_path, row_index, project_id, plan_key, source, severity, classification, disposition, summary)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (str(path), idx, pid, plan_key, source, severity, classification, disposition, summary),
+            (artifact_path, idx, pid, plan_key, source, severity, classification, disposition, summary),
         )
         count += 1
     return count
@@ -382,7 +387,7 @@ def ingest_merge_rows(conn: sqlite3.Connection, path: Path, pid: int, plan_key: 
 def discover_projects(args_projects: list[str]) -> list[Path]:
     projects = []
     for raw in args_projects:
-        p = Path(raw).expanduser()
+        p = Path(raw).expanduser().resolve(strict=False)
         if p.exists() and p not in projects:
             projects.append(p)
 
@@ -401,7 +406,7 @@ def discover_projects(args_projects: list[str]) -> list[Path]:
     for raw in os.environ.get("PIDEX_DASHBOARD_EXTERNAL_PROJECTS", "").split(os.pathsep):
         if not raw.strip():
             continue
-        p = Path(raw).expanduser()
+        p = Path(raw).expanduser().resolve(strict=False)
         if p.exists() and p not in projects:
             projects.append(p)
     # Include projects observed in metrics if they still exist.
@@ -411,8 +416,10 @@ def discover_projects(args_projects: list[str]) -> list[Path]:
                 for line in file.read_text(errors="ignore").splitlines()[:5]:
                     rec = json.loads(line)
                     proj = rec.get("project")
-                    if proj and Path(proj).exists() and Path(proj) not in projects:
-                        projects.append(Path(proj))
+                    if proj:
+                        proj_path = Path(proj).expanduser().resolve(strict=False)
+                        if proj_path.exists() and proj_path not in projects:
+                            projects.append(proj_path)
                     break
             except Exception:
                 pass
@@ -422,6 +429,7 @@ def discover_projects(args_projects: list[str]) -> list[Path]:
 def ingest_artifacts(conn: sqlite3.Connection, projects: list[Path]) -> tuple[int, int]:
     artifact_count = merge_count = 0
     for project in projects:
+        project = project.expanduser().resolve(strict=False)
         out = project / "agents.output"
         if not out.exists():
             continue
@@ -448,7 +456,7 @@ def ingest_artifacts(conn: sqlite3.Connection, projects: list[Path]) -> tuple[in
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    str(path), pid, plan_key, role, label, secondary, 1 if routing else 0,
+                    canonical_path(path), pid, plan_key, role, label, secondary, 1 if routing else 0,
                     routing.get("verdict"), routing.get("route_to"), routing.get("gate"), title[:300],
                     utc_from_ts(stat.st_mtime), stat.st_size, safe_hash(text),
                 ),

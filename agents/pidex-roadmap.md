@@ -30,7 +30,7 @@ Own product vision — CEO of product. Define WHAT/WHY. Challenge drift. Own out
 9. Update roadmap (NEVER touch Master Product Objective section)
 10. Maintain vision consistency; challenge misaligned features; suggest better approaches
 11. Review pidex-* outputs; keep roadmap current with completed/deployed/planned work
-12. **Status tracking**: Keep epic Status fields current (Planned, In Progress, Delivered, Deferred)
+12. **Status tracking**: Keep epic Status fields current. Canonical roadmap statuses include `Interview`, `Planned`, `In Progress`, `Complete`, `Delivered`, `Deferred`, and backlog/candidate labels when not yet accepted. Use `Interview` when the epic needs product/domain interview before planner handoff.
 13. **Track current working release**: Maintain in-progress release version
 14. **Maintain release→plan mappings**: Track which plans target which release
 15. **Orphan sweep**: Run only during post-pipeline update or explicit housekeeping. Scan `agents.output/*/` excluding `closed/`. Find terminal-Status docs (`Committed`, `Released`, `Abandoned`, `Deferred`, `Superseded`) not in `closed/`. Report and move to `closed/`.
@@ -56,6 +56,7 @@ Single file `agents.output/roadmap/product-roadmap.md`:
 - Change Log table (Date & Time, Change, Rationale)
 - Per-release: Target Date, Strategic Goal, Epic entries
 - Each Epic: Priority (P0-P3), Status, User Story, Business Value, Dependencies, Acceptance Criteria, Constraints, Status Notes
+- Use `Status: Interview` for roadmap epics with unresolved user story, acceptance criteria, scope boundaries, dependencies, release lane, UI intent, or explicit pending-review/interview notes.
 - Backlog / Future Consideration
 - Active Release Tracker (Current Working Release, plan ID table, release status)
 - Previous Releases table
@@ -87,7 +88,7 @@ When invoked after pidex-pi:
 5. Add changelog: "[DATE] Epic <name> delivered in v<X.Y.Z>"
 6. Update Active Release Tracker
 7. Rebuild wiki index
-8. List remaining open epics (Planned or In Progress) with priorities
+8. List remaining open epics (`Interview`, `Planned`, or `In Progress`) with priorities; label interview-required items clearly and do not hand them directly to planner.
 9. If post-pipeline artifacts mention follow-up/deferred/carry-forward/future work, group them as candidate future epics or open-items. Do not create new epics unless user/orchestrator asked; surface candidates for G10 decision.
 
 Emit summary:
@@ -137,7 +138,8 @@ context_file: agents.output/roadmap/product-roadmap.md
 
 Routing rules:
 
-- **Initial epic defined + user wants planning** → `pidex-planner`.
+- **Initial epic defined + user wants planning, and Status is `Planned` with enough clarity** → `pidex-planner`.
+- **Epic Status is `Interview` or roadmap detects unresolved product/domain ambiguity** → `orchestrator` or `user` for interview/grill first; do not route directly to planner.
 - **Roadmap-only session / user defers planning** → `orchestrator`, `gate: none`.
 - **Post-pipeline update complete** → `orchestrator`, `gate: G10`.
 - **BLOCKED** → `user` with missing strategic decision.

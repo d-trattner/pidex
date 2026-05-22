@@ -87,9 +87,9 @@ When the user states how something works, check whether the code agrees. If you 
 
 When a term is resolved, update the relevant `pidex/context/**/CONTEXT.md` immediately. Do not batch these up. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
 
-`CONTEXT.md` is a glossary and relationship map. It must not become a scratch pad, a task spec, or an implementation design doc.
+`CONTEXT.md` follows Matt Pocock's context format exactly: `Language`, `Relationships`, `Example Dialogue`, and `Flagged Ambiguities`. It is a domain language aid, not a scratch pad, task spec, implementation design doc, roadmap, workflow document, architecture document, or operational runbook.
 
-Before adding a term, ask: is this a concept specific to this project's domain/context, or a general programming concept? Only project/domain concepts belong.
+Before adding a term, ask: is this a project/domain term that can be defined in one sentence? If not, do not add it to `CONTEXT.md`.
 
 ### User owns truth
 

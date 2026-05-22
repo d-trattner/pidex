@@ -689,11 +689,15 @@ export async function getLiveState(search = ''): Promise<JsonObject> {
   );
 
   const inferredRunningMs = Number(process.env.PIDEX_DASHBOARD_INFERRED_RUNNING_MS || 45 * 60 * 1000);
-  const isRunningOpenPipeline = (row: DbRow): boolean => {
-    if (row.source === 'pipeline_events') return row.status === 'running';
-    if (row.source !== 'agent_runs_inferred') return false;
+  const eventRunningMs = Number(process.env.PIDEX_DASHBOARD_EVENT_RUNNING_MS || 6 * 60 * 60 * 1000);
+  const freshEnough = (row: DbRow, windowMs: number): boolean => {
     const lastAt = Date.parse(String(row.last_at || ''));
-    return Number.isFinite(lastAt) && Date.now() - lastAt <= inferredRunningMs;
+    return Number.isFinite(lastAt) && Date.now() - lastAt <= windowMs;
+  };
+  const isRunningOpenPipeline = (row: DbRow): boolean => {
+    if (row.source === 'pipeline_events') return row.status === 'running' && freshEnough(row, eventRunningMs);
+    if (row.source !== 'agent_runs_inferred') return false;
+    return freshEnough(row, inferredRunningMs);
   };
   const openPipelines: DbRow[] = ((eventOpen || []).concat(inferredOpen || []) as DbRow[]).slice(0, 24).map((row: DbRow) => ({
     ...row,

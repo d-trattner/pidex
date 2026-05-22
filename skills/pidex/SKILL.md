@@ -25,7 +25,8 @@ Rules for grilling inside pidex:
 - If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
 - For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
 - If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `<pidex-root>/scripts/project-context/init.py <project-root>`.
-- Put confirmed user statements and clear code/docs-evidenced terms directly into `## Language` when durable. Use `## Open Questions / Needs User Review` only for proposals the agent is genuinely uncertain about; do not require review for every normal context entry. Uncertain proposals must use the same structure as Language entries (`**Term**:`, definition, optional `_Avoid_:`) so the dashboard can edit, approve, or delete them.
+- `CONTEXT.md` follows Matt Pocock's context format exactly. Use `<pidex-root>/skills/grill-with-docs/CONTEXT-FORMAT.md` as the single source of truth for context handling.
+- Put confirmed user statements and clear code/docs-evidenced project/domain terms directly into `## Language` only when they can be defined in one sentence. Do not put task specs, acceptance criteria, implementation plans, roadmap items, workflows, architecture notes, operational constraints, or release decisions in `CONTEXT.md`.
 - For fresh/new projects, create `pidex/context/CONTEXT.md` during the orchestrator preparation step before spawning agents so the first plan has a context home.
 - Agents may update context from confirmed user statements or clear code evidence; the user/domain expert owns truth.
 - Stop grilling once you can write a crisp 3-5 sentence epic statement with explicit acceptance criteria, constraints, and out-of-scope items.
@@ -77,9 +78,12 @@ Keep orchestrator context lean by default:
 2. Do **not** read long artifacts (`open-items.md`, large plan docs, retros) end-to-end unless a specific gate/decision requires it.
 3. When a project is mentioned by name/path, do a **roadmap-first quick look** before broader scanning:
    - Check `<project>/agents.output/roadmap/product-roadmap.md` first (if present).
+   - Reconcile it with newer roadmap/planning artifacts before answering next-work/status questions: targeted-check latest `<project>/agents.output/roadmap/*roadmap-update*.md`, `<project>/agents.output/planning/*brief*.md`, `<project>/agents.output/planning/*draft*.md`, and `<project>/agents.output/planning/*summary*.md` whose mtimes or plan IDs are newer than the canonical roadmap.
+   - If a newer artifact proposes planned epics or next work that is not present in the canonical roadmap, say so explicitly and treat it as a pending/unpromoted roadmap update; do not answer from the older canonical roadmap alone.
    - Extract only current/open signals (e.g., ACTIVE/OPEN/IN PROGRESS/recent epics) with targeted grep/snippets.
-   - Expand to other files only if roadmap data is missing or the user asks for deeper detail.
-4. Default summary depth: top 3-5 actionable items, then ask whether to drill deeper.
+   - Expand to other files only if roadmap data is missing, newer artifacts conflict with canonical roadmap, or the user asks for deeper detail.
+4. After a project is selected, if roadmap/open-work signals exist, present a compact lettered shortlist immediately instead of asking a blank "what deliverable?" question. Include up to 5 items from canonical roadmap plus reconciled newer roadmap/planning artifacts, clearly labelling status/source such as `Interview`, `Planned (canonical)`, `Pending roadmap update`, or `Backlog candidate`. Always include options for `Other/manual task` and `Show more/open work`. If an item is `Interview`, or if the orchestrator can see unresolved user story/acceptance/scope/dependency/UI-intent ambiguity, label it interview-first and start the interview/grill phase when selected; do not route directly to planner.
+5. Default summary depth: top 3-5 actionable items, then ask whether to drill deeper.
 
 ### Project boundary write guard (mandatory)
 
@@ -164,7 +168,20 @@ The user might say any of these:
 1. Verify the directory exists. If not: "This directory does not exist. Should I create it as a new project, or did you mean something else?"
 2. Use bundled agents from `<pidex-root>/agents/` through the `pidex_agent` tool. Project-local `.pi/agents/` copies are optional and not required for the MVP.
 3. Check if `<path>/agents.output/` exists. If not, create it with `.next-id` set to 0.
-4. If the user asked a status/open-work question (e.g., "what is open in <project>?"), check `<path>/agents.output/roadmap/product-roadmap.md` first using low-context snippets before scanning other docs.
+4. Check roadmap/open-work signals using the low-context roadmap-first reconciliation rule above even if the user only selected a project. If actionable planned/open/backlog items exist, present a compact lettered shortlist, for example:
+   ```text
+   Selected project: <path>
+
+   Roadmap options:
+   A) <planned epic> — Interview (interview first)
+   B) <planned epic> — Planned (ready for planner after quick confirmation)
+   C) <newer epic> — Pending roadmap update from <artifact>
+   D) Other/manual task
+   E) Show more/open work
+
+   Which deliverable should this run take?
+   ```
+   Do not force the user to ask "what is open?" when obvious roadmap options are available. Treat `Interview` as a start-interview choice, not a start-implementation choice.
 5. Determine project type: does the directory have source code? A package.json / pyproject.toml / go.mod? Tests? This informs which interview flow to use.
 6. Store the resolved absolute path.
 
