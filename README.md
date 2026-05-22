@@ -1,6 +1,10 @@
 # PIDEX
 
-PIDEX is my personal LLM exploration project: a place where I try to understand how to use Codex-oriented LLMs effectively in a software-delivery pipeline. It is in constant development and refinement, keeps evolving over time, and now includes many principles I learned along the way. The LLM world moves so fast that trying to follow every “new” and “best” approach can be overwhelming and exhausting. At some point, you just have to try things, measure what happens, and see where it goes.
+<p align="center">
+  <img src="readme/assets/pidex-logo.svg" alt="PIDEX animated logo" width="160">
+</p>
+
+PIDEX is my personal LLM pipeline automation project. To be clear, I am heavily assisted by LLMs while building it, and I have invested most of my time over the last months trying to improve every aspect. It is experimental, constantly changing, and shaped by lessons learned from real local projects. The LLM world moves fast, and I try to filter what is worth trying and what is not. The number of new tools and open-source projects emerging every day is enormous; no one can try everything, so deciding what to test is not easy. PIDEX is my way of trying ideas directly, measuring what happens, and keeping the parts that seem to help.
 
 Metrics are a useful way to test what works and what does not, so PIDEX includes a local dashboard for pipeline state, quality signals, provider usage, and project context. PIDEX also follows the LLM Wiki direction: durable project knowledge should be explicit, reviewable, and close to the source instead of hidden behind opaque retrieval machinery. I tried RAG too, but for this project I prefer fewer dependencies and more explicit context.
 
@@ -22,7 +26,6 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Project session memory](readme/project-memory.md)
 - [Project context](readme/project-context.md)
-- [Future briefs](readme/future-briefs.md)
 
 Project/process docs:
 
@@ -35,7 +38,7 @@ Project/process docs:
 PIDEX v0.1 expects the checkout at exactly `~/pidex`. Other checkout paths are not supported yet.
 
 ```bash
-git clone <pidex-repo-url> ~/pidex
+git clone https://github.com/d-trattner/pidex.git ~/pidex
 cd ~/pidex
 ./install.sh
 # simulate without changing Pi settings:
@@ -60,7 +63,7 @@ cd ~/pidex
 In Pi:
 
 ```text
-/pidex Add a small helper in ~/my-project
+/pidex Work on ~/my-project
 ```
 
 `/pd` is available as a short alias. The orchestrator routes work through Codex-oriented `pidex-*` specialist agents.
@@ -79,7 +82,7 @@ Project session memory:
 - `rules/` – role-specific rules
 - `templates/` – artifact/checklist templates
 - `extensions/pidex/` – Pi extension entrypoint (`pidex_agent`)
-- `config/agents.json` – Codex-only routing
+- `config/agents.json` – default agent routing configuration
 - `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark variants
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `scripts/metrics/` + `scripts/pipeline/` – analytics helpers
@@ -137,6 +140,3 @@ PIDEX_AUTO_PDQ=0
 
 See [Automatic quality reports](readme/automatic-quality-reports.md).
 
-## Future briefs
-
-Notable future-epic briefs live under `agents.output/briefs/`. See [Future briefs](readme/future-briefs.md).
