@@ -3,7 +3,7 @@ title: Windows Compatibility Analysis
 type: initiative
 sequence: 016
 status: planned
-stage: phase-4-compatibility-matrix-drafted
+stage: phase-5-smoke-test-plan-drafted
 priority: medium
 created: 2026-05-22
 updated: 2026-05-22
@@ -19,12 +19,12 @@ Analyze what PIDEX needs before it can run reliably on Windows without weakening
 ## Current status
 
 - Status: `planned`
-- Stage: `phase-4-compatibility-matrix-drafted`
+- Stage: `phase-5-smoke-test-plan-drafted`
 - Priority: `medium`
 
 ## Next action
 
-Review and merge Milestone A through Phase 4 docs, then continue Phase 5: create the Windows smoke test plan for later laptop validation.
+Review and merge Milestone A through Phase 5 docs, then use the smoke test plan for later laptop validation before any runtime Windows implementation.
 
 ## Documents
 
@@ -36,6 +36,7 @@ Review and merge Milestone A through Phase 4 docs, then continue Phase 5: create
 - [[entrypoint-inventory]] — Phase 2 PIDEX public/internal entrypoint Windows exposure inventory
 - [[static-portability-audit]] — Phase 3 static portability risks and mitigation order
 - [[compatibility-matrix]] — Phase 4 environment/feature support matrix and support-claim candidates
+- [[windows-smoke-test-plan]] — Phase 5 safe laptop smoke checklist for WSL2, Git Bash, and PowerShell audit-only
 
 ## Navigation
 
