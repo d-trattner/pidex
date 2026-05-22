@@ -31,7 +31,7 @@ The host orchestrator and every spawned `pidex-*` agent must treat all other rep
 Cross-project mutation is allowed only after the user explicitly says to switch the active project, for example:
 
 ```text
-Switch project to /home/daniel/pidex and start a PIDEX pipeline for that project.
+Switch project to ~/pidex and start a PIDEX pipeline for that project.
 ```
 
 A vague statement such as "PIDEX should improve this later" or "make a follow-up" is not permission to mutate PIDEX. Capture a brief/follow-up plan instead.

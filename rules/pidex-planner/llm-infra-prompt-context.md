@@ -8,7 +8,7 @@ When a plan uses an LLM to generate infrastructure actions (tool loops, plan ste
 autonomous mutation sequencing), the system prompt specification MUST include a dedicated
 "ENVIRONMENT FACTS" or "INFRASTRUCTURE CONTEXT" subsection that provides static facts:
 
-  - Service names and their roles (e.g., "Pi-hole at 10.0.0.1 handles DNS resolution")
+  - Service names and their roles (e.g., "Pi-hole at <service-host> handles DNS resolution")
   - IP addresses and hostnames for services the LLM may reference or target
   - What is installed and where (e.g., "nginx-proxy-manager is the sole reverse proxy")
   - Any constraints the LLM must not violate (e.g., "never modify hosts not in the allowlist")

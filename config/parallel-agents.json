@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "enabled": true,
+  "enabled": false,
   "default_mode": "opportunistic",
   "dedupe_hours": 6,
   "max_provider_models_per_agent": 2,
   "agents": {
     "pidex-code-reviewer": {
-      "enabled": true,
+      "enabled": false,
       "trigger": "after-implementation",
       "mode": "opportunistic",
       "timeout_seconds": 600,
@@ -16,18 +16,18 @@
           "provider": "deepseek",
           "model": "deepseek-v4-flash",
           "effort": "medium",
-          "enabled": true
+          "enabled": false
         },
         {
           "provider": "minimax",
           "model": "MiniMax-M2.7",
           "effort": "medium",
-          "enabled": true
+          "enabled": false
         }
       ]
     },
     "pidex-critic": {
-      "enabled": true,
+      "enabled": false,
       "trigger": "after-plan",
       "mode": "opportunistic",
       "timeout_seconds": 600,
@@ -37,13 +37,13 @@
           "provider": "deepseek",
           "model": "deepseek-v4-flash",
           "effort": "medium",
-          "enabled": true
+          "enabled": false
         },
         {
           "provider": "minimax",
           "model": "MiniMax-M2.7",
           "effort": "medium",
-          "enabled": true
+          "enabled": false
         }
       ]
     }

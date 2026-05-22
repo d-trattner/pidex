@@ -13,7 +13,7 @@ UniFi, Home Assistant, or any service running in the homelab), before writing th
 
   ### API Verification — [ServiceName].[methodName]
   ```
-  curl -X PUT "http://10.0.0.1/api/config/dns/hosts/my.domain.com" \
+  curl -X PUT "http://<service-host>/api/config/dns/hosts/my.domain.com" \
     -H "Authorization: Bearer $PIHOLE_PASSWORD" \
     -H "Content-Type: application/json"
   # Response: 200 {"took":0.001}

@@ -1,29 +1,4 @@
 {
   "schema_version": 1,
-  "providers": [
-    {
-      "provider": "deepseek",
-      "label": "DeepSeek",
-      "enabled": true,
-      "snapshots": [
-        {
-          "kind": "balance_update",
-          "balance_usd": 16.89,
-          "captured_at": "2026-05-20T12:00:00.000Z"
-        }
-      ]
-    },
-    {
-      "provider": "minimax",
-      "label": "MiniMax",
-      "enabled": true,
-      "snapshots": [
-        {
-          "kind": "balance_update",
-          "balance_usd": 21.34,
-          "captured_at": "2026-05-20T12:00:00.000Z"
-        }
-      ]
-    }
-  ]
+  "providers": []
 }

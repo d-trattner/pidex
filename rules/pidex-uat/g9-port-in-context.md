@@ -17,7 +17,7 @@ port must be propagated verbatim into the G9 context message.
 ## G9 gate context must include
 
   --context "Localhost URL: http://127.0.0.1:<PORT>/<route>
-  LAN URL: http://10.0.0.103:<PORT>/<route>
+  LAN URL: http://<lan-host>:<PORT>/<route>
   Verified: listening on 0.0.0.0:<PORT>; LAN route returned 200
   <test summary line>
   Check: <what to verify>"

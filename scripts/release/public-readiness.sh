@@ -15,6 +15,8 @@ Checks the PIDEX public-release invariants:
 - checkout path is exactly ~/pidex
 - npm run check passes unless --skip-check
 - no forbidden tracked runtime/private paths
+- no high-confidence secret tokens or local operator path leaks in tracked text
+- public default configs do not include local balances or enabled optional secondary lanes
 - npm pack does not include excluded paths
 - no legacy dashboard archive
 - README documents the ~/pidex install contract
@@ -49,25 +51,109 @@ else
 fi
 
 python3 - <<'PY'
-import subprocess, sys
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
 paths = subprocess.check_output(['git', 'ls-files'], text=True).splitlines()
 bad = []
 for path in paths:
+    parts = pathlib.PurePosixPath(path).parts
     if path == 'pidex/state/.gitkeep':
         continue
     if (
-        path.startswith(('state/', 'agents.output/', 'logs/', 'pidex/state/'))
+        'agents.output' in parts
+        or 'logs' in parts
+        or 'node_modules' in parts
+        or '__pycache__' in parts
+        or '.playwright' in parts
+        or '.fallow' in parts
+        or 'test-results' in parts
+        or (('state' in parts) and path != 'pidex/state/.gitkeep')
         or path == 'dashboard/data'
         or '/.env' in path or path.startswith('.env')
-        or path == 'config.env' or path.startswith('secrets/')
-        or path.endswith(('.db', '.sqlite', '.pem', '.key', '.crt', '.p12'))
+        or path == 'config.env' or path.startswith('secrets/') or 'secrets' in parts
+        or path.endswith(('.db', '.sqlite', '.sqlite3', '.pem', '.key', '.crt', '.p12', '.pfx', '.jks', '.keystore', '.kubeconfig', '.pid'))
     ):
         bad.append(path)
 if bad:
-    print('\n'.join(bad), file=sys.stderr)
+    print('\n'.join(sorted(set(bad))), file=sys.stderr)
     raise SystemExit(1)
+
+# Structural secret scan over tracked text files. Keep this focused on high-confidence
+# token formats so public release checks do not fail on documentation examples.
+skip_suffixes = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.woff', '.woff2', '.ttf', '.ico', '.lock', '.svg'}
+allow_files = {
+    'scripts/git-hooks/lib/security-scan.sh',
+    'scripts/doctor.sh',
+    'scripts/wiki/hygiene.py',
+}
+patterns = [
+    ('AWS key', re.compile(r'\b(AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b')),
+    ('Google API key', re.compile(r'AIza[A-Za-z0-9_-]{35}')),
+    ('GitHub token', re.compile(r'\b(ghp|gho|ghs)_[A-Za-z0-9]{36}\b|github_pat_[A-Za-z0-9_]{82}')),
+    ('OpenAI key', re.compile(r'\bsk-(proj-)?[A-Za-z0-9_-]{40,}\b')),
+    ('Anthropic key', re.compile(r'sk-ant-api03-[A-Za-z0-9_-]{80,}')),
+    ('Slack token/webhook', re.compile(r'xox[baprs]-[0-9A-Za-z-]{20,}|hooks\.slack\.com/services/[A-Za-z0-9/]{30,}')),
+    ('Telegram bot token', re.compile(r'\b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b')),
+    ('Private key', re.compile(r'-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----')),
+    ('Credentialed URL', re.compile(r'\b(postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?)://[^\s:@]+:[^\s@]+@')),
+]
+findings = []
+for path in paths:
+    if path in allow_files:
+        continue
+    if pathlib.PurePosixPath(path).suffix in skip_suffixes:
+        continue
+    try:
+        text = pathlib.Path(path).read_text(encoding='utf-8')
+    except Exception:
+        continue
+    for label, pattern in patterns:
+        for match in pattern.finditer(text):
+            line = text.count('\n', 0, match.start()) + 1
+            findings.append(f'{path}:{line}: {label}')
+if findings:
+    print('High-confidence secret-like values found:', file=sys.stderr)
+    print('\n'.join(findings[:100]), file=sys.stderr)
+    raise SystemExit(1)
+
+# Local operator paths/IPs are useful in private artifacts but should not ship in public docs/rules.
+local_leak_patterns = [
+    ('operator home path', re.compile(r'/home/daniel')),
+    ('specific private LAN address', re.compile(r'\b10\.0\.0\.[0-9]+\b')),
+]
+local_findings = []
+for path in paths:
+    if path == 'scripts/release/public-readiness.sh':
+        continue
+    if pathlib.PurePosixPath(path).suffix in skip_suffixes:
+        continue
+    try:
+        text = pathlib.Path(path).read_text(encoding='utf-8')
+    except Exception:
+        continue
+    for label, pattern in local_leak_patterns:
+        for match in pattern.finditer(text):
+            line = text.count('\n', 0, match.start()) + 1
+            local_findings.append(f'{path}:{line}: {label}')
+if local_findings:
+    print('Local operator path/address leaks found:', file=sys.stderr)
+    print('\n'.join(local_findings[:100]), file=sys.stderr)
+    raise SystemExit(1)
+
+# Local balance snapshots are useful operational state but should not be published.
+balance_path = pathlib.Path('config/balance.json')
+if balance_path.exists():
+    data = json.loads(balance_path.read_text(encoding='utf-8'))
+    snapshots = [s for provider in data.get('providers', []) for s in provider.get('snapshots', [])]
+    if snapshots:
+        print('config/balance.json contains local balance snapshots', file=sys.stderr)
+        raise SystemExit(1)
 PY
-ok "no forbidden tracked runtime/private files"
+ok "no forbidden tracked runtime/private files or high-confidence secrets"
 
 if git ls-files | grep -q '^dashboard-old/'; then
   git ls-files | grep '^dashboard-old/' >&2
@@ -89,6 +175,28 @@ if ! rg -q '@earendil-works/pi-coding-agent' package.json extensions; then
   fail "@earendil-works/pi-coding-agent dependency/import not found"
 fi
 ok "Pi SDK namespace uses @earendil-works"
+
+python3 - <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path('config/parallel-agents.json')
+if path.exists():
+    data = json.loads(path.read_text(encoding='utf-8'))
+    if data.get('enabled') is not False:
+        print('config/parallel-agents.json must be disabled by default for public release', file=sys.stderr)
+        raise SystemExit(1)
+    for name, cfg in (data.get('agents') or {}).items():
+        if cfg.get('enabled') is not False:
+            print(f'parallel agent {name} must be disabled by default for public release', file=sys.stderr)
+            raise SystemExit(1)
+        for lane in cfg.get('provider_models') or []:
+            if lane.get('enabled') is not False:
+                print(f'parallel lane {name}:{lane.get("provider")}:{lane.get("model")} must be disabled by default', file=sys.stderr)
+                raise SystemExit(1)
+PY
+ok "public default optional parallel agents are disabled"
 
 if [ "$SKIP_CHECK" != "1" ]; then
   npm run check
