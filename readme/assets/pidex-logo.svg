@@ -1,39 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title desc">
   <title id="title">PIDEX animated logo</title>
-  <desc id="desc">A central Pi-like mark with orbiting translucent marks.</desc>
+  <desc id="desc">A filled central pi mark with orbiting pi particles, pulse, and rotating energy rings.</desc>
   <defs>
-    <path id="pi-mark" d="M 15,20 C 12,10 25,10 35,12 L 85,12 C 92,12 92,20 85,20 L 28,20 M 42,20 C 40,40 35,70 20,88 C 18,92 12,90 15,85 C 28,68 32,40 35,20 M 65,20 C 65,45 66,70 76,86 C 78,89 82,90 84,87 C 86,84 85,81 83,78 C 75,68 73,50 73,20" />
-    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
-      <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#00f5ff" flood-opacity="0.58" />
-      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#a78bfa" flood-opacity="0.38" />
-      <feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#000000" flood-opacity="0.55" />
+    <radialGradient id="bg" cx="50%" cy="42%" r="72%">
+      <stop offset="0%" stop-color="#172554" />
+      <stop offset="54%" stop-color="#07111f" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+    <linearGradient id="pi-fill" x1="24" y1="20" x2="96" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="46%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#a78bfa" />
+    </linearGradient>
+    <filter id="core-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#00f5ff" flood-opacity="0.82" />
+      <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#a78bfa" flood-opacity="0.42" />
+      <feDropShadow dx="0" dy="4" stdDeviation="2" flood-color="#000000" flood-opacity="0.65" />
+    </filter>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#00f5ff" flood-opacity="0.48" />
     </filter>
     <style>
-      .orbiter { transform-origin: 60px 60px; animation: orbit 9s linear infinite; }
-      .pulse { transform-origin: 60px 60px; animation: pulse 3.8s ease-in-out infinite; }
-      .ghost { fill: none; stroke: #7dd3fc; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; opacity: .22; }
-      .core { fill: none; stroke: #f8fafc; stroke-width: 5.5; stroke-linecap: round; stroke-linejoin: round; filter: url(#glow); }
+      .ring-a { animation: dash 5.5s linear infinite; transform-origin: 60px 60px; }
+      .ring-b { animation: dash-rev 8s linear infinite; transform-origin: 60px 60px; }
+      .orbit { animation: orbit 9s linear infinite; transform-origin: 60px 60px; }
+      .orbit-rev { animation: orbit-rev 14s linear infinite; transform-origin: 60px 60px; }
+      .core { animation: breathe 3.2s ease-in-out infinite; transform-origin: 60px 62px; }
+      .spark { animation: twinkle 2.4s ease-in-out infinite; transform-origin: center; }
+      .s1 { animation-delay: 0s; } .s2 { animation-delay: .25s; } .s3 { animation-delay: .5s; } .s4 { animation-delay: .75s; }
+      .s5 { animation-delay: 1s; } .s6 { animation-delay: 1.25s; } .s7 { animation-delay: 1.5s; } .s8 { animation-delay: 1.75s; }
+      .pi-small { font: 800 15px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #7dd3fc; opacity: .62; filter: url(#soft-glow); }
+      .pi-core { font: 900 76px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: url(#pi-fill); stroke: rgba(255,255,255,.34); stroke-width: 1.2px; paint-order: stroke fill; filter: url(#core-glow); }
       @keyframes orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      @keyframes pulse { 0%, 100% { transform: scale(.98); opacity: .95; } 50% { transform: scale(1.04); opacity: 1; } }
-      @media (prefers-reduced-motion: reduce) { .orbiter, .pulse { animation: none; } }
+      @keyframes orbit-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+      @keyframes dash { from { stroke-dashoffset: 0; transform: rotate(0deg); } to { stroke-dashoffset: -64; transform: rotate(360deg); } }
+      @keyframes dash-rev { from { stroke-dashoffset: 0; transform: rotate(0deg); } to { stroke-dashoffset: 96; transform: rotate(-360deg); } }
+      @keyframes breathe { 0%, 100% { transform: scale(.96); opacity: .95; } 50% { transform: scale(1.05); opacity: 1; } }
+      @keyframes twinkle { 0%, 100% { opacity: .25; transform: scale(.86); } 50% { opacity: .9; transform: scale(1.14); } }
+      @media (prefers-reduced-motion: reduce) { .ring-a, .ring-b, .orbit, .orbit-rev, .core, .spark { animation: none; } }
     </style>
   </defs>
 
-  <rect width="120" height="120" rx="28" fill="#030712" opacity="0.92" />
-  <circle cx="60" cy="60" r="44" fill="none" stroke="#00f5ff" stroke-opacity="0.12" />
+  <rect width="120" height="120" rx="28" fill="url(#bg)" />
+  <circle cx="60" cy="60" r="45" fill="none" stroke="#00f5ff" stroke-opacity="0.13" />
+  <circle class="ring-a" cx="60" cy="60" r="39" fill="none" stroke="#22d3ee" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="10 9" stroke-opacity="0.5" />
+  <circle class="ring-b" cx="60" cy="60" r="49" fill="none" stroke="#a78bfa" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="3 13" stroke-opacity="0.42" />
 
-  <g class="orbiter">
-    <use href="#pi-mark" class="ghost" transform="translate(60 22) rotate(0) scale(.19) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(87 33) rotate(45) scale(.21) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(98 60) rotate(90) scale(.19) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(87 87) rotate(135) scale(.21) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(60 98) rotate(180) scale(.19) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(33 87) rotate(225) scale(.21) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(22 60) rotate(270) scale(.19) translate(-50 -50)" />
-    <use href="#pi-mark" class="ghost" transform="translate(33 33) rotate(315) scale(.21) translate(-50 -50)" />
+  <g class="orbit">
+    <text class="pi-small spark s1" x="60" y="20" text-anchor="middle">π</text>
+    <text class="pi-small spark s2" x="88" y="32" text-anchor="middle" transform="rotate(45 88 32)">π</text>
+    <text class="pi-small spark s3" x="100" y="65" text-anchor="middle" transform="rotate(90 100 65)">π</text>
+    <text class="pi-small spark s4" x="86" y="94" text-anchor="middle" transform="rotate(135 86 94)">π</text>
+    <text class="pi-small spark s5" x="60" y="106" text-anchor="middle" transform="rotate(180 60 106)">π</text>
+    <text class="pi-small spark s6" x="32" y="94" text-anchor="middle" transform="rotate(225 32 94)">π</text>
+    <text class="pi-small spark s7" x="20" y="65" text-anchor="middle" transform="rotate(270 20 65)">π</text>
+    <text class="pi-small spark s8" x="32" y="32" text-anchor="middle" transform="rotate(315 32 32)">π</text>
   </g>
 
-  <g class="pulse">
-    <use href="#pi-mark" class="core" transform="translate(60 60) scale(.58) translate(-50 -50)" />
+  <g class="orbit-rev" opacity="0.42">
+    <circle class="spark s2" cx="60" cy="27" r="2" fill="#f0abfc" />
+    <circle class="spark s4" cx="93" cy="60" r="1.8" fill="#67e8f9" />
+    <circle class="spark s6" cx="60" cy="93" r="2" fill="#c4b5fd" />
+    <circle class="spark s8" cx="27" cy="60" r="1.8" fill="#67e8f9" />
+  </g>
+
+  <g class="core">
+    <text class="pi-core" x="60" y="82" text-anchor="middle">π</text>
   </g>
 </svg>
