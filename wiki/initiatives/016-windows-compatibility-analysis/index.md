@@ -3,7 +3,7 @@ title: Windows Compatibility Analysis
 type: initiative
 sequence: 016
 status: planned
-stage: phase-3-static-audit-drafted
+stage: phase-4-compatibility-matrix-drafted
 priority: medium
 created: 2026-05-22
 updated: 2026-05-22
@@ -19,12 +19,12 @@ Analyze what PIDEX needs before it can run reliably on Windows without weakening
 ## Current status
 
 - Status: `planned`
-- Stage: `phase-3-static-audit-drafted`
+- Stage: `phase-4-compatibility-matrix-drafted`
 - Priority: `medium`
 
 ## Next action
 
-Review and merge Milestone A through Phase 3 docs, then continue Phase 4: turn audit evidence into the Windows compatibility matrix.
+Review and merge Milestone A through Phase 4 docs, then continue Phase 5: create the Windows smoke test plan for later laptop validation.
 
 ## Documents
 
@@ -35,6 +35,7 @@ Review and merge Milestone A through Phase 3 docs, then continue Phase 4: turn a
 - [[linux-feature-baseline]] — Phase 0 Linux/direct-mode preservation baseline
 - [[entrypoint-inventory]] — Phase 2 PIDEX public/internal entrypoint Windows exposure inventory
 - [[static-portability-audit]] — Phase 3 static portability risks and mitigation order
+- [[compatibility-matrix]] — Phase 4 environment/feature support matrix and support-claim candidates
 
 ## Navigation
 
