@@ -79,3 +79,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Reconciled initiative 016 brief/plan: Milestone A docs/audit is explicitly not runtime support implementation, and Phase 6 now refines Milestone A docs using compatibility evidence.
 - 2026-05-22: Strengthened initiative 016 platform separation language: Windows support must default to separate Windows-owned files, and Windows-driven edits to Linux-owned runtime files require explicit exception review and regression proof.
 - 2026-05-22: Added initiative 016 Phase 0 Linux feature baseline to preserve current Linux/direct-mode behavior before Windows portability work.
+- 2026-05-22: Added initiative 016 Phase 1 Pi Windows baseline, separating Pi-inherited Git Bash/Bash support from PIDEX-owned scripts and wrappers.

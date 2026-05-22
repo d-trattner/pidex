@@ -3,7 +3,7 @@ title: Windows Compatibility Analysis
 type: initiative
 sequence: 016
 status: planned
-stage: phase-0-baseline-drafted
+stage: phase-1-pi-baseline-drafted
 priority: medium
 created: 2026-05-22
 updated: 2026-05-22
@@ -19,17 +19,18 @@ Analyze what PIDEX needs before it can run reliably on Windows without weakening
 ## Current status
 
 - Status: `planned`
-- Stage: `phase-0-baseline-drafted`
+- Stage: `phase-1-pi-baseline-drafted`
 - Priority: `medium`
 
 ## Next action
 
-Review and merge Milestone A docs/audit, then continue Phase 1: validate Pi's own Windows compatibility contract before PIDEX-specific portability work.
+Review and merge Milestone A/Phase 0/Phase 1 docs, then continue Phase 2: create the PIDEX entrypoint inventory and classify Windows exposure.
 
 ## Documents
 
 - [[brief]] — Windows Compatibility Analysis Brief
 - [[pi-compatibility-first]] — notes on Pi's own Windows support contract and lessons PIDEX should reuse
+- [[pi-windows-baseline]] — Phase 1 Pi Windows support contract and PIDEX ownership split
 - [[implementation-plan]] — phased analysis and validation plan
 - [[linux-feature-baseline]] — Phase 0 Linux/direct-mode preservation baseline
 
