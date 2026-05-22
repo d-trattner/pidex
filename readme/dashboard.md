@@ -32,17 +32,19 @@ http://pi.lan/dashboard
 - **Live** — active projects, running pipelines, timeline, latest agent runs, and context/markdown modal.
 - **Runs** — agent and completed pipeline tables with formatted timestamps, durations, cost, and context-document buttons.
 - **Quality** — completion/runtime/model-quality charts and artifact health signals.
-- **Usage** — provider limits, active profile, token consumption, quota trends, and profile switching.
+- **Usage** — provider limits, active profile, token consumption, quota trends, profile switching, and estimate-only agent balance/runway cards.
 - **Wiki** — project-scoped markdown browser for `agents.output` and auto-detected `wiki` roots.
-- **Settings** — active profile, configured profiles, and provider-limit refresh status.
+- **Context** — project-scoped editor for `pidex/context/CONTEXT.md` domain language, relationships, example dialogue, and flagged ambiguities.
+- **Settings** — active profile, configured profiles, provider-limit refresh status, optional parallel-agent configuration, and estimate-only agent balance inputs.
 
 ## UX notes
 
 - Core dashboard data polls every 5 seconds via TanStack Query.
 - Desktop header is fixed.
 - Mobile uses bottom-sheet navigation.
-- `/wiki` requires a selected project; “All Projects” shows a project-selection message.
+- `/wiki` and `/context` require a selected project; “All Projects” shows a project-selection message.
 - Markdown viewers format frontmatter and PIDEX `<!-- ROUTING ... -->` blocks as cards.
+- Context fields use wrapping textareas for long terms, definitions, aliases, relationships, dialogue, and ambiguity notes.
 - Tables scroll internally to avoid whole-card/page overflow.
 
 ## Useful checks

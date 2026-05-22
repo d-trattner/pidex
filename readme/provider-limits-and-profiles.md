@@ -61,3 +61,13 @@ Profiles live under:
 ```
 
 The active routing config is controlled by PIDEX provider/profile logic and surfaced in the dashboard Usage and Settings sections.
+
+## Estimate-only agent balances
+
+For Pi-supported providers without native quota APIs, PIDEX also has estimate-only balance tracking in the dashboard:
+
+- balance snapshots are stored in `<pidex-root>/config/balance.json`
+- Settings lets you record current balance or top-up snapshots
+- Usage shows estimated current balance, burn, and runway based on manual snapshots plus PIDEX token metrics
+
+This is advisory only. It does not replace provider-native billing or quota pages.

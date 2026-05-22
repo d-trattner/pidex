@@ -6,32 +6,44 @@ PIDEX project context lives under:
 <project-root>/pidex/context/
 ```
 
-It stores durable domain language and lightweight architectural decision records used by PIDEX planning/grilling flows.
+`CONTEXT.md` stores durable project domain language used by PIDEX planning/grilling flows. It is not a task spec, roadmap, workflow document, architecture note, or acceptance-criteria store.
 
 ## Files
 
-Phase 1 supports the single-context glossary:
+Single-context projects use:
 
 ```text
 <project-root>/pidex/context/CONTEXT.md
 ```
 
-Future phases may add:
+The supported `CONTEXT.md` shape follows Matt Pocock's format exactly:
+
+```md
+## Language
+## Relationships
+## Example Dialogue
+## Flagged Ambiguities
+```
+
+Multi-context projects may use:
 
 ```text
 <project-root>/pidex/context/CONTEXT-MAP.md
 <project-root>/pidex/context/contexts/<name>/CONTEXT.md
-<project-root>/pidex/context/adr/*.md
 ```
+
+The dashboard editor currently targets the single-context `pidex/context/CONTEXT.md` file. Multi-context files are for agent/orchestrator use until dashboard support is expanded.
 
 ## Dashboard editor
 
 The dashboard has a **Context** page. It lets the user/domain expert review and correct `CONTEXT.md` entries written by agents.
 
-Phase 1 features:
+Features:
 
+- review queue for uncertain agent proposals
 - one card per `## Language` glossary entry
-- add/edit/remove terms
+- add/edit/remove terms and avoid-aliases
+- editable sections for relationships, example dialogue, and flagged ambiguities
 - raw Markdown fallback editor
 - syntax validation before save
 - stale-write protection when the file changed on disk
@@ -45,9 +57,9 @@ Rules:
 
 - New/non-existing projects use `grill-me` instead.
 - Existing projects may use `grill-with-docs`.
-- Context files live under `pidex/context/**`, not root `CONTEXT.md` or root `docs/adr/`.
+- Context files live under `pidex/context/**`, not root `CONTEXT.md`.
 - Agents may add glossary terms from confirmed user statements or clear code evidence.
-- ADRs are created only for hard-to-reverse, surprising trade-offs.
+- Agents must not put task specs, implementation plans, roadmap items, workflows, acceptance criteria, or general architecture notes into `CONTEXT.md`.
 
 ## Ownership
 

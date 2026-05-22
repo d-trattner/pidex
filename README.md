@@ -12,7 +12,11 @@ The pipeline is self-improving through rules. Every project can split refinement
 
 Like many devs, I was initially driven by the excitement of creating things with little effort. Over time, that feeling had to give way to a more disciplined process, so most of the refinement now happens at the user-llm level. Having an orchestrator question you in detail is the most important step. You can use the `grill-me` or `grill-with-docs` skill for that, or rely on the predefined orchestrator instructions.
 
-Status: **experimental direct-mode MVP**. Direct mode is the supported path today.
+## Current status
+
+PIDEX is an experimental direct-mode MVP. Direct mode is the supported path today.
+
+The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. The current focus is the Quality Rule Learning initiative. Memory hygiene, wiki graph conventions, and reliability modules are intentionally waiting until the quality evidence foundation is more stable.
 
 ## Detailed feature docs
 
