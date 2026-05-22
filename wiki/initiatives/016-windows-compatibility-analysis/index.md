@@ -3,7 +3,7 @@ title: Windows Compatibility Analysis
 type: initiative
 sequence: 016
 status: planned
-stage: phase-2-entrypoint-inventory-drafted
+stage: phase-3-static-audit-drafted
 priority: medium
 created: 2026-05-22
 updated: 2026-05-22
@@ -19,12 +19,12 @@ Analyze what PIDEX needs before it can run reliably on Windows without weakening
 ## Current status
 
 - Status: `planned`
-- Stage: `phase-2-entrypoint-inventory-drafted`
+- Stage: `phase-3-static-audit-drafted`
 - Priority: `medium`
 
 ## Next action
 
-Review and merge Milestone A through Phase 2 docs, then continue Phase 3: perform the static portability audit against high-risk entrypoints.
+Review and merge Milestone A through Phase 3 docs, then continue Phase 4: turn audit evidence into the Windows compatibility matrix.
 
 ## Documents
 
@@ -34,6 +34,7 @@ Review and merge Milestone A through Phase 2 docs, then continue Phase 3: perfor
 - [[implementation-plan]] — phased analysis and validation plan
 - [[linux-feature-baseline]] — Phase 0 Linux/direct-mode preservation baseline
 - [[entrypoint-inventory]] — Phase 2 PIDEX public/internal entrypoint Windows exposure inventory
+- [[static-portability-audit]] — Phase 3 static portability risks and mitigation order
 
 ## Navigation
 

@@ -81,3 +81,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added initiative 016 Phase 0 Linux feature baseline to preserve current Linux/direct-mode behavior before Windows portability work.
 - 2026-05-22: Added initiative 016 Phase 1 Pi Windows baseline, separating Pi-inherited Git Bash/Bash support from PIDEX-owned scripts and wrappers.
 - 2026-05-22: Added initiative 016 Phase 2 entrypoint inventory, classifying public commands, scripts, dashboard paths, Pi resources, and Windows support recommendations.
+- 2026-05-22: Added initiative 016 Phase 3 static portability audit with severity-rated Windows risks and mitigation order.
