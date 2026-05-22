@@ -65,6 +65,30 @@ These areas need evidence before PIDEX can make a stronger Windows support claim
 - provider/delegate and pipeline scripts assume the current direct-mode Linux workflow until separate Windows validation exists.
 - native PowerShell support requires Windows-owned wrappers and smoke tests.
 
+## Experimental PowerShell bootstrap
+
+PIDEX includes an additive Windows-owned bootstrap script:
+
+```powershell
+irm https://raw.githubusercontent.com/d-trattner/pidex/master/install.windows.ps1 | iex
+```
+
+For testing this initiative branch before merge:
+
+```powershell
+$env:PIDEX_INSTALL_BRANCH='initiative-016-windows-milestone-a'; irm https://raw.githubusercontent.com/d-trattner/pidex/initiative-016-windows-milestone-a/install.windows.ps1 | iex
+```
+
+Safer inspect-first form:
+
+```powershell
+irm https://raw.githubusercontent.com/d-trattner/pidex/master/install.windows.ps1 -OutFile install.windows.ps1
+notepad .\install.windows.ps1
+powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
+```
+
+The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Python/Pi/Git Bash, runs the read-only audit, installs dashboard dependencies when missing, and runs `pi install`. It does not call `install.sh` and does not install global Git hooks.
+
 ## Recommended Windows approach today
 
-If you are on Windows and want to experiment with PIDEX today, prefer WSL2 and follow the Linux README inside the WSL environment. If you use Pi's Git Bash path on Windows, treat PIDEX as experimental and run the audit script first.
+If you are on Windows and want to experiment with PIDEX today, prefer WSL2 and follow the Linux README inside the WSL environment. If you use native Windows, start with the experimental PowerShell bootstrap above or run the audit script first. Treat Windows support as experimental until the smoke plan has real laptop evidence.

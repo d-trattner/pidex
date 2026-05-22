@@ -30,6 +30,7 @@
     "skills/",
     "templates/",
     "install.sh",
+    "install.windows.ps1",
     "uninstall.sh",
     "README.md",
     "SECURITY.md",

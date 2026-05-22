@@ -143,7 +143,7 @@ Do not include these in the first Windows support claim:
 |---|---|---|
 | Should Linux remain canonical? | Yes | All validation evidence is Linux; user explicitly requires no Linux behavior change. |
 | Should Windows support modify `install.sh`? | No | Use Windows-owned `install.windows.ps1`; it must not call or edit `install.sh`. |
-| Should PIDEX support a one-line Windows bootstrap? | Yes, as a planned future slice | Prefer PowerShell `irm <raw install.windows.ps1> | iex` plus safer inspect-first docs. It should clone/check `$HOME\\pidex`, verify tools/Git Bash, run audit, install the Pi package, and skip global Git hooks by default. |
+| Should PIDEX support a one-line Windows bootstrap? | Yes, via additive `install.windows.ps1` | Prefer PowerShell `irm <raw install.windows.ps1> | iex` plus safer inspect-first docs. It clones/checks `$HOME\\pidex`, verifies tools/Git Bash, runs audit, installs dashboard dependencies when missing, installs the Pi package, and skips global Git hooks by default. |
 | Should Windows support modify `dashboard/start.sh`? | No | Use `dashboard/start.windows.mjs`/`.ps1` or direct npm docs later. |
 | Should public readiness become cross-platform? | Not now | Keep Linux gate; add `windows-audit.py`/future Windows readiness script. |
 | Should Git hook support be claimed on Windows? | No | Needs separate proof and likely wrapper. |
@@ -176,7 +176,7 @@ The compatibility matrix does **not** justify a Windows runtime support claim ye
 - WSL2 as safest recommendation
 - Git Bash as experimental and under analysis
 - native PowerShell as audit-only/unsupported runtime today
-- a future Windows-owned PowerShell one-line bootstrap as the first installation UX candidate
+- an additive Windows-owned PowerShell one-line bootstrap as the first installation UX candidate
 - planning separate Windows-owned wrappers only after smoke evidence
 
 ## Navigation
