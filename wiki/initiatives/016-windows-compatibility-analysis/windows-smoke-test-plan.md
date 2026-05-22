@@ -306,6 +306,44 @@ Expected:
 - pre-flight starts
 - no path corruption
 
+## Planned one-line Windows bootstrap validation
+
+A future implementation slice may add `install.windows.ps1` for native PowerShell bootstrap. That script should be Windows-owned and additive.
+
+Target UX examples:
+
+Convenient one-liner:
+
+```powershell
+irm https://raw.githubusercontent.com/d-trattner/pidex/master/install.windows.ps1 | iex
+```
+
+Branch-test one-liner:
+
+```powershell
+irm https://raw.githubusercontent.com/d-trattner/pidex/initiative-016-windows-milestone-a/install.windows.ps1 | iex
+```
+
+Safer inspect-first form:
+
+```powershell
+irm https://raw.githubusercontent.com/d-trattner/pidex/master/install.windows.ps1 -OutFile install.windows.ps1
+notepad .\install.windows.ps1
+powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
+```
+
+Expected installer behavior when implemented:
+
+- clone or verify `$HOME\pidex`
+- check Git, Node, npm, Python/py, Pi, and Git Bash
+- run `scripts/compat/windows-audit.py`
+- run `pi install <pidex-root>`
+- skip global Git hook installation by default
+- not call `install.sh`
+- not modify Linux-owned runtime files
+
+Until `install.windows.ps1` exists, native PowerShell remains audit-only.
+
 ## Environment C — native PowerShell/CMD audit-only
 
 ### C0. Setup notes

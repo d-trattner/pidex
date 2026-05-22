@@ -84,3 +84,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added initiative 016 Phase 3 static portability audit with severity-rated Windows risks and mitigation order.
 - 2026-05-22: Added initiative 016 Phase 4 compatibility matrix, keeping Linux supported, WSL2 likely, Git Bash experimental, and native PowerShell audit-only/unsupported runtime.
 - 2026-05-22: Added initiative 016 Phase 5 Windows smoke test plan for later WSL2, Git Bash, and native PowerShell audit-only laptop validation.
+- 2026-05-22: Updated initiative 016 plan to include a future Windows-owned PowerShell one-line bootstrap (`install.windows.ps1`) that must not call or modify Linux `install.sh` and should skip global Git hooks by default.
