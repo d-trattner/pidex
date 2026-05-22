@@ -3,7 +3,7 @@ title: Windows Compatibility Analysis
 type: initiative
 sequence: 016
 status: planned
-stage: phase-1-pi-baseline-drafted
+stage: phase-2-entrypoint-inventory-drafted
 priority: medium
 created: 2026-05-22
 updated: 2026-05-22
@@ -19,12 +19,12 @@ Analyze what PIDEX needs before it can run reliably on Windows without weakening
 ## Current status
 
 - Status: `planned`
-- Stage: `phase-1-pi-baseline-drafted`
+- Stage: `phase-2-entrypoint-inventory-drafted`
 - Priority: `medium`
 
 ## Next action
 
-Review and merge Milestone A/Phase 0/Phase 1 docs, then continue Phase 2: create the PIDEX entrypoint inventory and classify Windows exposure.
+Review and merge Milestone A through Phase 2 docs, then continue Phase 3: perform the static portability audit against high-risk entrypoints.
 
 ## Documents
 
@@ -33,6 +33,7 @@ Review and merge Milestone A/Phase 0/Phase 1 docs, then continue Phase 2: create
 - [[pi-windows-baseline]] — Phase 1 Pi Windows support contract and PIDEX ownership split
 - [[implementation-plan]] — phased analysis and validation plan
 - [[linux-feature-baseline]] — Phase 0 Linux/direct-mode preservation baseline
+- [[entrypoint-inventory]] — Phase 2 PIDEX public/internal entrypoint Windows exposure inventory
 
 ## Navigation
 
