@@ -71,9 +71,16 @@ function commandVersion(command, executable) {
   };
   let runCommand = executable;
   let runArgs = argsByCommand[command];
-  if (process.platform === 'win32' && executable.toLowerCase().endsWith('.ps1')) {
-    runCommand = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : 'powershell.exe';
-    runArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', executable, ...argsByCommand[command]];
+  if (process.platform === 'win32') {
+    const lower = executable.toLowerCase();
+    if (lower.endsWith('.ps1')) {
+      runCommand = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : 'powershell.exe';
+      runArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', executable, ...argsByCommand[command]];
+    } else if (lower.endsWith('.cmd') || lower.endsWith('.bat') || !path.extname(executable)) {
+      runCommand = process.env.ComSpec || 'cmd.exe';
+      const quoted = `"${executable}" ${argsByCommand[command].map((arg) => `"${arg.replaceAll('"', '\\"')}"`).join(' ')}`;
+      runArgs = ['/d', '/s', '/c', quoted];
+    }
   }
   const result = spawnSync(runCommand, runArgs, { encoding: 'utf8', timeout: 5000 });
   const output = `${result.stdout || ''}${result.stderr || ''}`.trim().split(/\r?\n/).filter(Boolean);
