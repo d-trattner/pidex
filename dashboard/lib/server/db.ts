@@ -20,7 +20,7 @@ export const DB_PATH = process.env.PIDEX_DASHBOARD_DB
   : path.resolve(DASHBOARD_DIR, 'data', 'pidex.sqlite');
 
 const NODE_QUERY = path.resolve(DASHBOARD_DIR, 'lib/server/sqlite-query.mjs');
-const INGEST_SCRIPT = path.resolve(DASHBOARD_DIR, '../scripts/dashboard/ingest.py');
+const INGEST_SCRIPT = path.resolve(DASHBOARD_DIR, '../scripts/dashboard/ingest.mjs');
 let lastIngestAt = 0;
 let ingestFailedAt = 0;
 
@@ -50,7 +50,8 @@ function refreshDashboardDataIfNeeded(): void {
   if (now - lastIngestAt < 10_000) return;
   if (ingestFailedAt && now - ingestFailedAt < 60_000) return;
   try {
-    execFileSync('python3', [
+    execFileSync(process.execPath, [
+      '--no-warnings',
       INGEST_SCRIPT,
       '--db',
       DB_PATH,

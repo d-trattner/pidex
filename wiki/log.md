@@ -90,3 +90,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added Python portability backlog and first Node audit implementation (`scripts/compat/windows-audit.mjs`); Windows bootstrap now uses Node audit and treats Python as optional for basic install.
 - 2026-05-22: Added Node audit regression test and wired it into `npm run check` so Windows bootstrap audit behavior is covered on Linux validation.
 - 2026-05-22: Added Node dashboard SQLite query helper and switched dashboard query execution away from Python, with focused regression coverage.
+- 2026-05-22: Added Node dashboard ingest helper and switched dashboard auto-ingest away from Python, with fixture coverage.
