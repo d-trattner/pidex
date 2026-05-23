@@ -963,9 +963,9 @@ For wiki hygiene / project memory maintenance routes, the team prompt must inclu
 ```
 OPENING AGENT: pidex-wiki-hygienist
 This is a wiki hygiene / project memory maintenance task.
-Do not run /pdwiki or scripts/wiki/hygiene.py from the orchestrator before invoking the specialist.
+Do not run /pdwiki or scripts/wiki/hygiene.mjs from the orchestrator before invoking the specialist.
 Invoke pidex-wiki-hygienist as the opening agent and instruct it to run the deterministic read-only audit itself:
-python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
+node <pidex-root>/scripts/wiki/hygiene.mjs audit --project <project-root>
 pidex-wiki-hygienist MUST start read-only, run the audit, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only. If the user asked to execute/apply hygiene, pidex-wiki-hygienist must create a separate execution report at <project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md and must not overwrite the deterministic audit report. After audit/report-only wiki hygiene completes, provide a useful brief (score, counts, top findings, report path, state path, whether wiki content changed) and ask whether to commit the hygiene state. Suggested commit files must include <project-root>/pidex/state/wiki-hygiene.json only for audit-only runs; never suggest committing agents.output/**.
 Canonical wiki path is <project-root>/wiki/.
 ```

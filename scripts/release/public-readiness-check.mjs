@@ -17,7 +17,7 @@ if (cmd === 'tracked-clean') {
     if (parts.includes('agents.output') || parts.includes('logs') || parts.includes('node_modules') || parts.includes('__pycache__') || parts.includes('.playwright') || parts.includes('.fallow') || parts.includes('test-results') || (parts.includes('state') && file !== 'pidex/state/.gitkeep') || file === 'dashboard/data' || file.includes('/.env') || file.startsWith('.env') || file === 'config.env' || file.startsWith('secrets/') || parts.includes('secrets') || /\.(db|sqlite|sqlite3|pem|key|crt|p12|pfx|jks|keystore|kubeconfig|pid)$/.test(file)) bad.push(file);
   }
   const skipSuffixes = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.woff', '.woff2', '.ttf', '.ico', '.lock', '.svg']);
-  const allowFiles = new Set(['scripts/git-hooks/lib/security-scan.sh', 'scripts/doctor.sh', 'scripts/wiki/hygiene.py']);
+  const allowFiles = new Set(['scripts/git-hooks/lib/security-scan.sh', 'scripts/doctor.sh', 'scripts/wiki/hygiene.mjs']);
   const patterns = [
     ['AWS key', /\b(AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g], ['Google API key', /AIza[A-Za-z0-9_-]{35}/g], ['GitHub token', /\b(ghp|gho|ghs)_[A-Za-z0-9]{36}\b|github_pat_[A-Za-z0-9_]{82}/g], ['OpenAI key', /\bsk-(proj-)?[A-Za-z0-9_-]{40,}\b/g], ['Anthropic key', /sk-ant-api03-[A-Za-z0-9_-]{80,}/g], ['Slack token/webhook', /xox[baprs]-[0-9A-Za-z-]{20,}|hooks\.slack\.com\/services\/[A-Za-z0-9/]{30,}/g], ['Telegram bot token', /\b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b/g], ['Private key', /-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g], ['Credentialed URL', /\b(postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqps?):\/\/[^\s:@]+:[^\s@]+@/g]
   ];

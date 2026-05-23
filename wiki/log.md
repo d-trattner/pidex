@@ -98,3 +98,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added Node pipeline event helper and changed pipeline event wrapper to avoid embedded Python for event recording.
 - 2026-05-22: Removed replaced Python compatibility/dashboard/provider/context/parallel-agent helpers after Node paths became canonical for those slices.
 - 2026-05-22: Added Node project metadata migration helper and removed the old Python migration helper.
+- 2026-05-22: Added Node quality/report, rule-action, orchestrator-event, auto-PDQ, and wiki-hygiene helpers; removed the old Python quality/wiki helpers.

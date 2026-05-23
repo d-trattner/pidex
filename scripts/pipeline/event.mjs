@@ -61,11 +61,11 @@ const outPath = path.join(base, `${pipelineId}.jsonl`);
 writeFileSync(outPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', flag: 'a' });
 if (terminalEvents.has(args.event) && existsSync(currentFile)) { try { if (readFileSync(currentFile, 'utf8').trim() === pipelineId) unlinkSync(currentFile); } catch {} }
 console.log(`${outPath} pipeline_id=${pipelineId}`);
-if (terminalEvents.has(args.event)) {
+if (terminalEvents.has(args.event) && process.env.PIDEX_PIPELINE_EVENT_RUN_OPTIONAL_HOOKS === '1') {
   if (!['0', 'false', 'no', 'off'].includes(String(process.env.PIDEX_AUTO_PDQ || '1').toLowerCase())) {
-    const script = path.join(args.root, 'scripts', 'quality', 'run-auto-pdq.py');
-    if (existsSync(script)) runOptional('python3', [script, '--project', projectPath, '--plan', planKey, '--pipeline-id', pipelineId, '--terminal-event', args.event], { cwd: args.root, encoding: 'utf8', timeout: Number(process.env.PIDEX_AUTO_PDQ_TIMEOUT_SECONDS || 120) * 1000 });
+    const script = path.join(args.root, 'scripts', 'quality', 'run-auto-pdq.mjs');
+    if (existsSync(script)) runOptional(process.execPath, [script, '--project', projectPath, '--plan', planKey, '--pipeline-id', pipelineId, '--terminal-event', args.event], { cwd: args.root, encoding: 'utf8', timeout: Number(process.env.PIDEX_AUTO_PDQ_TIMEOUT_SECONDS || 120) * 1000 });
   }
-  const hygiene = path.join(args.root, 'scripts', 'wiki', 'hygiene.py');
-  if (existsSync(hygiene)) runOptional('python3', [hygiene, 'cadence', '--project', projectPath, '--plan', planKey, '--pipeline-id', pipelineId, '--terminal-event', args.event], { cwd: args.root, encoding: 'utf8', timeout: Number(process.env.PIDEX_WIKI_HYGIENE_CADENCE_TIMEOUT_SECONDS || 30) * 1000 });
+  const hygiene = path.join(args.root, 'scripts', 'wiki', 'hygiene.mjs');
+  if (existsSync(hygiene)) runOptional(process.execPath, [hygiene, 'cadence', '--project', projectPath, '--plan', planKey, '--pipeline-id', pipelineId, '--terminal-event', args.event], { cwd: args.root, encoding: 'utf8', timeout: Number(process.env.PIDEX_WIKI_HYGIENE_CADENCE_TIMEOUT_SECONDS || 30) * 1000 });
 }

@@ -27,12 +27,12 @@ Dependency policy for Windows bootstrap:
 | `scripts/compat/test_windows_audit.py` | Python audit tests | P0/P1 | Removed after Node audit test coverage stabilized. |
 | `scripts/dashboard/ingest.py` | Dashboard SQLite ingest | P1 | Removed after Node replacement `scripts/dashboard/ingest.mjs` became dashboard/start/check path. |
 | `dashboard/lib/server/sqlite-query.py` | Dashboard SQLite query helper | P1 | Removed after Node replacement `dashboard/lib/server/sqlite-query.mjs` became query path. |
-| `scripts/wiki/hygiene.py` | Wiki hygiene audit/cadence | P2 | Large feature; port only after bootstrap/dashboard basics. |
-| `scripts/quality/report.py` | PDQ quality report | P2 | Large feature; keep Python optional until Node port is justified. |
-| `scripts/quality/orchestrator-events.py` | Orchestrator event helpers | P2 | Port with quality suite if needed. |
-| `scripts/quality/rule-actions.py` | Rule action ledger | P2 | Port with quality suite if needed. |
-| `scripts/quality/run-auto-pdq.py` | Auto-PDQ trigger | P2 | Port after report.js exists, or keep optional. |
-| `scripts/quality/test_report_tdd.py` | Quality report tests | P2 | Replace with Node tests if quality is ported. |
+| `scripts/wiki/hygiene.py` | Wiki hygiene audit/cadence | P2 | Removed after Node replacement `scripts/wiki/hygiene.mjs` was added with coverage. |
+| `scripts/quality/report.py` | PDQ quality report | P2 | Removed after Node replacement `scripts/quality/report.mjs` was added with coverage. |
+| `scripts/quality/orchestrator-events.py` | Orchestrator event helpers | P2 | Removed after Node replacement `scripts/quality/orchestrator-events.mjs` was added. |
+| `scripts/quality/rule-actions.py` | Rule action ledger | P2 | Removed after Node replacement `scripts/quality/rule-actions.mjs` was added. |
+| `scripts/quality/run-auto-pdq.py` | Auto-PDQ trigger | P2 | Removed after Node replacement `scripts/quality/run-auto-pdq.mjs` was added. |
+| `scripts/quality/test_report_tdd.py` | Quality report tests | P2 | Removed after Node report tests were added. |
 | `scripts/provider-limits/probe.py` | Provider limits probe/profile state | P2 | Removed after Node replacement `scripts/provider-limits/probe.mjs` became dashboard/profile path. |
 | `scripts/provider-limits/test_probe_tdd.py` | Provider probe tests | P2 | Removed after Node probe test coverage was added. |
 | `scripts/project-context/init.py` | Project context template init | P2 | Removed after Node replacement `scripts/project-context/init.mjs` became orchestrator path. |
