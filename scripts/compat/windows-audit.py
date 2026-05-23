@@ -52,7 +52,27 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def command_version(command: str) -> str | None:
+def git_bash_candidates() -> list[str]:
+    candidates: list[str] = []
+    for env_name in ("ProgramFiles", "ProgramFiles(x86)"):
+        base = os.environ.get(env_name)
+        if base:
+            candidates.append(str(Path(base) / "Git" / "bin" / "bash.exe"))
+    return candidates
+
+
+def resolve_command(command: str) -> str | None:
+    found = shutil.which(command)
+    if found:
+        return found
+    if command == "bash" and platform.system().lower() == "windows":
+        for candidate in git_bash_candidates():
+            if Path(candidate).is_file():
+                return candidate
+    return None
+
+
+def command_version(command: str, executable: str) -> tuple[str | None, bool]:
     version_args = {
         "bash": ["--version"],
         "node": ["--version"],
@@ -64,26 +84,34 @@ def command_version(command: str) -> str | None:
     }[command]
     try:
         completed = subprocess.run(
-            [command, *version_args],
+            [executable, *version_args],
             check=False,
             capture_output=True,
             text=True,
             timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
-        return None
+        return None, False
     output = (completed.stdout or completed.stderr).strip().splitlines()
-    return output[0] if output else None
+    version = output[0] if output else None
+    if completed.returncode != 0:
+        return version, False
+    return version, True
 
 
 def audit_commands() -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     for command in COMMANDS:
-        found = shutil.which(command)
+        found = resolve_command(command)
+        version: str | None = None
+        executable_works = False
+        if found:
+            version, executable_works = command_version(command, found)
         result[command] = {
-            "available": bool(found),
+            "available": bool(found) and (executable_works or command == "pi"),
             "path": found,
-            "version": command_version(command) if found else None,
+            "version": version,
+            "executable_works": executable_works,
         }
     return result
 
@@ -160,6 +188,17 @@ def risky_entrypoints(root: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def parse_node_major_minor(version: str | None) -> tuple[int, int] | None:
+    if not version:
+        return None
+    text = version.strip().lstrip("v")
+    parts = text.split(".")
+    try:
+        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    except Exception:
+        return None
+
+
 def findings(environment: dict[str, Any], commands: dict[str, dict[str, Any]], paths: dict[str, Any]) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     kind = environment["kind"]
@@ -179,6 +218,10 @@ def findings(environment: dict[str, Any], commands: dict[str, dict[str, Any]], p
             items.append({"level": "warning", "message": f"Required or expected command not found on PATH: {command}."})
     if not (commands["python3"]["available"] or commands["python"]["available"]):
         items.append({"level": "warning", "message": "Neither python3 nor python was found on PATH."})
+
+    node_version = parse_node_major_minor(commands["node"].get("version"))
+    if node_version and node_version < (22, 12):
+        items.append({"level": "warning", "message": "Dashboard dependencies require Node >=22.12.0; current node appears older."})
 
     if paths["contains_spaces"]:
         items.append({"level": "warning", "message": "PIDEX checkout path contains spaces; this is not yet validated for Windows support."})
