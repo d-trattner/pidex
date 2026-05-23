@@ -54,6 +54,6 @@ RUNNING_PI_STATE_DIR="$TMP/state" bash "$ROOT/scripts/metrics/record.sh" \
   --source smoke >/dev/null
 RUNNING_PI_STATE_DIR="$TMP/state" bash "$ROOT/scripts/metrics/summarize.sh" "$PLAN_SMOKE" --project /tmp/project-smoke | grep -q 'pidex-smoke'
 
-python3 -m py_compile scripts/dashboard/ingest.py
+node --no-warnings scripts/dashboard/ingest.tdd.test.mjs
 
 printf 'OK\n'
