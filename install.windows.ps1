@@ -65,6 +65,18 @@ function Get-PythonCommand {
   return $null
 }
 
+function Assert-NodeVersion([string]$NodePath) {
+  $VersionText = (& $NodePath --version).Trim().TrimStart('v')
+  $Parts = $VersionText.Split('.')
+  if ($Parts.Length -lt 2) { Fail "Could not parse Node version: $VersionText" }
+  $Major = [int]$Parts[0]
+  $Minor = [int]$Parts[1]
+  if (($Major -lt 22) -or (($Major -eq 22) -and ($Minor -lt 12))) {
+    Fail "PIDEX Windows bootstrap requires Node >=22.12.0. Current Node is v$VersionText. Install/switch Node 22.12+ and reinstall Pi with: npm install -g @earendil-works/pi-coding-agent"
+  }
+  return "v$VersionText"
+}
+
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   & $FilePath @Arguments
   if ($LASTEXITCODE -ne 0) {
@@ -101,10 +113,11 @@ $GitBash = Find-GitBash
 if (-not $GitBash) {
   Fail "Missing Bash required by Pi on Windows. Install Git for Windows: https://git-scm.com/download/win"
 }
+$NodeVersion = Assert-NodeVersion $Node
 
 Write-Step "Prerequisites found"
 Write-Host "git:    $Git"
-Write-Host "node:   $Node"
+Write-Host "node:   $Node ($NodeVersion)"
 Write-Host "npm:    $Npm"
 Write-Host "python: $($Python.Command) $($Python.Prefix -join ' ')"
 Write-Host "pi:     $Pi"

@@ -87,7 +87,7 @@ notepad .\install.windows.ps1
 powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 ```
 
-The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Python/Pi/Git Bash, runs the read-only audit, installs dashboard dependencies when missing, and runs `pi install`. It does not call `install.sh` and does not install global Git hooks.
+The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Python/Pi/Git Bash, requires Node >=22.12.0, runs the read-only audit, installs dashboard dependencies when missing, and runs `pi install`. It does not call `install.sh` and does not install global Git hooks.
 
 ## Recommended Windows approach today
 

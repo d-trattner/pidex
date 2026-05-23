@@ -221,7 +221,7 @@ def findings(environment: dict[str, Any], commands: dict[str, dict[str, Any]], p
 
     node_version = parse_node_major_minor(commands["node"].get("version"))
     if node_version and node_version < (22, 12):
-        items.append({"level": "warning", "message": "Dashboard dependencies require Node >=22.12.0; current node appears older."})
+        items.append({"level": "warning", "message": "PIDEX Windows bootstrap/dashboard dependencies require Node >=22.12.0; current node appears older."})
 
     if paths["contains_spaces"]:
         items.append({"level": "warning", "message": "PIDEX checkout path contains spaces; this is not yet validated for Windows support."})
