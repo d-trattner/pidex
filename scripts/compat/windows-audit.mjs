@@ -69,7 +69,13 @@ function commandVersion(command, executable) {
     git: ['--version'],
     pi: ['--version'],
   };
-  const result = spawnSync(executable, argsByCommand[command], { encoding: 'utf8', timeout: 5000 });
+  let runCommand = executable;
+  let runArgs = argsByCommand[command];
+  if (process.platform === 'win32' && executable.toLowerCase().endsWith('.ps1')) {
+    runCommand = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe') : 'powershell.exe';
+    runArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', executable, ...argsByCommand[command]];
+  }
+  const result = spawnSync(runCommand, runArgs, { encoding: 'utf8', timeout: 5000 });
   const output = `${result.stdout || ''}${result.stderr || ''}`.trim().split(/\r?\n/).filter(Boolean);
   return { version: output[0] || null, works: result.status === 0 };
 }
