@@ -10,8 +10,8 @@ Windows compatibility is under analysis. This page is intentionally conservative
 |---|---|---|
 | Linux | Supported/currently tested | Canonical PIDEX path. Use the existing `install.sh`, `dashboard/start.sh`, and validation commands. |
 | WSL2 | Safest Windows recommendation for now | Expected to be closest to the Linux path, but still needs explicit PIDEX smoke evidence before being called fully supported. |
-| Windows + Git Bash | Experimental / under analysis | Pi documents a Git Bash-based Windows path. PIDEX still needs validation of install, dashboard, hooks, paths, and provider workflows before support is claimed. |
-| Native PowerShell / CMD | Not claimed | Future Windows support should use separate Windows-owned wrappers such as `.ps1` or `.windows.mjs` files instead of adding inline Windows branches to Linux scripts. |
+| Windows + Git Bash | Experimental / under analysis | Pi documents a Git Bash-based Windows path. PIDEX still needs validation of delegated pipeline behavior, hooks, and broader path handling before support is claimed. |
+| Native PowerShell / CMD | Experimental bootstrap only | `install.windows.ps1` has passed an initial Windows 11 smoke for clone/install/Pi resource loading and dashboard typecheck/build. Native PowerShell runtime support beyond the bootstrap is not claimed. |
 
 ## Platform separation rule
 
@@ -88,6 +88,8 @@ powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 ```
 
 The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Python/Pi/Git Bash, requires Node >=22.12.0, runs the read-only audit, installs dashboard dependencies when missing with `npm ci` when a dashboard lockfile is present, and runs `pi install`. It does not call `install.sh` and does not install global Git hooks.
+
+Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, and `npm --prefix dashboard run typecheck` plus `npm --prefix dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
 
 ## Recommended Windows approach today
 

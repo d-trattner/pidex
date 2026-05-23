@@ -33,25 +33,25 @@ This matrix is evidence-based and conservative. It is not a runtime implementati
 | Linux | Supported | PIDEX is developed and validated on Linux direct mode. | Current validation passes: `npm run public:check`, dashboard typecheck/build, `scripts/doctor.sh`, wiki hygiene audit. |
 | WSL2 | Likely / needs smoke | Safest Windows recommendation for experimentation because it is closest to Linux. | Static audit finds many Linux assumptions that WSL2 should satisfy, but no WSL2 smoke evidence yet. |
 | Windows + Git Bash | Experimental | First Pi-aligned Windows target to test, not yet supported. | Pi documents Bash-on-Windows via Git Bash; PIDEX scripts still have direct Bash/POSIX/process risks. |
-| Native PowerShell/CMD | Audit-only / unsupported runtime | Native Windows runtime support is not claimed. Run only the read-only audit for now. | No PowerShell wrappers exist; Linux-owned Bash scripts are not native Windows entrypoints. |
+| Native PowerShell/CMD | Experimental bootstrap only / unsupported runtime | Native PowerShell can run the additive bootstrap, but broader runtime support is not claimed. | Windows 11 smoke passed for `install.windows.ps1`, Pi resource load, `/pidex` pre-flight, and dashboard typecheck/build; Linux-owned Bash scripts remain unsupported natively. |
 
 ## Feature compatibility matrix
 
 | Feature / path | Linux | WSL2 | Windows + Git Bash | Native PowerShell/CMD | Notes |
 |---|---|---|---|---|---|
 | README/docs clarity | Supported | Supported | Supported | Supported | Milestone A docs clarify status without runtime claim. |
-| `scripts/compat/windows-audit.py` | Supported | Likely / needs smoke | Likely / needs smoke | Audit-only likely | Designed read-only and Python-only; test `python` vs `python3` on Windows. |
+| `scripts/compat/windows-audit.py` | Supported | Likely / needs smoke | Likely / needs smoke | Smoke passed | Windows 11 PowerShell smoke passed with `python`; `python3` app-execution alias may be misleading/missing. |
 | `install.sh` | Supported | Likely / needs smoke | Experimental | Unsupported | Linux-owned; future native path should be `install.windows.ps1`. |
 | `uninstall.sh` | Supported | Likely / needs smoke | Experimental | Unsupported | Linux-owned; future native path should be `uninstall.windows.ps1`. |
-| Pi package install `pi install ~/pidex` | Supported | Likely / needs smoke | Experimental | Not claimed | Pi supports Windows Bash, but PIDEX package load from Windows path needs proof. |
-| `/pidex` and `/pd` skill invocation | Supported | Likely / needs smoke | Experimental | Unsupported | Depends on Pi package load, extension loading, delegate scripts, path handling. |
+| Pi package install `pi install ~/pidex` | Supported | Likely / needs smoke | Experimental | Bootstrap smoke passed | `install.windows.ps1` successfully ran `pi install C:\Users\Daniel\pidex` on Windows 11. |
+| `/pidex` and `/pd` skill invocation | Supported | Likely / needs smoke | Experimental | Pre-flight smoke passed | `/reload` loaded PIDEX resources and `/pidex` pre-flight started on Windows 11 without edits/spawns. Delegated pipeline behavior remains untested. |
 | `pidex_agent` direct-mode tool | Supported | Likely / needs smoke | Experimental | Unsupported | Core extension should load through Pi, but subprocess/delegate paths need testing. |
 | `scripts/delegate/codex.sh` | Supported | Likely / needs smoke | Experimental | Unsupported | Bash wrapper, `python3`, `$HOME/.codex/auth.json`, Codex CLI behavior need Windows proof. |
 | `npm run check` | Supported | Likely / needs smoke | Experimental | Unsupported | Linux gate; broad Bash/Python/Node mix. Keep canonical Linux-only unless future Windows variant exists. |
 | `npm run public:check` | Supported | Likely / needs smoke | Experimental | Unsupported | Linux release gate. Native Windows should use future readiness script, not this shell gate. |
 | `bash scripts/doctor.sh` | Supported | Likely / needs smoke | Experimental | Unsupported | Hook checks and `/tmp`/executable-bit assumptions are risky. |
 | Dashboard `dashboard/start.sh` | Supported | Likely / needs smoke | Experimental/risky | Unsupported | Process management is Unix-oriented. Future path: `dashboard/start.windows.mjs` or direct npm docs. |
-| Dashboard typecheck/build | Supported | Likely / needs smoke | Likely / needs smoke | Likely / needs smoke | `npm --prefix dashboard run typecheck/build` should be tested on Windows. |
+| Dashboard typecheck/build | Supported | Likely / needs smoke | Likely / needs smoke | Smoke passed | `npm --prefix dashboard run typecheck` and `npm --prefix dashboard run build` passed on Windows 11 with Node 26. |
 | Dashboard runtime/API/provider behavior | Supported | Likely / needs smoke | Experimental | Unsupported runtime | Existing behavior must not change; start wrapper is main blocker. |
 | Provider limits/profiles | Supported | Likely / needs smoke | Experimental | Unsupported runtime | Python/Node pieces may work, shell helpers need audit evidence. |
 | `/pdq` / quality reports | Supported | Likely / needs smoke | Experimental | Unsupported runtime | Python scripts are candidates, but command paths often assume `python3`. |
@@ -96,16 +96,20 @@ Required evidence before this claim:
 - dashboard typecheck/build pass
 - global Git hook remains documented unsupported or separately tested in a disposable repo
 
-### Candidate 3: native PowerShell audit-only
+### Candidate 3: native PowerShell bootstrap experimental
 
 Safe current/future wording:
 
-> Native PowerShell/CMD runtime support is not claimed. You may run `python scripts/compat/windows-audit.py --json` to collect readiness information.
+> Native PowerShell can run PIDEX's experimental bootstrap installer. Initial Windows 11 smoke confirms clone/install, Pi resource loading, `/pidex` pre-flight, and dashboard typecheck/build. Broader native Windows runtime support, Git hooks, Linux-owned shell scripts, and delegated pipeline behavior are not yet supported.
 
-Required evidence:
+Current evidence:
 
+- `install.windows.ps1` real install passed on Windows 11
 - audit script runs under `python` in PowerShell
-- no runtime support wording beyond audit-only
+- Pi `/reload` loaded PIDEX skills/prompts/extension
+- `/pidex` pre-flight started without edits/spawns
+- dashboard typecheck/build passed with Node 26
+- no runtime support wording beyond bootstrap/pre-flight/dashboard build until more smoke exists
 
 ## Recommended first Windows target
 
@@ -123,7 +127,7 @@ Practical recommendation remains:
 
 1. WSL2 for safest experimentation.
 2. Git Bash for Pi-aligned native Windows analysis.
-3. PowerShell audit-only until separate wrappers exist, except that the planned future one-line bootstrap should itself be a Windows-owned PowerShell installer after review.
+3. PowerShell bootstrap is experimentally validated for install/resource-load/pre-flight/dashboard build, but runtime support remains limited until separate wrappers and delegated-pipeline smoke exist.
 
 ## Unsupported or deferred areas
 
@@ -176,7 +180,7 @@ The compatibility matrix does **not** justify a Windows runtime support claim ye
 - WSL2 as safest recommendation
 - Git Bash as experimental and under analysis
 - native PowerShell as audit-only/unsupported runtime today
-- an additive Windows-owned PowerShell one-line bootstrap as the first installation UX candidate
+- an additive Windows-owned PowerShell one-line bootstrap with initial Windows 11 smoke evidence
 - planning separate Windows-owned wrappers only after smoke evidence
 
 ## Navigation

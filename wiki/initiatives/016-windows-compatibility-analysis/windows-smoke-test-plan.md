@@ -475,9 +475,32 @@ Stop testing and report evidence if any of these happen:
 - dashboard leaves orphan processes that cannot be stopped easily
 - Pi package load errors indicate extension execution failure
 
+## Initial Windows 11 PowerShell smoke evidence
+
+Captured evidence from a Windows 11 laptop on this branch:
+
+- `install.windows.ps1` dry-run passed after PowerShell parser compatibility fix.
+- Real `install.windows.ps1` passed after installing Pi and switching to Node 26.
+- Bootstrap detected Git, Node/npm, Python, Pi, and Git Bash.
+- Audit ran under `python`; `python3` was a Windows Store alias/missing.
+- `pi install C:\Users\Daniel\pidex` succeeded.
+- Pi `/reload` loaded PIDEX skills (`pidex`, `pd`, `pdmem`, `pidex-quality`), prompts (`/pd`, `/pidex`), and extension (`pidex`).
+- `/pidex` smoke pre-flight started in direct mode, loaded `C:/Users/Daniel/pidex/skills/pidex/SKILL.md`, honored no-edit/no-spawn, and stopped.
+- `npm --prefix dashboard run typecheck` passed.
+- `npm --prefix dashboard run build` passed with the existing large chunk warning only.
+
+Remaining untested:
+
+- WSL2 smoke.
+- Git Bash shell smoke.
+- delegated `pidex_agent` subprocess run.
+- dashboard runtime start wrapper on Windows.
+- provider/delegate auth and Codex CLI behavior.
+- Git hook behavior on Windows, intentionally unsupported for now.
+
 ## Phase 5 conclusion criteria
 
-This plan is complete when a user can later run WSL2/Git Bash/PowerShell checks and return enough evidence to decide whether docs can be strengthened or wrappers should be built.
+This plan is complete when a user can run WSL2/Git Bash/PowerShell checks and return enough evidence to decide whether docs can be strengthened or additional wrappers should be built.
 
 ## Navigation
 

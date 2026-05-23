@@ -86,3 +86,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added initiative 016 Phase 5 Windows smoke test plan for later WSL2, Git Bash, and native PowerShell audit-only laptop validation.
 - 2026-05-22: Updated initiative 016 plan to include a future Windows-owned PowerShell one-line bootstrap (`install.windows.ps1`) that must not call or modify Linux `install.sh` and should skip global Git hooks by default.
 - 2026-05-22: Added additive `install.windows.ps1` prototype for native PowerShell bootstrap: clone/check `$HOME\\pidex`, validate prerequisites including Git Bash, run the read-only audit, install dashboard dependencies when missing, run `pi install`, and skip global Git hooks.
+- 2026-05-22: Recorded initial Windows 11 smoke evidence: PowerShell bootstrap install passed with Node 26, Pi `/reload` loaded PIDEX resources, `/pidex` pre-flight started without edits/spawns, and dashboard typecheck/build passed.
