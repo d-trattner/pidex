@@ -24,7 +24,7 @@ Rules for grilling inside pidex:
 - For every question, provide the recommended answer.
 - If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
 - For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
-- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `<pidex-root>/scripts/project-context/init.py <project-root>`.
+- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `node <pidex-root>/scripts/project-context/init.mjs <project-root>`.
 - `CONTEXT.md` follows Matt Pocock's context format exactly. Use `<pidex-root>/skills/grill-with-docs/CONTEXT-FORMAT.md` as the single source of truth for context handling.
 - Put confirmed user statements and clear code/docs-evidenced project/domain terms directly into `## Language` only when they can be defined in one sentence. Do not put task specs, acceptance criteria, implementation plans, roadmap items, workflows, architecture notes, operational constraints, or release decisions in `CONTEXT.md`.
 - For fresh/new projects, create `pidex/context/CONTEXT.md` during the orchestrator preparation step before spawning agents so the first plan has a context home.
@@ -566,7 +566,7 @@ After the user confirms the epic, create the project directory, project context 
 
 ```bash
 mkdir -p <project-path>/agents.output <project-path>/pidex/state <project-path>/pidex/rules <project-path>/pidex/config <project-path>/pidex/prompts
-python3 <pidex-root>/scripts/project-context/init.py <project-path>
+node <pidex-root>/scripts/project-context/init.mjs <project-path>
 printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n' >> <project-path>/.gitignore
 echo 0 > <project-path>/agents.output/.next-id
 ```
