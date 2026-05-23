@@ -24,24 +24,18 @@ if [ "${#PROVIDERS[@]}" -eq 0 ]; then
     echo "ERROR: config file not found: $CONFIG_FILE" >&2
     exit 1
   fi
-  mapfile -t PROVIDERS < <(python3 - "$CONFIG_FILE" <<'PY'
-import json, sys
-cfg = json.load(open(sys.argv[1], 'r', encoding='utf-8'))
-providers = set()
-
-def add(p):
-    p = (p or '').strip().lower()
-    if p and p not in {'pi', 'subagent', 'pidex_agent', 'rp_agent'}:
-        providers.add(p)
-
-add((cfg.get('defaults') or {}).get('provider'))
-for route in (cfg.get('agents') or {}).values():
-    add(route.get('provider') or (cfg.get('defaults') or {}).get('provider'))
-
-for provider in sorted(providers):
-    print(provider)
-PY
-)
+  mapfile -t PROVIDERS < <(node -e '
+const fs = require("fs");
+const cfg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const providers = new Set();
+function add(p) {
+  p = String(p || "").trim().toLowerCase();
+  if (p && !["pi", "subagent", "pidex_agent", "rp_agent"].includes(p)) providers.add(p);
+}
+add((cfg.defaults || {}).provider);
+for (const route of Object.values(cfg.agents || {})) add(route.provider || (cfg.defaults || {}).provider);
+for (const provider of [...providers].sort()) console.log(provider);
+' "$CONFIG_FILE")
 fi
 
 if [ "${#PROVIDERS[@]}" -eq 0 ]; then
@@ -65,14 +59,7 @@ check_codex() {
     echo "FAIL codex: no OPENAI_API_KEY and no $auth_file" >&2
     return 1
   fi
-  if python3 - "$auth_file" <<'PY' >/dev/null 2>&1
-import json, sys
-try:
-    a = json.load(open(sys.argv[1], 'r', encoding='utf-8'))
-    raise SystemExit(0 if a.get('tokens') or a.get('OPENAI_API_KEY') else 1)
-except Exception:
-    raise SystemExit(1)
-PY
+  if node -e 'const fs = require("fs"); try { const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.exit(a.tokens || a.OPENAI_API_KEY ? 0 : 1); } catch { process.exit(1); }' "$auth_file" >/dev/null 2>&1
   then
     echo "OK codex: auth file has tokens"
     return 0

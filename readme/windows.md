@@ -24,7 +24,7 @@ Preferred future pattern:
 | `install.sh` | `install.windows.ps1` |
 | `uninstall.sh` | `uninstall.windows.ps1` |
 | `dashboard/start.sh` | `dashboard/start.windows.mjs` or `dashboard/start.windows.ps1` |
-| `scripts/release/public-readiness.sh` | `scripts/compat/windows-audit.py` or `scripts/release/public-readiness.windows.py` |
+| `scripts/release/public-readiness.sh` | `scripts/compat/windows-audit.mjs` |
 | `scripts/git-hooks/install-global.sh` | `scripts/git-hooks/install-global.windows.ps1` or explicit unsupported docs |
 
 Do not add `if Windows then ... else ...` branches to Linux-owned runtime files unless explicitly approved and regression-proven.
@@ -34,21 +34,19 @@ Do not add `if Windows then ... else ...` branches to Linux-owned runtime files 
 Run the audit script to collect local readiness signals without changing files or settings:
 
 ```bash
-python3 scripts/compat/windows-audit.py
-# or, where python3 is not available:
-python scripts/compat/windows-audit.py
+node scripts/compat/windows-audit.mjs
 ```
 
 For machine-readable output:
 
 ```bash
-python3 scripts/compat/windows-audit.py --json
+node scripts/compat/windows-audit.mjs --json
 ```
 
 The audit reports:
 
 - OS/platform and likely environment (`linux`, `wsl`, `windows-git-bash`, `windows-native`, etc.)
-- availability of `bash`, `node`, `npm`, `python3`/`python`, `git`, and `pi`
+- availability of `bash`, `node`, `npm`, optional `python3`/`python`, `git`, and `pi`
 - PIDEX checkout path shape
 - dashboard prerequisite signals
 - known unsupported or risky Windows entrypoints

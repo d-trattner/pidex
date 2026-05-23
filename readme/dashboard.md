@@ -24,7 +24,7 @@ http://pi.lan/dashboard
 ## App locations
 
 - TanStack Start app: `<pidex-root>/dashboard/`
-- Dashboard ingest helper: `<pidex-root>/scripts/dashboard/ingest.py`
+- Dashboard ingest helper: `<pidex-root>/scripts/dashboard/ingest.mjs`
 
 ## Sections
 

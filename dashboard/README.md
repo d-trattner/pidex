@@ -45,4 +45,4 @@ Security note: `--public-read` allows unauthenticated provider-limits `GET` requ
 
 ## Migration status
 
-The legacy dashboard archive has been removed. Runtime ingest now lives at `../scripts/dashboard/ingest.py`.
+The legacy dashboard archive has been removed. Runtime ingest now lives at `../scripts/dashboard/ingest.mjs`.

@@ -72,10 +72,10 @@ fi
 sleep 0.5
 
 if [ "$INGEST" = "1" ]; then
-  INGEST_SCRIPT="$ROOT/../scripts/dashboard/ingest.py"
+  INGEST_SCRIPT="$ROOT/../scripts/dashboard/ingest.mjs"
   if [ -f "$INGEST_SCRIPT" ]; then
     echo "==> Ingesting dashboard data"
-    python3 "$INGEST_SCRIPT" --db "$ROOT/data/pidex.sqlite" --project "$ROOT/.." >/tmp/pidex-dashboard-ingest.json
+    node "$INGEST_SCRIPT" --db "$ROOT/data/pidex.sqlite" --project "$ROOT/.." >/tmp/pidex-dashboard-ingest.json
   else
     echo "==> Ingest script missing; skipping ingest"
   fi

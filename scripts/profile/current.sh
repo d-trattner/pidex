@@ -14,16 +14,7 @@ if [ -x "$PROBE" ] && [ -f "$STATE" ]; then
 fi
 
 if [ -f "$STATE" ]; then
-  python3 - "$STATE" <<'PY'
-import json, sys
-path = sys.argv[1]
-try:
-    with open(path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    print(data.get('active_profile', 'custom'))
-except Exception:
-    print('custom')
-PY
+  node -e 'const fs = require("fs"); try { const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(data.active_profile || "custom"); } catch { console.log("custom"); }' "$STATE"
   exit 0
 fi
 
