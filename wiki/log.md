@@ -99,3 +99,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Removed replaced Python compatibility/dashboard/provider/context/parallel-agent helpers after Node paths became canonical for those slices.
 - 2026-05-22: Added Node project metadata migration helper and removed the old Python migration helper.
 - 2026-05-22: Added Node quality/report, rule-action, orchestrator-event, auto-PDQ, and wiki-hygiene helpers; removed the old Python quality/wiki helpers.
+- 2026-05-23: Added Python-vs-Node parity harness for historical quality/wiki behavior and marked Windows/Python-removal initiative ready for real-project pipeline smoke before merge to main.

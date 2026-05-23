@@ -2,8 +2,8 @@
 title: Windows Compatibility Analysis
 type: initiative
 sequence: 016
-status: planned
-stage: phase-5-smoke-test-plan-drafted
+status: validating
+stage: milestone-a-windows-bootstrap-and-python-removal-validated
 priority: medium
 created: 2026-05-22
 updated: 2026-05-22
@@ -18,13 +18,20 @@ Analyze what PIDEX needs before it can run reliably on Windows without weakening
 
 ## Current status
 
-- Status: `planned`
-- Stage: `phase-5-smoke-test-plan-drafted`
+- Status: `validating`
+- Stage: `milestone-a-windows-bootstrap-and-python-removal-validated`
 - Priority: `medium`
 
 ## Next action
 
-Review and merge Milestone A through Phase 5 docs, then use the smoke test plan for later laptop validation before any runtime Windows implementation.
+Continue real-project smoke on branch `initiative-016-windows-milestone-a` for a few PIDEX pipelines. If no regressions appear, merge this branch to `main`.
+
+## Merge reminder
+
+- [ ] Run a few real PIDEX pipelines from `initiative-016-windows-milestone-a` against active projects such as homelab and forge.ng.
+- [ ] Watch for Node-port regressions in `/pdq`, `/pdwiki`, dashboard provider/parallel-agent pages, and pipeline metrics/events.
+- [ ] If the branch remains stable, merge `initiative-016-windows-milestone-a` into `main`.
+- [ ] After merge, re-run `npm run public:check`, dashboard typecheck/build, and Windows smoke commands from [[windows-smoke-test-plan]].
 
 ## Documents
 

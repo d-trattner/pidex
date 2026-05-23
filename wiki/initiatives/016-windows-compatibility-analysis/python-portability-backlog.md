@@ -16,8 +16,8 @@ Track every Python script and decide whether to keep it, port it to Node for Win
 Dependency policy for Windows bootstrap:
 
 - Required: PowerShell, Git, Node/npm, Pi, Git Bash.
-- Optional: Python for advanced PIDEX features until ported.
-- Avoid requiring Python for the basic Windows one-line installer.
+- Python is no longer required for tracked PIDEX runtime/check scripts.
+- The optional parity harness may use `python3` when available to compare current Node behavior against historical Python sources from git; it skips when Python is unavailable.
 
 ## Inventory
 
@@ -43,16 +43,19 @@ Dependency policy for Windows bootstrap:
 ## Completed
 
 - Added `scripts/compat/windows-audit.mjs` as the Node audit implementation.
-- Updated `install.windows.ps1` to use Node audit and make Python optional for bootstrap.
+- Updated `install.windows.ps1` to use Node audit; Python is no longer part of the Windows bootstrap requirement.
 - Added `dashboard/lib/server/sqlite-query.mjs` and switched dashboard query execution from Python to Node with regression coverage.
 - Added `scripts/dashboard/ingest.mjs` and switched dashboard auto-ingest from Python to Node with fixture coverage.
 - Added `scripts/project-context/init.mjs` and switched PIDEX orchestrator guidance from Python to Node with fixture coverage.
+- Ported provider limits, parallel-agent status/run-lane, metrics, pipeline events, public readiness checks, project metadata migration, PDQ quality, rule-action/orchestrator-event helpers, auto-PDQ, and wiki hygiene to Node.
+- Removed all tracked `.py` helper implementations.
+- Added `scripts/parity/python-node-parity.tdd.test.mjs` to compare historical Python behavior against current Node behavior where Python is available.
 
 ## Next candidates
 
-1. Validate Node dashboard ingest/query on Windows with dashboard typecheck/build and a dashboard smoke.
-2. Decide when to remove temporary Python dashboard helpers after Node path is proven on Linux and Windows.
-3. Pick next Python-free slice: wiki hygiene, PDQ quality suite, or remaining shell embedded Python in Linux-owned helper scripts.
+1. Continue real-project smoke on the branch for a few PIDEX pipelines.
+2. If no regressions appear, merge `initiative-016-windows-milestone-a` to `main`.
+3. Keep any future bug fixes backed by Node tests and, when applicable, parity fixtures.
 
 ## Navigation
 
