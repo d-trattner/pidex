@@ -39,14 +39,7 @@ if [ -z "${OPENAI_API_KEY:-}" ]; then
     echo "ERROR: Codex not authenticated — no OPENAI_API_KEY + no $AUTH_FILE" >&2
     exit 1
   fi
-  AUTH_OK=$(python3 -c "
-import json, sys
-try:
-    a = json.load(open(sys.argv[1]))
-    sys.exit(0 if a.get('tokens') or a.get('OPENAI_API_KEY') else 1)
-except Exception:
-    sys.exit(1)
-" "$AUTH_FILE" 2>/dev/null && echo 1 || echo 0)
+  AUTH_OK=$(node -e 'const fs = require("fs"); try { const a = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.exit(a.tokens || a.OPENAI_API_KEY ? 0 : 1); } catch { process.exit(1); }' "$AUTH_FILE" 2>/dev/null && echo 1 || echo 0)
   if [ "$AUTH_OK" = "0" ]; then
     echo "ERROR: ~/.codex/auth.json has no tokens — run 'codex login'" >&2
     exit 1

@@ -20,7 +20,7 @@ fi
 
 if command -v node >/dev/null 2>&1; then ok "node found: $(node --version)"; else fail "node not found"; fi
 if command -v npm >/dev/null 2>&1; then ok "npm found: $(npm --version)"; else fail "npm not found"; fi
-if command -v python3 >/dev/null 2>&1; then ok "python3 found: $(python3 --version 2>&1)"; else fail "python3 not found"; fi
+if command -v python3 >/dev/null 2>&1; then ok "python3 found: $(python3 --version 2>&1)"; else warn "python3 not found (optional for legacy/reference helpers)"; fi
 if command -v pi >/dev/null 2>&1; then ok "pi found: $(command -v pi)"; else fail "pi command not found"; fi
 
 if [ -f "$ROOT/config/agents.json" ]; then ok "config/agents.json present"; else fail "config/agents.json missing"; fi
@@ -43,25 +43,16 @@ if command -v pi >/dev/null 2>&1; then
   fi
 fi
 
-if command -v python3 >/dev/null 2>&1 && [ -f "$ROOT/config/agents.json" ]; then
-  MODELS=$(python3 - "$ROOT/config/agents.json" <<'PY'
-import json, sys
-cfg=json.load(open(sys.argv[1], encoding='utf-8'))
-models=[]
-
-def add(v):
-    if v and v not in models:
-        models.append(v)
-
-def gather(route):
-    add((route or {}).get('model'))
-
-add((cfg.get('defaults') or {}).get('model'))
-for r in (cfg.get('agents') or {}).values():
-    gather(r)
-print(' '.join(models))
-PY
-)
+if command -v node >/dev/null 2>&1 && [ -f "$ROOT/config/agents.json" ]; then
+  MODELS=$(node -e '
+const fs = require("fs");
+const cfg = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const models = [];
+function add(v) { if (v && !models.includes(v)) models.push(v); }
+add((cfg.defaults || {}).model);
+for (const route of Object.values(cfg.agents || {})) add((route || {}).model);
+console.log(models.join(" "));
+' "$ROOT/config/agents.json")
   if [ -n "$MODELS" ]; then
     ok "configured models: $MODELS"
   fi
@@ -86,18 +77,16 @@ fi
 
 if [ -r "$STATE_FILE" ]; then
   ok "global hook state file readable"
-  if command -v python3 >/dev/null 2>&1; then
-    if python3 - "$STATE_FILE" <<'PY' >/tmp/pidex-doctor-hook-state.log 2>&1
-import json, sys
-p=sys.argv[1]
-d=json.load(open(p, encoding='utf-8'))
-assert d.get('schema_version') == 1
-assert 'previous_global_hooks_path_existed' in d
-if d.get('previous_global_hooks_path_existed'):
-    assert isinstance(d.get('previous_global_hooks_path'), str) and d.get('previous_global_hooks_path')
-else:
-    assert d.get('previous_global_hooks_path') in (None, '')
-PY
+  if command -v node >/dev/null 2>&1; then
+    if node -e '
+const fs = require("fs");
+const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (d.schema_version !== 1) process.exit(1);
+if (!("previous_global_hooks_path_existed" in d)) process.exit(1);
+if (d.previous_global_hooks_path_existed) {
+  if (typeof d.previous_global_hooks_path !== "string" || !d.previous_global_hooks_path) process.exit(1);
+} else if (!(d.previous_global_hooks_path == null || d.previous_global_hooks_path === "")) process.exit(1);
+' "$STATE_FILE" >/tmp/pidex-doctor-hook-state.log 2>&1
     then
       ok "global hook state restore metadata valid"
     else
