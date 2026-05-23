@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
-PROBE="$ROOT/scripts/provider-limits/probe.py"
+PROBE="$ROOT/scripts/provider-limits/probe.mjs"
 PROFILE="${1:-}"
 
 if [ -z "$PROFILE" ] || [ "$PROFILE" = "-h" ] || [ "$PROFILE" = "--help" ]; then
@@ -12,7 +12,7 @@ if [ -z "$PROFILE" ] || [ "$PROFILE" = "-h" ] || [ "$PROFILE" = "--help" ]; then
 fi
 
 if [ -x "$PROBE" ]; then
-  python3 "$PROBE" use "$PROFILE"
+  node "$PROBE" use "$PROFILE"
   exit 0
 fi
 

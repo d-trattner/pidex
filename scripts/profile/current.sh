@@ -3,12 +3,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
-PROBE="$ROOT/scripts/provider-limits/probe.py"
+PROBE="$ROOT/scripts/provider-limits/probe.mjs"
 STATE="$ROOT/state/provider-limits/latest.json"
 
 if [ -x "$PROBE" ] && [ -f "$STATE" ]; then
-  python3 "$PROBE" latest \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("active_profile","custom"))' \
+  node "$PROBE" latest \
+    | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { const data = JSON.parse(s || "{}"); console.log(data.active_profile || "custom"); })' \
     || echo "custom"
   exit 0
 fi

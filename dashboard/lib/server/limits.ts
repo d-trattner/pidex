@@ -46,7 +46,7 @@ const STATE_DIR = path.resolve(ROOT, 'state', 'provider-limits');
 const STATE_FILE = path.resolve(STATE_DIR, 'latest.json');
 const HISTORY_FILE = path.resolve(STATE_DIR, 'history.jsonl');
 const ACTIVE_PROFILE_FILE = path.resolve(STATE_DIR, 'active-profile.json');
-const PROBE_SCRIPT = path.resolve(ROOT, 'scripts', 'provider-limits', 'probe.py');
+const PROBE_SCRIPT = path.resolve(ROOT, 'scripts', 'provider-limits', 'probe.mjs');
 const execFileAsync = promisify(execFile);
 let refreshInFlight: Promise<void> | null = null;
 let lastRefreshAttempt = 0;
@@ -143,7 +143,7 @@ async function refreshIfStale(state: JsonObject | null): Promise<void> {
   if (now - lastRefreshAttempt < minAttemptMs) return;
   lastRefreshAttempt = now;
   if (!refreshInFlight) {
-    refreshInFlight = execFileAsync('python3', [PROBE_SCRIPT, 'refresh'], {
+    refreshInFlight = execFileAsync(process.execPath, [PROBE_SCRIPT, 'refresh'], {
       cwd: ROOT,
       timeout: Number(process.env.PIDEX_PROVIDER_LIMITS_REFRESH_TIMEOUT_MS || 30_000),
       maxBuffer: 1024 * 1024,

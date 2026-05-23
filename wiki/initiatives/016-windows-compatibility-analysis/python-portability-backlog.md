@@ -33,7 +33,7 @@ Dependency policy for Windows bootstrap:
 | `scripts/quality/rule-actions.py` | Rule action ledger | P2 | Port with quality suite if needed. |
 | `scripts/quality/run-auto-pdq.py` | Auto-PDQ trigger | P2 | Port after report.js exists, or keep optional. |
 | `scripts/quality/test_report_tdd.py` | Quality report tests | P2 | Replace with Node tests if quality is ported. |
-| `scripts/provider-limits/probe.py` | Provider limits probe/profile state | P2 | Port if Windows dashboard/provider features require Python-free path. |
+| `scripts/provider-limits/probe.py` | Provider limits probe/profile state | P2 | Node replacement added as `scripts/provider-limits/probe.mjs`; dashboard refresh and profile shell helpers now use Node. Keep Python file temporarily until parity is proven. |
 | `scripts/provider-limits/test_probe_tdd.py` | Provider probe tests | P2 | Replace with Node tests if probe is ported. |
 | `scripts/project-context/init.py` | Project context template init | P2 | Node replacement added as `scripts/project-context/init.mjs`; orchestrator skill now points to Node path. Keep Python file temporarily until parity is proven. |
 | `scripts/parallel-agents/status.py` | Optional parallel-agent status | P3 | Optional advanced feature; keep Python for now. |
@@ -52,7 +52,7 @@ Dependency policy for Windows bootstrap:
 
 1. Validate Node dashboard ingest/query on Windows with dashboard typecheck/build and a dashboard smoke.
 2. Decide when to remove temporary Python dashboard helpers after Node path is proven on Linux and Windows.
-3. Pick next Python-free slice: provider-limits probe or parallel-agent status.
+3. Pick next Python-free slice: parallel-agent status or metrics/history shell embedded Python.
 
 ## Navigation
 
