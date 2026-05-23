@@ -93,3 +93,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added Node dashboard ingest helper and switched dashboard auto-ingest away from Python, with fixture coverage.
 - 2026-05-22: Added Node project-context init helper and switched PIDEX orchestrator guidance away from Python for context template initialization.
 - 2026-05-22: Added Node provider-limits probe and switched dashboard refresh/profile helpers away from Python for provider limit snapshots.
+- 2026-05-22: Added Node parallel-agent status helper and switched dashboard API/docs/orchestrator guidance away from Python for optional parallel-agent status.

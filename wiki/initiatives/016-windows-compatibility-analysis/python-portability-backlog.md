@@ -36,7 +36,7 @@ Dependency policy for Windows bootstrap:
 | `scripts/provider-limits/probe.py` | Provider limits probe/profile state | P2 | Node replacement added as `scripts/provider-limits/probe.mjs`; dashboard refresh and profile shell helpers now use Node. Keep Python file temporarily until parity is proven. |
 | `scripts/provider-limits/test_probe_tdd.py` | Provider probe tests | P2 | Replace with Node tests if probe is ported. |
 | `scripts/project-context/init.py` | Project context template init | P2 | Node replacement added as `scripts/project-context/init.mjs`; orchestrator skill now points to Node path. Keep Python file temporarily until parity is proven. |
-| `scripts/parallel-agents/status.py` | Optional parallel-agent status | P3 | Optional advanced feature; keep Python for now. |
+| `scripts/parallel-agents/status.py` | Optional parallel-agent status | P3 | Node replacement added as `scripts/parallel-agents/status.mjs`; dashboard API/docs/orchestrator guidance now use Node. Keep Python file temporarily until parity is proven. |
 | `scripts/parallel-agents/run-lane.py` | Manual parallel lane scaffold | P3 | Optional advanced feature; keep Python for now. |
 | `scripts/project-metadata/migrate-to-pidex-folder.py` | Migration helper | P3 | Historical/migration-only; do not prioritize. |
 
@@ -52,7 +52,7 @@ Dependency policy for Windows bootstrap:
 
 1. Validate Node dashboard ingest/query on Windows with dashboard typecheck/build and a dashboard smoke.
 2. Decide when to remove temporary Python dashboard helpers after Node path is proven on Linux and Windows.
-3. Pick next Python-free slice: parallel-agent status or metrics/history shell embedded Python.
+3. Pick next Python-free slice: metrics/history shell embedded Python or parallel-agent run-lane.
 
 ## Navigation
 

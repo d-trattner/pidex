@@ -1199,16 +1199,16 @@ Parallel implementer lanes are optional, not default. Use them only when the pla
 
 Before spawning `pidex-critic` or `pidex-code-reviewer`, run:
 ```bash
-python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent <agent> --trigger <trigger> --json
+node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent <agent> --trigger <trigger> --json
 ```
 If `.lanes[]` is non-empty, launch the primary lane and every eligible secondary lane as separate visible `pidex_agent` calls in the same assistant turn. `pidex_agent` itself must not spawn nested agents.
 
 Lane launch rules:
 - Primary: call `pidex_agent` normally using configured primary routing from `<pidex-root>/config/agents.json`.
-- Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `status.py eligible`. Use `runner_provider` and `runner_model` when present; these map Pi-auth provider/model IDs like DeepSeek/Minimax to `provider=pi`, `model=<provider>/<model>`. Do not pass unsupported direct providers such as `deepseek` or `minimax` to `pidex_agent`.
+- Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `status.mjs eligible`. Use `runner_provider` and `runner_model` when present; these map Pi-auth provider/model IDs like DeepSeek/Minimax to `provider=pi`, `model=<provider>/<model>`. Do not pass unsupported direct providers such as `deepseek` or `minimax` to `pidex_agent`.
 - Each lane must receive a unique expected output path; never let secondaries write the primary artifact.
-- Secondary failure is advisory and non-blocking. Record it with `status.py warn --lane <lane_id> --message <short reason>` and continue.
-- Secondary success should be recorded with `status.py success --lane <lane_id> --message success` after its output/ROUTING is verified.
+- Secondary failure is advisory and non-blocking. Record it with `status.mjs warn --lane <lane_id> --message <short reason>` and continue.
+- Secondary success should be recorded with `status.mjs success --lane <lane_id> --message success` after its output/ROUTING is verified.
 
 Secondary artifact suffixes:
 - `agents.output/critic/<id>-<slug>-critique.<provider>.<model-slug>.md`
