@@ -26,7 +26,7 @@ Dependency policy for Windows bootstrap:
 | `scripts/compat/windows-audit.py` | Read-only compatibility audit | P0 | Port first to Node so Windows bootstrap does not require Python. Keep Python version temporarily for parity/reference. |
 | `scripts/compat/test_windows_audit.py` | Python audit tests | P0/P1 | Replace/add Node audit tests after Node audit stabilizes. |
 | `scripts/dashboard/ingest.py` | Dashboard SQLite ingest | P1 | Port or wrap in Node so dashboard path can become Python-free. |
-| `dashboard/lib/server/sqlite-query.py` | Dashboard SQLite query helper | P1 | Port to Node or replace with JS SQLite access if feasible. |
+| `dashboard/lib/server/sqlite-query.py` | Dashboard SQLite query helper | P1 | Node replacement added as `dashboard/lib/server/sqlite-query.mjs`; dashboard query path now uses Node. Keep Python file temporarily until parity is proven. |
 | `scripts/wiki/hygiene.py` | Wiki hygiene audit/cadence | P2 | Large feature; port only after bootstrap/dashboard basics. |
 | `scripts/quality/report.py` | PDQ quality report | P2 | Large feature; keep Python optional until Node port is justified. |
 | `scripts/quality/orchestrator-events.py` | Orchestrator event helpers | P2 | Port with quality suite if needed. |
@@ -44,11 +44,12 @@ Dependency policy for Windows bootstrap:
 
 - Added `scripts/compat/windows-audit.mjs` as the Node audit implementation.
 - Updated `install.windows.ps1` to use Node audit and make Python optional for bootstrap.
+- Added `dashboard/lib/server/sqlite-query.mjs` and switched dashboard query execution from Python to Node with regression coverage.
 
 ## Next candidates
 
-1. Add Node tests for `windows-audit.mjs` and optionally wire them into Linux `npm run check`.
-2. Decide whether dashboard ingest/query should be the next Python-free Windows path.
+1. Port dashboard ingest (`scripts/dashboard/ingest.py`) to Node or design an incremental parity harness.
+2. Decide when to remove temporary Python query helper after Node query path is proven on Linux and Windows.
 3. Keep Python features clearly documented as optional advanced capabilities until ported.
 
 ## Navigation
