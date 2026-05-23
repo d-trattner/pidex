@@ -52,7 +52,7 @@ Dependency policy for Windows bootstrap:
 
 1. Validate Node dashboard ingest/query on Windows with dashboard typecheck/build and a dashboard smoke.
 2. Decide when to remove temporary Python dashboard helpers after Node path is proven on Linux and Windows.
-3. Pick next Python-free slice: pipeline event shell embedded Python, wiki hygiene, or PDQ quality suite.
+3. Pick next Python-free slice: wiki hygiene, PDQ quality suite, or remaining shell embedded Python in Linux-owned helper scripts.
 
 ## Navigation
 

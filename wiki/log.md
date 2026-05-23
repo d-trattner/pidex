@@ -95,3 +95,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added Node provider-limits probe and switched dashboard refresh/profile helpers away from Python for provider limit snapshots.
 - 2026-05-22: Added Node parallel-agent status helper and switched dashboard API/docs/orchestrator guidance away from Python for optional parallel-agent status.
 - 2026-05-22: Added Node parallel-agent run-lane scaffold and Node metrics record/summarize helpers; wrappers now avoid embedded Python.
+- 2026-05-22: Added Node pipeline event helper and changed pipeline event wrapper to avoid embedded Python for event recording.
