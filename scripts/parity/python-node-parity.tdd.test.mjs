@@ -8,6 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { build_expected_observed, normalize_plan, parse_git_status_rules, select_since_last_review, summarize } from '../quality/report.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const pythonProbe = spawnSync('python3', ['--version'], { encoding: 'utf8' });
+if (pythonProbe.status !== 0) {
+  console.log('python-node parity tests skipped: python3 not available');
+  process.exit(0);
+}
 const oldCommit = '533ed2d';
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-parity-'));
 
