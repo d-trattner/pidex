@@ -183,10 +183,12 @@ $DashboardDir = Join-Path $PidexRoot "dashboard"
 $DashboardNodeModules = Join-Path $DashboardDir "node_modules"
 if (-not $SkipDashboardDeps -and -not (Test-Path -LiteralPath $DashboardNodeModules)) {
   Write-Step "Installing dashboard dependencies"
+  $DashboardLock = Join-Path $DashboardDir "package-lock.json"
+  $NpmInstallCommand = if (Test-Path -LiteralPath $DashboardLock) { "ci" } else { "install" }
   if ($DryRun) {
-    Write-Host "DRY-RUN: npm --prefix $DashboardDir install"
+    Write-Host "DRY-RUN: npm --prefix $DashboardDir $NpmInstallCommand"
   } else {
-    Invoke-Checked $Npm @("--prefix", $DashboardDir, "install")
+    Invoke-Checked $Npm @("--prefix", $DashboardDir, $NpmInstallCommand)
   }
 } elseif ($SkipDashboardDeps) {
   Write-Step "Skipping dashboard dependency install"
