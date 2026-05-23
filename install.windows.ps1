@@ -68,7 +68,7 @@ function Get-PythonCommand {
 function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   & $FilePath @Arguments
   if ($LASTEXITCODE -ne 0) {
-    Fail "Command failed with exit $LASTEXITCODE: $FilePath $($Arguments -join ' ')"
+    Fail "Command failed with exit ${LASTEXITCODE}: $FilePath $($Arguments -join ' ')"
   }
 }
 
