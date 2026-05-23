@@ -37,6 +37,7 @@ Review and merge Milestone A through Phase 5 docs, then use the smoke test plan 
 - [[static-portability-audit]] — Phase 3 static portability risks and mitigation order
 - [[compatibility-matrix]] — Phase 4 environment/feature support matrix and support-claim candidates
 - [[windows-smoke-test-plan]] — Phase 5 safe laptop smoke checklist for WSL2, Git Bash, and PowerShell audit-only
+- [[python-portability-backlog]] — Python-to-Node portability backlog for reducing Windows dependencies
 
 ## Navigation
 

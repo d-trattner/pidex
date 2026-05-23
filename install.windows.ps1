@@ -106,9 +106,6 @@ $Node = Require-Command @("node") "Install Node.js LTS: https://nodejs.org/"
 $Npm = Require-Command @("npm") "Install Node.js/npm: https://nodejs.org/"
 $Pi = Require-Command @("pi") "Install Pi first: npm install -g @earendil-works/pi-coding-agent"
 $Python = Get-PythonCommand
-if (-not $Python) {
-  Fail "Missing prerequisite: python, python3, or py. Install Python 3 and enable PATH integration."
-}
 $GitBash = Find-GitBash
 if (-not $GitBash) {
   Fail "Missing Bash required by Pi on Windows. Install Git for Windows: https://git-scm.com/download/win"
@@ -119,7 +116,11 @@ Write-Step "Prerequisites found"
 Write-Host "git:    $Git"
 Write-Host "node:   $Node ($NodeVersion)"
 Write-Host "npm:    $Npm"
-Write-Host "python: $($Python.Command) $($Python.Prefix -join ' ')"
+if ($Python) {
+  Write-Host "python: $($Python.Command) $($Python.Prefix -join ' ')"
+} else {
+  Write-Host "python: <optional; not found>"
+}
 Write-Host "pi:     $Pi"
 Write-Host "bash:   $GitBash"
 
@@ -162,18 +163,18 @@ if ($Branch) {
   }
 }
 
-$AuditScript = Join-Path $PidexRoot "scripts\compat\windows-audit.py"
+$AuditScript = Join-Path $PidexRoot "scripts\compat\windows-audit.mjs"
 if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditScript)) {
   Fail "Missing audit script: $AuditScript"
 }
 
 Write-Step "Running read-only Windows audit"
 if ($DryRun) {
-  Write-Host "DRY-RUN: python scripts/compat/windows-audit.py"
+  Write-Host "DRY-RUN: node scripts/compat/windows-audit.mjs"
 } else {
   Push-Location $PidexRoot
   try {
-    Invoke-PythonScript $Python @($AuditScript)
+    Invoke-Checked $Node @($AuditScript)
   } finally {
     Pop-Location
   }
