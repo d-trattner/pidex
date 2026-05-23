@@ -97,3 +97,4 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added Node parallel-agent run-lane scaffold and Node metrics record/summarize helpers; wrappers now avoid embedded Python.
 - 2026-05-22: Added Node pipeline event helper and changed pipeline event wrapper to avoid embedded Python for event recording.
 - 2026-05-22: Removed replaced Python compatibility/dashboard/provider/context/parallel-agent helpers after Node paths became canonical for those slices.
+- 2026-05-22: Added Node project metadata migration helper and removed the old Python migration helper.

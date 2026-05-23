@@ -38,7 +38,7 @@ Dependency policy for Windows bootstrap:
 | `scripts/project-context/init.py` | Project context template init | P2 | Removed after Node replacement `scripts/project-context/init.mjs` became orchestrator path. |
 | `scripts/parallel-agents/status.py` | Optional parallel-agent status | P3 | Removed after Node replacement `scripts/parallel-agents/status.mjs` became dashboard/API/docs/orchestrator path. |
 | `scripts/parallel-agents/run-lane.py` | Manual parallel lane scaffold | P3 | Removed after Node replacement `scripts/parallel-agents/run-lane.mjs` became extension path. |
-| `scripts/project-metadata/migrate-to-pidex-folder.py` | Migration helper | P3 | Historical/migration-only; do not prioritize. |
+| `scripts/project-metadata/migrate-to-pidex-folder.py` | Migration helper | P3 | Removed after Node replacement `scripts/project-metadata/migrate-to-pidex-folder.mjs` was added with coverage. |
 
 ## Completed
 
