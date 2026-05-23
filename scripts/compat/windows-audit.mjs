@@ -78,8 +78,8 @@ function commandVersion(command, executable) {
       runArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', executable, ...argsByCommand[command]];
     } else if (lower.endsWith('.cmd') || lower.endsWith('.bat') || !path.extname(executable)) {
       runCommand = process.env.ComSpec || 'cmd.exe';
-      const quoted = `"${executable}" ${argsByCommand[command].map((arg) => `"${arg.replaceAll('"', '\\"')}"`).join(' ')}`;
-      runArgs = ['/d', '/s', '/c', quoted];
+      const cmdLine = `"${executable}" ${argsByCommand[command].join(' ')}`;
+      runArgs = ['/d', '/c', cmdLine];
     }
   }
   const result = spawnSync(runCommand, runArgs, { encoding: 'utf8', timeout: 5000 });
