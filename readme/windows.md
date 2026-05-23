@@ -46,7 +46,7 @@ node scripts/compat/windows-audit.mjs --json
 The audit reports:
 
 - OS/platform and likely environment (`linux`, `wsl`, `windows-git-bash`, `windows-native`, etc.)
-- availability of `bash`, `node`, `npm`, optional `python3`/`python`, `git`, and `pi`
+- availability of `bash`, `node`, `npm`, `git`, and `pi`
 - PIDEX checkout path shape
 - dashboard prerequisite signals
 - known unsupported or risky Windows entrypoints

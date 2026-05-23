@@ -98,26 +98,23 @@ normalize_path() {
 }
 
 normalize_content() {
-  python3 - "$1" "$2" <<'PY'
-from pathlib import Path
-import sys
-src, dst = sys.argv[1], sys.argv[2]
-text = Path(src).read_text(encoding='utf-8')
-replacements = [
-    ('running-pi', 'pidex'),
-    ('runningpi', 'pidex'),
-    ('rp-', 'pidex-'),
-    ('rp_agent', 'pidex_agent'),
-    ('running-pi-instructions', 'pidex-instructions'),
-    ('/runningpi/', '/pidex/'),
-    ('<running-pi-root>', '<pidex-root>'),
-    ('~/runningpi', '<pidex-root>'),
-    ('https://running-pi.dev', 'https://pidex.dev'),
-]
-for old, new in replacements:
-    text = text.replace(old, new)
-Path(dst).write_text(text, encoding='utf-8')
-PY
+  node -e '
+const fs = require("fs");
+const [src, dst] = process.argv.slice(1);
+let text = fs.readFileSync(src, "utf8");
+for (const [oldValue, newValue] of [
+  ["running-pi", "pidex"],
+  ["runningpi", "pidex"],
+  ["rp-", "pidex-"],
+  ["rp_agent", "pidex_agent"],
+  ["running-pi-instructions", "pidex-instructions"],
+  ["/runningpi/", "/pidex/"],
+  ["<running-pi-root>", "<pidex-root>"],
+  ["~/runningpi", "<pidex-root>"],
+  ["https://running-pi.dev", "https://pidex.dev"],
+]) text = text.split(oldValue).join(newValue);
+fs.writeFileSync(dst, text, "utf8");
+' "$1" "$2"
 }
 
 copy_text_file() {

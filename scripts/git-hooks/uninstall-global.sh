@@ -34,20 +34,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v git >/dev/null 2>&1 || fail "missing prerequisite: git"
-command -v python3 >/dev/null 2>&1 || fail "missing prerequisite: python3"
+command -v node >/dev/null 2>&1 || fail "missing prerequisite: node"
 [ -f "$STATE_FILE" ] || fail "state file missing: $STATE_FILE"
 
-STATE_INFO=$(python3 - "$STATE_FILE" <<'PY'
-import json, sys
-try:
-    d=json.load(open(sys.argv[1], encoding='utf-8'))
-except Exception as e:
-    raise SystemExit(f'failed to read state: {e}')
-print('1' if d.get('previous_global_hooks_path_existed') else '0')
-print(d.get('previous_global_hooks_path') or '')
-print(d.get('pidex_hooks_path') or '')
-PY
-)
+STATE_INFO=$(node -e 'const fs = require("fs"); try { const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(d.previous_global_hooks_path_existed ? "1" : "0"); console.log(d.previous_global_hooks_path || ""); console.log(d.pidex_hooks_path || ""); } catch (e) { console.error(`failed to read state: ${e.message}`); process.exit(1); }' "$STATE_FILE")
 PREVIOUS_EXISTS=$(printf '%s\n' "$STATE_INFO" | sed -n '1p')
 PREVIOUS_PATH=$(printf '%s\n' "$STATE_INFO" | sed -n '2p')
 STATE_HOOKS_PATH=$(printf '%s\n' "$STATE_INFO" | sed -n '3p')
@@ -80,19 +70,6 @@ else
   say "unset global core.hooksPath"
 fi
 
-python3 - "$STATE_FILE" <<'PY'
-import json, os, sys, tempfile
-from datetime import datetime, timezone
-state_file=sys.argv[1]
-with open(state_file, encoding='utf-8') as f:
-    d=json.load(f)
-d['installed']=False
-d['uninstalled_at']=datetime.now(timezone.utc).isoformat().replace('+00:00','Z')
-fd,tmp=tempfile.mkstemp(prefix='.global-state.', dir=os.path.dirname(state_file), text=True)
-with os.fdopen(fd,'w',encoding='utf-8') as f:
-    json.dump(d,f,indent=2)
-    f.write('\n')
-os.replace(tmp,state_file)
-PY
+node -e 'const fs = require("fs"), path = require("path"); const state_file = process.argv[1]; const d = JSON.parse(fs.readFileSync(state_file, "utf8")); d.installed = false; d.uninstalled_at = new Date().toISOString(); const tmp = path.join(path.dirname(state_file), `.global-state.${process.pid}.${Date.now()}.tmp`); fs.writeFileSync(tmp, JSON.stringify(d, null, 2) + "\n"); fs.renameSync(tmp, state_file);' "$STATE_FILE"
 
 say "PIDEX global Git hook uninstalled"

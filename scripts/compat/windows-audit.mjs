@@ -8,7 +8,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const COMMANDS = ['bash', 'node', 'npm', 'python3', 'python', 'git', 'pi'];
+const COMMANDS = ['bash', 'node', 'npm', 'git', 'pi'];
 const RISKY_ENTRYPOINTS = [
   ['install.sh', 'linux-owned', 'Prefer a future install.windows.ps1; do not add inline Windows branches to install.sh.'],
   ['uninstall.sh', 'linux-owned', 'Prefer a future uninstall.windows.ps1.'],
@@ -64,8 +64,6 @@ function commandVersion(command, executable) {
     bash: ['--version'],
     node: ['--version'],
     npm: ['--version'],
-    python3: ['--version'],
-    python: ['--version'],
     git: ['--version'],
     pi: ['--version'],
   };
@@ -182,9 +180,6 @@ function findings(environment, commands, paths) {
 
   for (const command of ['bash', 'node', 'npm', 'git', 'pi']) {
     if (!commands[command].available) items.push({ level: 'warning', message: `Required or expected command not found on PATH/standard location: ${command}.` });
-  }
-  if (!commands.python3.available && !commands.python.available) {
-    items.push({ level: 'info', message: 'Python was not found. Basic Windows bootstrap no longer requires Python, but some advanced PIDEX features still do.' });
   }
   const nodeVersion = parseNodeMajorMinor(commands.node.version);
   if (nodeVersion && (nodeVersion[0] < 22 || (nodeVersion[0] === 22 && nodeVersion[1] < 12))) {

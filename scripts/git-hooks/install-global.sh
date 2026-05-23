@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 command -v git >/dev/null 2>&1 || fail "missing prerequisite: git"
-command -v python3 >/dev/null 2>&1 || fail "missing prerequisite: python3"
+command -v node >/dev/null 2>&1 || fail "missing prerequisite: node"
 
 [ -x "$HOOKS_PATH/pre-commit" ] || fail "missing or non-executable hook: $HOOKS_PATH/pre-commit"
 [ -x "$HOOKS_PATH/commit-msg" ] || fail "missing or non-executable hook: $HOOKS_PATH/commit-msg"
@@ -49,19 +49,7 @@ STATE_INSTALLED=0
 STATE_PREVIOUS=""
 STATE_PREVIOUS_EXISTS=false
 if [ -f "$STATE_FILE" ]; then
-  STATE_INFO=$(python3 - "$STATE_FILE" <<'PY' || true
-import json, sys
-try:
-    d=json.load(open(sys.argv[1], encoding='utf-8'))
-    print('1' if d.get('installed') else '0')
-    print(d.get('previous_global_hooks_path') or '')
-    print('true' if d.get('previous_global_hooks_path_existed') else 'false')
-except Exception:
-    print('0')
-    print('')
-    print('false')
-PY
-)
+  STATE_INFO=$(node -e 'const fs = require("fs"); try { const d = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(d.installed ? "1" : "0"); console.log(d.previous_global_hooks_path || ""); console.log(d.previous_global_hooks_path_existed ? "true" : "false"); } catch { console.log("0\n\nfalse"); }' "$STATE_FILE" || true)
   STATE_INSTALLED=$(printf '%s\n' "$STATE_INFO" | sed -n '1p')
   STATE_PREVIOUS=$(printf '%s\n' "$STATE_INFO" | sed -n '2p')
   STATE_PREVIOUS_EXISTS=$(printf '%s\n' "$STATE_INFO" | sed -n '3p')
@@ -75,28 +63,7 @@ if [ "$CURRENT" = "$HOOKS_PATH" ]; then
       exit 0
     fi
     mkdir -p "$STATE_DIR"
-    python3 - "$STATE_FILE" "$PIDEX_ROOT" "$HOOKS_PATH" <<'PY'
-import json, os, sys, tempfile
-from datetime import datetime, timezone
-state_file, root, hooks = sys.argv[1:4]
-d={
-  'schema_version': 1,
-  'installed': True,
-  'installed_at': datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
-  'pidex_root': root,
-  'pidex_hooks_path': hooks,
-  'previous_global_hooks_path': None,
-  'previous_global_hooks_path_existed': False,
-  'mode': 'global',
-  'version': 1,
-}
-os.makedirs(os.path.dirname(state_file), exist_ok=True)
-fd,tmp=tempfile.mkstemp(prefix='.global-state.', dir=os.path.dirname(state_file), text=True)
-with os.fdopen(fd,'w',encoding='utf-8') as f:
-    json.dump(d,f,indent=2)
-    f.write('\n')
-os.replace(tmp,state_file)
-PY
+    node -e 'const fs = require("fs"), path = require("path"); const [state_file, root, hooks] = process.argv.slice(1); const d = { schema_version: 1, installed: true, installed_at: new Date().toISOString(), pidex_root: root, pidex_hooks_path: hooks, previous_global_hooks_path: null, previous_global_hooks_path_existed: false, mode: "global", version: 1 }; fs.mkdirSync(path.dirname(state_file), { recursive: true }); const tmp = path.join(path.dirname(state_file), `.global-state.${process.pid}.${Date.now()}.tmp`); fs.writeFileSync(tmp, JSON.stringify(d, null, 2) + "\n"); fs.renameSync(tmp, state_file);' "$STATE_FILE" "$PIDEX_ROOT" "$HOOKS_PATH"
     say "created missing state file"
   fi
   exit 0
@@ -140,29 +107,7 @@ elif [ -n "$PREVIOUS_PATH" ]; then
   PREVIOUS_EXISTS=true
 fi
 
-python3 - "$STATE_FILE" "$PIDEX_ROOT" "$HOOKS_PATH" "$PREVIOUS_PATH" "$PREVIOUS_EXISTS" <<'PY'
-import json, os, sys, tempfile
-from datetime import datetime, timezone
-state_file, root, hooks, previous, previous_exists = sys.argv[1:6]
-prev_exists = previous_exists == 'true'
-d={
-  'schema_version': 1,
-  'installed': True,
-  'installed_at': datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),
-  'pidex_root': root,
-  'pidex_hooks_path': hooks,
-  'previous_global_hooks_path': previous if prev_exists else None,
-  'previous_global_hooks_path_existed': prev_exists,
-  'mode': 'global',
-  'version': 1,
-}
-os.makedirs(os.path.dirname(state_file), exist_ok=True)
-fd,tmp=tempfile.mkstemp(prefix='.global-state.', dir=os.path.dirname(state_file), text=True)
-with os.fdopen(fd,'w',encoding='utf-8') as f:
-    json.dump(d,f,indent=2)
-    f.write('\n')
-os.replace(tmp,state_file)
-PY
+node -e 'const fs = require("fs"), path = require("path"); const [state_file, root, hooks, previous, previous_exists] = process.argv.slice(1); const prev = previous_exists === "true"; const d = { schema_version: 1, installed: true, installed_at: new Date().toISOString(), pidex_root: root, pidex_hooks_path: hooks, previous_global_hooks_path: prev ? previous : null, previous_global_hooks_path_existed: prev, mode: "global", version: 1 }; fs.mkdirSync(path.dirname(state_file), { recursive: true }); const tmp = path.join(path.dirname(state_file), `.global-state.${process.pid}.${Date.now()}.tmp`); fs.writeFileSync(tmp, JSON.stringify(d, null, 2) + "\n"); fs.renameSync(tmp, state_file);' "$STATE_FILE" "$PIDEX_ROOT" "$HOOKS_PATH" "$PREVIOUS_PATH" "$PREVIOUS_EXISTS"
 
 git config --global core.hooksPath "$HOOKS_PATH"
 say "PIDEX global Git hook installed: $HOOKS_PATH"

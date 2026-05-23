@@ -20,7 +20,6 @@ fi
 
 if command -v node >/dev/null 2>&1; then ok "node found: $(node --version)"; else fail "node not found"; fi
 if command -v npm >/dev/null 2>&1; then ok "npm found: $(npm --version)"; else fail "npm not found"; fi
-if command -v python3 >/dev/null 2>&1; then ok "python3 found: $(python3 --version 2>&1)"; else warn "python3 not found (optional for legacy/reference helpers)"; fi
 if command -v pi >/dev/null 2>&1; then ok "pi found: $(command -v pi)"; else fail "pi command not found"; fi
 
 if [ -f "$ROOT/config/agents.json" ]; then ok "config/agents.json present"; else fail "config/agents.json missing"; fi
