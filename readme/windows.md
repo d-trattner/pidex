@@ -85,9 +85,16 @@ notepad .\install.windows.ps1
 powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 ```
 
-The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Pi/Git Bash, requires Node >=22.12.0, runs the Node read-only audit, installs dashboard dependencies when missing with `npm ci` when a dashboard lockfile is present, and runs `pi install`. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
+The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs dashboard dependencies when missing with `npm ci` when a dashboard lockfile is present, and runs `pi install`. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
 
-Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, and `npm --prefix dashboard run typecheck` plus `npm --prefix dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
+For a separate PowerShell window/session, expose Git Bash before running Bash-backed npm checks:
+
+```powershell
+$env:Path = "C:\Program Files\Git\bin;$env:Path"
+npm run public:check
+```
+
+Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `npm run public:check` passed via PowerShell after adding Git Bash to PATH, and `npm --prefix dashboard run typecheck` plus `npm --prefix dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
 
 ## Recommended Windows approach today
 

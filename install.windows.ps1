@@ -124,6 +124,15 @@ if ($Python) {
 Write-Host "pi:     $Pi"
 Write-Host "bash:   $GitBash"
 
+$GitBashDir = Split-Path -Parent $GitBash
+$PathParts = @($env:Path -split ';' | Where-Object { $_ })
+$GitBashOnPath = $PathParts | Where-Object { $_ -ieq $GitBashDir } | Select-Object -First 1
+if (-not $GitBashOnPath) {
+  $env:Path = "$GitBashDir;$env:Path"
+  Write-Step "Added Git Bash to PATH for this installer session"
+  Write-Host "bash PATH entry: $GitBashDir"
+}
+
 if (-not (Test-Path -LiteralPath $PidexRoot)) {
   Write-Step "Cloning PIDEX into $PidexRoot"
   if ($DryRun) {
@@ -212,4 +221,6 @@ Write-Host "Global Git hooks were intentionally not installed on Windows."
 Write-Host "Next steps:"
 Write-Host "  1. Open Pi and run: /reload"
 Write-Host "  2. Try: /pidex <your task>"
-Write-Host "  3. For dashboard checks: npm --prefix dashboard run typecheck; npm --prefix dashboard run build"
+Write-Host "  3. For this PowerShell session, expose Git Bash before npm checks:"
+Write-Host "     `$env:Path = `"$GitBashDir;`$env:Path`""
+Write-Host "  4. Run checks: npm run public:check; npm --prefix dashboard run typecheck; npm --prefix dashboard run build"
