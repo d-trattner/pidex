@@ -7,9 +7,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 EXIT_CODE=0
 
-if ! command -v rg >/dev/null 2>&1; then
-  echo "ERROR: ripgrep (rg) required for this guard." >&2
-  exit 2
+HAS_RG=0
+if command -v rg >/dev/null 2>&1; then
+  HAS_RG=1
 fi
 
 TARGET_PATHS=(
@@ -121,9 +121,15 @@ collect_targets() {
   local files=()
   for path in "${TARGET_PATHS[@]}"; do
     if [[ -d "$path" ]]; then
-      while IFS= read -r f; do
-        files+=("$f")
-      done < <(rg --files "$path")
+      if [[ "$HAS_RG" = "1" ]]; then
+        while IFS= read -r f; do
+          files+=("$f")
+        done < <(rg --files "$path")
+      else
+        while IFS= read -r f; do
+          files+=("$f")
+        done < <(find "$path" -type f 2>/dev/null)
+      fi
     elif [[ -f "$path" ]]; then
       files+=("$path")
     fi
@@ -135,6 +141,16 @@ collect_targets() {
   done
 
   printf '%s\n' "${files[@]}"
+}
+
+search_file() {
+  local pattern="$1"
+  local file="$2"
+  if [[ "$HAS_RG" = "1" ]]; then
+    rg -n --pcre2 -e "$pattern" "$file" 2>/dev/null || true
+  else
+    grep -n -E -e "$pattern" "$file" 2>/dev/null || true
+  fi
 }
 
 findings=0
@@ -163,7 +179,7 @@ while IFS= read -r file; do
         findings=$((findings + 1))
         EXIT_CODE=1
       fi
-    done < <(rg -n --pcre2 -e "$pattern" "$file" 2>/dev/null || true)
+    done < <(search_file "$pattern" "$file")
   done
 
 done < <(collect_targets)
