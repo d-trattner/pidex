@@ -82,6 +82,30 @@ type ModelQualityPayload = {
   models: ModelQualityRow[];
 };
 
+type QualityReadModelSummary = {
+  project: string;
+  project_path: string;
+  generated_at: string | null;
+  confidence: string | null;
+  plans: string[];
+  trace_gaps: number;
+  critical_missing_operators: number;
+  trace: {
+    by_type: Record<string, number>;
+    by_operator: Record<string, number>;
+    by_severity: Record<string, number>;
+  };
+  regression_detectors: Array<{ dimension?: string; severity?: string; confidence?: string; count?: number; reason?: string }>;
+  comparability: { label?: string; sample_size?: number; reasons?: string[]; topologies?: string[] } | null;
+  latest_report: { json: string; markdown: string | null } | null;
+  review_state: { reviewed_plans_count: number; last_review_at: string | null };
+};
+
+type QualityLatestPayload = {
+  ok: boolean;
+  latest: QualityReadModelSummary | null;
+};
+
 const EMPTY_QUALITY: QualityPayload = {
   completionByDay: [],
   runtimeByAgent: [],
@@ -104,10 +128,12 @@ function QualityPage() {
   const project = readProjectFromSearch(location.search);
   const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project], withProjectParam('/api/charts/quality', project));
   const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project], withProjectParam('/api/charts/model-quality', project));
+  const qualityLatestQuery = useDashboardQuery<QualityLatestPayload>(['quality-latest-read-model', project], withProjectParam('/api/quality/latest', project));
   const quality = qualityQuery.data ?? EMPTY_QUALITY;
   const modelQuality = modelQuery.data ?? { models: [] };
-  const loading = qualityQuery.isLoading || modelQuery.isLoading;
-  const error = qualityQuery.isError || modelQuery.isError ? 'Quality data could not be loaded.' : '';
+  const latestQuality = qualityLatestQuery.data?.latest ?? null;
+  const loading = qualityQuery.isLoading || modelQuery.isLoading || qualityLatestQuery.isLoading;
+  const error = qualityQuery.isError || modelQuery.isError || qualityLatestQuery.isError ? 'Quality data could not be loaded.' : '';
 
   const safeNumber = (value: unknown): number => {
     const numeric = Number(value);
@@ -177,6 +203,71 @@ function QualityPage() {
       {loading ? <LoadingIndicator label="Loading quality metrics…" /> : null}
       {loading ? null : (
         <>
+
+      <article className="glass-card glass quality-card quality-card-full">
+        <h3>Self-improvement quality overview</h3>
+        <p className="muted">Latest PDQ read model. This does not recompute reports on page load.</p>
+        {latestQuality ? (
+          <>
+            <div className="grid quality-metrics-grid" style={{ gap: 12 }}>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Confidence</p>
+                <p className="metric-value">{latestQuality.confidence || '—'}</p>
+              </div>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Plans reviewed</p>
+                <p className="metric-value">{latestQuality.plans.length}</p>
+              </div>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Trace gaps</p>
+                <p className="metric-value">{latestQuality.trace_gaps}</p>
+              </div>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Critical missing</p>
+                <p className="metric-value">{latestQuality.critical_missing_operators}</p>
+              </div>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Regressions</p>
+                <p className="metric-value">{latestQuality.regression_detectors.length}</p>
+              </div>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Comparability</p>
+                <p className="metric-value">{latestQuality.comparability?.label || '—'}</p>
+              </div>
+            </div>
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginTop: 12 }}>
+              <div>
+                <h4>Trace gap types</h4>
+                <p className="muted">{Object.entries(latestQuality.trace.by_type).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'No trace gaps'}</p>
+              </div>
+              <div>
+                <h4>Operators</h4>
+                <p className="muted">{Object.entries(latestQuality.trace.by_operator).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'No operator gaps'}</p>
+              </div>
+              <div>
+                <h4>Latest report</h4>
+                <p className="muted">{latestQuality.generated_at || '—'}</p>
+                <p className="muted" style={{ wordBreak: 'break-all' }}>{latestQuality.latest_report?.markdown || latestQuality.latest_report?.json || 'No report path'}</p>
+              </div>
+            </div>
+            {latestQuality.regression_detectors.length ? (
+              <div style={{ marginTop: 12 }}>
+                <h4>Regression detectors</h4>
+                <ul>
+                  {latestQuality.regression_detectors.slice(0, 5).map((item, idx) => (
+                    <li key={`${item.dimension || 'regression'}-${idx}`}>
+                      <span>{item.dimension || 'unknown'} · {item.severity || 'unknown'} · {item.confidence || 'unknown'}</span>
+                      {item.reason ? <span className="muted"> — {item.reason}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="muted">No PDQ report has been generated yet.</p>
+        )}
+      </article>
 
       <article className="glass-card glass quality-card quality-card-full">
         <h3>Completion rate</h3>

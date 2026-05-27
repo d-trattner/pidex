@@ -10,6 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const script = path.join(root, 'scripts', 'quality', 'run-auto-pdq.mjs');
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-auto-pdq-project-'));
 const pipelineId = `auto-pdq-test-${process.pid}-${Date.now()}`;
+const cleanup = [];
 try {
   const cp = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--pipeline-id', pipelineId, '--terminal-event', 'pipeline_completed'], { cwd: root, encoding: 'utf8' });
   assert.equal(cp.status, 0, cp.stderr || cp.stdout);
@@ -29,7 +30,9 @@ try {
   assert.deepEqual(row.plans_reviewed, ['plan-007']);
   assert.equal(row.physical_action.json_report, reportOut.json);
   assert.equal(row.physical_action.markdown_report, reportOut.markdown);
+  cleanup.push(reportOut.json, reportOut.markdown, opOut.op_quality_review, path.dirname(opOut.op_quality_review));
 } finally {
+  for (const target of cleanup) rmSync(target, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
 }
 console.log('run-auto-pdq.mjs tests passed');

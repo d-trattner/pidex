@@ -11,6 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const script = path.join(root, 'scripts', 'quality', 'preflight.mjs');
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-preflight-project-'));
 const pipelineId = `preflight-test-${process.pid}-${Date.now()}`;
+const cleanup = [];
 try {
   const cp = spawnSync(process.execPath, [script, 'record', '--project', project, '--plan', '8', '--pipeline-id', pipelineId, '--task-class', 'feature', '--grill-skill', 'grill-with-docs', '--epic-ready', 'true', '--existing-project', 'true', '--context-read', 'pidex/context/CONTEXT.md,wiki/index.md', '--context-touched', 'pidex/context/CONTEXT.md', '--acceptance-count', '4', '--out-of-scope-count', '2'], { cwd: root, encoding: 'utf8' });
   assert.equal(cp.status, 0, cp.stderr || cp.stdout);
@@ -19,6 +20,7 @@ try {
   assert.equal(out.plan_key, 'plan-008');
   assert.equal(out.pipeline_id, pipelineId);
   assert.ok(existsSync(out.path));
+  cleanup.push(out.path, path.dirname(out.path));
   const row = JSON.parse(readFileSync(out.path, 'utf8').trim());
   assert.equal(row.operator_type, 'OpPreflight');
   assert.equal(row.source, 'preflight-finalized');
@@ -39,6 +41,7 @@ try {
   assert.equal(trace.observed_required, 1);
   assert.equal(trace.findings.length, 0);
 } finally {
+  for (const target of cleanup) rmSync(target, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
 }
 console.log('preflight.mjs tests passed');
