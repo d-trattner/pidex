@@ -94,7 +94,23 @@ type QualityReadModelSummary = {
     by_type: Record<string, number>;
     by_operator: Record<string, number>;
     by_severity: Record<string, number>;
+    findings: Array<{ type: string; operator_type: string; plan_key: string; severity: string; confidence: string; reason: string; evidence: string | null }>;
   };
+  rule_impact: Array<{
+    rule_path: string;
+    action: string;
+    owning_agent: string;
+    expected_impact_dimension: string;
+    expected_direction: string;
+    before_count: number;
+    after_count: number;
+    label: string;
+    confidence: string;
+    before_rejections: number;
+    after_rejections: number;
+    before_trace_proxy_gates: number;
+    after_trace_proxy_gates: number;
+  }>;
   regression_detectors: Array<{ dimension?: string; severity?: string; confidence?: string; count?: number; reason?: string }>;
   comparability: { label?: string; sample_size?: number; reasons?: string[]; topologies?: string[] } | null;
   latest_report: { json: string; markdown: string | null } | null;
@@ -263,6 +279,75 @@ function QualityPage() {
                 </ul>
               </div>
             ) : null}
+
+            <div style={{ marginTop: 16 }}>
+              <h4>Rule impact</h4>
+              <p className="muted">Before/after windows are directional proxies only; labels avoid causal claims.</p>
+              {latestQuality.rule_impact.length ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Rule</th>
+                        <th>Action</th>
+                        <th>Dimension</th>
+                        <th>Before / after</th>
+                        <th>Result</th>
+                        <th>Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {latestQuality.rule_impact.slice(0, 8).map((item, idx) => (
+                        <tr key={`${item.rule_path}-${idx}`}>
+                          <td style={{ maxWidth: 360, wordBreak: 'break-all' }}>{item.rule_path}</td>
+                          <td>{item.action}</td>
+                          <td>{item.expected_impact_dimension}</td>
+                          <td>{item.before_count} / {item.after_count}</td>
+                          <td>{item.label}</td>
+                          <td>{item.confidence}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">No rule impact windows in the latest report.</p>
+              )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <h4>Trace gap findings</h4>
+              {latestQuality.trace.findings.length ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Plan</th>
+                        <th>Operator</th>
+                        <th>Type</th>
+                        <th>Severity</th>
+                        <th>Confidence</th>
+                        <th>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {latestQuality.trace.findings.slice(0, 12).map((item, idx) => (
+                        <tr key={`${item.plan_key}-${item.operator_type}-${idx}`}>
+                          <td>{item.plan_key}</td>
+                          <td>{item.operator_type}</td>
+                          <td>{item.type}</td>
+                          <td>{item.severity}</td>
+                          <td>{item.confidence}</td>
+                          <td style={{ minWidth: 320 }}>{item.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">No trace gap findings in the latest report.</p>
+              )}
+            </div>
           </>
         ) : (
           <p className="muted">No PDQ report has been generated yet.</p>

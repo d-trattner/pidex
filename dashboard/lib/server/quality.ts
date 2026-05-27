@@ -6,10 +6,37 @@ const PIDEX_ROOT = path.resolve(process.cwd(), '..');
 
 type AnyRecord = Record<string, any>;
 
+export type TraceFinding = {
+  type: string;
+  operator_type: string;
+  plan_key: string;
+  severity: string;
+  confidence: string;
+  reason: string;
+  evidence: string | null;
+};
+
+export type RuleImpactSummary = {
+  rule_path: string;
+  action: string;
+  owning_agent: string;
+  expected_impact_dimension: string;
+  expected_direction: string;
+  before_count: number;
+  after_count: number;
+  label: string;
+  confidence: string;
+  before_rejections: number;
+  after_rejections: number;
+  before_trace_proxy_gates: number;
+  after_trace_proxy_gates: number;
+};
+
 export type TraceBreakdown = {
   by_type: Record<string, number>;
   by_operator: Record<string, number>;
   by_severity: Record<string, number>;
+  findings: TraceFinding[];
 };
 
 export type QualitySummary = {
@@ -21,6 +48,7 @@ export type QualitySummary = {
   trace_gaps: number;
   critical_missing_operators: number;
   trace: TraceBreakdown;
+  rule_impact: RuleImpactSummary[];
   regression_detectors: AnyRecord[];
   comparability: AnyRecord | null;
   latest_report: { json: string; markdown: string | null } | null;
@@ -38,6 +66,50 @@ function countBy(rows: AnyRecord[], key: string): Record<string, number> {
     out[value] = (out[value] || 0) + 1;
   }
   return out;
+}
+
+function num(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function labelConfidence(label: string, beforeCount: number, afterCount: number): string {
+  if (label === 'insufficient-data' || beforeCount < 3 || afterCount < 3) return 'low';
+  if (label === 'not-comparable') return 'low';
+  return beforeCount >= 6 && afterCount >= 6 ? 'medium' : 'low';
+}
+
+function normalizeFinding(row: AnyRecord): TraceFinding {
+  return {
+    type: String(row?.type || 'unknown'),
+    operator_type: String(row?.operator_type || 'unknown'),
+    plan_key: String(row?.plan_key || 'unknown-plan'),
+    severity: String(row?.severity || 'unknown'),
+    confidence: String(row?.confidence || 'unknown'),
+    reason: String(row?.reason || ''),
+    evidence: row?.evidence ? String(row.evidence) : null,
+  };
+}
+
+function normalizeRuleImpact(row: AnyRecord): RuleImpactSummary {
+  const beforeCount = num(row?.before_count);
+  const afterCount = num(row?.after_count);
+  const label = String(row?.label || 'insufficient-data');
+  return {
+    rule_path: String(row?.rule_path || 'unknown'),
+    action: String(row?.action || 'unknown'),
+    owning_agent: String(row?.owning_agent || 'unknown'),
+    expected_impact_dimension: String(row?.expected_impact_dimension || 'unknown'),
+    expected_direction: String(row?.expected_direction || 'unknown'),
+    before_count: beforeCount,
+    after_count: afterCount,
+    label,
+    confidence: String(row?.confidence || labelConfidence(label, beforeCount, afterCount)),
+    before_rejections: num(row?.before_rejections),
+    after_rejections: num(row?.after_rejections),
+    before_trace_proxy_gates: num(row?.before_trace_proxy_gates),
+    after_trace_proxy_gates: num(row?.after_trace_proxy_gates),
+  };
 }
 
 async function walkJson(dir: string): Promise<string[]> {
@@ -100,7 +172,9 @@ export function summarizeQualityReport(report: AnyRecord, reviewState: QualitySu
       by_type: countBy(findings, 'type'),
       by_operator: countBy(findings, 'operator_type'),
       by_severity: countBy(findings, 'severity'),
+      findings: findings.slice(0, 50).map(normalizeFinding),
     },
+    rule_impact: Array.isArray(summary.rule_action_windows) ? summary.rule_action_windows.map(normalizeRuleImpact) : [],
     regression_detectors: Array.isArray(summary.regression_detectors) ? summary.regression_detectors : [],
     comparability: summary.comparability || null,
     latest_report: report._path ? { json: report._path, markdown: markdownPathFor(report._path, report) } : null,

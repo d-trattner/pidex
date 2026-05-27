@@ -15,11 +15,14 @@ const summary = summarizeQualityReport({
       gap_count: 3,
       critical_missing_operators: 1,
       findings: [
-        { type: 'instrumentation_missing', operator_type: 'OpQualityReview', severity: 'low' },
+        { type: 'instrumentation_missing', operator_type: 'OpQualityReview', plan_key: 'plan-001', confidence: 'probably-unlogged', severity: 'low', reason: 'missing review' },
         { type: 'operator_unobserved', operator_type: 'OpPreflight', severity: 'info' },
         { type: 'missing_operator', operator_type: 'OpGate', severity: 'high' },
       ],
     },
+    rule_action_windows: [
+      { rule_path: 'rules/example.md', action: 'add', owning_agent: 'pidex-critic', expected_impact_dimension: 'review-quality', expected_direction: 'improve', before_count: 7, after_count: 8, label: 'directionally-improving', before_rejections: 2, after_rejections: 1 },
+    ],
     regression_detectors: [{ dimension: 'operator-trace', severity: 'high' }],
     comparability: { label: 'insufficient-data', sample_size: 1 },
   },
@@ -30,6 +33,9 @@ assert.equal(summary.trace_gaps, 3);
 assert.equal(summary.critical_missing_operators, 1);
 assert.deepEqual(summary.trace.by_type, { instrumentation_missing: 1, operator_unobserved: 1, missing_operator: 1 });
 assert.deepEqual(summary.trace.by_operator, { OpQualityReview: 1, OpPreflight: 1, OpGate: 1 });
+assert.equal(summary.trace.findings[0].plan_key, 'plan-001');
+assert.equal(summary.rule_impact[0].rule_path, 'rules/example.md');
+assert.equal(summary.rule_impact[0].confidence, 'medium');
 assert.equal(summary.comparability?.label, 'insufficient-data');
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-quality-readmodel-'));
