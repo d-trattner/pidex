@@ -1103,6 +1103,22 @@ cd "<absolute project path>" && bash <pidex-root>/scripts/pipeline/event.sh \
 
 `pipeline/event.sh` is analytics-only. It writes JSONL under `<pidex-root>/state/pipeline-events/`; it does not drive a backend scheduler. Operators never pass SQLite `project_id`; ingest derives that from `project_path` (default `$PWD`).
 
+Before invoking the opening agent (`pidex-planner`, `pidex-architect`, `pidex-analyst`, or `pidex-wiki-hygienist`), emit the finalized project-scoped preflight operator event. This event is separate from the low-confidence `/pidex` kickoff skeleton and must use the resolved `<absolute project path>` and plan key:
+
+```bash
+node <pidex-root>/scripts/quality/orchestrator-events.mjs \
+  --project "<absolute project path>" \
+  --pipeline-id "<pipeline-id-from-pipeline_started>" \
+  --plan "<plan-key>" \
+  --operator-type OpPreflight \
+  --confidence medium \
+  --reason "Preflight/interview complete before opening agent" \
+  --logical-json '{"task_class":"<feature|bugfix|ui|cleanup|qa|release|unknown>","existing_project":true,"epic_statement_ready":true,"grill_skill_used":"<grill-with-docs|grill-me|none>"}' \
+  --physical-json '{"context_paths_read":[],"context_paths_touched":[],"acceptance_criteria_count":0,"out_of_scope_count":0}'
+```
+
+If exact counts are not known, use best-effort conservative values and include the context/brief artifact path in `context_paths_read` or `context_paths_touched`. Do not spawn the opening agent before this finalized `OpPreflight` is written.
+
 After the pipeline completes (step 9 / post-retro handoffs) or if the user aborts it, append closing history and lifecycle events:
 
 ```bash

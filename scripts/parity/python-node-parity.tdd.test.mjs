@@ -87,7 +87,7 @@ const reportFixture = {
   ],
   orchestrator_events: [
     { operator_type: 'OpQualityReview', plan_key: 'plan-004' },
-    { operator_type: 'OpPreflight', plan_key: 'unknown-plan', logical_decision: { task_class: 'bugfix' }, physical_action: { grill_decision_pending: true } },
+    { operator_type: 'OpPreflight', plan_key: 'plan-005', logical_decision: { task_class: 'bugfix' }, physical_action: { grill_decision_pending: true } },
     { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa', physical_action: { verdict: 'APPROVED', finding_counts: { critical: 1 } } },
     { operator_type: 'OpUserCorrection', plan_key: 'plan-004', severity: 'medium', logical_decision: { correction_type: 'routing', summary: 'wrong next agent' } },
     { operator_type: 'OpReleaseDecision', plan_key: 'plan-004', logical_decision: { release_action: 'push-tag' }, physical_action: { release_action: 'push-tag', outcome: 'completed' } },

@@ -35,7 +35,7 @@ assert.equal(summary.rule_actions_as_operators[0].operator_type, 'OpRuleAction')
 
 trace = build_expected_observed({ metrics: [], pipeline_events: [{ plan: '4', event_type: 'pipeline_completed', _source_path: 'x' }], orchestrator_events: [], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 1);
-assert.ok(trace.findings.some((f) => f.operator_type === 'OpQualityReview'));
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpQualityReview' && f.type === 'instrumentation_missing'));
 
 summary = summarize({ metrics: [], pipeline_events: [], orchestrator_events: [{ operator_type: 'OpUserCorrection', plan_key: 'plan-004', severity: 'medium', logical_decision: { correction_type: 'routing', summary: 'wrong next agent' } }, { operator_type: 'OpReleaseDecision', plan_key: 'plan-004', source_artifact: 'x', reason: 'approved', logical_decision: { release_action: 'push-tag' }, physical_action: { release_action: 'push-tag', outcome: 'completed' } }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa', physical_action: { estimated_token_class: 'large', budget_warning: true } }, { operator_type: 'OpPreflight', plan_key: 'unknown-plan', logical_decision: { task_class: 'bugfix' }, physical_action: { grill_decision_pending: true } }, { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa', physical_action: { verdict: 'APPROVED', finding_counts: { critical: 1 } } }], rule_actions: [], routing_artifacts: [], rules: [], untracked_rule_changes: [], pidex_root_rule_actions: [], pidex_root_untracked_rule_changes: [] }, ['plan-004']);
 assert.deepEqual(summary.user_corrections_by_type, { routing: 1 });
@@ -51,6 +51,12 @@ assert.deepEqual(summary.reviews_by_verdict, { APPROVED: 1 });
 assert.deepEqual(summary.review_finding_counts, { critical: 1 });
 
 trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T21:30:00Z', agent: 'pidex-qa', _source_path: 'x' }], pipeline_events: [{ plan: '4', event_type: 'pipeline_started', timestamp: '2026-05-20T21:30:00Z' }], orchestrator_events: [{ operator_type: 'OpPreflight', plan_key: 'unknown-plan' }, { operator_type: 'OpSpawn', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa' }], rule_actions: [] }, ['plan-004']);
+assert.equal(trace.expected_required, 4);
+assert.equal(trace.observed_required, 3);
+assert.equal(trace.critical_missing_operators, 0);
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpPreflight' && f.type === 'operator_unobserved'));
+
+trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T21:30:00Z', agent: 'pidex-qa', _source_path: 'x' }], pipeline_events: [{ plan: '4', event_type: 'pipeline_started', timestamp: '2026-05-20T21:30:00Z' }], orchestrator_events: [{ operator_type: 'OpPreflight', plan_key: 'plan-004' }, { operator_type: 'OpSpawn', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa' }], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 4);
 assert.equal(trace.observed_required, 4);
 assert.equal(trace.findings.length, 0);
