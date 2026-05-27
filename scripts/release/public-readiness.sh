@@ -65,12 +65,22 @@ if ! grep -q 'exactly `~/pidex`' README.md; then
 fi
 ok "README documents exact install path"
 
-if rg -n '@mariozechner/pi-' package.json extensions >/tmp/pidex-public-readiness-namespace.txt 2>/dev/null; then
-  cat /tmp/pidex-public-readiness-namespace.txt >&2
-  fail "old @mariozechner Pi SDK namespace remains"
-fi
-if ! rg -q '@earendil-works/pi-coding-agent' package.json extensions; then
-  fail "@earendil-works/pi-coding-agent dependency/import not found"
+if command -v rg >/dev/null 2>&1; then
+  if rg -n '@mariozechner/pi-' package.json extensions >/tmp/pidex-public-readiness-namespace.txt 2>/dev/null; then
+    cat /tmp/pidex-public-readiness-namespace.txt >&2
+    fail "old @mariozechner Pi SDK namespace remains"
+  fi
+  if ! rg -q '@earendil-works/pi-coding-agent' package.json extensions; then
+    fail "@earendil-works/pi-coding-agent dependency/import not found"
+  fi
+else
+  if grep -R -n '@mariozechner/pi-' package.json extensions >/tmp/pidex-public-readiness-namespace.txt 2>/dev/null; then
+    cat /tmp/pidex-public-readiness-namespace.txt >&2
+    fail "old @mariozechner Pi SDK namespace remains"
+  fi
+  if ! grep -R -q '@earendil-works/pi-coding-agent' package.json extensions; then
+    fail "@earendil-works/pi-coding-agent dependency/import not found"
+  fi
 fi
 ok "Pi SDK namespace uses @earendil-works"
 
