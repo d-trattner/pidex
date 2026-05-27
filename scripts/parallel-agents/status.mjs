@@ -14,7 +14,13 @@ const TOKEN_RE = /([A-Za-z0-9_-]{4})[A-Za-z0-9_.\/+=:-]{16,}([A-Za-z0-9_-]{4})/g
 
 function now() { return new Date().toISOString(); }
 function rootFromScript() { return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'); }
-function paths(root) { return [path.join(root, 'config', 'parallel-agents.json'), path.join(root, 'state', 'parallel-agents', 'status.json'), path.join(root, 'state', 'telegram', 'parallel-agent-warnings.json')]; }
+function configPath(root, forWrite = false) {
+  if (process.env.PIDEX_PARALLEL_AGENTS_CONFIG) return path.resolve(process.env.PIDEX_PARALLEL_AGENTS_CONFIG);
+  const local = path.join(root, 'config', 'parallel-agents.local.json');
+  if (forWrite || existsSync(local)) return local;
+  return path.join(root, 'config', 'parallel-agents.json');
+}
+function paths(root, forWrite = false) { return [configPath(root, forWrite), path.join(root, 'state', 'parallel-agents', 'status.json'), path.join(root, 'state', 'telegram', 'parallel-agent-warnings.json')]; }
 function loadJson(file, fallback) { try { return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : fallback; } catch { return fallback; } }
 function writeJson(file, data) { mkdirSync(path.dirname(file), { recursive: true }); const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`); writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, 'utf8'); renameSync(tmp, file); }
 function laneId(agent, provider, model) { return `${agent}:${provider}:${model}`; }
@@ -125,7 +131,7 @@ async function main() {
   else if (cmd === 'config') { const [cfg, errors] = loadConfig(root); const [configPath] = paths(root); out = { ok: !errors.length && existsSync(configPath), errors, config: cfg }; code = out.ok ? 0 : 1; }
   else if (cmd === 'models') out = modelOptions(root);
   else if (cmd === 'eligible') { out = eligibleLanes(root, argValue(args, '--agent', null), argValue(args, '--trigger', null)); code = out.ok ? 0 : 1; }
-  else if (cmd === 'save-config') { const rawArg = argValue(args, '--config-json'); const raw = String(rawArg || '').startsWith('@') ? readFileSync(String(rawArg).slice(1), 'utf8') : rawArg; const [cfg, errors] = normalizeConfig(JSON.parse(raw)); if (errors.length) { console.error(JSON.stringify({ ok: false, errors })); process.exit(2); } writeJson(paths(root)[0], cfg); out = { ok: true, config_path: paths(root)[0] }; }
+  else if (cmd === 'save-config') { const rawArg = argValue(args, '--config-json'); const raw = String(rawArg || '').startsWith('@') ? readFileSync(String(rawArg).slice(1), 'utf8') : rawArg; const [cfg, errors] = normalizeConfig(JSON.parse(raw)); if (errors.length) { console.error(JSON.stringify({ ok: false, errors })); process.exit(2); } writeJson(paths(root, true)[0], cfg); out = { ok: true, config_path: paths(root, true)[0] }; }
   else if (cmd === 'classify') out = { ok: true, type: classifyMsg(argValue(args, '--message', '')) };
   else if (cmd === 'warn') { const type = argValue(args, '--type') || classifyMsg(argValue(args, '--message', '')); if (!WARNING_TYPES.has(type)) { console.error(`invalid warning type: ${type}`); process.exit(2); } updateLane(root, argValue(args, '--lane'), type, argValue(args, '--message', ''), type, args.includes('--no-telegram')); out = { ok: true, state_path: paths(root)[1] }; }
   else if (cmd === 'success') { updateLane(root, argValue(args, '--lane'), 'success', argValue(args, '--message', 'success')); out = { ok: true }; }

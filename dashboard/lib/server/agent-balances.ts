@@ -67,8 +67,24 @@ export interface AgentBalancesPayload {
 }
 
 const ROOT = path.resolve(process.cwd(), '..');
-const CONFIG_PATH = path.resolve(ROOT, 'config', 'balance.json');
+const DEFAULT_CONFIG_PATH = path.resolve(ROOT, 'config', 'balance.json');
+const LOCAL_CONFIG_PATH = path.resolve(ROOT, 'config', 'balance.local.json');
 const METRICS_ROOT = path.resolve(ROOT, 'state', 'metrics');
+
+async function readable(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function balanceConfigPath(forWrite = false): Promise<string> {
+  if (process.env.PIDEX_BALANCE_CONFIG) return path.resolve(process.env.PIDEX_BALANCE_CONFIG);
+  if (forWrite || await readable(LOCAL_CONFIG_PATH)) return LOCAL_CONFIG_PATH;
+  return DEFAULT_CONFIG_PATH;
+}
 
 const PROVIDER_WEIGHTS: Record<string, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
   deepseek: { input: 1, output: 2, cacheRead: 0.2, cacheWrite: 1 },
@@ -119,7 +135,8 @@ export function sanitizeBalanceConfig(raw: any): BalanceConfig {
 
 export async function readBalanceConfig(): Promise<BalanceConfig> {
   try {
-    const raw = JSON.parse(await fs.readFile(CONFIG_PATH, 'utf-8'));
+    const file = await balanceConfigPath(false);
+    const raw = JSON.parse(await fs.readFile(file, 'utf-8'));
     return sanitizeBalanceConfig(raw);
   } catch {
     return { schema_version: 1, providers: [] };
@@ -127,10 +144,11 @@ export async function readBalanceConfig(): Promise<BalanceConfig> {
 }
 
 async function writeBalanceConfig(config: BalanceConfig): Promise<void> {
-  await fs.mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-  const tmp = path.resolve(path.dirname(CONFIG_PATH), `.balance.json.${process.pid}.${Date.now()}.tmp`);
+  const file = await balanceConfigPath(true);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = path.resolve(path.dirname(file), `.balance.local.json.${process.pid}.${Date.now()}.tmp`);
   await fs.writeFile(tmp, `${JSON.stringify(sanitizeBalanceConfig(config), null, 2)}\n`, 'utf-8');
-  await fs.rename(tmp, CONFIG_PATH);
+  await fs.rename(tmp, file);
 }
 
 async function listMetricFiles(dir: string): Promise<string[]> {
@@ -285,7 +303,7 @@ export async function getAgentBalances(): Promise<AgentBalancesPayload> {
   const now = Date.now();
   return {
     ok: true,
-    config_path: CONFIG_PATH,
+    config_path: await balanceConfigPath(false),
     generated_at: new Date(now).toISOString(),
     providers: config.providers.filter((provider) => provider.enabled !== false).map((provider) => summarizeProvider(provider, rows, now)),
     config,

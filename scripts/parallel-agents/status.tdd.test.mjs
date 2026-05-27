@@ -57,6 +57,14 @@ try {
   run(tmp, ['success', '--lane', 'pidex-critic:deepseek:deepseek-v4-flash']);
   const afterSuccess = JSON.parse(readFileSync(statePath, 'utf8'));
   assert.equal(afterSuccess.lanes['pidex-critic:deepseek:deepseek-v4-flash'].warning_active, false);
+
+  writeFileSync(path.join(tmp, 'config', 'parallel-agents.local.json'), JSON.stringify({ enabled: false, agents: {} }), 'utf8');
+  const localStatus = run(tmp, ['show']);
+  assert.equal(localStatus.config_path, path.join(tmp, 'config', 'parallel-agents.local.json'));
+  assert.equal(localStatus.enabled, false);
+  const saveResult = run(tmp, ['save-config', '--config-json', JSON.stringify(config)]);
+  assert.equal(saveResult.config_path, path.join(tmp, 'config', 'parallel-agents.local.json'));
+  assert.equal(existsSync(path.join(tmp, 'config', 'parallel-agents.local.json')), true);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

@@ -7,6 +7,7 @@ Last updated: 2026-05-08 (POST-RELEASE-HYGIENE)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Local Operator Config Guard | [../shared/local-operator-config-guard.md](../shared/local-operator-config-guard.md) | PROC-LOCAL-CONFIG-1 | Release/public-readiness work must preserve ignored local operator config and validate tracked defaults separately |
 | Release-Lane Semantics Preflight Before G4 | [release-lane-semantics-preflight.md](release-lane-semantics-preflight.md) | PROC-NEW-SEMVER-2 | Before G4/tag/push, distinguish product epic labels from package semver and block ambiguous release-lane mismatches |
 | Post-Release Artifact Hygiene | [post-release-artifact-hygiene.md](post-release-artifact-hygiene.md) | POST-RELEASE-HYGIENE | After selective release staging leaves dirty docs/artifacts, classify every remaining path and either commit/delete hygiene safely or stop/ask for non-artifact scope |
 | Post-Push Release Coherence Checklist | [post-push-release-coherence-checklist.md](post-push-release-coherence-checklist.md) | 027-PI-1 | After push/tag success, require closure checklist for remote proof, roadmap/wiki coherence, and retro/PI artifact presence before release close |
