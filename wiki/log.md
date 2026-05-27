@@ -78,3 +78,29 @@ Chronological log of wiki changes. Agents append entries here when they create o
 - 2026-05-22: Added initiative 016 platform separation principle: keep Linux/direct-mode files canonical and add separate Windows entrypoints/wrappers/rules wherever possible.
 - 2026-05-22: Reconciled initiative 016 brief/plan: Milestone A docs/audit is explicitly not runtime support implementation, and Phase 6 now refines Milestone A docs using compatibility evidence.
 - 2026-05-22: Strengthened initiative 016 platform separation language: Windows support must default to separate Windows-owned files, and Windows-driven edits to Linux-owned runtime files require explicit exception review and regression proof.
+- 2026-05-22: Added initiative 016 Phase 0 Linux feature baseline to preserve current Linux/direct-mode behavior before Windows portability work.
+- 2026-05-22: Added initiative 016 Phase 1 Pi Windows baseline, separating Pi-inherited Git Bash/Bash support from PIDEX-owned scripts and wrappers.
+- 2026-05-22: Added initiative 016 Phase 2 entrypoint inventory, classifying public commands, scripts, dashboard paths, Pi resources, and Windows support recommendations.
+- 2026-05-22: Added initiative 016 Phase 3 static portability audit with severity-rated Windows risks and mitigation order.
+- 2026-05-22: Added initiative 016 Phase 4 compatibility matrix, keeping Linux supported, WSL2 likely, Git Bash experimental, and native PowerShell audit-only/unsupported runtime.
+- 2026-05-22: Added initiative 016 Phase 5 Windows smoke test plan for later WSL2, Git Bash, and native PowerShell audit-only laptop validation.
+- 2026-05-22: Updated initiative 016 plan to include a future Windows-owned PowerShell one-line bootstrap (`install.windows.ps1`) that must not call or modify Linux `install.sh` and should skip global Git hooks by default.
+- 2026-05-22: Added additive `install.windows.ps1` prototype for native PowerShell bootstrap: clone/check `$HOME\\pidex`, validate prerequisites including Git Bash, run the read-only audit, install dashboard dependencies when missing, run `pi install`, and skip global Git hooks.
+- 2026-05-22: Recorded initial Windows 11 smoke evidence: PowerShell bootstrap install passed with Node 26, Pi `/reload` loaded PIDEX resources, `/pidex` pre-flight started without edits/spawns, and dashboard typecheck/build passed.
+- 2026-05-22: Added Python portability backlog and first Node audit implementation (`scripts/compat/windows-audit.mjs`); Windows bootstrap now uses Node audit and treats Python as optional for basic install.
+- 2026-05-22: Added Node audit regression test and wired it into `npm run check` so Windows bootstrap audit behavior is covered on Linux validation.
+- 2026-05-22: Added Node dashboard SQLite query helper and switched dashboard query execution away from Python, with focused regression coverage.
+- 2026-05-22: Added Node dashboard ingest helper and switched dashboard auto-ingest away from Python, with fixture coverage.
+- 2026-05-22: Added Node project-context init helper and switched PIDEX orchestrator guidance away from Python for context template initialization.
+- 2026-05-22: Added Node provider-limits probe and switched dashboard refresh/profile helpers away from Python for provider limit snapshots.
+- 2026-05-22: Added Node parallel-agent status helper and switched dashboard API/docs/orchestrator guidance away from Python for optional parallel-agent status.
+- 2026-05-22: Added Node parallel-agent run-lane scaffold and Node metrics record/summarize helpers; wrappers now avoid embedded Python.
+- 2026-05-22: Added Node pipeline event helper and changed pipeline event wrapper to avoid embedded Python for event recording.
+- 2026-05-22: Removed replaced Python compatibility/dashboard/provider/context/parallel-agent helpers after Node paths became canonical for those slices.
+- 2026-05-22: Added Node project metadata migration helper and removed the old Python migration helper.
+- 2026-05-22: Added Node quality/report, rule-action, orchestrator-event, auto-PDQ, and wiki-hygiene helpers; removed the old Python quality/wiki helpers.
+- 2026-05-23: Added Python-vs-Node parity harness for historical quality/wiki behavior and marked Windows/Python-removal initiative ready for real-project pipeline smoke before merge to main.
+
+## 2026-05-27 — Initiative evidence review: Windows + Quality
+
+Reviewed evidence after real HAA pipelines and Node-port validation. Windows Compatibility Analysis Milestone A is ready for merge after final branch push/merge decision. Quality Rule Learning Phase 2A-F has enough real-pipeline evidence to proceed to a focused Phase 2G planning slice, with remaining trace semantics concentrated in OpPreflight and OpQualityReview rather than Node runtime failures.

@@ -343,13 +343,14 @@ If analysis recommends changes, plan them as small safe slices after Milestone A
 ### Possible Slices
 
 1. Documentation-only WSL2 recommendation.
-2. Git Bash install/start docs and smoke script.
-3. Additive command resolver helper for future Windows wrappers; do not wire into existing Linux scripts yet.
-4. Additive Windows-safe dashboard start wrapper, e.g. `dashboard/start.windows.mjs` or `dashboard/start.windows.ps1`; keep `dashboard/start.sh` unchanged.
-5. Windows-safe public readiness variant or separate compatibility check; keep Linux gate unchanged.
-6. Separate Windows Git hook wrapper or explicit Windows unsupported docs; keep Linux hook scripts unchanged.
-7. Platform-specific agent/rule docs for Windows tasks rather than conditionalizing all existing agent instructions.
-8. Only after proven wrappers exist, consider extracting shared lower-level helpers. Extraction must not delete or silently change Linux-owned entrypoints in the same slice.
+2. Native PowerShell one-line bootstrap design and additive `install.windows.ps1` prototype. This should be Windows-owned and must not call or modify `install.sh`. It should clone/check out `$HOME\\pidex` when needed, verify prerequisites, run `scripts/compat/windows-audit.py`, ensure Pi's Git Bash prerequisite is present, run `pi install <pidex-root>`, and skip global Git hook installation by default.
+3. Git Bash install/start docs and smoke script.
+4. Additive command resolver helper for future Windows wrappers; do not wire into existing Linux scripts yet.
+5. Additive Windows-safe dashboard start wrapper, e.g. `dashboard/start.windows.mjs` or `dashboard/start.windows.ps1`; keep `dashboard/start.sh` unchanged.
+6. Windows-safe public readiness variant or separate compatibility check; keep Linux gate unchanged.
+7. Separate Windows Git hook wrapper or explicit Windows unsupported docs; keep Linux hook scripts unchanged.
+8. Platform-specific agent/rule docs for Windows tasks rather than conditionalizing all existing agent instructions.
+9. Only after proven wrappers exist, consider extracting shared lower-level helpers. Extraction must not delete or silently change Linux-owned entrypoints in the same slice.
 
 ### Deliverable
 
@@ -386,7 +387,10 @@ Plus any feature-specific tests for touched areas.
 ## Open Decisions
 
 - First target: WSL2 or Git Bash?
-- Should `~/pidex` remain mandatory on Windows through Git Bash path semantics?
+- Should native PowerShell provide the public one-line bootstrap while Git Bash remains Pi's required command shell?
+- Should the Windows one-liner use `irm <raw install.windows.ps1> | iex`, an inspect-first download command, or both in docs?
+- Should `install.windows.ps1` clone the repo itself when missing, or require users to clone first?
+- Should `~/pidex` / `$HOME\\pidex` remain mandatory on Windows through Git Bash/PowerShell path semantics?
 - Should global Git hook installation be disabled by default on Windows?
 - Should dashboard get an additive Node-based `start.windows.mjs` wrapper, a PowerShell wrapper, or both, while preserving `start.sh`?
 - Should public readiness remain Linux-only while `windows-audit.py` handles Windows readiness?

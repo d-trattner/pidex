@@ -3,27 +3,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
-PROBE="$ROOT/scripts/provider-limits/probe.py"
+PROBE="$ROOT/scripts/provider-limits/probe.mjs"
 STATE="$ROOT/state/provider-limits/latest.json"
 
 if [ -x "$PROBE" ] && [ -f "$STATE" ]; then
-  python3 "$PROBE" latest \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("active_profile","codex-optimized"))' \
+  node "$PROBE" latest \
+    | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { const data = JSON.parse(s || "{}"); console.log(data.active_profile || "codex-optimized"); })' \
     || echo "codex-optimized"
   exit 0
 fi
 
 if [ -f "$STATE" ]; then
-  python3 - "$STATE" <<'PY'
-import json, sys
-path = sys.argv[1]
-try:
-    with open(path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    print(data.get('active_profile', 'codex-optimized'))
-except Exception:
-    print('codex-optimized')
-PY
+  node -e 'const fs = require("fs"); try { const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(data.active_profile || "codex-optimized"); } catch { console.log("codex-optimized"); }' "$STATE"
   exit 0
 fi
 

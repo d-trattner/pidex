@@ -24,7 +24,7 @@ Rules for grilling inside pidex:
 - For every question, provide the recommended answer.
 - If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
 - For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
-- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `<pidex-root>/scripts/project-context/init.py <project-root>`.
+- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `node <pidex-root>/scripts/project-context/init.mjs <project-root>`.
 - `CONTEXT.md` follows Matt Pocock's context format exactly. Use `<pidex-root>/skills/grill-with-docs/CONTEXT-FORMAT.md` as the single source of truth for context handling.
 - Put confirmed user statements and clear code/docs-evidenced project/domain terms directly into `## Language` only when they can be defined in one sentence. Do not put task specs, acceptance criteria, implementation plans, roadmap items, workflows, architecture notes, operational constraints, or release decisions in `CONTEXT.md`.
 - For fresh/new projects, create `pidex/context/CONTEXT.md` during the orchestrator preparation step before spawning agents so the first plan has a context home.
@@ -566,7 +566,7 @@ After the user confirms the epic, create the project directory, project context 
 
 ```bash
 mkdir -p <project-path>/agents.output <project-path>/pidex/state <project-path>/pidex/rules <project-path>/pidex/config <project-path>/pidex/prompts
-python3 <pidex-root>/scripts/project-context/init.py <project-path>
+node <pidex-root>/scripts/project-context/init.mjs <project-path>
 printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n' >> <project-path>/.gitignore
 echo 0 > <project-path>/agents.output/.next-id
 ```
@@ -963,9 +963,9 @@ For wiki hygiene / project memory maintenance routes, the team prompt must inclu
 ```
 OPENING AGENT: pidex-wiki-hygienist
 This is a wiki hygiene / project memory maintenance task.
-Do not run /pdwiki or scripts/wiki/hygiene.py from the orchestrator before invoking the specialist.
+Do not run /pdwiki or scripts/wiki/hygiene.mjs from the orchestrator before invoking the specialist.
 Invoke pidex-wiki-hygienist as the opening agent and instruct it to run the deterministic read-only audit itself:
-python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
+node <pidex-root>/scripts/wiki/hygiene.mjs audit --project <project-root>
 pidex-wiki-hygienist MUST start read-only, run the audit, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only. If the user asked to execute/apply hygiene, pidex-wiki-hygienist must create a separate execution report at <project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md and must not overwrite the deterministic audit report. After audit/report-only wiki hygiene completes, provide a useful brief (score, counts, top findings, report path, state path, whether wiki content changed) and ask whether to commit the hygiene state. Suggested commit files must include <project-root>/pidex/state/wiki-hygiene.json only for audit-only runs; never suggest committing agents.output/**.
 Canonical wiki path is <project-root>/wiki/.
 ```
@@ -1199,16 +1199,16 @@ Parallel implementer lanes are optional, not default. Use them only when the pla
 
 Before spawning `pidex-critic` or `pidex-code-reviewer`, run:
 ```bash
-python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent <agent> --trigger <trigger> --json
+node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent <agent> --trigger <trigger> --json
 ```
 If `.lanes[]` is non-empty, launch the primary lane and every eligible secondary lane as separate visible `pidex_agent` calls in the same assistant turn. `pidex_agent` itself must not spawn nested agents.
 
 Lane launch rules:
 - Primary: call `pidex_agent` normally using configured primary routing from `<pidex-root>/config/agents.json`.
-- Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `status.py eligible`. Use `runner_provider` and `runner_model` when present; these map Pi-auth provider/model IDs like DeepSeek/Minimax to `provider=pi`, `model=<provider>/<model>`. Do not pass unsupported direct providers such as `deepseek` or `minimax` to `pidex_agent`.
+- Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `status.mjs eligible`. Use `runner_provider` and `runner_model` when present; these map Pi-auth provider/model IDs like DeepSeek/Minimax to `provider=pi`, `model=<provider>/<model>`. Do not pass unsupported direct providers such as `deepseek` or `minimax` to `pidex_agent`.
 - Each lane must receive a unique expected output path; never let secondaries write the primary artifact.
-- Secondary failure is advisory and non-blocking. Record it with `status.py warn --lane <lane_id> --message <short reason>` and continue.
-- Secondary success should be recorded with `status.py success --lane <lane_id> --message success` after its output/ROUTING is verified.
+- Secondary failure is advisory and non-blocking. Record it with `status.mjs warn --lane <lane_id> --message <short reason>` and continue.
+- Secondary success should be recorded with `status.mjs success --lane <lane_id> --message success` after its output/ROUTING is verified.
 
 Secondary artifact suffixes:
 - `agents.output/critic/<id>-<slug>-critique.<provider>.<model-slug>.md`

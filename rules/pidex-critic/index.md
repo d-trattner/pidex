@@ -7,6 +7,7 @@ Last updated: 2026-04-28 (PROC-NEW-48-1)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Local Operator Config Guard | [../shared/local-operator-config-guard.md](../shared/local-operator-config-guard.md) | PROC-LOCAL-CONFIG-1 | Plans touching mutable settings must separate tracked public defaults from ignored local operator overrides |
 | Binding Fixture Semantic Check | [binding-semantic-check.md](binding-semantic-check.md) | X3 | Verify fixture identifiers are semantically correct domain names, not pipeline names |
 | Dep-Pruning Lockfile Check | [dep-pruning-lockfile-check.md](dep-pruning-lockfile-check.md) | 23 | Flag as BLOCKING any dep-pruning slice missing explicit lockfile regeneration step |
 | PIF Resolution Path Check | [pif-resolution-path-check.md](pif-resolution-path-check.md) | 24 | Flag as BLOCKING any PIF item in scope without "Resolution approach confirmed:" annotation |

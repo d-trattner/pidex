@@ -880,19 +880,20 @@ function savePidexMemory(ctx: any, argsLine?: string): string {
 }
 
 function runPidexQualityReport(cwd: string, argsLine?: string): { ok: boolean; summary: string } {
-	const script = path.join(PACKAGE_ROOT, "scripts", "quality", "report.py");
+	const script = path.join(PACKAGE_ROOT, "scripts", "quality", "report.mjs");
 	const rawArgs = (argsLine ?? "").trim().split(/\s+/).filter(Boolean);
 	const args = [script, "--project", cwd];
 	if (rawArgs.length) args.push(...rawArgs);
 	else args.push("--since-last-review", "--last", "5");
-	const proc = spawnSync("python3", args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
 	const stdout = (proc.stdout || "").trim();
 	const stderr = (proc.stderr || "").trim();
 	if (proc.status !== 0) {
 		return { ok: false, summary: `pdq failed (${proc.status ?? "signal"})\n${stderr || stdout}` };
 	}
 	try {
-		const payload = JSON.parse(stdout);
+		const line = stdout.split(/\r?\n/).find((entry) => entry.startsWith("PIDEX_QUALITY_RESULT="));
+		const payload = JSON.parse(line ? line.slice("PIDEX_QUALITY_RESULT=".length) : stdout);
 		return {
 			ok: true,
 			summary: [
@@ -900,9 +901,9 @@ function runPidexQualityReport(cwd: string, argsLine?: string): { ok: boolean; s
 				`Markdown: ${payload.markdown}`,
 				`JSON: ${payload.json}`,
 				payload.review_state ? `Review state: ${payload.review_state}` : undefined,
-				`Plans: ${(payload.plans ?? []).join(", ") || "none"}`,
-				`Confidence: ${payload.confidence}`,
-				`Trace gaps: ${payload.trace_gaps}`,
+				payload.plans ? `Plans: ${(payload.plans ?? []).join(", ") || "none"}` : undefined,
+				payload.confidence ? `Confidence: ${payload.confidence}` : undefined,
+				payload.trace_gaps !== undefined ? `Trace gaps: ${payload.trace_gaps}` : undefined,
 			].filter(Boolean).join("\n"),
 		};
 	} catch {
@@ -1741,20 +1742,20 @@ function getGlobalGitHookStatus(): string {
 function runParallelAgentsCommand(args: string | undefined, cwd: string | undefined): { ok: boolean; summary: string } {
 	const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
 	const action = parts[0] || "status";
-	const script = path.join(PACKAGE_ROOT, "scripts", "parallel-agents", action === "test" ? "run-lane.py" : "status.py");
+	const script = path.join(PACKAGE_ROOT, "scripts", "parallel-agents", action === "test" ? "run-lane.mjs" : "status.mjs");
 	let commandArgs: string[];
 	if (action === "status") commandArgs = [script, "show"];
 	else if (action === "clear" && parts[1]) commandArgs = [script, "clear", "--lane", parts[1]];
 	else if (action === "test" && parts[1]) commandArgs = [script, "--lane", parts[1], "--project", path.resolve(cwd ?? process.cwd(), parts[2] || "."), "--task-text", "Read-only PIDEX parallel lane smoke test", "--force"];
 	else return { ok: false, summary: "Usage: /pdparallel status | clear <lane-id> | test <lane-id> [project-root]" };
-	const proc = spawnSync("python3", commandArgs, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const proc = spawnSync(process.execPath, commandArgs, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
 	const output = `${proc.stdout ?? ""}\n${proc.stderr ?? ""}`.trim();
 	return { ok: proc.status === 0, summary: clipEnd(output || `pdparallel ${action} exit=${proc.status}`, 1600) };
 }
 
 function runWikiHygieneAudit(projectRoot: string): { ok: boolean; summary: string; reportMd?: string } {
-	const script = path.join(PACKAGE_ROOT, "scripts", "wiki", "hygiene.py");
-	const proc = spawnSync("python3", [script, "audit", "--project", projectRoot], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const script = path.join(PACKAGE_ROOT, "scripts", "wiki", "hygiene.mjs");
+	const proc = spawnSync(process.execPath, [script, "audit", "--project", projectRoot], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
 	const output = `${proc.stdout ?? ""}\n${proc.stderr ?? ""}`.trim();
 	const line = (proc.stdout ?? "").split(/\r?\n/).find((entry) => entry.startsWith("PIDEX_WIKI_HYGIENE_RESULT="));
 	if (proc.status !== 0 || !line) {
@@ -1762,8 +1763,8 @@ function runWikiHygieneAudit(projectRoot: string): { ok: boolean; summary: strin
 	}
 	try {
 		const parsed = JSON.parse(line.slice("PIDEX_WIKI_HYGIENE_RESULT=".length));
-		const reportMd = parsed.report_md;
-		const summary = `Wiki hygiene audit complete: ${reportMd} (score=${parsed.score}, critical=${parsed.critical}, high=${parsed.high})`;
+		const reportMd = parsed.report_md || parsed.markdown;
+		const summary = `Wiki hygiene audit complete: ${reportMd} (score=${parsed.score}, critical=${parsed.critical ?? parsed.counts?.critical ?? 0}, high=${parsed.high ?? parsed.counts?.high ?? 0})`;
 		return { ok: true, summary, reportMd };
 	} catch (error: any) {
 		return { ok: false, summary: `Wiki hygiene audit result parse failed: ${error?.message ?? error}` };

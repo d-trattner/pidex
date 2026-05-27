@@ -68,4 +68,4 @@ curl -fsS \
   --data-urlencode "text=$TEXT" \
   --data-urlencode "reply_markup={\"remove_keyboard\":true}" \
   "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("result",{}).get("message_id",""))'
+  | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { try { console.log((JSON.parse(s).result || {}).message_id || ""); } catch { console.log(""); } });'

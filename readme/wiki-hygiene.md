@@ -20,7 +20,7 @@ In Pi, after `/reload`:
 Direct script:
 
 ```bash
-python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
+node <pidex-root>/scripts/wiki/hygiene.mjs audit --project <project-root>
 ```
 
 ## Outputs

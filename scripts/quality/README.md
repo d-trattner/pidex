@@ -14,13 +14,13 @@ Read-only bootstrap for `/pdq`.
 Generate report:
 
 ```bash
-python3 scripts/quality/report.py --project <pidex-root> --last 10
+node scripts/quality/report.mjs --project <pidex-root> --last 10
 ```
 
 Review only plans not yet marked reviewed, then update cadence state:
 
 ```bash
-python3 scripts/quality/report.py --project <pidex-root> --since-last-review --last 5 --update-review-state
+node scripts/quality/report.mjs --project <pidex-root> --since-last-review --last 5 --update-review-state
 ```
 
 Cadence state lives at `state/quality/review-state.json`.
@@ -28,7 +28,7 @@ Cadence state lives at `state/quality/review-state.json`.
 Write/dry-run an operator event:
 
 ```bash
-python3 scripts/quality/orchestrator-events.py \
+node scripts/quality/orchestrator-events.mjs \
   --pipeline-id demo \
   --plan plan-004 \
   --operator-type OpRoute \
@@ -70,7 +70,7 @@ Phase 2 notes:
 Record a user correction manually:
 
 ```bash
-python3 scripts/quality/orchestrator-events.py \
+node scripts/quality/orchestrator-events.mjs \
   --project <project-root> \
   --pipeline-id <pipeline-id> \
   --plan <plan-key> \
@@ -84,7 +84,7 @@ python3 scripts/quality/orchestrator-events.py \
 Record a release decision manually:
 
 ```bash
-python3 scripts/quality/orchestrator-events.py \
+node scripts/quality/orchestrator-events.mjs \
   --project <project-root> \
   --pipeline-id <pipeline-id> \
   --plan <plan-key> \
@@ -100,7 +100,7 @@ python3 scripts/quality/orchestrator-events.py \
 Record a rule/process action without editing rules:
 
 ```bash
-python3 scripts/quality/rule-actions.py add \
+node scripts/quality/rule-actions.mjs add \
   --action monitor \
   --status monitoring \
   --owning-agent orchestrator \
@@ -113,7 +113,7 @@ python3 scripts/quality/rule-actions.py add \
 List actions:
 
 ```bash
-python3 scripts/quality/rule-actions.py list
+node scripts/quality/rule-actions.mjs list
 ```
 
 Ledger entries include:

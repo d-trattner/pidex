@@ -21,7 +21,7 @@ Audit a project's canonical wiki for hygiene issues and write a conservative rep
 2. Run:
 
 ```bash
-python3 <pidex-root>/scripts/wiki/hygiene.py audit --project <project-root>
+node <pidex-root>/scripts/wiki/hygiene.mjs audit --project <project-root>
 ```
 
 3. Read the generated JSON/Markdown report if needed.

@@ -18,6 +18,7 @@ agents.output/.locks/*.mutex
 agents.output/.next-id
 
 config.env
+config/*.local.json
 .env
 .env.*
 !.env.example

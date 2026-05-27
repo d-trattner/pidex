@@ -7,7 +7,7 @@ import { errorResponse, jsonResponse } from '../../lib/server/response';
 import { authorizeProviderLimitsRequest } from '../../lib/server/provider-limits-auth';
 
 const PIDEX_ROOT = path.resolve(process.cwd(), '..');
-const SCRIPT = path.join(PIDEX_ROOT, 'scripts', 'parallel-agents', 'status.py');
+const SCRIPT = path.join(PIDEX_ROOT, 'scripts', 'parallel-agents', 'status.mjs');
 const CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.json');
 const STATE_PATH = path.join(PIDEX_ROOT, 'state', 'parallel-agents', 'status.json');
 
@@ -58,8 +58,8 @@ function mergedPayload() {
 }
 
 function runStatus(args: string[]) {
-  const proc = spawnSync('python3', [SCRIPT, '--root', PIDEX_ROOT, ...args], { cwd: PIDEX_ROOT, encoding: 'utf8', timeout: 30_000 });
-  if (proc.status !== 0) throw new Error((proc.stderr || proc.stdout || `status.py failed exit=${proc.status}`).trim());
+  const proc = spawnSync(process.execPath, [SCRIPT, '--root', PIDEX_ROOT, ...args], { cwd: PIDEX_ROOT, encoding: 'utf8', timeout: 30_000 });
+  if (proc.status !== 0) throw new Error((proc.stderr || proc.stdout || `status.mjs failed exit=${proc.status}`).trim());
   return proc.stdout.trim();
 }
 

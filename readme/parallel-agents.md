@@ -38,13 +38,13 @@ You can enable/disable the subsystem, choose up to two authenticated provider/mo
 ## CLI
 
 ```bash
-python3 <pidex-root>/scripts/parallel-agents/status.py show
-python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent pidex-critic --trigger after-plan --json
-python3 <pidex-root>/scripts/parallel-agents/status.py eligible --agent pidex-code-reviewer --trigger after-implementation --json
-python3 <pidex-root>/scripts/parallel-agents/status.py models --json
-python3 <pidex-root>/scripts/parallel-agents/status.py warn --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash' --message 'quota limit reached'
-python3 <pidex-root>/scripts/parallel-agents/status.py success --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
-python3 <pidex-root>/scripts/parallel-agents/status.py clear --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
+node <pidex-root>/scripts/parallel-agents/status.mjs show
+node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent pidex-critic --trigger after-plan --json
+node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent pidex-code-reviewer --trigger after-implementation --json
+node <pidex-root>/scripts/parallel-agents/status.mjs models --json
+node <pidex-root>/scripts/parallel-agents/status.mjs warn --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash' --message 'quota limit reached'
+node <pidex-root>/scripts/parallel-agents/status.mjs success --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
+node <pidex-root>/scripts/parallel-agents/status.mjs clear --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
 ```
 
 Pi command after `/reload`:
@@ -72,7 +72,7 @@ The PIDEX orchestrator checks configured lanes before supported review gates:
 - `after-plan` launches enabled `pidex-critic` secondary lanes alongside the primary critic.
 - `after-implementation` launches enabled `pidex-code-reviewer` secondary lanes alongside the primary reviewer.
 
-Each secondary is a visible `pidex_agent` call with explicit `provider`, `model`, and `effort` from `status.py eligible`. For Pi-auth providers such as DeepSeek or Minimax, `eligible` emits `runner_provider=pi` and `runner_model=<provider>/<model>` because `pidex_agent` direct provider overrides only support `pi` and `codex`. Secondary artifacts must use unique paths under `agents.output/**` and are advisory. The orchestrator records lane success/failure in `state/parallel-agents/status.json`, writes a merge/adjudication summary, and continues primary flow unless a secondary reports concrete High/Critical evidence that needs adjudication.
+Each secondary is a visible `pidex_agent` call with explicit `provider`, `model`, and `effort` from `status.mjs eligible`. For Pi-auth providers such as DeepSeek or Minimax, `eligible` emits `runner_provider=pi` and `runner_model=<provider>/<model>` because `pidex_agent` direct provider overrides only support `pi` and `codex`. Secondary artifacts must use unique paths under `agents.output/**` and are advisory. The orchestrator records lane success/failure in `state/parallel-agents/status.json`, writes a merge/adjudication summary, and continues primary flow unless a secondary reports concrete High/Critical evidence that needs adjudication.
 
 ## Guarantees
 

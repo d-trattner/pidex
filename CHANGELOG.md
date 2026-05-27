@@ -8,7 +8,7 @@ Public-readiness changes include:
 
 - Exact `~/pidex` install contract documented.
 - Legacy `dashboard-old/**` archive removed.
-- Runtime dashboard ingest moved to `scripts/dashboard/ingest.py`.
+- Runtime dashboard ingest moved to `scripts/dashboard/ingest.mjs`.
 - Explicit npm package allowlist added.
 - Direct `pidex_agent` provider overrides restricted to `pi` and `codex`.
 - Pi SDK dependency namespace updated to `@earendil-works/*`.

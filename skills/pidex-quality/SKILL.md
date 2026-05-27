@@ -24,15 +24,15 @@ The report focuses on facts, dimensions, confidence labels, and evidence links. 
 From `<pidex-root>`:
 
 ```bash
-python3 scripts/quality/report.py --project <pidex-root> --last 10
+node scripts/quality/report.mjs --project <pidex-root> --last 10
 ```
 
 Useful options:
 
 ```bash
-python3 scripts/quality/report.py --project <pidex-root> --since-last-review
-python3 scripts/quality/report.py --project <pidex-root> --plan plan-004
-python3 scripts/quality/report.py --project <pidex-root> --json-out state/quality/manual.json --md-out agents.output/quality/manual.md
+node scripts/quality/report.mjs --project <pidex-root> --since-last-review
+node scripts/quality/report.mjs --project <pidex-root> --plan plan-004
+node scripts/quality/report.mjs --project <pidex-root> --json-out state/quality/manual.json --md-out agents.output/quality/manual.md
 ```
 
 ## Guardrails
