@@ -207,6 +207,27 @@ function QualityPage() {
 
   const latest = completionData.at(-1);
   const latestCompletion = latest ? `${safeNumber(latest.completion_rate).toFixed(1)}%` : '—';
+  const palette = ['#00f5ff', '#9d7bff', '#ffcc66', '#ff6b9d', '#66ff99', '#ff8a4c'];
+  const traceTypeData = latestQuality
+    ? Object.entries(latestQuality.trace.by_type).map(([name, value]) => ({ name, value: safeNumber(value) }))
+    : [];
+  const severityData = latestQuality
+    ? Object.entries(latestQuality.trace.by_severity).map(([severity, count]) => ({ severity, count: safeNumber(count) }))
+    : [];
+  const operatorGapData = latestQuality
+    ? Object.entries(latestQuality.trace.by_operator)
+        .map(([operator, count]) => ({ operator, count: safeNumber(count) }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6)
+    : [];
+  const ruleImpactData = latestQuality
+    ? Object.entries(
+        latestQuality.rule_impact.reduce<Record<string, number>>((acc, item) => {
+          acc[item.label] = (acc[item.label] || 0) + 1;
+          return acc;
+        }, {}),
+      ).map(([label, count]) => ({ label, count }))
+    : [];
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>
@@ -251,20 +272,67 @@ function QualityPage() {
                 <p className="metric-value">{latestQuality.comparability?.label || '—'}</p>
               </div>
             </div>
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginTop: 12 }}>
-              <div>
-                <h4>Trace gap types</h4>
-                <p className="muted">{Object.entries(latestQuality.trace.by_type).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'No trace gaps'}</p>
+            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 12 }}>
+              <div className="glass-card glass">
+                <h4>Trace gap mix</h4>
+                {traceTypeData.length ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={traceTypeData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={72} paddingAngle={3}>
+                        {traceTypeData.map((_, index) => <Cell key={`trace-${index}`} fill={palette[index % palette.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <p className="muted">No trace gaps</p>}
               </div>
-              <div>
-                <h4>Operators</h4>
-                <p className="muted">{Object.entries(latestQuality.trace.by_operator).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'No operator gaps'}</p>
+              <div className="glass-card glass">
+                <h4>Operator gaps</h4>
+                {operatorGapData.length ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={operatorGapData} layout="vertical" margin={{ left: 24, right: 8, top: 8, bottom: 8 }}>
+                      <CartesianGrid stroke="rgba(34,255,225,0.12)" />
+                      <XAxis type="number" stroke="#8ad7ff" />
+                      <YAxis type="category" dataKey="operator" stroke="#8ad7ff" width={104} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#9d7bff" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="muted">No operator gaps</p>}
               </div>
-              <div>
-                <h4>Latest report</h4>
-                <p className="muted">{latestQuality.generated_at || '—'}</p>
-                <p className="muted" style={{ wordBreak: 'break-all' }}>{latestQuality.latest_report?.markdown || latestQuality.latest_report?.json || 'No report path'}</p>
+              <div className="glass-card glass">
+                <h4>Rule impact labels</h4>
+                {ruleImpactData.length ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={ruleImpactData} margin={{ left: 4, right: 8, top: 8, bottom: 36 }}>
+                      <CartesianGrid stroke="rgba(34,255,225,0.12)" />
+                      <XAxis dataKey="label" stroke="#8ad7ff" angle={-20} textAnchor="end" interval={0} height={56} />
+                      <YAxis stroke="#8ad7ff" allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#66ff99" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="muted">No rule impact windows</p>}
               </div>
+              <div className="glass-card glass">
+                <h4>Severity</h4>
+                {severityData.length ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={severityData} margin={{ left: 4, right: 8, top: 8, bottom: 8 }}>
+                      <CartesianGrid stroke="rgba(34,255,225,0.12)" />
+                      <XAxis dataKey="severity" stroke="#8ad7ff" />
+                      <YAxis stroke="#8ad7ff" allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#ffcc66" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p className="muted">No severity findings</p>}
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <h4>Latest report</h4>
+              <p className="muted">{latestQuality.generated_at || '—'} · {latestQuality.latest_report?.markdown || latestQuality.latest_report?.json || 'No report path'}</p>
             </div>
             {latestQuality.regression_detectors.length ? (
               <div style={{ marginTop: 12 }}>
