@@ -36,6 +36,7 @@ if (cmd === 'tracked-clean') {
   }
   if (localFindings.length) fail(`Local operator path/address leaks found:\n${localFindings.slice(0, 100).join('\n')}`);
   if (existsSync('config/balance.json')) { const data = JSON.parse(readFileSync('config/balance.json', 'utf8')); const snapshots = (data.providers || []).flatMap((p) => p.snapshots || []); if (snapshots.length) fail('config/balance.json contains local balance snapshots'); }
+  if (paths.includes('config/operator-contracts.local.json')) fail('config/operator-contracts.local.json must remain local/untracked');
   if (bad.length) fail([...new Set(bad)].sort().join('\n'));
 } else if (cmd === 'parallel-defaults') {
   const file = 'config/parallel-agents.json';
