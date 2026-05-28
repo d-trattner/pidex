@@ -9,6 +9,7 @@ import { authorizeProviderLimitsRequest } from '../../lib/server/provider-limits
 const PIDEX_ROOT = path.resolve(process.cwd(), '..');
 const SCRIPT = path.join(PIDEX_ROOT, 'scripts', 'parallel-agents', 'status.mjs');
 const CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.json');
+const LOCAL_CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.local.json');
 const STATE_PATH = path.join(PIDEX_ROOT, 'state', 'parallel-agents', 'status.json');
 
 type ParallelConfig = {
@@ -22,8 +23,13 @@ function readJson(file: string, fallback: any) {
 
 function laneId(agent: string, provider: string, model: string) { return `${agent}:${provider}:${model}`; }
 
+function activeConfigPath() {
+  return fs.existsSync(LOCAL_CONFIG_PATH) ? LOCAL_CONFIG_PATH : CONFIG_PATH;
+}
+
 function mergedPayload() {
-  const config = readJson(CONFIG_PATH, { enabled: false, agents: {} }) as ParallelConfig;
+  const configPath = activeConfigPath();
+  const config = readJson(configPath, { enabled: false, agents: {} }) as ParallelConfig;
   const state = readJson(STATE_PATH, { lanes: {}, warnings: [] });
   const agents = Object.entries(config.agents || {}).map(([agent, cfg]: [string, any]) => {
     const providerModels = (cfg.provider_models || []).map((pm: any) => {
@@ -54,7 +60,7 @@ function mergedPayload() {
       providerModels,
     };
   });
-  return { ok: fs.existsSync(CONFIG_PATH), enabled: Boolean(config.enabled), configPath: CONFIG_PATH, statePath: STATE_PATH, agents, warnings: state.warnings || [], updatedAt: state.updated_at || null };
+  return { ok: fs.existsSync(configPath), enabled: Boolean(config.enabled), configPath, statePath: STATE_PATH, agents, warnings: state.warnings || [], updatedAt: state.updated_at || null };
 }
 
 function runStatus(args: string[]) {
