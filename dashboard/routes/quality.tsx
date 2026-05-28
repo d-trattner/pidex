@@ -17,6 +17,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { HelpPopover } from '../components/ui/help-popover';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
@@ -115,6 +116,10 @@ type QualityReadModelSummary = {
   comparability: { label?: string; sample_size?: number; reasons?: string[]; topologies?: string[] } | null;
   latest_report: { json: string; markdown: string | null } | null;
   review_state: { reviewed_plans_count: number; last_review_at: string | null };
+  scope?: 'project' | 'aggregate';
+  included_projects?: Array<{ project: string; generated_at: string | null; trace_gaps: number; critical_missing_operators: number; confidence: string | null }>;
+  confidence_mix?: Record<string, number>;
+  stale_projects?: Array<{ project: string; generated_at: string | null; age_hours: number | null }>;
 };
 
 type QualityLatestPayload = {
@@ -148,6 +153,8 @@ function QualityPage() {
   const quality = qualityQuery.data ?? EMPTY_QUALITY;
   const modelQuality = modelQuery.data ?? { models: [] };
   const latestQuality = qualityLatestQuery.data?.latest ?? null;
+  const scopeLabel = project || 'All projects';
+  const scopeDescription = project ? `${project} · latest project PDQ report` : 'All projects · aggregate across non-smoke latest reports';
   const loading = qualityQuery.isLoading || modelQuery.isLoading || qualityLatestQuery.isLoading;
   const error = qualityQuery.isError || modelQuery.isError || qualityLatestQuery.isError ? 'Quality data could not be loaded.' : '';
 
@@ -208,6 +215,15 @@ function QualityPage() {
   const latest = completionData.at(-1);
   const latestCompletion = latest ? `${safeNumber(latest.completion_rate).toFixed(1)}%` : '—';
   const palette = ['#00f5ff', '#9d7bff', '#ffcc66', '#ff6b9d', '#66ff99', '#ff8a4c'];
+  const qualityState = !latestQuality
+    ? { label: 'unknown', tone: 'warn', next: 'Generate a PDQ report for this scope.' }
+    : latestQuality.critical_missing_operators > 0
+      ? { label: 'needs attention', tone: 'bad', next: 'Fix critical missing operator evidence, then refresh PDQ.' }
+      : latestQuality.trace_gaps > 0
+        ? { label: 'instrumentation debt', tone: 'warn', next: 'Repair repeated trace gaps and validate on the next real pipeline.' }
+        : latestQuality.plans.length < 6
+          ? { label: 'clean, low sample', tone: 'warn', next: 'Run more comparable pipelines before trusting trend direction.' }
+          : { label: 'clean', tone: 'good', next: 'Keep monitoring trend and refresh stale reports.' };
   const traceTypeData = latestQuality
     ? Object.entries(latestQuality.trace.by_type).map(([name, value]) => ({ name, value: safeNumber(value) }))
     : [];
@@ -232,8 +248,20 @@ function QualityPage() {
   return (
     <section className="grid" style={{ marginTop: 12 }}>
       <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
-        <h2 className="h2">Quality</h2>
-        <p className="muted">Pipeline, model, and artifact quality with Recharts (Area/Line/Bar/Pie).</p>
+        <div className="card-heading-row">
+          <div>
+            <h2 className="h2">Quality</h2>
+            <p className="muted">Scope: <strong>{scopeDescription}</strong>. Quality signals stay here; usage/cost/quota stay in Usage.</p>
+          </div>
+          <HelpPopover
+            title="Quality page scope"
+            shows="Quality metrics for the active global project selector. All projects aggregates non-smoke reports; one selected project shows only that project."
+            source="Global project selector plus /api/quality/latest, /api/charts/quality, and /api/charts/model-quality."
+            reading="Start with trend, current state, top issue, and next action before reading detailed tables."
+            improve="Select the right scope, refresh PDQ for stale reports, and reduce critical gaps before optimizing lower-severity signals."
+            caveats="Aggregate mode is not a project comparison table; it summarizes the selected scope."
+          />
+        </div>
         {error ? <p style={{ color: '#f8a' }}>{error}</p> : null}
       </article>
 
@@ -242,8 +270,37 @@ function QualityPage() {
         <>
 
       <article className="glass-card glass quality-card quality-card-full">
-        <h3>Self-improvement quality overview</h3>
-        <p className="muted">Latest PDQ read model. This does not recompute reports on page load.</p>
+        <div className="card-heading-row">
+          <div>
+            <h3>Quality trajectory</h3>
+            <p className="muted">Current state for {scopeLabel}: <strong className={`metric-${qualityState.tone}`}>{qualityState.label}</strong>. Next action: {qualityState.next}</p>
+          </div>
+          <HelpPopover
+            title="Quality trajectory"
+            shows="The top-level quality state and next recommended operator action for the selected scope."
+            source="Latest PDQ read model from /api/quality/latest."
+            reading="Critical missing operators outrank trace gaps. Low samples are labelled as weak evidence rather than success."
+            improve="Fix critical gaps, repair repeated trace instrumentation debt, and run comparable pipelines."
+            caveats="This avoids a fake single quality score and does not claim causality."
+          />
+        </div>
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full">
+        <div className="card-heading-row">
+          <div>
+            <h3>Self-improvement quality overview</h3>
+            <p className="muted">Latest PDQ read model. This does not recompute reports on page load.</p>
+          </div>
+          <HelpPopover
+            title="PDQ read model"
+            shows="The compact quality facts extracted from existing PDQ JSON reports."
+            source="/api/quality/latest reading state/quality/*.json."
+            reading="Use confidence, trace gaps, critical missing, regressions, and comparability together."
+            improve="Generate fresh PDQ reports after real pipelines and fix repeated operator gaps."
+            caveats="Ordinary page loads never recompute PDQ."
+          />
+        </div>
         {latestQuality ? (
           <>
             <div className="grid quality-metrics-grid" style={{ gap: 12 }}>
@@ -274,7 +331,7 @@ function QualityPage() {
             </div>
             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 12 }}>
               <div className="glass-card glass">
-                <h4>Trace gap mix</h4>
+                <div className="card-heading-row"><h4>Trace gap mix</h4><HelpPopover title="Trace gap mix" shows="Counts by trace gap type." source="PDQ operator_trace.findings." reading="Instrumentation gaps mean PIDEX probably did work but did not observe the expected event." improve="Add or repair instrumentation for the missing event class." /></div>
                 {traceTypeData.length ? (
                   <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
@@ -288,7 +345,7 @@ function QualityPage() {
                 ) : <p className="muted">No trace gaps</p>}
               </div>
               <div className="glass-card glass">
-                <h4>Operator gaps</h4>
+                <div className="card-heading-row"><h4>Operator gaps</h4><HelpPopover title="Operator gaps" shows="Which operator event types are missing most often." source="PDQ operator trace findings." reading="Repeated operators indicate where the pipeline instrumentation is weakest." improve="Fix the most repeated operator event emitter first." /></div>
                 {operatorGapData.length ? (
                   <ResponsiveContainer width="100%" height={180}>
                     <BarChart data={operatorGapData} layout="vertical" margin={{ left: 24, right: 8, top: 8, bottom: 8 }}>
@@ -302,7 +359,7 @@ function QualityPage() {
                 ) : <p className="muted">No operator gaps</p>}
               </div>
               <div className="glass-card glass">
-                <h4>Rule impact labels</h4>
+                <div className="card-heading-row"><h4>Rule impact labels</h4><HelpPopover title="Rule impact labels" shows="Directional labels for approved rule-action before/after windows." source="PDQ rule action windows and rule-action ledger." reading="Labels are proxies such as insufficient-data or directionally-improving, not causal proof." improve="Record approved rule actions and gather comparable before/after samples." /></div>
                 {ruleImpactData.length ? (
                   <ResponsiveContainer width="100%" height={180}>
                     <BarChart data={ruleImpactData} margin={{ left: 4, right: 8, top: 8, bottom: 36 }}>
@@ -316,7 +373,7 @@ function QualityPage() {
                 ) : <p className="muted">No rule impact windows</p>}
               </div>
               <div className="glass-card glass">
-                <h4>Severity</h4>
+                <div className="card-heading-row"><h4>Severity</h4><HelpPopover title="Severity" shows="Trace findings grouped by severity." source="PDQ operator trace findings." reading="Critical/high should be fixed before low instrumentation debt." improve="Prioritize critical findings, then repeated low-severity gaps." /></div>
                 {severityData.length ? (
                   <ResponsiveContainer width="100%" height={180}>
                     <BarChart data={severityData} margin={{ left: 4, right: 8, top: 8, bottom: 8 }}>
@@ -384,7 +441,7 @@ function QualityPage() {
             </div>
 
             <div style={{ marginTop: 16 }}>
-              <h4>Trace gap findings</h4>
+              <div className="card-heading-row"><h4>Trace gap findings</h4><HelpPopover title="Trace gap findings" shows="Detailed missing/unobserved operator evidence rows." source="PDQ operator trace findings." reading="Group by operator first; repeated reasons usually indicate one instrumentation fix." improve="Record finalized preflight, restore quality-review events, or add explicit skip events depending on the reason." /></div>
               {latestQuality.trace.findings.length ? (
                 <div style={{ overflowX: 'auto' }}>
                   <table className="table">

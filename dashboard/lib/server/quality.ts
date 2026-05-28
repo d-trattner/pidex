@@ -53,10 +53,20 @@ export type QualitySummary = {
   comparability: AnyRecord | null;
   latest_report: { json: string; markdown: string | null } | null;
   review_state: { reviewed_plans_count: number; last_review_at: string | null };
+  scope?: 'project' | 'aggregate';
+  included_projects?: Array<{ project: string; project_path: string; generated_at: string | null; trace_gaps: number; critical_missing_operators: number; confidence: string | null }>;
+  confidence_mix?: Record<string, number>;
+  stale_projects?: Array<{ project: string; generated_at: string | null; age_hours: number | null }>;
 };
 
 function projectName(projectPath: string): string {
   return path.basename(projectPath || '') || 'unknown';
+}
+
+function isSmokeProject(projectPath: string): boolean {
+  const name = projectName(projectPath).toLowerCase();
+  const normalized = String(projectPath || '').toLowerCase();
+  return name === 'tmp' || name.includes('smoke') || normalized.includes('smoke-project');
 }
 
 function countBy(rows: AnyRecord[], key: string): Record<string, number> {
@@ -188,6 +198,74 @@ async function loadReports(root: string): Promise<AnyRecord[]> {
   return reports.sort((a, b) => (Date.parse(b.generated_at || '') || b._mtime || 0) - (Date.parse(a.generated_at || '') || a._mtime || 0));
 }
 
+function latestByProject(reports: AnyRecord[], includeSmoke = false): AnyRecord[] {
+  const byProject = new Map<string, AnyRecord>();
+  for (const report of reports) {
+    const key = String(report.project_path || 'unknown');
+    if (!includeSmoke && isSmokeProject(key)) continue;
+    if (!byProject.has(key)) byProject.set(key, report);
+  }
+  return [...byProject.values()];
+}
+
+function mergeCounts(rows: Array<Record<string, number>>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row || {})) out[key] = (out[key] || 0) + num(value);
+  }
+  return out;
+}
+
+function reportAgeHours(generatedAt: string | null): number | null {
+  if (!generatedAt) return null;
+  const parsed = Date.parse(generatedAt);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, (Date.now() - parsed) / 3_600_000);
+}
+
+function aggregateQualitySummaries(summaries: QualitySummary[], reviewState: QualitySummary['review_state']): QualitySummary {
+  const newest = summaries
+    .map((item) => item.generated_at)
+    .filter(Boolean)
+    .sort((a, b) => (Date.parse(String(b)) || 0) - (Date.parse(String(a)) || 0))[0] || null;
+  const confidenceMix: Record<string, number> = {};
+  for (const item of summaries) confidenceMix[item.confidence || 'unknown'] = (confidenceMix[item.confidence || 'unknown'] || 0) + 1;
+  const staleProjects = summaries
+    .map((item) => ({ project: item.project, generated_at: item.generated_at, age_hours: reportAgeHours(item.generated_at) }))
+    .filter((item) => item.age_hours == null || item.age_hours > 72);
+  return {
+    project: 'All projects',
+    project_path: '',
+    generated_at: newest,
+    confidence: Object.keys(confidenceMix).length === 1 ? Object.keys(confidenceMix)[0] : 'mixed',
+    plans: Array.from(new Set(summaries.flatMap((item) => item.plans.map((plan) => `${item.project}:${plan}`)))),
+    trace_gaps: summaries.reduce((sum, item) => sum + item.trace_gaps, 0),
+    critical_missing_operators: summaries.reduce((sum, item) => sum + item.critical_missing_operators, 0),
+    trace: {
+      by_type: mergeCounts(summaries.map((item) => item.trace.by_type)),
+      by_operator: mergeCounts(summaries.map((item) => item.trace.by_operator)),
+      by_severity: mergeCounts(summaries.map((item) => item.trace.by_severity)),
+      findings: summaries.flatMap((item) => item.trace.findings.map((finding) => ({ ...finding, plan_key: `${item.project}:${finding.plan_key}` }))).slice(0, 80),
+    },
+    rule_impact: summaries.flatMap((item) => item.rule_impact).slice(0, 80),
+    regression_detectors: summaries.flatMap((item) => item.regression_detectors).slice(0, 80),
+    comparability: { label: 'aggregate', sample_size: summaries.length, reasons: ['aggregate across latest non-smoke project reports'] },
+    latest_report: null,
+    review_state: reviewState,
+    scope: 'aggregate',
+    included_projects: summaries.map((item) => ({
+      project: item.project,
+      project_path: item.project_path,
+      generated_at: item.generated_at,
+      trace_gaps: item.trace_gaps,
+      critical_missing_operators: item.critical_missing_operators,
+      confidence: item.confidence,
+    })),
+    confidence_mix: confidenceMix,
+    stale_projects: staleProjects,
+  };
+}
+
 function matchesProject(report: AnyRecord, project: string): boolean {
   const p = project.trim();
   if (!p) return true;
@@ -196,20 +274,49 @@ function matchesProject(report: AnyRecord, project: string): boolean {
 }
 
 export async function getQualityProjects(search = '', root = PIDEX_ROOT): Promise<{ ok: true; generated_at: string; projects: QualitySummary[] }> {
-  const reports = await loadReports(root);
+  const q = new URLSearchParams(search);
+  const includeSmoke = q.get('include_smoke') === '1';
+  const reports = latestByProject(await loadReports(root), includeSmoke);
   const reviewState = await readReviewState(root);
-  const byProject = new Map<string, AnyRecord>();
-  for (const report of reports) {
-    const key = String(report.project_path || 'unknown');
-    if (!byProject.has(key)) byProject.set(key, report);
-  }
-  return { ok: true, generated_at: new Date().toISOString(), projects: [...byProject.values()].map((r) => summarizeQualityReport(r, reviewState)) };
+  return { ok: true, generated_at: new Date().toISOString(), projects: reports.map((r) => ({ ...summarizeQualityReport(r, reviewState), scope: 'project' as const })) };
 }
 
 export async function getQualityLatest(search = '', root = PIDEX_ROOT): Promise<{ ok: true; generated_at: string; latest: QualitySummary | null }> {
   const q = new URLSearchParams(search);
   const project = q.get('project') || '';
-  const reports = (await loadReports(root)).filter((r) => matchesProject(r, project));
+  const includeSmoke = q.get('include_smoke') === '1';
+  const reports = await loadReports(root);
   const reviewState = await readReviewState(root);
-  return { ok: true, generated_at: new Date().toISOString(), latest: reports[0] ? summarizeQualityReport(reports[0], reviewState) : null };
+  if (!project.trim()) {
+    const summaries = latestByProject(reports, includeSmoke).map((r) => ({ ...summarizeQualityReport(r, reviewState), scope: 'project' as const }));
+    return { ok: true, generated_at: new Date().toISOString(), latest: summaries.length ? aggregateQualitySummaries(summaries, reviewState) : null };
+  }
+  const matches = reports.filter((r) => matchesProject(r, project));
+  return { ok: true, generated_at: new Date().toISOString(), latest: matches[0] ? { ...summarizeQualityReport(matches[0], reviewState), scope: 'project' } : null };
+}
+
+export async function getQualityHistory(search = '', root = PIDEX_ROOT): Promise<{ ok: true; generated_at: string; history: Array<Pick<QualitySummary, 'project' | 'project_path' | 'generated_at' | 'confidence' | 'plans' | 'trace_gaps' | 'critical_missing_operators' | 'comparability'> & { regression_count: number; by_operator: Record<string, number>; by_type: Record<string, number>; latest_report: QualitySummary['latest_report'] }> }> {
+  const q = new URLSearchParams(search);
+  const project = q.get('project') || '';
+  const limit = Math.max(1, Math.min(100, Number.parseInt(q.get('limit') || '20', 10) || 20));
+  const reports = (await loadReports(root)).filter((r) => (project.trim() ? matchesProject(r, project) : !isSmokeProject(String(r.project_path || ''))));
+  const reviewState = await readReviewState(root);
+  const history = reports.slice(0, limit).map((report) => {
+    const summary = summarizeQualityReport(report, reviewState);
+    return {
+      project: summary.project,
+      project_path: summary.project_path,
+      generated_at: summary.generated_at,
+      confidence: summary.confidence,
+      plans: summary.plans,
+      trace_gaps: summary.trace_gaps,
+      critical_missing_operators: summary.critical_missing_operators,
+      comparability: summary.comparability,
+      regression_count: summary.regression_detectors.length,
+      by_operator: summary.trace.by_operator,
+      by_type: summary.trace.by_type,
+      latest_report: summary.latest_report,
+    };
+  });
+  return { ok: true, generated_at: new Date().toISOString(), history };
 }

@@ -51,6 +51,7 @@ import { Route as ApiAnalysisRouteImport } from './../routes/api/analysis'
 import { Route as ApiAgentBalancesRouteImport } from './../routes/api/agent-balances'
 import { Route as ApiQualityProjectsRouteImport } from './../routes/api/quality/projects'
 import { Route as ApiQualityLatestRouteImport } from './../routes/api/quality/latest'
+import { Route as ApiQualityHistoryRouteImport } from './../routes/api/quality/history'
 import { Route as ApiProvider_limitsProfileRouteImport } from './../routes/api/provider_limits/profile'
 import { Route as ApiProviderLimitsProfileRouteImport } from './../routes/api/provider-limits/profile'
 import { Route as ApiParallelAgentsModelsRouteImport } from './../routes/api/parallel-agents/models'
@@ -269,6 +270,11 @@ const ApiQualityLatestRoute = ApiQualityLatestRouteImport.update({
   path: '/api/quality/latest',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiQualityHistoryRoute = ApiQualityHistoryRouteImport.update({
+  id: '/api/quality/history',
+  path: '/api/quality/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProvider_limitsProfileRoute =
   ApiProvider_limitsProfileRouteImport.update({
     id: '/profile',
@@ -355,6 +361,7 @@ export interface FileRoutesByFullPath {
   '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
+  '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
 }
@@ -405,6 +412,7 @@ export interface FileRoutesByTo {
   '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
+  '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
 }
@@ -457,6 +465,7 @@ export interface FileRoutesById {
   '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
+  '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
 }
@@ -510,6 +519,7 @@ export interface FileRouteTypes {
     | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
+    | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
   fileRoutesByTo: FileRoutesByTo
@@ -560,6 +570,7 @@ export interface FileRouteTypes {
     | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
+    | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
   id:
@@ -611,6 +622,7 @@ export interface FileRouteTypes {
     | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
+    | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
   fileRoutesById: FileRoutesById
@@ -649,6 +661,7 @@ export interface RootRouteChildren {
   ApiToken_consumptionRoute: typeof ApiToken_consumptionRoute
   ApiChartsModelQualityRoute: typeof ApiChartsModelQualityRoute
   ApiChartsQualityRoute: typeof ApiChartsQualityRoute
+  ApiQualityHistoryRoute: typeof ApiQualityHistoryRoute
   ApiQualityLatestRoute: typeof ApiQualityLatestRoute
   ApiQualityProjectsRoute: typeof ApiQualityProjectsRoute
 }
@@ -949,6 +962,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiQualityLatestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/quality/history': {
+      id: '/api/quality/history'
+      path: '/api/quality/history'
+      fullPath: '/api/quality/history'
+      preLoaderRoute: typeof ApiQualityHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/provider_limits/profile': {
       id: '/api/provider_limits/profile'
       path: '/profile'
@@ -1110,6 +1130,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiToken_consumptionRoute: ApiToken_consumptionRoute,
   ApiChartsModelQualityRoute: ApiChartsModelQualityRoute,
   ApiChartsQualityRoute: ApiChartsQualityRoute,
+  ApiQualityHistoryRoute: ApiQualityHistoryRoute,
   ApiQualityLatestRoute: ApiQualityLatestRoute,
   ApiQualityProjectsRoute: ApiQualityProjectsRoute,
 }
