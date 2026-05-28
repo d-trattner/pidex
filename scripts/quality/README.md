@@ -57,6 +57,7 @@ Important operators:
 - `OpRuleAction`
 - `OpQualityReview`
 - `OpReleaseDecision`
+- `OpDecision`
 
 Phase 2 notes:
 
@@ -130,3 +131,42 @@ Ledger entries include:
 - `status`: accepted/rejected/deferred/monitoring/rolled-back
 
 Phase 0 does not mutate rules. Ledger writes are explicit user/operator actions only.
+
+## Operator decisions
+
+Phase 3 records explicit operator decisions as `OpDecision` rows in the same orchestrator-event stream.
+Use this when the operator intentionally skips, overrides, defers, accepts risk, backfills manual evidence, or corrects a PDQ expectation.
+
+Record a valid preflight skip for a continuation pipeline:
+
+```bash
+node scripts/quality/operator-decisions.mjs record \
+  --project <project-root> \
+  --pipeline-id <pipeline-id> \
+  --plan <plan-key> \
+  --decision skip_step \
+  --target-operator OpPreflight \
+  --target-step preflight \
+  --reason continuation-existing-plan \
+  --approved-by operator \
+  --risk-accepted false \
+  --follow-up-required false \
+  --evidence-path agents.output/planner/<artifact>.md
+```
+
+Record an auto-PDQ/manual backfill decision:
+
+```bash
+node scripts/quality/operator-decisions.mjs record \
+  --project <project-root> \
+  --pipeline-id <pipeline-id> \
+  --plan <plan-key> \
+  --decision manual_evidence \
+  --target-operator OpQualityReview \
+  --reason terminal-event-backfill \
+  --approved-by operator \
+  --risk-accepted false \
+  --follow-up-required true
+```
+
+Valid decision reasons are finite and reportable; run `node scripts/quality/operator-decisions.mjs --help` for the current taxonomy.

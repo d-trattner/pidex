@@ -50,6 +50,13 @@ assert.deepEqual(summary.reviews_by_agent, { 'pidex-qa': 1 });
 assert.deepEqual(summary.reviews_by_verdict, { APPROVED: 1 });
 assert.deepEqual(summary.review_finding_counts, { critical: 1 });
 
+summary = summarize({ metrics: [], pipeline_events: [], orchestrator_events: [{ operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'skip_step', target_operator: 'OpPreflight', reason: 'continuation-existing-plan', approved_by: 'operator' }, { operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'expectation_correction', target_operator: 'OpQualityReview', reason: 'expectation-wrong', approved_by: 'operator', proposed_expectation: { required_if: 'auto_pdq_enabled' } }], rule_actions: [], routing_artifacts: [], rules: [], untracked_rule_changes: [], pidex_root_rule_actions: [], pidex_root_untracked_rule_changes: [] }, ['plan-004']);
+assert.equal(summary.operator_decisions.length, 2);
+assert.deepEqual(summary.operator_decisions_by_type, { skip_step: 1, expectation_correction: 1 });
+assert.deepEqual(summary.operator_decisions_by_reason, { 'continuation-existing-plan': 1, 'expectation-wrong': 1 });
+assert.equal(summary.valid_skips.length, 1);
+assert.equal(summary.expectation_corrections.length, 1);
+
 trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T21:30:00Z', agent: 'pidex-qa', _source_path: 'x' }], pipeline_events: [{ plan: '4', event_type: 'pipeline_started', timestamp: '2026-05-20T21:30:00Z' }], orchestrator_events: [{ operator_type: 'OpPreflight', plan_key: 'unknown-plan' }, { operator_type: 'OpSpawn', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa' }], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 4);
 assert.equal(trace.observed_required, 3);
