@@ -311,10 +311,14 @@ function QualityPage() {
             <p className="muted">Current state for {scopeLabel}: <strong className={`metric-${qualityState.tone}`}>{qualityState.label}</strong>. Freshness: <strong className={`metric-${freshness.tone}`}>{freshness.label}</strong>.</p>
             <p className="muted"><strong>Why:</strong> {qualityState.why}</p>
             <p className="muted"><strong>Next action:</strong> {qualityState.next}</p>
-            <div className="quality-action-row">
-              <button type="button" className="button" onClick={refreshPdq} disabled={refreshState.status === 'running'}>{refreshState.status === 'running' ? 'Refreshing PDQ…' : 'Refresh PDQ'}</button>
-              {refreshState.message ? <span className={`quality-refresh-status quality-refresh-status--${refreshState.status}`}>{refreshState.message}</span> : null}
-            </div>
+            <details className="quality-advanced-actions">
+              <summary>Advanced/manual actions</summary>
+              <p className="muted">PDQ normally runs automatically after terminal pipeline events. Use manual refresh only for stale reports, backfilled events, failed auto-PDQ, or after changing PDQ/report logic.</p>
+              <div className="quality-action-row">
+                <button type="button" className="button" onClick={refreshPdq} disabled={refreshState.status === 'running'}>{refreshState.status === 'running' ? 'Refreshing PDQ…' : 'Manual PDQ refresh'}</button>
+                {refreshState.message ? <span className={`quality-refresh-status quality-refresh-status--${refreshState.status}`}>{refreshState.message}</span> : null}
+              </div>
+            </details>
           </div>
           <HelpPopover
             title="Quality trajectory"
