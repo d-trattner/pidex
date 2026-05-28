@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import {
   Area,
@@ -146,6 +148,7 @@ const EMPTY_QUALITY: QualityPayload = {
 
 function QualityPage() {
   const location = useLocation();
+  const [refreshState, setRefreshState] = useState<{ status: 'idle' | 'running' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
   const project = readProjectFromSearch(location.search);
   const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project], withProjectParam('/api/charts/quality', project));
   const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project], withProjectParam('/api/charts/model-quality', project));
@@ -215,15 +218,17 @@ function QualityPage() {
   const latest = completionData.at(-1);
   const latestCompletion = latest ? `${safeNumber(latest.completion_rate).toFixed(1)}%` : '—';
   const palette = ['#00f5ff', '#9d7bff', '#ffcc66', '#ff6b9d', '#66ff99', '#ff8a4c'];
+  const reportAgeHours = latestQuality?.generated_at ? Math.max(0, (Date.now() - (Date.parse(latestQuality.generated_at) || Date.now())) / 3_600_000) : null;
+  const freshness = reportAgeHours == null ? { label: 'unknown freshness', tone: 'warn' } : reportAgeHours > 168 ? { label: `${(reportAgeHours / 24).toFixed(1)}d old`, tone: 'bad' } : reportAgeHours > 72 ? { label: `${(reportAgeHours / 24).toFixed(1)}d old`, tone: 'warn' } : { label: reportAgeHours < 24 ? `${reportAgeHours.toFixed(0)}h old` : `${(reportAgeHours / 24).toFixed(1)}d old`, tone: 'good' };
   const qualityState = !latestQuality
-    ? { label: 'unknown', tone: 'warn', next: 'Generate a PDQ report for this scope.' }
+    ? { label: 'unknown', tone: 'warn', next: 'Generate a PDQ report for this scope.', why: 'No quality report is available for the selected scope.' }
     : latestQuality.critical_missing_operators > 0
-      ? { label: 'needs attention', tone: 'bad', next: 'Fix critical missing operator evidence, then refresh PDQ.' }
+      ? { label: 'needs attention', tone: 'bad', next: 'Fix critical missing operator evidence, then refresh PDQ.', why: `${latestQuality.critical_missing_operators} critical missing operator(s) exist in the selected scope.` }
       : latestQuality.trace_gaps > 0
-        ? { label: 'instrumentation debt', tone: 'warn', next: 'Repair repeated trace gaps and validate on the next real pipeline.' }
+        ? { label: 'instrumentation debt', tone: 'warn', next: 'Repair repeated trace gaps and validate on the next real pipeline.', why: `${latestQuality.trace_gaps} trace gap(s) remain, mostly instrumentation/observability debt.` }
         : latestQuality.plans.length < 6
-          ? { label: 'clean, low sample', tone: 'warn', next: 'Run more comparable pipelines before trusting trend direction.' }
-          : { label: 'clean', tone: 'good', next: 'Keep monitoring trend and refresh stale reports.' };
+          ? { label: 'clean, low sample', tone: 'warn', next: 'Run more comparable pipelines before trusting trend direction.', why: 'No gaps are visible, but the sample size is still too low.' }
+          : { label: 'clean', tone: 'good', next: 'Keep monitoring trend and refresh stale reports.', why: 'No trace gaps or critical missing operators are visible in the selected scope.' };
   const traceTypeData = latestQuality
     ? Object.entries(latestQuality.trace.by_type).map(([name, value]) => ({ name, value: safeNumber(value) }))
     : [];
@@ -262,6 +267,19 @@ function QualityPage() {
       }, {}))
     : [];
 
+  const refreshPdq = async () => {
+    setRefreshState({ status: 'running', message: project ? `Refreshing PDQ for ${project}…` : 'Refreshing PDQ for all non-smoke projects…' });
+    try {
+      const response = await fetch(withProjectParam('/api/quality/refresh', project), { method: 'POST' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `Refresh failed (${response.status})`);
+      setRefreshState({ status: 'success', message: `Refreshed ${payload.refreshed || 0} report target(s).` });
+      await Promise.all([qualityLatestQuery.refetch(), qualityQuery.refetch(), modelQuery.refetch()]);
+    } catch (error) {
+      setRefreshState({ status: 'error', message: error instanceof Error ? error.message : 'Refresh failed' });
+    }
+  };
+
   return (
     <section className="grid" style={{ marginTop: 12 }}>
       <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
@@ -290,7 +308,13 @@ function QualityPage() {
         <div className="card-heading-row">
           <div>
             <h3>Quality trajectory</h3>
-            <p className="muted">Current state for {scopeLabel}: <strong className={`metric-${qualityState.tone}`}>{qualityState.label}</strong>. Next action: {qualityState.next}</p>
+            <p className="muted">Current state for {scopeLabel}: <strong className={`metric-${qualityState.tone}`}>{qualityState.label}</strong>. Freshness: <strong className={`metric-${freshness.tone}`}>{freshness.label}</strong>.</p>
+            <p className="muted"><strong>Why:</strong> {qualityState.why}</p>
+            <p className="muted"><strong>Next action:</strong> {qualityState.next}</p>
+            <div className="quality-action-row">
+              <button type="button" className="button" onClick={refreshPdq} disabled={refreshState.status === 'running'}>{refreshState.status === 'running' ? 'Refreshing PDQ…' : 'Refresh PDQ'}</button>
+              {refreshState.message ? <span className={`quality-refresh-status quality-refresh-status--${refreshState.status}`}>{refreshState.message}</span> : null}
+            </div>
           </div>
           <HelpPopover
             title="Quality trajectory"

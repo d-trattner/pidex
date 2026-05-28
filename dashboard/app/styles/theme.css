@@ -611,6 +611,31 @@ body.modal-open {
   overflow-wrap: anywhere;
 }
 
+.quality-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.quality-refresh-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.quality-refresh-status--success {
+  color: var(--good);
+}
+
+.quality-refresh-status--error {
+  color: var(--bad);
+}
+
+.quality-refresh-status--running {
+  color: var(--warn);
+}
+
 .rule-impact-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

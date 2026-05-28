@@ -49,6 +49,7 @@ import { Route as ApiDocumentRouteImport } from './../routes/api/document'
 import { Route as ApiContextRouteImport } from './../routes/api/context'
 import { Route as ApiAnalysisRouteImport } from './../routes/api/analysis'
 import { Route as ApiAgentBalancesRouteImport } from './../routes/api/agent-balances'
+import { Route as ApiQualityRefreshRouteImport } from './../routes/api/quality/refresh'
 import { Route as ApiQualityProjectsRouteImport } from './../routes/api/quality/projects'
 import { Route as ApiQualityLatestRouteImport } from './../routes/api/quality/latest'
 import { Route as ApiQualityHistoryRouteImport } from './../routes/api/quality/history'
@@ -260,6 +261,11 @@ const ApiAgentBalancesRoute = ApiAgentBalancesRouteImport.update({
   path: '/api/agent-balances',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiQualityRefreshRoute = ApiQualityRefreshRouteImport.update({
+  id: '/api/quality/refresh',
+  path: '/api/quality/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiQualityProjectsRoute = ApiQualityProjectsRouteImport.update({
   id: '/api/quality/projects',
   path: '/api/quality/projects',
@@ -364,6 +370,7 @@ export interface FileRoutesByFullPath {
   '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
+  '/api/quality/refresh': typeof ApiQualityRefreshRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -415,6 +422,7 @@ export interface FileRoutesByTo {
   '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
+  '/api/quality/refresh': typeof ApiQualityRefreshRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -468,6 +476,7 @@ export interface FileRoutesById {
   '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
+  '/api/quality/refresh': typeof ApiQualityRefreshRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -522,6 +531,7 @@ export interface FileRouteTypes {
     | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
+    | '/api/quality/refresh'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -573,6 +583,7 @@ export interface FileRouteTypes {
     | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
+    | '/api/quality/refresh'
   id:
     | '__root__'
     | '/'
@@ -625,6 +636,7 @@ export interface FileRouteTypes {
     | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
+    | '/api/quality/refresh'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -664,6 +676,7 @@ export interface RootRouteChildren {
   ApiQualityHistoryRoute: typeof ApiQualityHistoryRoute
   ApiQualityLatestRoute: typeof ApiQualityLatestRoute
   ApiQualityProjectsRoute: typeof ApiQualityProjectsRoute
+  ApiQualityRefreshRoute: typeof ApiQualityRefreshRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -948,6 +961,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentBalancesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/quality/refresh': {
+      id: '/api/quality/refresh'
+      path: '/api/quality/refresh'
+      fullPath: '/api/quality/refresh'
+      preLoaderRoute: typeof ApiQualityRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/quality/projects': {
       id: '/api/quality/projects'
       path: '/api/quality/projects'
@@ -1133,6 +1153,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiQualityHistoryRoute: ApiQualityHistoryRoute,
   ApiQualityLatestRoute: ApiQualityLatestRoute,
   ApiQualityProjectsRoute: ApiQualityProjectsRoute,
+  ApiQualityRefreshRoute: ApiQualityRefreshRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
