@@ -244,6 +244,23 @@ function QualityPage() {
         }, {}),
       ).map(([label, count]) => ({ label, count }))
     : [];
+  const pidexIncluded = latestQuality?.included_projects?.find((item) => item.project === 'pidex') || (project === 'pidex' && latestQuality ? latestQuality : null);
+  const managedIncluded = (latestQuality?.included_projects || []).filter((item) => item.project !== 'pidex');
+  const managedTraceGaps = managedIncluded.length ? managedIncluded.reduce((sum, item) => sum + safeNumber(item.trace_gaps), 0) : latestQuality?.trace_gaps || 0;
+  const managedCritical = managedIncluded.length ? managedIncluded.reduce((sum, item) => sum + safeNumber(item.critical_missing_operators), 0) : latestQuality?.critical_missing_operators || 0;
+  const regressionHeatmap = latestQuality
+    ? Object.values(latestQuality.regression_detectors.reduce<Record<string, { dimension: string; low: number; medium: number; high: number; critical: number; confidence: string; reason: string }>>((acc, item) => {
+        const dimension = String(item.dimension || 'unknown');
+        const severity = String(item.severity || 'low').toLowerCase();
+        const count = safeNumber(item.count || 1);
+        if (!acc[dimension]) acc[dimension] = { dimension, low: 0, medium: 0, high: 0, critical: 0, confidence: String(item.confidence || 'unknown'), reason: String(item.reason || '') };
+        if (severity === 'critical') acc[dimension].critical += count;
+        else if (severity === 'high') acc[dimension].high += count;
+        else if (severity === 'medium') acc[dimension].medium += count;
+        else acc[dimension].low += count;
+        return acc;
+      }, {}))
+    : [];
 
   return (
     <section className="grid" style={{ marginTop: 12 }}>
@@ -285,6 +302,52 @@ function QualityPage() {
           />
         </div>
       </article>
+
+      <div className="quality-layer-grid">
+        <article className="glass-card glass quality-layer-card quality-layer-card--pidex">
+          <div className="card-heading-row">
+            <div>
+              <h3>PIDEX quality system</h3>
+              <p className="muted">PDQ, rules, orchestration traces, and PIDEX-internal process health.</p>
+            </div>
+            <HelpPopover
+              title="PIDEX quality system"
+              shows="The health of PIDEX as the measurement/orchestration system, separate from managed project outcomes."
+              source="PIDEX PDQ reports, operator trace findings, rule-action windows, and PIDEX project reports."
+              reading="Critical PIDEX gaps mean the measuring system itself needs attention before project trends can be trusted fully."
+              improve="Fix PIDEX operator trace coverage, rule-action evidence, and PDQ reporting integrity."
+              caveats="When a non-PIDEX project is selected, this card may only show a summary unless aggregate/PIDEX report data is loaded."
+            />
+          </div>
+          <div className="quality-layer-metrics">
+            <div><span className="muted">Critical</span><strong className={safeNumber(pidexIncluded?.critical_missing_operators) > 0 ? 'metric-bad' : 'metric-good'}>{pidexIncluded ? safeNumber(pidexIncluded.critical_missing_operators) : '—'}</strong></div>
+            <div><span className="muted">Trace gaps</span><strong>{pidexIncluded ? safeNumber(pidexIncluded.trace_gaps) : '—'}</strong></div>
+            <div><span className="muted">Confidence</span><strong>{pidexIncluded?.confidence || (project === 'pidex' ? latestQuality?.confidence : 'load All/pidex')}</strong></div>
+          </div>
+        </article>
+
+        <article className="glass-card glass quality-layer-card quality-layer-card--scope">
+          <div className="card-heading-row">
+            <div>
+              <h3>Selected scope quality</h3>
+              <p className="muted">Pipeline/review/model quality for {scopeLabel}; in All projects this is the managed-project aggregate.</p>
+            </div>
+            <HelpPopover
+              title="Selected scope quality"
+              shows="Quality evidence for the currently selected project, or aggregate managed-project evidence in All projects mode."
+              source="Latest quality read model for the active selector scope."
+              reading="This answers how the selected work is doing, not whether PIDEX itself is measuring correctly."
+              improve="Reduce selected-scope trace gaps, review loops, rejections, and stale reports."
+              caveats="PIDEX-system issues are intentionally called out separately."
+            />
+          </div>
+          <div className="quality-layer-metrics">
+            <div><span className="muted">Critical</span><strong className={managedCritical > 0 ? 'metric-bad' : 'metric-good'}>{managedCritical}</strong></div>
+            <div><span className="muted">Trace gaps</span><strong>{managedTraceGaps}</strong></div>
+            <div><span className="muted">Scope</span><strong>{scopeLabel}</strong></div>
+          </div>
+        </article>
+      </div>
 
       <article className="glass-card glass quality-card quality-card-full">
         <div className="card-heading-row">
@@ -406,10 +469,47 @@ function QualityPage() {
             ) : null}
 
             <div style={{ marginTop: 16 }}>
-              <h4>Rule impact</h4>
+              <div className="card-heading-row"><h4>Regression detector heatmap</h4><HelpPopover title="Regression detector heatmap" shows="A compact matrix of repeated quality problem dimensions by severity." source="PDQ regression_detectors in the latest quality report." reading="Darker/hotter cells indicate repeated or higher-severity regression signals that need attention." improve="Investigate recurring dimensions, add targeted rules/tests, and verify the next PDQ report improves." caveats="Current heatmap is latest-report based; historical dimension trends can be added once reports expose stable per-dimension history." /></div>
+              {regressionHeatmap.length ? (
+                <div className="regression-heatmap" role="table" aria-label="Regression detector heatmap">
+                  <div className="regression-heatmap__head" role="row"><span>Dimension</span><span>Low</span><span>Med</span><span>High</span><span>Crit</span><span>Confidence</span></div>
+                  {regressionHeatmap.map((row) => (
+                    <div className="regression-heatmap__row" role="row" key={row.dimension}>
+                      <strong>{row.dimension}</strong>
+                      <span className="heat-cell heat-cell--low" data-empty={row.low === 0}>{row.low || ''}</span>
+                      <span className="heat-cell heat-cell--medium" data-empty={row.medium === 0}>{row.medium || ''}</span>
+                      <span className="heat-cell heat-cell--high" data-empty={row.high === 0}>{row.high || ''}</span>
+                      <span className="heat-cell heat-cell--critical" data-empty={row.critical === 0}>{row.critical || ''}</span>
+                      <span className="muted">{row.confidence}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="muted">No regression detector findings in the latest report.</p>}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="card-heading-row"><h4>Rule impact windows</h4><HelpPopover title="Rule impact windows" shows="Before/after evidence windows for approved PIDEX rule actions." source="PDQ rule_action_windows and the rule-action ledger." reading="A shorter after bar can be directionally good only when samples are comparable; labels intentionally avoid causal claims." improve="Record rule actions with expected impact dimensions, then collect comparable before/after pipeline samples." caveats="Low confidence or partially comparable windows are evidence prompts, not proof." /></div>
               <p className="muted">Before/after windows are directional proxies only; labels avoid causal claims.</p>
               {latestQuality.rule_impact.length ? (
-                <div style={{ overflowX: 'auto' }}>
+                <>
+                  <div className="rule-impact-card-grid">
+                    {latestQuality.rule_impact.slice(0, 6).map((item, idx) => {
+                      const max = Math.max(1, item.before_count, item.after_count);
+                      return (
+                        <article className="rule-impact-card" key={`${item.rule_path}-card-${idx}`}>
+                          <div className="rule-impact-card__head">
+                            <strong>{item.rule_path.split('/').slice(-1)[0] || item.rule_path}</strong>
+                            <span className={`rule-impact-label rule-impact-label--${item.label.replace(/[^a-z0-9-]/gi, '-')}`}>{item.label}</span>
+                          </div>
+                          <p className="muted">{item.owning_agent} · {item.expected_impact_dimension}</p>
+                          <div className="mini-bar-row"><span>Before</span><div><i style={{ width: `${(item.before_count / max) * 100}%` }} /></div><strong>{item.before_count}</strong></div>
+                          <div className="mini-bar-row mini-bar-row--after"><span>After</span><div><i style={{ width: `${(item.after_count / max) * 100}%` }} /></div><strong>{item.after_count}</strong></div>
+                          <p className="muted">confidence: {item.confidence}</p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
                   <table className="table">
                     <thead>
                       <tr>
@@ -435,6 +535,7 @@ function QualityPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               ) : (
                 <p className="muted">No rule impact windows in the latest report.</p>
               )}
