@@ -393,10 +393,10 @@ function QualityPage() {
               </div>
             </div>
             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 12 }}>
-              <div className="glass-card glass">
+              <div className="glass-card glass chart-card--roomy-mobile">
                 <div className="card-heading-row"><h4>Trace gap mix</h4><HelpPopover title="Trace gap mix" shows="Counts by trace gap type." source="PDQ operator_trace.findings." reading="Instrumentation gaps mean PIDEX probably did work but did not observe the expected event." improve="Add or repair instrumentation for the missing event class." /></div>
                 {traceTypeData.length ? (
-                  <ResponsiveContainer width="100%" height={180}>
+                  <ResponsiveContainer width="100%" height={240}>
                     <PieChart>
                       <Pie data={traceTypeData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={72} paddingAngle={3}>
                         {traceTypeData.map((_, index) => <Cell key={`trace-${index}`} fill={palette[index % palette.length]} />)}
@@ -635,11 +635,11 @@ function QualityPage() {
         )}
       </article>
 
-      <article className="glass-card glass quality-card">
+      <article className="glass-card glass quality-card chart-card--roomy-mobile">
         <h3>Secondary Health (Pie)</h3>
         <p className="muted">Clean vs malformed in secondary artifacts.</p>
         {pieData.length ? (
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Tooltip />
               <Pie

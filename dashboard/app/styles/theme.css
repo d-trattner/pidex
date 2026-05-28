@@ -273,6 +273,31 @@ body.modal-open {
   grid-template-columns: 1fr;
 }
 
+.recharts-default-tooltip {
+  border: 1px solid rgba(0, 245, 255, 0.34) !important;
+  border-radius: 10px !important;
+  background: rgba(3, 8, 20, 0.92) !important;
+  color: var(--text) !important;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42), 0 0 20px rgba(0, 245, 255, 0.10) !important;
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+}
+
+.recharts-tooltip-label,
+.recharts-tooltip-item,
+.recharts-tooltip-item-name,
+.recharts-tooltip-item-value,
+.recharts-tooltip-item-separator {
+  color: var(--text) !important;
+}
+
+.recharts-legend-item-text,
+.recharts-text,
+.recharts-cartesian-axis-tick-value {
+  fill: #8ad7ff !important;
+  color: #8ad7ff !important;
+}
+
 @media (min-width: 900px) {
   .quality-metrics-grid {
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -382,6 +407,21 @@ body.modal-open {
 
 .glass-card.quality-metric-card {
   grid-column: 1 / -1;
+  min-height: auto;
+  padding: 12px;
+}
+
+.quality-metric-card .muted {
+  margin: 0 0 4px;
+}
+
+.quality-metric-card .metric-value {
+  margin: 0;
+  line-height: 1.08;
+}
+
+.chart-card--roomy-mobile {
+  min-height: 260px;
 }
 
 .dashboard-overview .dashboard-hero,
@@ -711,6 +751,18 @@ body.modal-open {
 @media (max-width: 640px) {
   .card-heading-row {
     gap: 8px;
+  }
+
+  .glass-card.quality-metric-card {
+    padding: 10px 12px;
+  }
+
+  .glass-card.quality-metric-card .metric-value {
+    font-size: clamp(1.35rem, 7vw, 1.85rem);
+  }
+
+  .chart-card--roomy-mobile {
+    min-height: 320px;
   }
 
   .metric-help-backdrop {

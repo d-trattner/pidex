@@ -142,11 +142,11 @@ function DashboardLayout() {
             ) : <p className="muted">No quality history available yet.</p>}
           </article>
 
-          <article className="glass-card glass quality-card">
+          <article className="glass-card glass quality-card chart-card--roomy-mobile">
             <div className="card-heading-row"><h3>Confidence mix</h3><HelpPopover title="Confidence mix" shows="Evidence confidence labels in the active scope." source="/api/quality/latest aggregate confidence_mix or project confidence." reading="More medium/high confidence means the trend is more trustworthy." improve="Increase sample size, reduce stale reports, and keep report scope comparable." /></div>
             {confidenceData.length ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart><Pie data={confidenceData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={76}>{confidenceData.map((_, idx) => <Cell key={idx} fill={['#00f5ff', '#9d7bff', '#ffe600', '#ff3864'][idx % 4]} />)}</Pie><Tooltip /></PieChart>
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart><Pie data={confidenceData} dataKey="value" nameKey="name" innerRadius={54} outerRadius={96}>{confidenceData.map((_, idx) => <Cell key={idx} fill={['#00f5ff', '#9d7bff', '#ffe600', '#ff3864'][idx % 4]} />)}</Pie><Tooltip /></PieChart>
               </ResponsiveContainer>
             ) : <p className="muted">No confidence data.</p>}
           </article>
