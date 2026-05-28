@@ -93,11 +93,26 @@ type QualityReadModelSummary = {
   plans: string[];
   trace_gaps: number;
   critical_missing_operators: number;
+  valid_skip_count?: number;
   trace: {
     by_type: Record<string, number>;
     by_operator: Record<string, number>;
     by_severity: Record<string, number>;
-    findings: Array<{ type: string; operator_type: string; plan_key: string; severity: string; confidence: string; reason: string; evidence: string | null }>;
+    findings: Array<{
+      type: string;
+      operator_type: string;
+      plan_key: string;
+      severity: string;
+      confidence: string;
+      reason: string;
+      evidence: string | null;
+      contract_id?: string | null;
+      expected_when?: string | null;
+      observed_state?: string | null;
+      allowed_skip_reasons?: string[];
+      resolution_options?: string[];
+      decision_evidence?: Record<string, unknown> | null;
+    }>;
   };
   rule_impact: Array<{
     rule_path: string;
@@ -119,7 +134,7 @@ type QualityReadModelSummary = {
   latest_report: { json: string; markdown: string | null } | null;
   review_state: { reviewed_plans_count: number; last_review_at: string | null };
   scope?: 'project' | 'aggregate';
-  included_projects?: Array<{ project: string; generated_at: string | null; trace_gaps: number; critical_missing_operators: number; confidence: string | null }>;
+  included_projects?: Array<{ project: string; generated_at: string | null; trace_gaps: number; critical_missing_operators: number; valid_skip_count?: number; confidence: string | null }>;
   confidence_mix?: Record<string, number>;
   stale_projects?: Array<{ project: string; generated_at: string | null; age_hours: number | null }>;
 };
@@ -223,7 +238,7 @@ function QualityPage() {
   const qualityState = !latestQuality
     ? { label: 'unknown', tone: 'warn', next: 'Generate a PDQ report for this scope.', why: 'No quality report is available for the selected scope.' }
     : latestQuality.critical_missing_operators > 0
-      ? { label: 'needs attention', tone: 'bad', next: 'Fix critical missing operator evidence, then refresh PDQ.', why: `${latestQuality.critical_missing_operators} critical missing operator(s) exist in the selected scope.` }
+      ? { label: 'needs attention', tone: 'bad', next: 'Resolve violated operator contracts: restore event logging, record a valid skip/manual decision, or correct the expectation contract.', why: `${latestQuality.critical_missing_operators} critical missing operator(s) exist in the selected scope.` }
       : latestQuality.trace_gaps > 0
         ? { label: 'instrumentation debt', tone: 'warn', next: 'Repair repeated trace gaps and validate on the next real pipeline.', why: `${latestQuality.trace_gaps} trace gap(s) remain, mostly instrumentation/observability debt.` }
         : latestQuality.plans.length < 6
@@ -232,6 +247,9 @@ function QualityPage() {
   const traceTypeData = latestQuality
     ? Object.entries(latestQuality.trace.by_type).map(([name, value]) => ({ name, value: safeNumber(value) }))
     : [];
+  const contractFindings = latestQuality?.trace.findings.filter((item) => item.contract_id && item.type !== 'valid_skip') || [];
+  const validSkipFindings = latestQuality?.trace.findings.filter((item) => item.type === 'valid_skip') || [];
+  const expectationCorrectionFindings = latestQuality?.trace.findings.filter((item) => item.decision_evidence && item.type === 'expectation_needs_correction') || [];
   const severityData = latestQuality
     ? Object.entries(latestQuality.trace.by_severity).map(([severity, count]) => ({ severity, count: safeNumber(count) }))
     : [];
@@ -311,6 +329,7 @@ function QualityPage() {
             <p className="muted">Current state for {scopeLabel}: <strong className={`metric-${qualityState.tone}`}>{qualityState.label}</strong>. Freshness: <strong className={`metric-${freshness.tone}`}>{freshness.label}</strong>.</p>
             <p className="muted"><strong>Why:</strong> {qualityState.why}</p>
             <p className="muted"><strong>Next action:</strong> {qualityState.next}</p>
+            {latestQuality?.valid_skip_count ? <p className="muted"><strong>Operator decisions:</strong> {latestQuality.valid_skip_count} valid skip/manual evidence decision(s) are recorded and excluded from trace-gap counts.</p> : null}
             <details className="quality-advanced-actions">
               <summary>Advanced/manual actions</summary>
               <p className="muted">PDQ normally runs automatically after terminal pipeline events. Use manual refresh only for stale reports, backfilled events, failed auto-PDQ, or after changing PDQ/report logic.</p>
@@ -410,6 +429,10 @@ function QualityPage() {
               <div className="glass-card glass quality-metric-card">
                 <p className="muted">Critical missing</p>
                 <p className="metric-value">{latestQuality.critical_missing_operators}</p>
+              </div>
+              <div className="glass-card glass quality-metric-card">
+                <p className="muted">Valid skips</p>
+                <p className="metric-value">{latestQuality.valid_skip_count || 0}</p>
               </div>
               <div className="glass-card glass quality-metric-card">
                 <p className="muted">Regressions</p>
@@ -567,6 +590,66 @@ function QualityPage() {
               ) : (
                 <p className="muted">No rule impact windows in the latest report.</p>
               )}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="card-heading-row"><h4>Operator contract findings</h4><HelpPopover title="Operator contract findings" shows="Contract-backed PDQ findings with expected evidence, allowed operator decisions, and repair options." source="PDQ operator_trace.findings contract fields from operator-contracts.mjs." reading="A violated contract means PIDEX expected structured operator evidence. Either restore the event, record a valid operator-approved decision, or correct the expectation." improve="Use allowed skip reasons only when the operator explicitly approved the skip/manual evidence." caveats="Valid skips are shown separately and are not counted as trace gaps." /></div>
+              {contractFindings.length ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Plan</th>
+                        <th>Contract</th>
+                        <th>Operator</th>
+                        <th>Observed</th>
+                        <th>Severity</th>
+                        <th>Allowed decisions</th>
+                        <th>Repair action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {contractFindings.slice(0, 10).map((item, idx) => (
+                        <tr key={`${item.contract_id}-${item.plan_key}-${idx}`}>
+                          <td>{item.plan_key}</td>
+                          <td style={{ minWidth: 220 }}>{item.contract_id}</td>
+                          <td>{item.operator_type}</td>
+                          <td>{item.observed_state || item.type}</td>
+                          <td>{item.severity}</td>
+                          <td style={{ minWidth: 240 }}>{(item.allowed_skip_reasons || []).join(', ') || '—'}</td>
+                          <td style={{ minWidth: 280 }}>{(item.resolution_options || []).join(' · ') || item.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="muted">No violated operator contracts in the latest report.</p>}
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="card-heading-row"><h4>Valid skips and manual evidence</h4><HelpPopover title="Valid skips and manual evidence" shows="Operator-approved decisions that satisfy a PDQ contract instead of becoming generic missing evidence." source="OpDecision rows with allowed reasons matched by PDQ operator contracts." reading="These are healthy when explicitly recorded, scoped, and allowed by contract." improve="Keep reasons finite and evidence paths useful; do not use skip decisions to hide unresolved risk." /></div>
+              {validSkipFindings.length ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="table">
+                    <thead><tr><th>Plan</th><th>Operator</th><th>Decision</th><th>Reason</th><th>Evidence</th></tr></thead>
+                    <tbody>
+                      {validSkipFindings.slice(0, 10).map((item, idx) => {
+                        const decision = item.decision_evidence || {};
+                        return (
+                          <tr key={`${item.plan_key}-${item.operator_type}-skip-${idx}`}>
+                            <td>{item.plan_key}</td>
+                            <td>{item.operator_type}</td>
+                            <td>{String(decision.decision_type || item.type)}</td>
+                            <td>{String(decision.reason || item.reason)}</td>
+                            <td style={{ minWidth: 240 }}>{item.evidence || String((decision as Record<string, unknown>).evidence_path || '—')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <p className="muted">No valid skip/manual-evidence decisions in the latest report.</p>}
+              {expectationCorrectionFindings.length ? <p className="muted">Expectation corrections pending: {expectationCorrectionFindings.length}</p> : null}
             </div>
 
             <div style={{ marginTop: 16 }}>

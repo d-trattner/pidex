@@ -15,7 +15,7 @@ const summary = summarizeQualityReport({
       gap_count: 3,
       critical_missing_operators: 1,
       findings: [
-        { type: 'instrumentation_missing', operator_type: 'OpQualityReview', plan_key: 'plan-001', confidence: 'probably-unlogged', severity: 'low', reason: 'missing review' },
+        { type: 'instrumentation_missing', operator_type: 'OpQualityReview', plan_key: 'plan-001', confidence: 'probably-unlogged', severity: 'low', reason: 'missing review', contract_id: 'operator.OpQualityReview.terminal-pdq', allowed_skip_reasons: ['terminal-event-backfill'], resolution_options: ['backfill OpQualityReview'] },
         { type: 'operator_unobserved', operator_type: 'OpPreflight', severity: 'info' },
         { type: 'missing_operator', operator_type: 'OpGate', severity: 'high' },
       ],
@@ -34,6 +34,8 @@ assert.equal(summary.critical_missing_operators, 1);
 assert.deepEqual(summary.trace.by_type, { instrumentation_missing: 1, operator_unobserved: 1, missing_operator: 1 });
 assert.deepEqual(summary.trace.by_operator, { OpQualityReview: 1, OpPreflight: 1, OpGate: 1 });
 assert.equal(summary.trace.findings[0].plan_key, 'plan-001');
+assert.equal(summary.trace.findings[0].contract_id, 'operator.OpQualityReview.terminal-pdq');
+assert.deepEqual(summary.trace.findings[0].allowed_skip_reasons, ['terminal-event-backfill']);
 assert.equal(summary.rule_impact[0].rule_path, 'rules/example.md');
 assert.equal(summary.rule_impact[0].confidence, 'medium');
 assert.equal(summary.comparability?.label, 'insufficient-data');

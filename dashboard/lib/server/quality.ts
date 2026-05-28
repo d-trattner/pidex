@@ -14,6 +14,12 @@ export type TraceFinding = {
   confidence: string;
   reason: string;
   evidence: string | null;
+  contract_id: string | null;
+  expected_when: string | null;
+  observed_state: string | null;
+  allowed_skip_reasons: string[];
+  resolution_options: string[];
+  decision_evidence: AnyRecord | null;
 };
 
 export type RuleImpactSummary = {
@@ -47,6 +53,7 @@ export type QualitySummary = {
   plans: string[];
   trace_gaps: number;
   critical_missing_operators: number;
+  valid_skip_count: number;
   trace: TraceBreakdown;
   rule_impact: RuleImpactSummary[];
   regression_detectors: AnyRecord[];
@@ -54,7 +61,7 @@ export type QualitySummary = {
   latest_report: { json: string; markdown: string | null } | null;
   review_state: { reviewed_plans_count: number; last_review_at: string | null };
   scope?: 'project' | 'aggregate';
-  included_projects?: Array<{ project: string; project_path: string; generated_at: string | null; trace_gaps: number; critical_missing_operators: number; confidence: string | null }>;
+  included_projects?: Array<{ project: string; project_path: string; generated_at: string | null; trace_gaps: number; critical_missing_operators: number; valid_skip_count: number; confidence: string | null }>;
   confidence_mix?: Record<string, number>;
   stale_projects?: Array<{ project: string; generated_at: string | null; age_hours: number | null }>;
 };
@@ -98,6 +105,12 @@ function normalizeFinding(row: AnyRecord): TraceFinding {
     confidence: String(row?.confidence || 'unknown'),
     reason: String(row?.reason || ''),
     evidence: row?.evidence ? String(row.evidence) : null,
+    contract_id: row?.contract_id ? String(row.contract_id) : null,
+    expected_when: row?.expected_when ? String(row.expected_when) : null,
+    observed_state: row?.observed_state ? String(row.observed_state) : null,
+    allowed_skip_reasons: Array.isArray(row?.allowed_skip_reasons) ? row.allowed_skip_reasons.map(String) : [],
+    resolution_options: Array.isArray(row?.resolution_options) ? row.resolution_options.map(String) : [],
+    decision_evidence: row?.decision_evidence && typeof row.decision_evidence === 'object' ? row.decision_evidence : null,
   };
 }
 
@@ -178,6 +191,7 @@ export function summarizeQualityReport(report: AnyRecord, reviewState: QualitySu
     plans: Array.isArray(summary.plans_reviewed) ? summary.plans_reviewed : [],
     trace_gaps: Number(trace.gap_count || 0),
     critical_missing_operators: Number(trace.critical_missing_operators || 0),
+    valid_skip_count: Number(trace.valid_skip_count || 0),
     trace: {
       by_type: countBy(findings, 'type'),
       by_operator: countBy(findings, 'operator_type'),
@@ -241,6 +255,7 @@ function aggregateQualitySummaries(summaries: QualitySummary[], reviewState: Qua
     plans: Array.from(new Set(summaries.flatMap((item) => item.plans.map((plan) => `${item.project}:${plan}`)))),
     trace_gaps: summaries.reduce((sum, item) => sum + item.trace_gaps, 0),
     critical_missing_operators: summaries.reduce((sum, item) => sum + item.critical_missing_operators, 0),
+    valid_skip_count: summaries.reduce((sum, item) => sum + item.valid_skip_count, 0),
     trace: {
       by_type: mergeCounts(summaries.map((item) => item.trace.by_type)),
       by_operator: mergeCounts(summaries.map((item) => item.trace.by_operator)),
@@ -259,6 +274,7 @@ function aggregateQualitySummaries(summaries: QualitySummary[], reviewState: Qua
       generated_at: item.generated_at,
       trace_gaps: item.trace_gaps,
       critical_missing_operators: item.critical_missing_operators,
+      valid_skip_count: item.valid_skip_count,
       confidence: item.confidence,
     })),
     confidence_mix: confidenceMix,
