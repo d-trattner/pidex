@@ -130,6 +130,9 @@ type QualityReadModelSummary = {
     after_trace_proxy_gates: number;
   }>;
   regression_detectors: Array<{ dimension?: string; severity?: string; confidence?: string; count?: number; reason?: string }>;
+  operator_decisions?: Array<Record<string, unknown>>;
+  valid_skips?: Array<Record<string, unknown>>;
+  expectation_corrections?: Array<Record<string, unknown>>;
   comparability: { label?: string; sample_size?: number; reasons?: string[]; topologies?: string[] } | null;
   latest_report: { json: string; markdown: string | null } | null;
   review_state: { reviewed_plans_count: number; last_review_at: string | null };
@@ -164,6 +167,7 @@ const EMPTY_QUALITY: QualityPayload = {
 function QualityPage() {
   const location = useLocation();
   const [refreshState, setRefreshState] = useState<{ status: 'idle' | 'running' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
+  const [traceFilter, setTraceFilter] = useState<'violated' | 'valid' | 'raw'>('violated');
   const project = readProjectFromSearch(location.search);
   const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project], withProjectParam('/api/charts/quality', project));
   const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project], withProjectParam('/api/charts/model-quality', project));
@@ -249,7 +253,12 @@ function QualityPage() {
     : [];
   const contractFindings = latestQuality?.trace.findings.filter((item) => item.contract_id && item.type !== 'valid_skip') || [];
   const validSkipFindings = latestQuality?.trace.findings.filter((item) => item.type === 'valid_skip') || [];
-  const expectationCorrectionFindings = latestQuality?.trace.findings.filter((item) => item.decision_evidence && item.type === 'expectation_needs_correction') || [];
+  const expectationCorrections = latestQuality?.expectation_corrections || [];
+  const filteredTraceFindings = traceFilter === 'valid'
+    ? validSkipFindings
+    : traceFilter === 'violated'
+      ? contractFindings
+      : latestQuality?.trace.findings.filter((item) => item.type !== 'valid_skip') || [];
   const severityData = latestQuality
     ? Object.entries(latestQuality.trace.by_severity).map(([severity, count]) => ({ severity, count: safeNumber(count) }))
     : [];
@@ -649,12 +658,29 @@ function QualityPage() {
                   </table>
                 </div>
               ) : <p className="muted">No valid skip/manual-evidence decisions in the latest report.</p>}
-              {expectationCorrectionFindings.length ? <p className="muted">Expectation corrections pending: {expectationCorrectionFindings.length}</p> : null}
+              {expectationCorrections.length ? (
+                <div style={{ marginTop: 12 }}>
+                  <h5>Expectation corrections pending</h5>
+                  <ul>
+                    {expectationCorrections.slice(0, 5).map((item, idx) => (
+                      <li key={`expectation-correction-${idx}`}>
+                        <span>{String(item.target_operator || 'unknown')} · {String(item.reason || 'expectation-wrong')}</span>
+                        {item.proposed_expectation ? <span className="muted"> — proposed: {JSON.stringify(item.proposed_expectation)}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
 
             <div style={{ marginTop: 16 }}>
-              <div className="card-heading-row"><h4>Trace gap findings</h4><HelpPopover title="Trace gap findings" shows="Detailed missing/unobserved operator evidence rows." source="PDQ operator trace findings." reading="Group by operator first; repeated reasons usually indicate one instrumentation fix." improve="Record finalized preflight, restore quality-review events, or add explicit skip events depending on the reason." /></div>
-              {latestQuality.trace.findings.length ? (
+              <div className="card-heading-row"><h4>Trace findings</h4><HelpPopover title="Trace findings" shows="Filtered missing/unobserved operator evidence rows plus valid decision evidence." source="PDQ operator trace findings." reading="Use violated contracts first, then valid skips, then raw non-skip findings for debugging." improve="Record finalized preflight, restore events, or add explicit skip/manual evidence decisions depending on the reason." /></div>
+              <div className="quality-action-row" style={{ marginBottom: 8 }}>
+                <button type="button" className="button" onClick={() => setTraceFilter('violated')} aria-pressed={traceFilter === 'violated'}>Violated contracts</button>
+                <button type="button" className="button" onClick={() => setTraceFilter('valid')} aria-pressed={traceFilter === 'valid'}>Valid skips</button>
+                <button type="button" className="button" onClick={() => setTraceFilter('raw')} aria-pressed={traceFilter === 'raw'}>Raw trace gaps</button>
+              </div>
+              {filteredTraceFindings.length ? (
                 <div style={{ overflowX: 'auto' }}>
                   <table className="table">
                     <thead>
@@ -668,7 +694,7 @@ function QualityPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {latestQuality.trace.findings.slice(0, 12).map((item, idx) => (
+                      {filteredTraceFindings.slice(0, 12).map((item, idx) => (
                         <tr key={`${item.plan_key}-${item.operator_type}-${idx}`}>
                           <td>{item.plan_key}</td>
                           <td>{item.operator_type}</td>
@@ -682,7 +708,7 @@ function QualityPage() {
                   </table>
                 </div>
               ) : (
-                <p className="muted">No trace gap findings in the latest report.</p>
+                <p className="muted">No trace findings for this filter in the latest report.</p>
               )}
             </div>
           </>

@@ -5,30 +5,55 @@ export const CONTRACTS = {
   OpPreflight: {
     contract_id: 'operator.OpPreflight.finalized-preflight',
     required_when: 'post-Phase-2B pipeline_started exists',
+    allowed_decision_types: ['skip_step', 'manual_evidence', 'backfill_evidence'],
     allowed_skip_reasons: ['continuation-existing-plan', 'already-covered'],
     resolution_options: ['record finalized OpPreflight', 'record valid OpDecision skip', 'correct expectation contract'],
   },
   OpQualityReview: {
     contract_id: 'operator.OpQualityReview.terminal-pdq',
     required_when: 'terminal pipeline event exists',
+    allowed_decision_types: ['skip_step', 'manual_evidence', 'backfill_evidence'],
     allowed_skip_reasons: ['auto-pdq-disabled', 'optional-hooks-disabled', 'terminal-event-backfill', 'report-logic-regeneration-pending'],
     resolution_options: ['restore auto-PDQ hook', 'record valid OpDecision skip/manual evidence', 'backfill OpQualityReview', 'correct expectation contract'],
   },
   OpReview: {
     contract_id: 'operator.OpReview.review-agent-evidence',
     required_when: 'post-Phase-2B review-agent metric row exists',
+    allowed_decision_types: ['skip_step', 'manual_evidence', 'backfill_evidence'],
     allowed_skip_reasons: ['not-applicable', 'already-covered', 'docs-only', 'manual-review-done-outside-pidex', 'provider-quota-limited', 'operator-approved-risk', 'duplicate-signal'],
     resolution_options: ['restore review event emission', 'record valid OpDecision skip/manual review evidence', 'run the review agent', 'correct expectation contract'],
   },
   OpGate: {
     contract_id: 'operator.OpGate.user-gate-evidence',
     required_when: 'metric row contains a real gate',
+    allowed_decision_types: ['skip_step', 'manual_evidence', 'backfill_evidence'],
     allowed_skip_reasons: ['not-applicable', 'already-covered', 'no-ui-change', 'manual-review-done-outside-pidex', 'operator-approved-risk', 'expectation-wrong'],
     resolution_options: ['restore gate event emission', 'record valid OpDecision skip/manual gate evidence', 'backfill gate evidence', 'correct expectation contract'],
   },
+  OpRoute: {
+    contract_id: 'operator.OpRoute.route-decision-evidence',
+    required_when: 'metric row contains route_to',
+    allowed_decision_types: ['override_route', 'manual_evidence', 'backfill_evidence', 'expectation_correction'],
+    allowed_skip_reasons: ['already-covered', 'duplicate-signal', 'operator-approved-risk', 'expectation-wrong', 'manual-review-done-outside-pidex'],
+    resolution_options: ['restore route event emission', 'record explicit route override decision', 'backfill route evidence', 'correct expectation contract'],
+  },
+  OpSpawn: {
+    contract_id: 'operator.OpSpawn.agent-spawn-evidence',
+    required_when: 'agent metric row exists',
+    allowed_decision_types: ['manual_evidence', 'backfill_evidence', 'expectation_correction'],
+    allowed_skip_reasons: ['already-covered', 'duplicate-signal', 'expectation-wrong', 'provider-quota-limited'],
+    resolution_options: ['restore pidex_agent OpSpawn emission', 'backfill/manual evidence for agent run', 'correct expectation contract'],
+  },
+  OpContextPack: {
+    contract_id: 'operator.OpContextPack.context-pack-evidence',
+    required_when: 'post-Phase-2B agent metric row exists',
+    allowed_decision_types: ['manual_evidence', 'backfill_evidence', 'expectation_correction'],
+    allowed_skip_reasons: ['already-covered', 'duplicate-signal', 'expectation-wrong', 'provider-quota-limited'],
+    resolution_options: ['restore context-pack event emission', 'record manual context-pack evidence', 'correct expectation contract'],
+  },
 };
 
-const SKIP_DECISION_TYPES = new Set(['skip_step', 'manual_evidence', 'backfill_evidence']);
+const DEFAULT_DECISION_TYPES = ['skip_step', 'manual_evidence', 'backfill_evidence'];
 
 function planMatches(row, plan) {
   return [plan, null, undefined, ''].includes(row?.plan_key);
@@ -45,7 +70,7 @@ export function validDecisionFor(decisions, { plan, operator_type, target_step =
   const contract = CONTRACTS[operator_type];
   if (!contract) return null;
   return (decisions || []).find((row) => row?.operator_type === 'OpDecision'
-    && SKIP_DECISION_TYPES.has(row.decision_type)
+    && (contract.allowed_decision_types || DEFAULT_DECISION_TYPES).includes(row.decision_type)
     && row.target_operator === operator_type
     && planMatches(row, plan)
     && targetStepMatches(row, target_step)

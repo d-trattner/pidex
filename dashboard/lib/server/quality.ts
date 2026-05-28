@@ -57,6 +57,9 @@ export type QualitySummary = {
   trace: TraceBreakdown;
   rule_impact: RuleImpactSummary[];
   regression_detectors: AnyRecord[];
+  operator_decisions: AnyRecord[];
+  valid_skips: AnyRecord[];
+  expectation_corrections: AnyRecord[];
   comparability: AnyRecord | null;
   latest_report: { json: string; markdown: string | null } | null;
   review_state: { reviewed_plans_count: number; last_review_at: string | null };
@@ -200,6 +203,9 @@ export function summarizeQualityReport(report: AnyRecord, reviewState: QualitySu
     },
     rule_impact: Array.isArray(summary.rule_action_windows) ? summary.rule_action_windows.map(normalizeRuleImpact) : [],
     regression_detectors: Array.isArray(summary.regression_detectors) ? summary.regression_detectors : [],
+    operator_decisions: Array.isArray(summary.operator_decisions) ? summary.operator_decisions : [],
+    valid_skips: Array.isArray(summary.valid_skips) ? summary.valid_skips : [],
+    expectation_corrections: Array.isArray(summary.expectation_corrections) ? summary.expectation_corrections : [],
     comparability: summary.comparability || null,
     latest_report: report._path ? { json: report._path, markdown: markdownPathFor(report._path, report) } : null,
     review_state: reviewState,
@@ -264,6 +270,9 @@ function aggregateQualitySummaries(summaries: QualitySummary[], reviewState: Qua
     },
     rule_impact: summaries.flatMap((item) => item.rule_impact).slice(0, 80),
     regression_detectors: summaries.flatMap((item) => item.regression_detectors).slice(0, 80),
+    operator_decisions: summaries.flatMap((item) => item.operator_decisions).slice(0, 80),
+    valid_skips: summaries.flatMap((item) => item.valid_skips).slice(0, 80),
+    expectation_corrections: summaries.flatMap((item) => item.expectation_corrections).slice(0, 80),
     comparability: { label: 'aggregate', sample_size: summaries.length, reasons: ['aggregate across latest non-smoke project reports'] },
     latest_report: null,
     review_state: reviewState,

@@ -180,5 +180,8 @@ Current contract-backed classifications cover:
 - `OpQualityReview`: required after terminal pipeline events; valid skip/manual evidence reasons are `auto-pdq-disabled`, `optional-hooks-disabled`, `terminal-event-backfill`, and `report-logic-regeneration-pending`.
 - `OpReview`: required after post-Phase-2B review-agent metric rows; valid skip/manual evidence reasons include `not-applicable`, `already-covered`, `docs-only`, `manual-review-done-outside-pidex`, `provider-quota-limited`, `operator-approved-risk`, and `duplicate-signal`.
 - `OpGate`: required when a metric row contains a real gate; valid skip/manual evidence reasons include `not-applicable`, `already-covered`, `no-ui-change`, `manual-review-done-outside-pidex`, `operator-approved-risk`, and `expectation-wrong`.
+- `OpRoute`: required when a metric row contains `route_to`; valid override/manual evidence reasons include `already-covered`, `duplicate-signal`, `operator-approved-risk`, `expectation-wrong`, and `manual-review-done-outside-pidex`.
+- `OpSpawn`: required when an agent metric row exists; valid manual/backfill reasons include `already-covered`, `duplicate-signal`, `expectation-wrong`, and `provider-quota-limited`.
+- `OpContextPack`: required when a post-Phase-2B agent metric row exists; valid manual/backfill reasons include `already-covered`, `duplicate-signal`, `expectation-wrong`, and `provider-quota-limited`.
 
 When a matching `OpDecision` exists, PDQ reports a `valid_skip` finding, counts it as observed structured evidence, and excludes it from trace gap counts. Other operator expectations still use the legacy conservative classification until their contracts are added.

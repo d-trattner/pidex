@@ -24,6 +24,9 @@ const summary = summarizeQualityReport({
       { rule_path: 'rules/example.md', action: 'add', owning_agent: 'pidex-critic', expected_impact_dimension: 'review-quality', expected_direction: 'improve', before_count: 7, after_count: 8, label: 'directionally-improving', before_rejections: 2, after_rejections: 1 },
     ],
     regression_detectors: [{ dimension: 'operator-trace', severity: 'high' }],
+    operator_decisions: [{ operator_type: 'OpDecision', decision_type: 'expectation_correction', reason: 'expectation-wrong' }],
+    valid_skips: [{ operator_type: 'OpDecision', decision_type: 'skip_step', reason: 'already-covered' }],
+    expectation_corrections: [{ operator_type: 'OpDecision', decision_type: 'expectation_correction', reason: 'expectation-wrong' }],
     comparability: { label: 'insufficient-data', sample_size: 1 },
   },
   _path: '/tmp/pidex/state/quality/report.json',
@@ -39,6 +42,9 @@ assert.deepEqual(summary.trace.findings[0].allowed_skip_reasons, ['terminal-even
 assert.equal(summary.rule_impact[0].rule_path, 'rules/example.md');
 assert.equal(summary.rule_impact[0].confidence, 'medium');
 assert.equal(summary.comparability?.label, 'insufficient-data');
+assert.equal(summary.operator_decisions.length, 1);
+assert.equal(summary.valid_skips.length, 1);
+assert.equal(summary.expectation_corrections.length, 1);
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-quality-readmodel-'));
 try {
