@@ -1172,6 +1172,27 @@ Provider overrides are exceptional debugging tools only. Prefer config-driven ro
 
 **Context-pack enforcement:** before each `pidex_agent` call, prefer `spawn-with-budget.sh` if it exists and pass the emitted pack path/content in the task briefing. If the helper is unavailable, create a compact manual pack instead and mark `CONTEXT-PACK-MANUAL: helper unavailable`. Budget warnings are non-blocking by default; use `--hard` only when needed and the helper exists.
 
+**Operator decision evidence (Phase 3):** when the operator/orchestrator intentionally skips, overrides, defers, accepts risk, backfills manual evidence, or corrects a PDQ expectation, record an `OpDecision` before continuing. Use the existing finite taxonomy; do not invent free-text reasons when a standard reason fits.
+
+Minimal command:
+
+```bash
+node <pidex-root>/scripts/quality/operator-decisions.mjs record \
+  --project "<absolute project path>" \
+  --pipeline-id "<pipeline-id>" \
+  --plan "<plan-key>" \
+  --decision skip_step \
+  --target-operator OpReview \
+  --target-step "pidex-security" \
+  --reason already-covered \
+  --approved-by operator \
+  --risk-accepted false \
+  --follow-up-required false \
+  --evidence-path "<artifact-or-plan-path>"
+```
+
+Record decisions for all intentional deviations from the conservative route, including approved Execution Profile skips, optional parallel lane skips caused by explicit minimal/cheap/single-lane user choice, manual evidence/backfills, route overrides, explicit risk acceptance, and expectation corrections. Valid skip evidence is not a generic quality gap; unrecorded skips remain missing evidence in PDQ.
+
 **Legacy plan migration:** when resuming an active plan that lacks `Execution Profile`, `Skipped Agents`, or `Retro Mode`, read `<pidex-root>/rules/orchestrator/legacy-plan-profile-migration.md`. Prefer a small pidex-planner revision before implementation; if late-stage, run conservative full path and brief `LEGACY-PROFILE-SKIP: no skips honored`.
 
 Default direct-mode route graph:
@@ -1181,7 +1202,7 @@ Default direct-mode route graph:
 2. pidex-critic verdict is `APPROVED` or `APPROVED_WITH_COMMENTS`,
 3. critique has no unresolved Critical/Major finding against the skip/profile,
 4. no mandatory trigger contradicts the skip (UI-heavy → designer, API/user input → security, product code → QA, UI/G9 → UAT/browser evidence, full-retro trigger → retrospective/pidex-pi),
-5. you record the skip reason in your running notes or next agent briefing.
+5. you record an `OpDecision` with the skipped agent/operator, standard reason, approval source, risk/follow-up flags, and evidence path before continuing.
 
 If uncertain, ignore the skip and run the conservative default route. Never skip `pidex-qa` for product code; only downgrade/shorten based on profile if plan+critic explicitly allow it. This guidance does not override agent ROUTING blocks for rejection/failure loops.
 
@@ -1189,16 +1210,16 @@ If uncertain, ignore the skip and run the conservative default route. Never skip
 |---|---|---|
 | 0W | `pidex-wiki-hygienist` | Specialist opening route for wiki hygiene / project memory maintenance. Orchestrator must not run `/pdwiki` or the hygiene script itself for this route; it invokes `pidex-wiki-hygienist`, and the specialist runs the deterministic audit. Wiki hygiene must never mutate `<project-root>/pidex/**` except audit/cadence state at `<project-root>/pidex/state/wiki-hygiene.json`. Audit/report-only runs must end with a brief and ask whether to commit the hygiene state. If user approves commit, orchestrator owns the commit: stage `pidex/state/wiki-hygiene.json` (use `git add -f pidex/state/wiki-hygiene.json` if ignored), never stage `agents.output/**`, then commit with a `chore(wiki): record hygiene audit`-style message. `COMPLETE` routes to user or orchestrator; cleanup implementation is not automatic. |
 | 1 | `pidex-planner` | Epic → implementation-ready plan. `COMPLETE` routes to `pidex-critic`; `BLOCKED` routes to `pidex-analyst`, `pidex-architect`, or user depending on reason. |
-| 2 | `pidex-critic` | `APPROVED*` + UI-heavy/frontend scope → `pidex-designer` unless approved profile explicitly permits skip; `APPROVED*` + no UI or approved designer skip → `pidex-implementer`; `REJECTED` → `pidex-planner` (G1). |
+| 2 | `pidex-critic` | `APPROVED*` + UI-heavy/frontend scope → `pidex-designer` unless approved profile explicitly permits skip; `APPROVED*` + no UI or approved designer skip → `pidex-implementer`; `REJECTED` → `pidex-planner` (G1). If designer is intentionally skipped, record `OpDecision` for the skipped review/design step with reason `no-ui-change`, `not-applicable`, or `already-covered` as appropriate. |
 | 2.5 | `pidex-designer` | UI plans only. `APPROVED*` → `pidex-implementer`; `REJECTED` → `pidex-planner`. |
 | 3 | `pidex-implementer` | `COMPLETE` → `pidex-code-reviewer`; `BLOCKED` → `pidex-planner`, `pidex-analyst`, or user based on blocker. |
-| 4 | `pidex-code-reviewer` | `APPROVED*` → `pidex-security` by default; direct `pidex-qa` only when Security Scope Assessment and approved Execution Profile both say skip. `REJECTED` → `pidex-implementer` or `pidex-architect`. |
+| 4 | `pidex-code-reviewer` | `APPROVED*` → `pidex-security` by default; direct `pidex-qa` only when Security Scope Assessment and approved Execution Profile both say skip. Record an `OpDecision` for any security skip before routing to QA. `REJECTED` → `pidex-implementer` or `pidex-architect`. |
 | 5 | `pidex-security` | `APPROVED*` → `pidex-qa`; `APPROVED_WITH_CONTROLS` / blocking verdict → `pidex-implementer` or `pidex-planner` (G5 when user decision/risk acceptance needed). |
 | 6 | `pidex-qa` | `COMPLETE` → `pidex-uat`; `FAILED` → `pidex-implementer` (G2); browser-smoke `BLOCKED` → orchestrator collects Playwright evidence and appends QA doc; infra/spec `BLOCKED` → `pidex-planner` or user. |
-| 7 | `pidex-uat` | `APPROVED` + `gate: G9` → G9 preview then `pidex-devops`; `APPROVED` + `gate: none` / G9 not applicable → `pidex-devops` directly; `REJECTED` → `pidex-implementer` or `pidex-planner` (G3). |
+| 7 | `pidex-uat` | `APPROVED` + `gate: G9` → G9 preview then `pidex-devops`; `APPROVED` + `gate: none` / G9 not applicable → `pidex-devops` directly; `REJECTED` → `pidex-implementer` or `pidex-planner` (G3). If G9 is intentionally not applicable, ensure the plan has the G9 applicability declaration or record `OpDecision` with reason `no-ui-change`/`not-applicable`. |
 | 7.5 | G9 Preview | Orchestrator starts dev server when applicable, asks user to approve/reject visual preview. Reject loops to `pidex-implementer`. UAT-era preview does not replace post-devops UI preview before G4. |
-| 8 | `pidex-devops` | Stage 1 local commit → if UI involved/uncertain, orchestrator post-devops G9 preview before G4; if non-UI, G4 directly. Stage 2 push/local/hold/abort → `pidex-retrospective` only when Retro Mode is `full` or mandatory full-retro trigger exists; otherwise record `Retro Mode Closure` in deployment/final summary and continue according to plan. |
-| 9 | `pidex-retrospective` | `COMPLETE` → `pidex-pi`, with optional `post_retro_handoffs`; skip only when approved Retro Mode is `none`/`mini` and no mandatory trigger occurred. |
+| 8 | `pidex-devops` | Stage 1 local commit → if UI involved/uncertain, orchestrator post-devops G9 preview before G4; if non-UI, G4 directly. Stage 2 push/local/hold/abort → `pidex-retrospective` only when Retro Mode is `full` or mandatory full-retro trigger exists; otherwise record `Retro Mode Closure` in deployment/final summary and continue according to plan. If full retrospective is intentionally skipped by approved Retro Mode, record `OpDecision` for the retrospective step unless the closure artifact already records first-class skip evidence. |
+| 9 | `pidex-retrospective` | `COMPLETE` → `pidex-pi`, with optional `post_retro_handoffs`; skip only when approved Retro Mode is `none`/`mini` and no mandatory trigger occurred. Record `OpDecision` when skipped. |
 | 10 | `pidex-pi` | `COMPLETE`/`DEFERRED`/`REJECTED` → `pidex-roadmap`. |
 | 11 | `pidex-roadmap` | Post-pipeline update → orchestrator with G10 next-epic decision. |
 
@@ -1254,13 +1275,13 @@ For agents with configured parallel lanes, do **not** send user/Telegram gate no
 
 Initial policy: advisory execution plus mandatory merge summary. Continue when primary approves and no secondary has concrete High/Critical evidence. Route to `pidex-implementer` or ask for primary-reviewer adjudication when a secondary reports High/Critical with concrete file/path/evidence. Record secondary timeout/failure/malformed ROUTING in the merge summary and continue with the primary result during rollout.
 
-Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or the user requested a minimal/cheap/single-lane run.
+Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or the user requested a minimal/cheap/single-lane run. If the skip happens because the user/operator explicitly requested minimal/cheap/single-lane mode, record `OpDecision` with reason `provider-quota-limited`, `operator-approved-risk`, `docs-only`, or `not-applicable` as appropriate. Do not record decisions for lanes that were simply not eligible in config/status output.
 
 Before `pidex-security` or `pidex-qa` on JS/TS scopes, include the Fallow requirement in the brief:
 - `pidex-security`: read `<pidex-root>/rules/pidex-security/fallow-structural-signal.md`; record fallow evidence or `FALLOW-SKIP`.
 - `pidex-qa`: read `<pidex-root>/rules/pidex-qa/fallow-static-audit-gate.md`; do not emit QA COMPLETE without fallow evidence or `FALLOW-SKIP`.
 
-After every agent return, trust the final `<!-- ROUTING -->` block over prose. Read `verdict`, `route_to`, `gate`, `reason`, and `context_file`; verify `context_file` exists before proceeding. `route_to: orchestrator` means deterministic internal work for this orchestrator session, not a user gate. If ROUTING contradicts an approved Execution Profile skip, treat it as a routing inconsistency: do not silently override; either follow conservative route or re-run/ask the emitting agent to resolve the contradiction. Special case: `pidex-qa` with `reason` containing `browser smoke BLOCKED` routes to orchestrator action, not user decision.
+After every agent return, trust the final `<!-- ROUTING -->` block over prose. Read `verdict`, `route_to`, `gate`, `reason`, and `context_file`; verify `context_file` exists before proceeding. `route_to: orchestrator` means deterministic internal work for this orchestrator session, not a user gate. If ROUTING contradicts an approved Execution Profile skip, treat it as a routing inconsistency: do not silently override; either follow conservative route or re-run/ask the emitting agent to resolve the contradiction. If the operator deliberately overrides the agent route anyway, record `OpDecision --decision override_route` before continuing. Special case: `pidex-qa` with `reason` containing `browser smoke BLOCKED` routes to orchestrator action, not user decision.
 
 **Post-devops UI preview before G4 (mandatory):** Load `<pidex-root>/rules/orchestrator/post-devops-ui-preview-gate.md` when `pidex-devops` Stage 1 completes or before any G4. If any included plan has `User Preview Requirement` with `UI involved: yes`, `Preview required before G4: yes`, visible UI/browser changes, or uncertainty, do NOT ask `push/local/hold/abort` yet. Start preview from committed local HEAD, show URL/routes/screens to user, ask `approve/reject` as G9. On approve, mark/brief `User Preview Before G4: APPROVED`, then ask G4 directly or re-invoke `pidex-devops` for Stage 2 with that approval context. On reject, record `MANDATORY-RETRO-TRIGGER: G9 rejection` and route to `pidex-implementer`.
 
@@ -1284,7 +1305,7 @@ This notification is informational only: no buttons, no reply handling, no `pend
 - **G8 (destructive ops):** Ask for explicit confirmation before proceeding.
 - **G9 (preview verification):** Triggered either after pidex-uat approves with `gate: G9` or after pidex-devops Stage 1 for UI-involved work before G4. The orchestrator (you) starts the dev server/preview server, determines the accessible URL, and asks the user to verify visually. Only proceed after the user says "approve". On "reject", ask what's wrong, record a scoped `MANDATORY-RETRO-TRIGGER: G9 rejection`, load `<pidex-root>/rules/orchestrator/g9-rejection-playwright-repro.md`, capture a G9 Rejection Repro Contract, and loop back to pidex-implementer. Before asking G9 again for the same flow, require live Playwright evidence from QA or orchestrator that reproduces the exact rejected browser flow and now passes. After a second rejection in the same plan, or for navigation/runtime/API-auth/browser-only issues, the orchestrator must run Playwright evidence directly when tooling is available before another broad loop. Skip G9 only for non-UI projects without a dev server (pure libraries, CLI tools). If pidex-uat emits `gate: G9` but the plan says G9 is not applicable or no dev server exists, treat it as routing inconsistency; do not start fake preview. Route to devops with documented correction or ask pidex-uat to resolve. Kill the dev server after G9 resolves.
 
-The agents' instructions include "If running via pidex, call send-gate.sh" — in direct mode, ignore that branch. The agents will fall through to their interactive-mode behavior (report to user directly).
+The agents' instructions include "If running via pidex, call send-gate.sh" — in direct mode, ignore that branch. The agents will fall through to their interactive-mode behavior (report to user directly). If a gate is intentionally skipped or satisfied by manual evidence outside PIDEX instrumentation, record `OpDecision` with `--target-operator OpGate` (or the specific affected operator) before continuing.
 
 **4. Auto-proceed discipline**
 

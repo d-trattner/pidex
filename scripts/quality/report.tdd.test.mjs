@@ -18,7 +18,7 @@ trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-01-01T
 assert.equal(trace.expected_required, 4);
 assert.equal(trace.observed_required, 0);
 assert.equal(trace.gap_count, 4);
-assert.ok(trace.findings.some((f) => f.operator_type === 'OpGate' && f.type === 'missing_operator'));
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpGate' && f.type === 'missing_operator' && f.contract_id === 'operator.OpGate.user-gate-evidence'));
 
 trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-01-01T00:00:00Z', agent: 'pidex-uat', gate: 'G9', _source_path: 'x' }], orchestrator_events: [{ operator_type: 'OpGate', plan_key: 'plan-004', gate: 'g9' }], pipeline_events: [], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 2);
@@ -74,6 +74,14 @@ trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T
 assert.equal(trace.expected_required, 4);
 assert.equal(trace.observed_required, 4);
 assert.equal(trace.findings.length, 0);
+
+trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T21:30:00Z', agent: 'pidex-qa', gate: 'G9', _source_path: 'x' }], pipeline_events: [], orchestrator_events: [{ operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'manual_evidence', target_operator: 'OpReview', target_step: 'pidex-qa', reason: 'manual-review-done-outside-pidex', approved_by: 'operator' }, { operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'skip_step', target_operator: 'OpGate', target_step: 'G9', reason: 'no-ui-change', approved_by: 'operator' }, { operator_type: 'OpSpawn', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa' }], rule_actions: [] }, ['plan-004']);
+assert.equal(trace.expected_required, 4);
+assert.equal(trace.observed_required, 4);
+assert.equal(trace.gap_count, 0);
+assert.equal(trace.valid_skip_count, 2);
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpReview' && f.type === 'valid_skip' && f.agent === 'pidex-qa'));
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpGate' && f.type === 'valid_skip' && f.gate === 'G9'));
 
 trace = build_expected_observed({ metrics: [], pipeline_events: [{ plan: '4', event_type: 'pipeline_started', timestamp: '2026-05-20T21:30:00Z' }], orchestrator_events: [{ operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'skip_step', target_operator: 'OpPreflight', reason: 'continuation-existing-plan', approved_by: 'operator' }], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 1);

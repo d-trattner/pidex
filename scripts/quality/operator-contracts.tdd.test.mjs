@@ -4,6 +4,8 @@ import { CONTRACTS, decorateContractFinding, validDecisionFor, validSkipFinding 
 
 assert.ok(CONTRACTS.OpPreflight.allowed_skip_reasons.includes('continuation-existing-plan'));
 assert.ok(CONTRACTS.OpQualityReview.allowed_skip_reasons.includes('terminal-event-backfill'));
+assert.ok(CONTRACTS.OpReview.allowed_skip_reasons.includes('manual-review-done-outside-pidex'));
+assert.ok(CONTRACTS.OpGate.allowed_skip_reasons.includes('no-ui-change'));
 
 const decisions = [
   { operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'skip_step', target_operator: 'OpPreflight', reason: 'continuation-existing-plan', approved_by: 'operator', confidence: 'medium' },
