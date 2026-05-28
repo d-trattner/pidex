@@ -170,3 +170,13 @@ node scripts/quality/operator-decisions.mjs record \
 ```
 
 Valid decision reasons are finite and reportable; run `node scripts/quality/operator-decisions.mjs --help` for the current taxonomy.
+
+## Operator contracts
+
+Phase 3 starts with conservative contract helpers in `scripts/quality/operator-contracts.mjs`.
+Current contract-backed classifications cover:
+
+- `OpPreflight`: required after post-Phase-2B `pipeline_started`; valid skip reasons are `continuation-existing-plan` and `already-covered`.
+- `OpQualityReview`: required after terminal pipeline events; valid skip/manual evidence reasons are `auto-pdq-disabled`, `optional-hooks-disabled`, `terminal-event-backfill`, and `report-logic-regeneration-pending`.
+
+When a matching `OpDecision` exists, PDQ reports a `valid_skip` finding, counts it as observed structured evidence, and excludes it from trace gap counts. Other operator expectations still use the legacy conservative classification until their contracts are added.

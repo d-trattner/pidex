@@ -35,7 +35,14 @@ assert.equal(summary.rule_actions_as_operators[0].operator_type, 'OpRuleAction')
 
 trace = build_expected_observed({ metrics: [], pipeline_events: [{ plan: '4', event_type: 'pipeline_completed', _source_path: 'x' }], orchestrator_events: [], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 1);
-assert.ok(trace.findings.some((f) => f.operator_type === 'OpQualityReview' && f.type === 'instrumentation_missing'));
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpQualityReview' && f.type === 'instrumentation_missing' && f.contract_id === 'operator.OpQualityReview.terminal-pdq'));
+
+trace = build_expected_observed({ metrics: [], pipeline_events: [{ plan: '4', event_type: 'pipeline_completed', _source_path: 'x' }], orchestrator_events: [{ operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'manual_evidence', target_operator: 'OpQualityReview', reason: 'terminal-event-backfill', approved_by: 'operator' }], rule_actions: [] }, ['plan-004']);
+assert.equal(trace.expected_required, 1);
+assert.equal(trace.observed_required, 1);
+assert.equal(trace.gap_count, 0);
+assert.equal(trace.valid_skip_count, 1);
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpQualityReview' && f.type === 'valid_skip'));
 
 summary = summarize({ metrics: [], pipeline_events: [], orchestrator_events: [{ operator_type: 'OpUserCorrection', plan_key: 'plan-004', severity: 'medium', logical_decision: { correction_type: 'routing', summary: 'wrong next agent' } }, { operator_type: 'OpReleaseDecision', plan_key: 'plan-004', source_artifact: 'x', reason: 'approved', logical_decision: { release_action: 'push-tag' }, physical_action: { release_action: 'push-tag', outcome: 'completed' } }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa', physical_action: { estimated_token_class: 'large', budget_warning: true } }, { operator_type: 'OpPreflight', plan_key: 'unknown-plan', logical_decision: { task_class: 'bugfix' }, physical_action: { grill_decision_pending: true } }, { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa', physical_action: { verdict: 'APPROVED', finding_counts: { critical: 1 } } }], rule_actions: [], routing_artifacts: [], rules: [], untracked_rule_changes: [], pidex_root_rule_actions: [], pidex_root_untracked_rule_changes: [] }, ['plan-004']);
 assert.deepEqual(summary.user_corrections_by_type, { routing: 1 });
@@ -61,12 +68,18 @@ trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T
 assert.equal(trace.expected_required, 4);
 assert.equal(trace.observed_required, 3);
 assert.equal(trace.critical_missing_operators, 0);
-assert.ok(trace.findings.some((f) => f.operator_type === 'OpPreflight' && f.type === 'operator_unobserved'));
+assert.ok(trace.findings.some((f) => f.operator_type === 'OpPreflight' && f.type === 'operator_unobserved' && f.contract_id === 'operator.OpPreflight.finalized-preflight'));
 
 trace = build_expected_observed({ metrics: [{ plan: '4', timestamp: '2026-05-20T21:30:00Z', agent: 'pidex-qa', _source_path: 'x' }], pipeline_events: [{ plan: '4', event_type: 'pipeline_started', timestamp: '2026-05-20T21:30:00Z' }], orchestrator_events: [{ operator_type: 'OpPreflight', plan_key: 'plan-004' }, { operator_type: 'OpSpawn', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpContextPack', plan_key: 'plan-004', agent: 'pidex-qa' }, { operator_type: 'OpReview', plan_key: 'plan-004', agent: 'pidex-qa' }], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 4);
 assert.equal(trace.observed_required, 4);
 assert.equal(trace.findings.length, 0);
+
+trace = build_expected_observed({ metrics: [], pipeline_events: [{ plan: '4', event_type: 'pipeline_started', timestamp: '2026-05-20T21:30:00Z' }], orchestrator_events: [{ operator_type: 'OpDecision', plan_key: 'plan-004', decision_type: 'skip_step', target_operator: 'OpPreflight', reason: 'continuation-existing-plan', approved_by: 'operator' }], rule_actions: [] }, ['plan-004']);
+assert.equal(trace.expected_required, 1);
+assert.equal(trace.observed_required, 1);
+assert.equal(trace.gap_count, 0);
+assert.equal(trace.valid_skip_count, 1);
 
 summary = summarize({ metrics: [{ plan: '4', timestamp: '2026-01-01T00:00:00Z', agent: 'pidex-planner', route_to: 'pidex-critic' }, { plan: '4', timestamp: '2026-01-01T00:01:00Z', agent: 'pidex-critic', route_to: 'pidex-implementer', agent_verdict: 'REJECTED' }, { plan: '4', timestamp: '2026-01-01T00:02:00Z', agent: 'pidex-implementer', route_to: 'pidex-critic' }, { plan: '4', timestamp: '2026-01-01T00:03:00Z', agent: 'pidex-critic', route_to: 'pidex-qa', gate: 'G9' }, { plan: '5', timestamp: '2026-01-01T00:04:00Z', agent: 'pidex-planner' }], pipeline_events: [{ plan: '4', event_type: 'pipeline_completed', timestamp: '2026-01-01T00:05:00Z' }], orchestrator_events: [{ operator_type: 'OpQualityReview', plan_key: 'plan-004' }], rule_actions: [{ timestamp: '2026-01-01T00:02:30Z', action: 'monitor', owning_agent: 'pidex-critic', expected_impact_dimension: 'review-quality', expected_direction: 'increase' }], routing_artifacts: [], rules: [], untracked_rule_changes: [{ path: 'rules/x.md' }], pidex_root_rule_actions: [], pidex_root_untracked_rule_changes: [] }, ['plan-004', 'plan-005']);
 assert.equal(summary.coordination_specs['plan-004'].topology, 'review-loop');
