@@ -317,8 +317,6 @@ function textFromAssistantMessage(message: any): string {
 function finalAssistantTextFromEvent(event: JsonEvent): string {
 	const direct = textFromAssistantMessage(event?.message);
 	if (direct) return direct;
-	const turnEnd = textFromAssistantMessage(event?.message);
-	if (turnEnd) return turnEnd;
 	if (Array.isArray(event?.messages)) {
 		for (let i = event.messages.length - 1; i >= 0; i--) {
 			const text = textFromAssistantMessage(event.messages[i]);

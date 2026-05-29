@@ -90,6 +90,8 @@ where `isAcceptable` centralizes the `exitCode === 0 && finalText && hasRoutingB
 
 ### S3. `finalAssistantTextFromEvent` has a dead branch
 
+**Status:** DONE — duplicate same-input branch removed.
+
 ```ts
 const direct = textFromAssistantMessage(event?.message);
 if (direct) return direct;
@@ -122,6 +124,8 @@ Combined with `providerLimitRecord` and `codexQuotaProviderFromModel`, which exi
 `quality.ts` leans on `AnyRecord` and a fleet of `String(row?.x || 'unknown')` coercions for every field of an incoming JSON report. That's defensible at the *parse boundary* (untrusted JSON on disk), but right now the un-narrowed `any` flows deep — `summarizeQualityReport` reaches into `report.summary.operator_trace.findings` with no typed intermediate. Define a `RawQualityReport` input type for the on-disk shape and narrow once at `readReport`, so the rest of the module operates on typed data instead of re-coercing `any` at every property access.
 
 ### T3. `modelQuality` reads a field that doesn't exist on its own row type
+
+**Status:** DONE — success predicate now checks `r.exit_code == null`, with a regression test covering failed rows.
 
 ```ts
 g.success += (exitCode === 0 || r.exitCode == null || verdict === 'APPROVED' ...)
