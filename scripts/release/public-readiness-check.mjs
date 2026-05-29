@@ -37,8 +37,12 @@ if (cmd === 'tracked-clean') {
   if (localFindings.length) fail(`Local operator path/address leaks found:\n${localFindings.slice(0, 100).join('\n')}`);
   if (existsSync('config/balance.json')) { const data = JSON.parse(readFileSync('config/balance.json', 'utf8')); const snapshots = (data.providers || []).flatMap((p) => p.snapshots || []); if (snapshots.length) fail('config/balance.json contains local balance snapshots'); }
   if (paths.includes('config/operator-contracts.local.json')) fail('config/operator-contracts.local.json must remain local/untracked');
+  if (paths.includes('config/contract-governor.local.json')) fail('config/contract-governor.local.json must remain local/untracked');
   if (bad.length) fail([...new Set(bad)].sort().join('\n'));
 } else if (cmd === 'parallel-defaults') {
+  const governorFile = 'config/contract-governor.json';
+  if (existsSync(governorFile)) { const g = JSON.parse(readFileSync(governorFile, 'utf8')); if (g.enabled !== false) fail('config/contract-governor.json must be disabled by default'); if (g.hot_mode !== false) fail('contract governor hot_mode must be false by default'); if (!['off', 0, false, null, undefined].includes(g.auto_apply)) fail('contract governor auto_apply must be off by default'); if (g.max_cost_usd_per_run !== 0) fail('contract governor public max_cost_usd_per_run must be 0'); }
+
   const file = 'config/parallel-agents.json';
   if (existsSync(file)) { const data = JSON.parse(readFileSync(file, 'utf8')); if (data.enabled !== false) fail('config/parallel-agents.json must be disabled by default for public release'); for (const [name, cfg] of Object.entries(data.agents || {})) { if (cfg.enabled !== false) fail(`parallel agent ${name} must be disabled by default for public release`); for (const lane of cfg.provider_models || []) if (lane.enabled !== false) fail(`parallel lane ${name}:${lane.provider}:${lane.model} must be disabled by default`); } }
 } else if (cmd === 'pack-clean') {

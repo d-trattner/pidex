@@ -19,6 +19,8 @@ type ModelsPayload = { ok: boolean; models: ProviderModel[]; source?: string };
 type BalanceSnapshot = { kind: 'balance_update' | 'balance_top_up'; balance_usd: number; captured_at: string };
 type BalanceProvider = { provider: string; label: string; latest_balance_usd: number | null; estimated_current_balance_usd: number | null; confidence: string; learned_intervals: number; days_remaining: number | null; snapshots: BalanceSnapshot[] };
 type BalancesPayload = { ok: boolean; providers: BalanceProvider[]; config?: { providers?: Array<{ provider: string; label?: string }> } };
+type ContractGovernorConfig = { enabled?: boolean; mode?: string; hot_mode?: boolean; auto_apply?: string; agent_enabled?: boolean; model?: string | null; escalation_model?: string | null; effort?: string; timeout_seconds?: number; max_cost_usd_per_run?: number; max_proposals_per_run?: number; monitoring_window_reports?: number };
+type ContractGovernorPayload = { ok: boolean; effective_config: ContractGovernorConfig; local_config_exists: boolean; runs: Array<Record<string, any>>; pending: Array<Record<string, any>>; approved: Array<Record<string, any>> };
 
 function newestCapture(rows: Array<{ captured_at?: string | null }>): string {
   const newest = rows
@@ -222,6 +224,58 @@ function ParallelAgentsCard() {
   );
 }
 
+function QualityGovernanceCard() {
+  const query = useDashboardQuery<ContractGovernorPayload>(['contract-governor'], '/api/quality/contract-governor');
+  const [config, setConfig] = useState<ContractGovernorConfig>({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const hydratedRef = useRef(false);
+  useEffect(() => { if (query.data?.effective_config) { setConfig(query.data.effective_config); hydratedRef.current = true; } }, [query.data?.effective_config]);
+  const patch = (next: Partial<ContractGovernorConfig>) => setConfig((current) => ({ ...current, ...next }));
+  const save = async () => {
+    if (config.hot_mode && !window.confirm('Enable Contract Governor hot mode? This is development-only and can automatically change local PDQ expectations for low-risk corrections.')) return;
+    setSaving(true); setMessage('');
+    try {
+      const response = await fetch('/api/quality/contract-governor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ config }) });
+      if (!response.ok) throw new Error(await response.text());
+      setMessage('Quality governance config saved.');
+      await query.refetch();
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Save failed'); }
+    finally { setSaving(false); }
+  };
+  const latest = query.data?.runs?.[0];
+  return (
+    <article className="glass-card glass" style={{ gridColumn: '1 / -1' }}>
+      <div className="metric-tile-head"><span className="metric-icon" aria-hidden="true"><Gauge size={18} /></span><h3>Quality Governance</h3></div>
+      <p className="muted">Contract governor can change local PDQ expectations. Public defaults stay off. Hot mode is development-only and enables low-risk local auto-apply.</p>
+      <div className="parallel-agents-grid" style={{ marginTop: 12 }}>
+        <div className="glass-card parallel-status-card" style={{ padding: 14 }}>
+          <h4>Contract Governor</h4>
+          <ToggleCard active={Boolean(config.enabled)} label={config.enabled ? 'Governor enabled' : 'Governor disabled'} onClick={() => patch({ enabled: !config.enabled })} />
+          <ToggleCard active={Boolean(config.hot_mode)} label={config.hot_mode ? 'Hot mode ON' : 'Hot mode off'} onClick={() => patch({ hot_mode: !config.hot_mode, auto_apply: !config.hot_mode ? 'low-risk' : 'off' })} />
+          <div className="settings-info-grid">
+            <InfoPill label="Local config" value={query.data?.local_config_exists ? 'yes' : 'no'} />
+            <InfoPill label="Pending" value={query.data?.pending?.length || 0} tone={(query.data?.pending?.length || 0) > 0 ? 'warn' : 'ok'} />
+            <InfoPill label="Approved/applied" value={query.data?.approved?.length || 0} />
+            <InfoPill label="Last run" value={latest?.timestamp ? new Date(latest.timestamp).toLocaleString() : '—'} />
+          </div>
+        </div>
+        <div className="glass-card parallel-agent-card" style={{ padding: 14 }}>
+          <h4>Local settings</h4>
+          <label className="muted">Mode<select className="themed-select" value={config.mode || 'deterministic-only'} onChange={(e) => patch({ mode: e.target.value })}><option value="deterministic-only">deterministic-only</option><option value="agent-review">agent-review</option><option value="agent-review-auto-apply">agent-review-auto-apply</option></select></label>
+          <label className="muted">Auto apply<select className="themed-select" value={config.hot_mode ? (config.auto_apply || 'off') : 'off'} disabled={!config.hot_mode} onChange={(e) => patch({ auto_apply: e.target.value })}><option value="off">off</option><option value="low-risk">low-risk</option></select></label>
+          <label className="muted">Model<input className="themed-input" value={config.model || ''} onChange={(e) => patch({ model: e.target.value || null })} placeholder="openai-codex/gpt-5.3-codex-spark" /></label>
+          <label className="muted">Max cost/run<input className="themed-input" type="number" min="0" step="0.01" value={config.max_cost_usd_per_run ?? 0} onChange={(e) => patch({ max_cost_usd_per_run: Number(e.target.value) })} /></label>
+          <label className="muted">Max proposals/run<input className="themed-input" type="number" min="1" max="20" value={config.max_proposals_per_run ?? 5} onChange={(e) => patch({ max_proposals_per_run: Number(e.target.value) })} /></label>
+          <button className="button" type="button" disabled={saving || !hydratedRef.current} onClick={save}>{saving ? 'Saving…' : 'Save governance config'}</button>
+          {message ? <p className="muted">{message}</p> : null}
+        </div>
+      </div>
+      {config.hot_mode ? <div className="settings-warning active" style={{ marginTop: 12 }}><AlertTriangle size={14} /> Hot mode active: low-risk local contract corrections may auto-apply.</div> : null}
+    </article>
+  );
+}
+
 function AgentBalanceCard() {
   const balancesQuery = useDashboardQuery<BalancesPayload>(['agent-balances'], '/api/agent-balances');
   const modelsQuery = useDashboardQuery<ModelsPayload>(['parallel-agent-models', 'balances'], '/api/parallel-agents/models');
@@ -371,6 +425,7 @@ function SettingsPage() {
       </article>
 
       <ParallelAgentsCard />
+      <QualityGovernanceCard />
       <AgentBalanceCard />
     </section>
   );

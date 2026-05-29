@@ -53,6 +53,7 @@ import { Route as ApiQualityRefreshRouteImport } from './../routes/api/quality/r
 import { Route as ApiQualityProjectsRouteImport } from './../routes/api/quality/projects'
 import { Route as ApiQualityLatestRouteImport } from './../routes/api/quality/latest'
 import { Route as ApiQualityHistoryRouteImport } from './../routes/api/quality/history'
+import { Route as ApiQualityContractGovernorRouteImport } from './../routes/api/quality/contract-governor'
 import { Route as ApiProvider_limitsProfileRouteImport } from './../routes/api/provider_limits/profile'
 import { Route as ApiProviderLimitsProfileRouteImport } from './../routes/api/provider-limits/profile'
 import { Route as ApiParallelAgentsModelsRouteImport } from './../routes/api/parallel-agents/models'
@@ -281,6 +282,12 @@ const ApiQualityHistoryRoute = ApiQualityHistoryRouteImport.update({
   path: '/api/quality/history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiQualityContractGovernorRoute =
+  ApiQualityContractGovernorRouteImport.update({
+    id: '/api/quality/contract-governor',
+    path: '/api/quality/contract-governor',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiProvider_limitsProfileRoute =
   ApiProvider_limitsProfileRouteImport.update({
     id: '/profile',
@@ -367,6 +374,7 @@ export interface FileRoutesByFullPath {
   '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
+  '/api/quality/contract-governor': typeof ApiQualityContractGovernorRoute
   '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
@@ -419,6 +427,7 @@ export interface FileRoutesByTo {
   '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
+  '/api/quality/contract-governor': typeof ApiQualityContractGovernorRoute
   '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
@@ -473,6 +482,7 @@ export interface FileRoutesById {
   '/api/parallel-agents/models': typeof ApiParallelAgentsModelsRoute
   '/api/provider-limits/profile': typeof ApiProviderLimitsProfileRoute
   '/api/provider_limits/profile': typeof ApiProvider_limitsProfileRoute
+  '/api/quality/contract-governor': typeof ApiQualityContractGovernorRoute
   '/api/quality/history': typeof ApiQualityHistoryRoute
   '/api/quality/latest': typeof ApiQualityLatestRoute
   '/api/quality/projects': typeof ApiQualityProjectsRoute
@@ -528,6 +538,7 @@ export interface FileRouteTypes {
     | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
+    | '/api/quality/contract-governor'
     | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
@@ -580,6 +591,7 @@ export interface FileRouteTypes {
     | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
+    | '/api/quality/contract-governor'
     | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
@@ -633,6 +645,7 @@ export interface FileRouteTypes {
     | '/api/parallel-agents/models'
     | '/api/provider-limits/profile'
     | '/api/provider_limits/profile'
+    | '/api/quality/contract-governor'
     | '/api/quality/history'
     | '/api/quality/latest'
     | '/api/quality/projects'
@@ -673,6 +686,7 @@ export interface RootRouteChildren {
   ApiToken_consumptionRoute: typeof ApiToken_consumptionRoute
   ApiChartsModelQualityRoute: typeof ApiChartsModelQualityRoute
   ApiChartsQualityRoute: typeof ApiChartsQualityRoute
+  ApiQualityContractGovernorRoute: typeof ApiQualityContractGovernorRoute
   ApiQualityHistoryRoute: typeof ApiQualityHistoryRoute
   ApiQualityLatestRoute: typeof ApiQualityLatestRoute
   ApiQualityProjectsRoute: typeof ApiQualityProjectsRoute
@@ -989,6 +1003,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiQualityHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/quality/contract-governor': {
+      id: '/api/quality/contract-governor'
+      path: '/api/quality/contract-governor'
+      fullPath: '/api/quality/contract-governor'
+      preLoaderRoute: typeof ApiQualityContractGovernorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/provider_limits/profile': {
       id: '/api/provider_limits/profile'
       path: '/profile'
@@ -1150,6 +1171,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiToken_consumptionRoute: ApiToken_consumptionRoute,
   ApiChartsModelQualityRoute: ApiChartsModelQualityRoute,
   ApiChartsQualityRoute: ApiChartsQualityRoute,
+  ApiQualityContractGovernorRoute: ApiQualityContractGovernorRoute,
   ApiQualityHistoryRoute: ApiQualityHistoryRoute,
   ApiQualityLatestRoute: ApiQualityLatestRoute,
   ApiQualityProjectsRoute: ApiQualityProjectsRoute,

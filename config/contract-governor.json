@@ -1,0 +1,17 @@
+{
+  "$schema": "https://pidex.dev/contract-governor.schema.json",
+  "version": 1,
+  "enabled": false,
+  "background": true,
+  "mode": "deterministic-only",
+  "hot_mode": false,
+  "auto_apply": "off",
+  "agent_enabled": false,
+  "model": null,
+  "escalation_model": null,
+  "effort": "medium",
+  "timeout_seconds": 60,
+  "max_cost_usd_per_run": 0,
+  "max_proposals_per_run": 5,
+  "monitoring_window_reports": 5
+}
