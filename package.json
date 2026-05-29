@@ -41,6 +41,7 @@
     "readme/",
     "rules/",
     "scripts/",
+    "uninstall.windows.ps1",
     "skills/",
     "templates/",
     "install.sh",

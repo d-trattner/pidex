@@ -172,14 +172,17 @@ cd ~/pidex/dashboard
 ./start.sh
 ```
 
-Windows has an experimental dashboard launcher:
+Windows has experimental PowerShell install/dashboard/uninstall entrypoints:
 
 ```powershell
+.\install.windows.ps1
 cd $HOME\pidex\dashboard
 .\start.windows.ps1
+cd $HOME\pidex
+.\uninstall.windows.ps1
 ```
 
-See [Windows status](readme/windows.md). The Linux `dashboard/start.sh` launcher is not the Windows entrypoint.
+See [Windows status](readme/windows.md). The Linux shell launchers are not the Windows entrypoints.
 
 The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
 

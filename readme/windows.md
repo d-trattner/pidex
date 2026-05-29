@@ -87,6 +87,27 @@ powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 
 The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs dashboard dependencies when missing with `npm ci` when a dashboard lockfile is present, and runs `pi install`. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
 
+## Experimental uninstall helper
+
+Windows includes an additive PowerShell uninstall helper:
+
+```powershell
+cd $HOME\pidex
+.\uninstall.windows.ps1
+```
+
+It removes PIDEX from Pi settings with `pi uninstall $HOME\pidex`, preserves the checkout by default, and does not manage global Git hooks.
+
+Useful options:
+
+```powershell
+.\uninstall.windows.ps1 -DryRun
+.\uninstall.windows.ps1 -RemoveCheckout
+.\uninstall.windows.ps1 -RemoveAstGrep
+```
+
+`-RemoveAstGrep` only removes `@ast-grep/cli` when the PIDEX install marker exists.
+
 For a separate PowerShell window/session, expose Git Bash before running Bash-backed npm checks:
 
 ```powershell
