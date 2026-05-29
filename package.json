@@ -1,5 +1,5 @@
 {
-  "name": "pidex",
+  "name": "@d-trattner/pidex",
   "version": "0.1.0",
   "description": "Pi package for structured planning, implementation, quality governance, and dashboard workflows.",
   "type": "module",
