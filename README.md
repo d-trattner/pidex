@@ -172,7 +172,14 @@ cd ~/pidex/dashboard
 ./start.sh
 ```
 
-Windows currently uses the experimental bootstrap and Windows support notes in [Windows status](readme/windows.md). The Linux `dashboard/start.sh` launcher is not the Windows entrypoint.
+Windows has an experimental dashboard launcher:
+
+```powershell
+cd $HOME\pidex\dashboard
+.\start.windows.ps1
+```
+
+See [Windows status](readme/windows.md). The Linux `dashboard/start.sh` launcher is not the Windows entrypoint.
 
 The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
 

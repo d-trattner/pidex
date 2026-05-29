@@ -23,7 +23,7 @@ Preferred future pattern:
 |---|---|
 | `install.sh` | `install.windows.ps1` |
 | `uninstall.sh` | `uninstall.windows.ps1` |
-| `dashboard/start.sh` | `dashboard/start.windows.mjs` or `dashboard/start.windows.ps1` |
+| `dashboard/start.sh` | `dashboard/start.windows.ps1` |
 | `scripts/release/public-readiness.sh` | `scripts/compat/windows-audit.mjs` |
 | `scripts/git-hooks/install-global.sh` | `scripts/git-hooks/install-global.windows.ps1` or explicit unsupported docs |
 
@@ -95,6 +95,33 @@ npm run public:check
 ```
 
 Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `npm run public:check` passed via PowerShell after adding Git Bash to PATH, and `npm --prefix dashboard run typecheck` plus `npm --prefix dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
+
+## Experimental dashboard launcher
+
+Windows includes an additive PowerShell dashboard launcher:
+
+```powershell
+cd $HOME\pidex\dashboard
+.\start.windows.ps1
+```
+
+Useful options:
+
+```powershell
+.\start.windows.ps1 -NoBuild
+.\start.windows.ps1 -Dev
+.\start.windows.ps1 -HostName 0.0.0.0 -Domain your.local.name
+```
+
+A local friendly domain can also be configured in `$HOME\pidex\config\dashboard.local.json`:
+
+```json
+{
+  "domain": "your.local.name"
+}
+```
+
+The launcher is experimental and runs in the foreground.
 
 ## Recommended Windows approach today
 

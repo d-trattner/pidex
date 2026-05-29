@@ -13,7 +13,14 @@ cd <pidex-root>/dashboard
 
 The Linux installer installs dashboard dependencies when needed. If you used `./install.sh --skip-dashboard-deps`, run `npm --prefix <pidex-root>/dashboard ci` before starting the dashboard.
 
-Windows native support is experimental; do not use the Linux `start.sh` launcher as the Windows entrypoint. See [Windows status](windows.md).
+Windows native support is experimental. Use the additive PowerShell launcher instead of the Linux shell script:
+
+```powershell
+cd <pidex-root>\dashboard
+.\start.windows.ps1
+```
+
+See [Windows status](windows.md).
 
 Default local URL:
 
@@ -21,11 +28,25 @@ Default local URL:
 http://127.0.0.1:18777/dashboard
 ```
 
-If exposed through the local proxy, use the friendly domain shown by `start.sh`, for example:
+If you expose the dashboard through your own LAN DNS/reverse proxy, pass the domain explicitly so the launcher prints it:
 
-```text
-http://pi.lan/dashboard
+```bash
+./start.sh --host 0.0.0.0 --domain your.local.name
 ```
+
+```powershell
+.\start.windows.ps1 -HostName 0.0.0.0 -Domain your.local.name
+```
+
+You can also set a local default domain in `config/dashboard.local.json`:
+
+```json
+{
+  "domain": "your.local.name"
+}
+```
+
+The public default `config/dashboard.json` leaves the domain unset. PIDEX does not assume a built-in LAN domain.
 
 ## App locations
 

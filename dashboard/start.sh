@@ -3,6 +3,13 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd -P)
+PIDEX_ROOT=$(cd "$ROOT/.." && pwd -P)
+
+config_value() {
+  local key="$1"
+  node -e "const fs=require('fs'); const path=require('path'); const root=process.argv[1]; const key=process.argv[2]; let value=''; for (const file of ['config/dashboard.json','config/dashboard.local.json']) { const p=path.join(root,file); if (!fs.existsSync(p)) continue; try { const data=JSON.parse(fs.readFileSync(p,'utf8')); if (data && data[key] != null && String(data[key]).trim()) value=String(data[key]).trim(); } catch {} } process.stdout.write(value);" "$PIDEX_ROOT" "$key"
+}
+
 HOST="127.0.0.1"
 PORT="18777"
 FOREGROUND=0
@@ -11,7 +18,7 @@ INGEST=1
 DEV=0
 PUBLIC_READ="${PIDEX_PROVIDER_LIMITS_PUBLIC_READ:-0}"
 PUBLIC_WRITE="${PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE:-0}"
-DOMAIN="${PIDEX_DASHBOARD_DOMAIN:-pi.lan}"
+DOMAIN="${PIDEX_DASHBOARD_DOMAIN:-$(config_value domain)}"
 
 usage() {
   cat <<'EOF'
@@ -20,7 +27,7 @@ Usage: dashboard/start.sh [options]
 Options:
   --host HOST       Bind host. Default: 127.0.0.1
   --port PORT       Bind port. Default: 18777
-  --domain NAME     Print friendly domain URL. Default: pi.lan
+  --domain NAME     Print friendly domain URL. Default: config/dashboard*.json or disabled
   --public-read     Allow unauthenticated provider-limits GETs on public bind
   --public-write    Allow same-origin provider-limits writes on public bind (profile buttons)
   --no-build        Skip production build before start
