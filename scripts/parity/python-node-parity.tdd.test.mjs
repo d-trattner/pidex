@@ -14,6 +14,11 @@ if (pythonProbe.status !== 0) {
   process.exit(0);
 }
 const oldCommit = '533ed2d';
+const gitProbe = spawnSync('git', ['cat-file', '-e', `${oldCommit}^{commit}`], { cwd: root, encoding: 'utf8' });
+if (gitProbe.status !== 0) {
+  console.log('python-node parity tests skipped: historical git fixture unavailable');
+  process.exit(0);
+}
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-parity-'));
 
 function gitShow(file) {
