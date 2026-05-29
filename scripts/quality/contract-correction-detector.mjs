@@ -16,7 +16,7 @@ function readJsonl(file) { if (!existsSync(file)) return []; return readFileSync
 function walk(dir) { let out = []; if (!existsSync(dir)) return out; for (const e of readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name); if (e.isDirectory()) out = out.concat(walk(p)); else out.push(p); } return out; }
 function latestReport(root, project) { const projectPath = path.resolve(project); const files = walk(path.join(root, 'state', 'quality')).filter((p) => p.endsWith('.json') && path.basename(p) !== 'review-state.json'); const reports = files.map((file) => { try { return { file, report: readJson(file) }; } catch { return null; } }).filter((r) => r?.report?.summary && path.resolve(String(r.report.project_path || '')) === projectPath); reports.sort((a, b) => (Date.parse(b.report.generated_at || '') || 0) - (Date.parse(a.report.generated_at || '') || 0)); return reports[0]; }
 function decisions(root, project) { const projectPath = path.resolve(project); return walk(path.join(root, 'state', 'orchestrator-events')).filter((p) => p.endsWith('.jsonl')).flatMap(readJsonl).filter((r) => r.operator_type === 'OpDecision' && path.resolve(String(r.project_path || projectPath)) === projectPath); }
-function forbiddenCheck(operatorType, patch) { const broadReasons = Array.isArray(patch.allowed_skip_reasons) && patch.allowed_skip_reasons.length > 12; return { touches_security_gate: operatorType === 'OpGate' || operatorType === 'OpReview', touches_release_gate: false, removes_required_operator: false, broadens_skip_reasons: broadReasons }; }
+function forbiddenCheck(operatorType, patch) { const broadReasons = Array.isArray(patch.allowed_skip_reasons) && patch.allowed_skip_reasons.length > 12; const gateOrReviewReasonPatch = ['OpGate', 'OpReview'].includes(operatorType) && Object.hasOwn(patch || {}, 'allowed_skip_reasons'); return { touches_security_gate: gateOrReviewReasonPatch, touches_release_gate: operatorType === 'OpGate' && (Object.hasOwn(patch || {}, 'required_when') || Object.hasOwn(patch || {}, 'allowed_skip_reasons')), removes_required_operator: String(patch?.required_when || '').toLowerCase().includes('never'), broadens_skip_reasons: broadReasons }; }
 function proposal(operatorType, patch, reason, evidence, reportFile) { const contract = CONTRACTS[operatorType] || {}; const fingerprint = { operatorType, patch, evidence: evidence.slice(0, 10).map((e) => e._source_path || e.timestamp || e.plan_key || e.reason) }; const id = `contract-correction-${hash(fingerprint)}`; return { proposal_id: id, id, operator_type: operatorType, contract_id: contract.contract_id || null, current_contract: contract, proposed_patch: patch, reason, evidence: { matching_findings: evidence.filter((e) => e.kind === 'finding').map((e) => e.row), matching_op_decisions: evidence.filter((e) => e.kind === 'decision').map((e) => e.row), source_reports: [reportFile], relevant_rules: [] }, impact_estimate: { affected_findings: evidence.filter((e) => e.kind === 'finding').length, severity_before: evidence.filter((e) => e.kind === 'finding').reduce((acc, e) => { const s = e.row.severity || 'unknown'; acc[s] = (acc[s] || 0) + 1; return acc; }, {}), historical_reclassification: 'future-only' }, forbidden_changes_check: forbiddenCheck(operatorType, patch) }; }
 export function detectContractCorrections({ report, reportFile = null, opDecisions = [], maxProposals = 5 }) {
   const findings = report?.summary?.operator_trace?.findings || [];
@@ -27,7 +27,24 @@ export function detectContractCorrections({ report, reportFile = null, opDecisio
     const withPatch = rows.filter((r) => r.proposed_expectation || r.contract_patch);
     if (!withPatch.length) continue;
     const patch = withPatch.at(-1).contract_patch || withPatch.at(-1).proposed_expectation;
-    proposals.push(proposal(operatorType, patch, `Repeated expectation correction decisions for ${operatorType}.`, rows.map((row) => ({ kind: 'decision', row })), reportFile));
+    if (rows.length >= 2 || withPatch.some((r) => r.confidence === 'high' || r.operator_approved === true)) proposals.push(proposal(operatorType, patch, `Repeated or explicit expectation correction decisions for ${operatorType}.`, rows.map((row) => ({ kind: 'decision', row })), reportFile));
+  }
+  const invalidReasonGroups = new Map();
+  for (const d of opDecisions) {
+    if (!['skip_step', 'manual_evidence', 'backfill_evidence', 'override_route'].includes(d.decision_type) || !d.target_operator || !d.reason) continue;
+    const contract = CONTRACTS[d.target_operator] || {};
+    if ((contract.allowed_skip_reasons || []).includes(d.reason)) continue;
+    if (!['high', 'medium'].includes(String(d.confidence || 'medium')) && d.operator_approved !== true) continue;
+    const key = `${d.target_operator}\u0000${d.reason}`;
+    const arr = invalidReasonGroups.get(key) || [];
+    arr.push(d);
+    invalidReasonGroups.set(key, arr);
+  }
+  for (const [key, rows] of invalidReasonGroups) {
+    if (rows.length < 2) continue;
+    const [operatorType, reason] = key.split('\u0000');
+    const current = CONTRACTS[operatorType]?.allowed_skip_reasons || [];
+    proposals.push(proposal(operatorType, { allowed_skip_reasons: [...new Set([...current, reason])].sort() }, `Repeated approved operator decisions use unsupported reason ${reason} for ${operatorType}.`, rows.map((row) => ({ kind: 'decision', row })), reportFile));
   }
   const byOp = new Map();
   for (const f of findings) if (f.contract_id && f.type !== 'valid_skip') { const arr = byOp.get(f.operator_type) || []; arr.push(f); byOp.set(f.operator_type, arr); }

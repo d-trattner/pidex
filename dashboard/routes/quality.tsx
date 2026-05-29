@@ -147,6 +147,15 @@ type QualityLatestPayload = {
   latest: QualityReadModelSummary | null;
 };
 
+type ContractGovernorPayload = {
+  ok: boolean;
+  effective_config: { enabled?: boolean; hot_mode?: boolean; auto_apply?: string; mode?: string; model?: string | null };
+  runs: Array<Record<string, any>>;
+  pending: Array<Record<string, any>>;
+  approved: Array<Record<string, any>>;
+  corrections?: Array<Record<string, any>>;
+};
+
 const EMPTY_QUALITY: QualityPayload = {
   completionByDay: [],
   runtimeByAgent: [],
@@ -172,13 +181,16 @@ function QualityPage() {
   const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project], withProjectParam('/api/charts/quality', project));
   const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project], withProjectParam('/api/charts/model-quality', project));
   const qualityLatestQuery = useDashboardQuery<QualityLatestPayload>(['quality-latest-read-model', project], withProjectParam('/api/quality/latest', project));
+  const governorQuery = useDashboardQuery<ContractGovernorPayload>(['quality-contract-governor'], '/api/quality/contract-governor');
   const quality = qualityQuery.data ?? EMPTY_QUALITY;
   const modelQuality = modelQuery.data ?? { models: [] };
   const latestQuality = qualityLatestQuery.data?.latest ?? null;
+  const governor = governorQuery.data;
+  const governorLatest = governor?.runs?.[0];
   const scopeLabel = project || 'All projects';
   const scopeDescription = project ? `${project} · latest project PDQ report` : 'All projects · aggregate across non-smoke latest reports';
   const loading = qualityQuery.isLoading || modelQuery.isLoading || qualityLatestQuery.isLoading;
-  const error = qualityQuery.isError || modelQuery.isError || qualityLatestQuery.isError ? 'Quality data could not be loaded.' : '';
+  const error = qualityQuery.isError || modelQuery.isError || qualityLatestQuery.isError || governorQuery.isError ? 'Quality data could not be loaded.' : '';
 
   const safeNumber = (value: unknown): number => {
     const numeric = Number(value);
@@ -357,6 +369,49 @@ function QualityPage() {
             caveats="This avoids a fake single quality score and does not claim causality."
           />
         </div>
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full">
+        <div className="card-heading-row">
+          <div>
+            <h3>Background governance</h3>
+            <p className="muted">Contract governor is non-pipeline automation for PDQ expectation corrections. It is visible here but excluded from normal route-graph metrics.</p>
+            {governor?.effective_config?.hot_mode ? <p className="metric-bad"><strong>Hot mode active:</strong> low-risk local contract corrections may auto-apply.</p> : null}
+          </div>
+          <HelpPopover
+            title="Background governance"
+            shows="Contract governor status, pending contract-correction proposals, local overrides, and evaluator outcomes."
+            source="/api/quality/contract-governor reading state/quality/contract-governor and state/quality/contract-corrections.jsonl."
+            reading="Pending proposals are suggested expectation corrections; applied/validated rows show local contract overrides under monitoring."
+            improve="Review pending proposals, keep hot mode off until pending-only runs are clean, and investigate rollback recommendations."
+            caveats="Governor runs are background governance, not normal pipeline agent runs."
+          />
+        </div>
+        <div className="grid quality-metrics-grid" style={{ gap: 12 }}>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Governor</p><p className="metric-value">{governor?.effective_config?.enabled ? 'enabled' : 'off'}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Hot mode</p><p className={`metric-value ${governor?.effective_config?.hot_mode ? 'metric-bad' : ''}`}>{governor?.effective_config?.hot_mode ? 'on' : 'off'}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Pending</p><p className="metric-value">{governor?.pending?.length || 0}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Applied/approved</p><p className="metric-value">{governor?.approved?.length || 0}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Last proposals</p><p className="metric-value">{safeNumber(governorLatest?.proposals_reviewed)}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Last outcome</p><p className="metric-value">{governorLatest?.status || '—'}</p></div>
+        </div>
+        {governorLatest ? <p className="muted" style={{ marginTop: 10 }}>Last run: {governorLatest.timestamp ? new Date(String(governorLatest.timestamp)).toLocaleString() : '—'} · duration {safeNumber(governorLatest.duration_ms)}ms · model {governorLatest.model || 'deterministic'} · auto-applied {safeNumber(governorLatest.auto_applied)}</p> : <p className="muted" style={{ marginTop: 10 }}>No governor runs recorded yet.</p>}
+        {(governor?.pending || []).length ? (
+          <div style={{ marginTop: 12, overflowX: 'auto' }}>
+            <h4>Pending proposals</h4>
+            <table className="table"><thead><tr><th>Proposal</th><th>Operator</th><th>Decision</th><th>Reason</th></tr></thead><tbody>
+              {(governor?.pending || []).slice(0, 8).map((row, idx) => <tr key={`${row.id || 'pending'}-${idx}`}><td>{row.id || '—'}</td><td>{row.operator_type || '—'}</td><td>{row.governor_decision?.decision || row.status || 'pending'}</td><td>{row.reason || row.governor_decision?.reason || '—'}</td></tr>)}
+            </tbody></table>
+          </div>
+        ) : null}
+        {(governor?.approved || []).length ? (
+          <div style={{ marginTop: 12, overflowX: 'auto' }}>
+            <h4>Approved / monitored local overrides</h4>
+            <table className="table"><thead><tr><th>Correction</th><th>Operator</th><th>Status</th><th>Monitoring</th><th>Rollback</th></tr></thead><tbody>
+              {(governor?.approved || []).slice(0, 8).map((row, idx) => <tr key={`${row.id || 'approved'}-${idx}`}><td>{row.id || '—'}</td><td>{row.operator_type || '—'}</td><td>{row.status || '—'}</td><td>{row.monitoring_status || '—'}</td><td>{row.rollback_recommended ? 'recommended' : 'no'}</td></tr>)}
+            </tbody></table>
+          </div>
+        ) : null}
       </article>
 
       <div className="quality-layer-grid">
