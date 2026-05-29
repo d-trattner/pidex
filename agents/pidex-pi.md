@@ -131,26 +131,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 
 **If running via running-pi**, send gate to Telegram. Use only concrete, fixed option names:
 ```
-bash <pidex-root>/scripts/telegram/send-gate.sh \
-  --gate G7 --plan <plan-id> --slug <slug> \
-  --options "approve-all,defer,reject" \
-  --context "PI proposes <N> changes to agent instructions:
-<numbered list of proposals with one-line summaries>.
-approve-all = apply all proposals. defer = save for later. reject = discard all."
-```
-Do NOT use dynamic options like `approve-P2-P3`. If user wants partial approval, they reply via orchestrator session (not via button) after seeing context. Button set must be fixed strings relay can validate.
-
-Then END YOUR TURN. Orchestrator resumes with user's decision. Based on response, proceed to Phase 5 (on approve-all) or skip to Phase 6 (on defer/reject).
-
-**If running interactively**, present analysis and wait for explicit approval:
-
-1. Present comprehensive analysis:
-   - Executive summary
-   - Detailed findings
-   - Proposed solutions
-   - Risk assessment
-2. **Wait for user approval** — DO NOT proceed without confirmation
-3. Iterate on any concerns raised
+Report the gate decision request directly to the orchestrator/user in the current Pi session. Do not call external Telegram/background gate scripts.
 
 ## Phase 5: Implementation
 

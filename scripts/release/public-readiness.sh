@@ -53,6 +53,9 @@ fi
 node scripts/release/public-readiness-check.mjs tracked-clean
 ok "no forbidden tracked runtime/private files or high-confidence secrets"
 
+node scripts/release/reference-integrity.mjs
+ok "package-facing references resolve"
+
 if git ls-files | grep -q '^dashboard-old/'; then
   git ls-files | grep '^dashboard-old/' >&2
   fail "legacy dashboard-old files are still tracked"

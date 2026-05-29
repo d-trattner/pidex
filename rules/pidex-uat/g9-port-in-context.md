@@ -11,16 +11,18 @@ The UAT doc's "Preview Instructions" section must state the exact dev server URL
 For projects with multiple concurrent dev servers (e.g., one for the app, one for API dev):
 also identify which server this is.
 
-The orchestrator reads this section to construct the G9 send-gate.sh --context string. The
+The orchestrator reads this section to construct the G9 terminal gate context. The
 port must be propagated verbatim into the G9 context message.
 
 ## G9 gate context must include
 
-  --context "Localhost URL: http://127.0.0.1:<PORT>/<route>
-  LAN URL: http://<lan-host>:<PORT>/<route>
-  Verified: listening on 0.0.0.0:<PORT>; LAN route returned 200
-  <test summary line>
-  Check: <what to verify>"
+```text
+Localhost URL: http://127.0.0.1:<PORT>/<route>
+LAN URL: http://<lan-host>:<PORT>/<route>
+Verified: listening on 0.0.0.0:<PORT>; LAN route returned 200
+<test summary line>
+Check: <what to verify>
+```
 
 For headless/server runs, localhost-only preview instructions are insufficient. If the doc chain only has `127.0.0.1` or `localhost`, UAT must request LAN URL verification before routing G9.
 

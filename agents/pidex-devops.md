@@ -134,15 +134,7 @@ Security (no credentials), performance (size), maintainability (versioning), cle
    - Included Plans: [list all plan IDs and summaries]
    - Environment: [target]
    - Combined changes overview
-2. **If running via running-pi**: Send gate to Telegram:
-   ```
-   bash <pidex-root>/scripts/telegram/send-gate.sh \
-     --gate G4 --plan <plan-id> --slug <slug> \
-     --options "push,local,hold,abort" \
-     --context "Release v[X.Y.Z] ready. Plans: [list]. Tests: [count] green, [coverage]% coverage. push = push+tag to remote. local = local tag only. hold = defer. abort = cancel."
-   ```
-   Then END YOUR TURN — orchestrator will resume with user's choice.
-3. **If running interactively**: Wait for explicit user response.
+2. Present Gate G4 directly in the current Pi session and wait for explicit user response. Do not call external Telegram/background gate scripts.
 4. Document confirmation with timestamp.
 
 ### Phase 2C: Release Execution (After Approval)

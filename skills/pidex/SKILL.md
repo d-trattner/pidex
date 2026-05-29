@@ -48,7 +48,7 @@ pidex currently supports direct mode as the working MVP:
 - `pidex_agent` honors `<pidex-root>/config/agents.json`: default/tool-heavy agents use lean isolated Pi subprocesses; configured review/synthesis agents may route to Claude, Codex, or Gemini CLI delegates.
 - `pidex_agent` stores raw child JSON streams under `<pidex-root>/state/runs/` and returns only compact tool details to avoid parent-session bloat.
 - `pidex_agent` records per-agent metrics under `<pidex-root>/state/metrics/`.
-- For plan-id allocation, use atomic helper `bash <pidex-root>/scripts/parallel/manifest.sh next-id --project-root <project-root>` (do not increment `.next-id` ad hoc under parallel load).
+- For plan-id allocation, use the next available numeric plan id from `<project-root>/agents.output/**` and document the selected id in the plan/brief. Do not increment `.next-id` ad hoc unless a future helper is present in the installed package.
 - Specialist final responses must stay short: write full artifacts to files, then return only status, output paths, next route, concise evidence, and the ROUTING block.
 - Generated `agents.output/**` artifacts are runtime/operator outputs and must never be committed. Do not stage them, do not use `git add -f` for them, and do not suggest them as commit candidates. Commit durable wiki/project metadata instead (for example `wiki/**` or `pidex/state/wiki-hygiene.json` when appropriate).
 - Gates are asked in the Pi session. Do not use Telegram reply handling unless the user explicitly asks for the scaffolded background mode.
@@ -93,23 +93,9 @@ A pipeline may only mutate its declared `<project-root>` / allowed write root. O
 
 Every specialist handoff must include a `PROJECT BOUNDARY` block naming current project root, allowed write root, read-only external reference roots, and the rule: do not edit/commit/tag/push outside allowed write root.
 
-### Pre-spawn context pack (preferred; helper optional)
+### Pre-spawn context pack
 
-Before every `pidex-*` spawn, use a compact context pack instead of pasting broad/full artifacts. If a PIDEX context-budget helper exists, prefer it:
-
-```bash
-bash <pidex-root>/scripts/pre-spawn/spawn-with-budget.sh \
-  --agent <pidex-agent> \
-  --brief-file <brief.md|txt> \
-  --focus "<epic|section>" \
-  --include-file <doc1> [--include-file <doc2> ...]
-```
-
-Use the emitted pack path in the `pidex_agent` briefing.
-
-If the helper is unavailable, do **not** block the pipeline. Create a compact manual context pack/brief instead, include only targeted artifact paths/snippets, and mention `CONTEXT-PACK-MANUAL: helper unavailable` in the handoff.
-
-Budget check is **soft by default** (warn-only). Use `--hard` only when you explicitly want blocking behavior and the helper exists.
+Before every `pidex-*` spawn, use a compact context pack instead of pasting broad/full artifacts. Create a manual context pack/brief with only targeted artifact paths/snippets, and mention `CONTEXT-PACK-MANUAL` in the handoff. Budget check is soft by default: keep context lean, but do not block the pipeline on the absence of an optional helper.
 
 ### Step 0 — Recent projects shortlist
 
@@ -204,7 +190,7 @@ Store the choice as `direct` unless the user explicitly accepts experimental bac
 
 Walk through the appropriate interview flow to produce a crisp epic statement. The project state from Step 1 determines the scenario.
 
-**UI design interview branch (mandatory when triggered):** Before routing to planner/designer/implementer, load `<pidex-root>/rules/orchestrator/ui-design-interview-gate.md`, `<pidex-root>/rules/orchestrator/ui-preservation-classifier.md`, and (after UI G9 rejection) `<pidex-root>/rules/orchestrator/g9-ui-rejection-delta.md` when the request touches UI placement, hierarchy, layout, mobile, forms, tables, navigation, modals/sheets, cards, status strips, toolbars, or pattern parity ("match", "like X", "same as", "move to where X is"). Ask targeted missing questions only; inspect source when possible instead of asking. Classify the UI intent as preserve / preserve-mostly / redesign / new / incidental. For UI-heavy or visually sensitive work, ask whether the user wants a designer meeting with a temporary preview before implementation (`yes`, `no`, or `only if designer finds ambiguity`). Persist the result as `agents.output/design/<plan-id>-ui-intent-interview.md` or as `## UI Intent Contract` plus `## UI Preservation Classification` in the first plan/design artifact. If UI intent remains ambiguous, route to `user`; do not spawn implementer. If the user requests a temporary preview, route to pidex-designer with `rules/pidex-designer/design-snippet-preview.md` and use `scripts/preview/*design-snippet.sh` helpers to return localhost and LAN URLs on a random port. For any G9/post-devops preview on a headless/server host, apply `rules/orchestrator/preview-lan-url-required.md`: bind to `0.0.0.0`, verify LAN route, and include both localhost and LAN URLs. If G9/user feedback rejects positioning twice, this UI interview branch is mandatory before any further implementer fix.
+**UI design interview branch (mandatory when triggered):** When the request touches UI placement, hierarchy, layout, mobile, forms, tables, navigation, modals/sheets, cards, status strips, or pattern parity ("match", "like X", "same as", "move to where X is"), ask targeted missing questions only and inspect source when possible instead of asking. Classify the UI intent as preserve / preserve-mostly / redesign / new / incidental. For UI-heavy or visually sensitive work, ask whether the user wants a designer meeting with a temporary preview before implementation (`yes`, `no`, or `only if designer finds ambiguity`). Persist the result as `agents.output/design/<plan-id>-ui-intent-interview.md` or as `## UI Intent Contract` plus `## UI Preservation Classification` in the first plan/design artifact. If UI intent remains ambiguous, route to `user`; do not spawn implementer. If the user requests a temporary preview, route to pidex-designer with `rules/pidex-designer/design-snippet-preview.md`; the designer should provide a disposable HTML/CSS/JS artifact and instructions to preview it with project-local tooling. If G9/user feedback rejects positioning twice, repeat this UI interview branch before any further implementer fix.
 
 
 **Fresh project (Step 1 = "new" or empty directory):**
@@ -982,83 +968,7 @@ The execution mode the user chose at the beginning determines how the pipeline s
 
 ### Background mode
 
-Compose the lead prompt from the template in `<pidex-root>/pidex-instructions.md` Rule 7 and call:
-
-```bash
-bash <pidex-root>/scripts/lead/start.sh \
-  --prompt "<full prompt with Rules 0-7 reference and the confirmed epic>" \
-  --cwd "<project-path>" \
-  --teams
-```
-
-Report the lead UUID to the user. Then begin monitoring (see "Monitoring" below).
-
-#### Monitoring a running lead (MANDATORY in background mode)
-
-After starting a lead, the orchestrator MUST actively monitor its progress. Do NOT fire-and-forget. The lead runs headless — if it crashes, stalls, or hits an unexpected state, nobody notices unless the orchestrator checks.
-
-**Cadence:**
-- First check ~60 seconds after start (verify PID alive, lead log has content)
-- Ongoing every 2-3 minutes (lead log growing? new agents.output/ files?)
-- After a gate relay: check ~30 seconds later that resume spawned
-
-**Healthy:** PID alive, log growing, new docs appearing, pending-gate.json appears when gate sent.
-**Warning:** PID alive but no output for 3+ minutes → tell user. No new docs for 5+ minutes → tell user.
-**Failure:** PID gone + no gate + error in log → crash, report to user. PID gone + no gate + normal log → completion, report deliverables. PID gone + gate exists → expected, orchestrator must poll `recv-gate.sh` for the reply (see below).
-
-**Gate-reply polling (when `pending-gate.json` exists):**
-```bash
-reply=$(bash <pidex-root>/scripts/telegram/recv-gate.sh --wait 60)
-if [ -n "$reply" ]; then
-    bash <pidex-root>/scripts/relay/handle.sh --text "$reply" --chat-id "$TELEGRAM_CHAT_ID"
-fi
-```
-Loop this after each gate send until the gate clears. If `recv-gate.sh` returns empty, check back on the next monitoring tick. If the user reports "Telegram message does not arrive", relay their chosen option manually: `bash <pidex-root>/scripts/relay/handle.sh --text "pidex!approve" --chat-id "$TELEGRAM_CHAT_ID"`.
-
-**G9 auto-start dev server (orchestrator responsibility):** When a pending gate with `"gate": "G9"` is detected and no dev server is running on the project's default port, the orchestrator MUST start the dev server BEFORE the user tries to open the preview URL. The lead cannot start it — the project's dev server is a foreground process that would block the lead.
-
-Detection and start pattern:
-```bash
-# Check if the pending gate is G9
-GATE=$(jq -r '.gate' <pidex-root>/state/pending-gate.json 2>/dev/null)
-if [ "$GATE" = "G9" ]; then
-    # Extract project cwd from active-lead.id
-    LEAD_ID=$(cat <pidex-root>/state/active-lead.id)
-    CWD=$(cat <pidex-root>/state/lead-${LEAD_ID}.cwd)
-
-    # Check if dev server already reachable (default ports: 3000 Next/Vite, 5173 Vite, 8080 generic)
-    for PORT in 3000 5173 8080; do
-        if curl -sS -o /dev/null -w "%{http_code}" "http://localhost:$PORT" --max-time 2 2>/dev/null | grep -q "^[23]"; then
-            DEV_UP=1; break
-        fi
-    done
-
-    # Start dev server if not running. Use npm run dev if present; else pnpm/yarn/bun.
-    # IMPORTANT: run the cd inside a subshell so the orchestrator's persistent
-    # Bash tool cwd is NOT affected — otherwise hook-based notifications will
-    # keep showing the project basename (e.g. "pidex-test") long after RC ends.
-    if [ -z "$DEV_UP" ] && [ -f "$CWD/package.json" ]; then
-        (cd "$CWD" && nohup npm run dev > /tmp/pidex-dev-${LEAD_ID}.log 2>&1 &)
-        # Give it up to 20s to come up, then report URL to user
-    fi
-fi
-```
-
-Report the working URL to the user (they'll already see the Telegram gate). Kill the dev server after G9 resolves (approve or reject routes on).
-
-**Reporting:** Concise one-liners at milestones (plan written, impl started, gate sent, pipeline complete, crash with log excerpt).
-
-**Real-time progress:** Tail `<cwd>/agents.output/.progress.jsonl` for doc-written events. The keepalive watchdog appends one JSON line each time a new file appears under agents.output/. Use `tail -f` from a separate check or `jq` over the last N lines to surface what the lead wrote most recently — this bypasses --print output buffering.
-
-**Stall auto-kill:** Since keepalive v2, the lead is automatically SIGTERMed if no new agents.output/ file appears for 600s AND no gate is pending. Look for `keepalive_stall_kill` in pidex.log to confirm. No manual intervention needed for common hang cases.
-
-**Do NOT** during background monitoring: interrupt the lead, modify project files, kill the lead prematurely, start a second lead.
-
-#### Status and control (background mode)
-
-- **Status:** `bash <pidex-root>/scripts/lead/status.sh`
-- **Stop:** `bash <pidex-root>/scripts/lead/stop.sh` (add `--force` if needed)
-- **Replace:** `bash <pidex-root>/scripts/lead/start.sh --replace --prompt "..." --cwd "..." --teams`
+Background/Telegram lead mode is **not shipped in PIDEX v0.1**. If the user asks for background mode, explain that it remains experimental and continue in direct mode unless a future package release adds documented Windows/Linux-owned service scripts. Do not reference or call legacy lead, relay, or gate-reply scripts.
 
 ---
 
@@ -1148,7 +1058,7 @@ Use the `pidex_agent` tool for every specialist handoff. Do **not** use legacy `
 
 Before each spawn:
 
-1. Build compact context pack with `spawn-with-budget.sh` when available; otherwise create a compact manual pack and mark `CONTEXT-PACK-MANUAL: helper unavailable`.
+1. Build a compact manual context pack and mark `CONTEXT-PACK-MANUAL`.
 2. Emit `pipeline_stage_started` with `scripts/pipeline/event.sh` (`--actor <pidex-agent>`, `--status running`).
 3. Pass complete task context to `pidex_agent`: project cwd, current epic/plan, relevant artifact paths, expected output path, gate/ROUTING expectations, and the mandatory `PROJECT BOUNDARY` block from `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`.
 4. Set `cwd` to the project root (or lane worktree for implementer lanes). The `cwd` must be inside the allowed write root unless the lane worktree is explicitly declared for the same project pipeline.
@@ -1170,7 +1080,7 @@ Provider overrides are exceptional debugging tools only. Prefer config-driven ro
 
 **2. Pipeline sequence**
 
-**Context-pack enforcement:** before each `pidex_agent` call, prefer `spawn-with-budget.sh` if it exists and pass the emitted pack path/content in the task briefing. If the helper is unavailable, create a compact manual pack instead and mark `CONTEXT-PACK-MANUAL: helper unavailable`. Budget warnings are non-blocking by default; use `--hard` only when needed and the helper exists.
+**Context-pack enforcement:** before each `pidex_agent` call, create a compact manual pack/path list and pass it in the task briefing. Mark `CONTEXT-PACK-MANUAL`. Budget warnings are non-blocking by default.
 
 **Operator decision evidence (Phase 3):** when the operator/orchestrator intentionally skips, overrides, defers, accepts risk, backfills manual evidence, or corrects a PDQ expectation, record an `OpDecision` before continuing. Use the existing finite taxonomy; do not invent free-text reasons when a standard reason fits.
 
@@ -1193,7 +1103,7 @@ node <pidex-root>/scripts/quality/operator-decisions.mjs record \
 
 Record decisions for all intentional deviations from the conservative route, including approved Execution Profile skips, optional parallel lane skips caused by explicit minimal/cheap/single-lane user choice, manual evidence/backfills, route overrides, explicit risk acceptance, and expectation corrections. Valid skip evidence is not a generic quality gap; unrecorded skips remain missing evidence in PDQ.
 
-**Legacy plan migration:** when resuming an active plan that lacks `Execution Profile`, `Skipped Agents`, or `Retro Mode`, read `<pidex-root>/rules/orchestrator/legacy-plan-profile-migration.md`. Prefer a small pidex-planner revision before implementation; if late-stage, run conservative full path and brief `LEGACY-PROFILE-SKIP: no skips honored`.
+**Legacy plan migration:** when resuming an active plan that lacks `Execution Profile`, `Skipped Agents`, or `Retro Mode`, prefer a small pidex-planner revision before implementation; if late-stage, run the conservative full path and brief `LEGACY-PROFILE-SKIP: no skips honored`.
 
 Default direct-mode route graph:
 
@@ -1283,7 +1193,7 @@ Before `pidex-security` or `pidex-qa` on JS/TS scopes, include the Fallow requir
 
 After every agent return, trust the final `<!-- ROUTING -->` block over prose. Read `verdict`, `route_to`, `gate`, `reason`, and `context_file`; verify `context_file` exists before proceeding. `route_to: orchestrator` means deterministic internal work for this orchestrator session, not a user gate. If ROUTING contradicts an approved Execution Profile skip, treat it as a routing inconsistency: do not silently override; either follow conservative route or re-run/ask the emitting agent to resolve the contradiction. If the operator deliberately overrides the agent route anyway, record `OpDecision --decision override_route` before continuing. Special case: `pidex-qa` with `reason` containing `browser smoke BLOCKED` routes to orchestrator action, not user decision.
 
-**Post-devops UI preview before G4 (mandatory):** Load `<pidex-root>/rules/orchestrator/post-devops-ui-preview-gate.md` when `pidex-devops` Stage 1 completes or before any G4. If any included plan has `User Preview Requirement` with `UI involved: yes`, `Preview required before G4: yes`, visible UI/browser changes, or uncertainty, do NOT ask `push/local/hold/abort` yet. Start preview from committed local HEAD, show URL/routes/screens to user, ask `approve/reject` as G9. On approve, mark/brief `User Preview Before G4: APPROVED`, then ask G4 directly or re-invoke `pidex-devops` for Stage 2 with that approval context. On reject, record `MANDATORY-RETRO-TRIGGER: G9 rejection` and route to `pidex-implementer`.
+**Post-devops UI preview before G4 (mandatory):** When `pidex-devops` Stage 1 completes or before any G4, inspect the plan for `User Preview Requirement`, visible UI/browser changes, or uncertainty. If preview is required, do NOT ask `push/local/hold/abort` yet. Start a preview from committed local HEAD using project-local tooling, show URL/routes/screens to user, ask `approve/reject` as G9. On approve, mark/brief `User Preview Before G4: APPROVED`, then ask G4 directly or re-invoke `pidex-devops` for Stage 2 with that approval context. On reject, record `MANDATORY-RETRO-TRIGGER: G9 rejection` and route to `pidex-implementer`.
 
 **3. Gate handling in direct mode**
 
@@ -1305,7 +1215,7 @@ This notification is informational only: no buttons, no reply handling, no `pend
 - **G8 (destructive ops):** Ask for explicit confirmation before proceeding.
 - **G9 (preview verification):** Triggered either after pidex-uat approves with `gate: G9` or after pidex-devops Stage 1 for UI-involved work before G4. The orchestrator (you) starts the dev server/preview server, determines the accessible URL, and asks the user to verify visually. Only proceed after the user says "approve". On "reject", ask what's wrong, record a scoped `MANDATORY-RETRO-TRIGGER: G9 rejection`, load `<pidex-root>/rules/orchestrator/g9-rejection-playwright-repro.md`, capture a G9 Rejection Repro Contract, and loop back to pidex-implementer. Before asking G9 again for the same flow, require live Playwright evidence from QA or orchestrator that reproduces the exact rejected browser flow and now passes. After a second rejection in the same plan, or for navigation/runtime/API-auth/browser-only issues, the orchestrator must run Playwright evidence directly when tooling is available before another broad loop. Skip G9 only for non-UI projects without a dev server (pure libraries, CLI tools). If pidex-uat emits `gate: G9` but the plan says G9 is not applicable or no dev server exists, treat it as routing inconsistency; do not start fake preview. Route to devops with documented correction or ask pidex-uat to resolve. Kill the dev server after G9 resolves.
 
-The agents' instructions include "If running via pidex, call send-gate.sh" — in direct mode, ignore that branch. The agents will fall through to their interactive-mode behavior (report to user directly). If a gate is intentionally skipped or satisfied by manual evidence outside PIDEX instrumentation, record `OpDecision` with `--target-operator OpGate` (or the specific affected operator) before continuing.
+Gate decisions are direct-mode terminal prompts in PIDEX v0.1. If a gate is intentionally skipped or satisfied by manual evidence outside PIDEX instrumentation, record `OpDecision` with `--target-operator OpGate` (or the specific affected operator) before continuing.
 
 **4. Auto-proceed discipline**
 

@@ -271,7 +271,7 @@ Routing rules:
 - **BLOCKED + missing test infrastructure planned poorly** → `pidex-planner`.
 - **BLOCKED + environment/access/tooling unavailable** → `user`.
 
-If running via running-pi and verdict is `FAILED`, send Gate G2 using `scripts/telegram/send-gate.sh`, then end turn. If interactive, report failure directly.
+If verdict is `FAILED`, report Gate G2 directly to the orchestrator/user in the current Pi session. Do not call external Telegram/background gate scripts.
 
 # Deferred Findings Tracking
 

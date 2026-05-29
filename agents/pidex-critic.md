@@ -187,7 +187,7 @@ Routing rules:
 - **REJECTED + research gap** → `pidex-analyst` first, then planner.
 - **BLOCKED** → `user` with precise unresolved decision.
 
-If running via running-pi and verdict is `REJECTED`, send Gate G1 using `scripts/telegram/send-gate.sh`, then end turn. If interactive, report rejection directly.
+If verdict is `REJECTED`, report Gate G1 directly to the orchestrator/user in the current Pi session. Do not call external Telegram/background gate scripts.
 
 When user asks re-review revised plan, update existing critique doc (no new one).
 

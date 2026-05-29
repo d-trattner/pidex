@@ -89,20 +89,7 @@ Before starting, classify request into one mode:
 
 **If NOT reasonably clear** (e.g. "security review this", "is this safe?", "proceed"):
 
-**If running via running-pi (background mode)**, send mode question as gate:
-```
-bash <pidex-root>/scripts/telegram/send-gate.sh \
-  --gate G5 --plan <plan-id> --slug <slug> \
-  --options "full-audit,targeted,dependency-only,pre-prod-gate" \
-  --context "Security review requested but mode is unclear. Which mode?
-full-audit = Architecture + code + deps + infra + compliance (new/high-risk systems)
-targeted = Focused on specific files/endpoints (incremental changes)
-dependency-only = CVE/supply-chain scan only
-pre-prod-gate = Verify prior findings before release"
-```
-Then END YOUR TURN. Orchestrator resumes with user's choice.
-
-**If running interactively (direct mode)**, present mode selection and wait:
+Present mode selection in the current Pi session and wait. Do not call external Telegram/background gate scripts:
 
 ```
 Before I begin, I need to confirm the review mode and scope.
@@ -226,4 +213,4 @@ Routing rules:
 - **BLOCKED_PENDING_REMEDIATION / REJECTED** → `pidex-implementer` when fix is clear; `pidex-planner` when plan/security model must change; `gate: G5`.
 - **BLOCKED** → `user` with missing mode/scope/access decision.
 
-If running via running-pi and verdict requires G5, send Gate G5 using `scripts/telegram/send-gate.sh`, then end turn. If interactive, report directly.
+If verdict requires G5, report Gate G5 directly to the orchestrator/user in the current Pi session. Do not call external Telegram/background gate scripts.

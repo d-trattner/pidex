@@ -17,22 +17,11 @@ Produce a small disposable HTML/CSS/JS preview that communicates layout, hierarc
 - Label what is intentionally unchanged vs intentionally changed.
 - Include short design rationale and open questions.
 
-## Helper scripts
+## Preview handling
 
-Use Running Pi preview helpers:
+PIDEX v0.1 does not bundle dedicated design-preview helper scripts. Create a disposable HTML/CSS/JS artifact under `agents.output/design/` and provide clear instructions for serving it with project-local tooling, for example a temporary static server or existing app preview command.
 
-```bash
-bash <pidex-root>/scripts/preview/create-design-snippet.sh --title "<title>" < snippet.html
-bash <pidex-root>/scripts/preview/serve-design-snippet.sh --id <id>
-bash <pidex-root>/scripts/preview/stop-design-snippet.sh --id <id>
-```
-
-The serve helper returns both:
-
-```text
-localhost: http://127.0.0.1:<random-port>
-lan:       http://<host-ip>:<random-port>
-```
+When a preview is served, return the local URL and, if intentionally bound to a LAN interface, the LAN URL. Prefer localhost-only unless the operator explicitly needs LAN access.
 
 ## Output contract
 

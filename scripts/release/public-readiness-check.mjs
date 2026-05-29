@@ -47,7 +47,30 @@ if (cmd === 'tracked-clean') {
   if (existsSync(file)) { const data = JSON.parse(readFileSync(file, 'utf8')); if (data.enabled !== false) fail('config/parallel-agents.json must be disabled by default for public release'); for (const [name, cfg] of Object.entries(data.agents || {})) { if (cfg.enabled !== false) fail(`parallel agent ${name} must be disabled by default for public release`); for (const lane of cfg.provider_models || []) if (lane.enabled !== false) fail(`parallel lane ${name}:${lane.provider}:${lane.model} must be disabled by default`); } }
 } else if (cmd === 'pack-clean') {
   const pkg = JSON.parse(readFileSync(process.argv[3], 'utf8'))[0]; const bad = [];
-  for (const f of pkg.files || []) { const p = f.path || ''; if (['dashboard-old/', 'analysis/', 'wiki/', 'state/', 'agents.output/', 'logs/', 'dashboard/node_modules/', 'dashboard/.playwright/', 'dashboard/.fallow/', 'dashboard/agents.output/', 'dashboard/dist/', 'dashboard/test-results/'].some((x) => p.startsWith(x)) || p === 'dashboard/data' || (p.startsWith('pidex/state/') && p !== 'pidex/state/.gitkeep')) bad.push(p); }
-  if (bad.length) fail(`Forbidden package paths:\n${bad.slice(0, 100).join('\n')}`);
+  const forbiddenPrefixes = [
+    'dashboard-old/', 'analysis/', 'wiki/', 'state/', 'agents.output/', 'logs/',
+    'dashboard/node_modules/', 'dashboard/.playwright/', 'dashboard/.fallow/',
+    'dashboard/agents.output/', 'dashboard/dist/', 'dashboard/test-results/', 'dashboard/data/'
+  ];
+  const forbiddenPatterns = [
+    /(^|\/)wiki\//,
+    /(^|\/)agents\.output\//,
+    /(^|\/)state\//,
+    /(^|\/)pidex\/state\//,
+    /(^|\/)logs\//,
+    /(^|\/)node_modules\//,
+    /(^|\/)__pycache__\//,
+    /(^|\.)\.env($|\.)/,
+    /(^|\/)config\.env$/,
+    /(^|\/)secrets?\//,
+    /\.local\.json$/,
+    /\.(db|sqlite|sqlite3|pyc|pem|key|crt|p12|pfx|jks|keystore|kubeconfig|pid|id)$/,
+  ];
+  for (const f of pkg.files || []) {
+    const p = f.path || '';
+    if (p === 'pidex/state/.gitkeep') continue;
+    if (forbiddenPrefixes.some((x) => p.startsWith(x)) || forbiddenPatterns.some((re) => re.test(p))) bad.push(p);
+  }
+  if (bad.length) fail(`Forbidden package paths:\n${[...new Set(bad)].sort().slice(0, 100).join('\n')}`);
   console.log(`pack ok: files=${(pkg.files || []).length} unpacked=${pkg.unpackedSize}`);
 } else fail(`unknown public-readiness check: ${cmd}`);

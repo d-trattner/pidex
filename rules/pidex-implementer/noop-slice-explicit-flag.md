@@ -25,8 +25,8 @@ When the plan signals that a slice is expected to be a no-op:
    ### S0 — Source Gap-Fill
    **Status: NO-OP** — state audit (pre-plan) confirmed source files already contain
    all required content. No file edits performed. Verified via:
-   - `grep "PROC-NEW-36e" <pidex-root>/docs/rule-09-briefing-discipline.md` → found ✓
-   - `grep "check-heartbeat" <pidex-root>/scripts/pre-spawn/pidex-qa-prep.sh` → found ✓
+   - `grep "<expected-marker>" <project-root>/<expected-file>` → found ✓
+   - `grep "<expected-helper>" <project-root>/<expected-helper-file>` → found ✓
    ```
 
 2. **Do NOT re-run the full verification suite** from scratch. Run at most one confirmatory grep per file claimed complete. Trust the plan's state audit. If the audit said "file X contains pattern Y," one `grep` to confirm is sufficient — do not open the file and re-read the entire content.

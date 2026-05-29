@@ -1,7 +1,7 @@
 {
   "name": "pidex",
   "version": "0.1.0",
-  "description": "Codex-only fork of Running Pi with pidex naming and provider hardening.",
+  "description": "Pi package for structured planning, implementation, quality governance, and dashboard workflows.",
   "type": "module",
   "keywords": [
     "pi-package",
@@ -12,6 +12,14 @@
     "codex"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/d-trattner/pidex#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/d-trattner/pidex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/d-trattner/pidex/issues"
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-ai": "*",
@@ -53,10 +61,18 @@
     "CHANGELOG.md",
     "LICENSE",
     "NOTICE",
+    "!wiki/",
+    "!agents.output/",
+    "!state/",
+    "!pidex/state/",
+    "!config/*.local.json",
+    "!**/__pycache__/**",
+    "!**/*.pyc",
     "!dashboard/.dashboard-*.pid",
     "!dashboard/.fallow/",
     "!dashboard/.playwright/",
     "!dashboard/agents.output/",
+    "!dashboard/data/",
     "!dashboard/node_modules/",
     "!dashboard/dist/",
     "!dashboard/test-results/",
@@ -65,6 +81,7 @@
   "scripts": {
     "check": "bash ./scripts/guard-codex-only.sh && bash -n install.sh uninstall.sh dashboard/start.sh scripts/doctor.sh scripts/smoke-test.sh scripts/release/public-readiness.sh scripts/delegate/codex.sh scripts/delegate/pi-governor.sh scripts/delegate/check-auth.sh scripts/metrics/record.sh scripts/metrics/summarize.sh scripts/pipeline/event.sh scripts/history/append.sh scripts/history/list.sh scripts/git-hooks/install-global.sh scripts/git-hooks/uninstall-global.sh scripts/git-hooks/global/pre-commit scripts/git-hooks/global/commit-msg scripts/git-hooks/lib/security-scan.sh && node scripts/compat/windows-audit.test.mjs && node --no-warnings dashboard/lib/server/sqlite-query.tdd.test.mjs && node --no-warnings dashboard/lib/server/model-quality.tdd.test.mjs && node --no-warnings dashboard/lib/server/quality.tdd.test.mjs && node --no-warnings scripts/dashboard/ingest.tdd.test.mjs && node scripts/project-context/init.tdd.test.mjs && node scripts/provider-limits/probe.tdd.test.mjs && node scripts/parallel-agents/status.tdd.test.mjs && node scripts/parallel-agents/run-lane.tdd.test.mjs && node scripts/metrics/metrics.tdd.test.mjs && node scripts/pipeline/event.tdd.test.mjs && node scripts/project-metadata/migrate-to-pidex-folder.tdd.test.mjs && node scripts/quality/report.tdd.test.mjs && node scripts/quality/run-auto-pdq.tdd.test.mjs && node scripts/quality/preflight.tdd.test.mjs && node scripts/quality/operator-decisions.tdd.test.mjs && node scripts/quality/operator-contracts.tdd.test.mjs && node scripts/quality/operator-contracts-admin.tdd.test.mjs && node scripts/quality/trace-normalize.tdd.test.mjs && node scripts/quality/contract-governor.tdd.test.mjs && node scripts/wiki/hygiene.tdd.test.mjs && node scripts/parity/python-node-parity.tdd.test.mjs && node --test dashboard/lib/server/context-md.tdd.test.mjs",
     "public:check": "bash scripts/release/public-readiness.sh",
+    "reference:check": "node scripts/release/reference-integrity.mjs",
     "doctor": "bash scripts/doctor.sh"
   },
   "devDependencies": {

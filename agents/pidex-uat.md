@@ -195,7 +195,7 @@ Routing rules:
 - **BLOCKED + predecessor doc missing/failed** → appropriate predecessor agent.
 - **BLOCKED + epic/user decision unclear** → `user`.
 
-If running via running-pi and verdict is `REJECTED`, send Gate G3 using `scripts/telegram/send-gate.sh`, then end turn. If interactive, report directly.
+If verdict is `REJECTED`, report Gate G3 directly to the orchestrator/user in the current Pi session. Do not call external Telegram/background gate scripts.
 
 # Backward Handoffs
 
