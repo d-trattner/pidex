@@ -30,11 +30,17 @@ Reports are written under:
 
 PIDEX also emits an `OpQualityReview` operator event.
 
+If the disabled-by-default contract governor is locally enabled, auto-PDQ can also spawn a fail-soft background governor run after the report. This is non-pipeline background governance and does not block terminal event recording. See [Quality governance](quality-governance.md).
+
 ## Notes
 
 - `state/quality/` is runtime state.
 - `agents.output/quality/` is generated operator-facing output.
 - Generated `agents.output/quality/pdq-*.md` reports must not be committed. Preserve durable conclusions in `wiki/` or `pidex/state/` where appropriate.
+
+## Contract-backed findings
+
+PDQ findings include operator-contract metadata such as contract ID, expected condition, allowed skip/manual-evidence reasons, and resolution options. Explicit valid operator decisions count as observed evidence rather than generic trace gaps.
 
 ## Manual quality report
 

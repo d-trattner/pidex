@@ -16,7 +16,7 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 PIDEX is an experimental direct-mode MVP. Direct mode is the supported path today.
 
-The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. The current focus is the Quality Rule Learning initiative. Memory hygiene, wiki graph conventions, and reliability modules are intentionally waiting until the quality evidence foundation is more stable.
+The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. The next memory-hygiene work is being shaped as PDQ-adjacent operational-memory consistency checks, not as a separate autonomous cleanup loop.
 
 ## Detailed feature docs
 
@@ -28,6 +28,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Wiki hygiene](readme/wiki-hygiene.md)
 - [Optional parallel agents](readme/parallel-agents.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
+- [Quality governance](readme/quality-governance.md)
 - [Project session memory](readme/project-memory.md)
 - [Project context](readme/project-context.md)
 - [Windows status](readme/windows.md)
@@ -38,9 +39,38 @@ Project/process docs:
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
+## Prerequisites
+
+PIDEX currently supports Linux/direct mode and includes experimental Windows bootstrap support.
+
+Linux / WSL2 recommended prerequisites:
+
+- Git
+- Node.js `>=22.19.0`
+- npm
+- Pi CLI installed globally:
+  ```bash
+  npm install -g @earendil-works/pi-coding-agent
+  ```
+- local Pi/Codex/provider authentication configured outside PIDEX
+
+Windows prerequisites for the experimental PowerShell bootstrap:
+
+- Git for Windows, including Git Bash
+- Node.js `>=22.12.0`
+- npm
+- Pi CLI installed globally:
+  ```powershell
+  npm install -g @earendil-works/pi-coding-agent
+  ```
+
+See [Windows status](readme/windows.md) for support boundaries and the PowerShell bootstrap.
+
 ## Install
 
-PIDEX v0.1 expects the checkout at exactly `~/pidex`. Other checkout paths are not supported yet.
+PIDEX v0.1 expects the checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other checkout paths are not supported yet.
+
+Linux / WSL2:
 
 ```bash
 git clone https://github.com/d-trattner/pidex.git ~/pidex
@@ -50,9 +80,34 @@ cd ~/pidex
 ./install.sh --dry-run
 ```
 
-`install.sh` runs `pi install ~/pidex` and may optionally install the global Git security hook after an interactive prompt. Non-interactive installs skip the hook unless `PIDEX_INSTALL_GLOBAL_GIT_HOOK=1` is set.
+`install.sh` installs dashboard dependencies when needed, runs validation checks, runs `pi install ~/pidex`, and may optionally install the global Git security hook after an interactive prompt. Non-interactive installs skip the hook unless requested.
 
-In the detailed docs, `<pidex-root>` means `~/pidex` for v0.1.
+Useful Linux/WSL2 install flags:
+
+```bash
+./install.sh --skip-dashboard-deps
+./install.sh --install-global-git-hook
+./install.sh --skip-global-git-hook
+```
+
+The same controls also exist as environment variables for automation, but flags are preferred for manual use.
+
+Windows experimental bootstrap:
+
+```powershell
+irm https://raw.githubusercontent.com/d-trattner/pidex/master/install.windows.ps1 | iex
+```
+
+Useful Windows install flags when running a downloaded script locally:
+
+```powershell
+.\install.windows.ps1 -SkipDashboardDeps
+.\install.windows.ps1 -DryRun
+```
+
+For the one-line `irm ... | iex` form, use the defaults unless you specifically need an advanced automation override.
+
+In the detailed docs, `<pidex-root>` means `~/pidex` for Linux/WSL2 and `$HOME\pidex` for the Windows bootstrap.
 
 Uninstall:
 
@@ -64,6 +119,8 @@ cd ~/pidex
 ```
 
 ## Quick start
+
+After a first install in a new Pi session, PIDEX resources should be available immediately. If Pi was already open during install, run `/reload` once.
 
 In Pi:
 
@@ -108,10 +165,14 @@ node scripts/wiki/hygiene.mjs audit --project ~/pidex
 
 ## Dashboard
 
+Linux / WSL2:
+
 ```bash
 cd ~/pidex/dashboard
 ./start.sh
 ```
+
+Windows currently uses the experimental bootstrap and Windows support notes in [Windows status](readme/windows.md). The Linux `dashboard/start.sh` launcher is not the Windows entrypoint.
 
 The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
 
@@ -143,5 +204,5 @@ Terminal pipeline lifecycle events can trigger automatic PDQ quality reports. Di
 PIDEX_AUTO_PDQ=0
 ```
 
-See [Automatic quality reports](readme/automatic-quality-reports.md).
+See [Automatic quality reports](readme/automatic-quality-reports.md) and [Quality governance](readme/quality-governance.md).
 

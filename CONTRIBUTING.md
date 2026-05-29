@@ -1,6 +1,8 @@
 # Contributing
 
-PIDEX v0.1 expects the checkout at exactly `~/pidex`.
+PIDEX v0.1 expects the checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` when using the experimental Windows bootstrap.
+
+Prerequisites: Git, Node.js compatible with Pi (`>=22.19.0` on Linux/WSL2; Windows bootstrap checks `>=22.12.0`), npm, and the Pi CLI (`npm install -g @earendil-works/pi-coding-agent`).
 
 ## Local checks
 

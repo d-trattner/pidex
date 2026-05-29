@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
 TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
 INSTALL_GLOBAL_GIT_HOOK="${PIDEX_INSTALL_GLOBAL_GIT_HOOK:-ask}"
+SKIP_DASHBOARD_DEPS="${PIDEX_SKIP_DASHBOARD_DEPS:-0}"
 STATE_DIR="$TARGET_DIR/state/skills"
 AST_GREP_CLI_MARKER="$STATE_DIR/ast-grep-cli-installed-by-pidex"
 
@@ -15,15 +16,19 @@ fail() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
 Usage:
-  install.sh [--dry-run] [--help]
+  install.sh [options]
 
 Options:
-  --dry-run   print pi install command without executing
-  --help      show this help
+  --dry-run                  print pi install command without executing
+  --skip-dashboard-deps      skip dashboard npm dependency install
+  --install-global-git-hook  install PIDEX global Git hook non-interactively
+  --skip-global-git-hook     skip PIDEX global Git hook prompt
+  --help                     show this help
 
-Environment:
-  PIDEX_INSTALL_GLOBAL_GIT_HOOK=1  install PIDEX global Git hook non-interactively
-  PIDEX_INSTALL_GLOBAL_GIT_HOOK=0  skip PIDEX global Git hook prompt
+Environment equivalents:
+  PIDEX_INSTALL_GLOBAL_GIT_HOOK=1  same as --install-global-git-hook
+  PIDEX_INSTALL_GLOBAL_GIT_HOOK=0  same as --skip-global-git-hook
+  PIDEX_SKIP_DASHBOARD_DEPS=1      same as --skip-dashboard-deps
 
 Notes:
   Installs ast-grep CLI if missing. PIDEX exposes bundled skills through
@@ -39,6 +44,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN="1"
+      shift
+      ;;
+    --skip-dashboard-deps)
+      SKIP_DASHBOARD_DEPS="1"
+      shift
+      ;;
+    --install-global-git-hook)
+      INSTALL_GLOBAL_GIT_HOOK="1"
+      shift
+      ;;
+    --skip-global-git-hook)
+      INSTALL_GLOBAL_GIT_HOOK="0"
       shift
       ;;
     --*)
@@ -64,6 +81,30 @@ fi
 
 command -v pi >/dev/null 2>&1 || fail "missing prerequisite: pi"
 command -v node >/dev/null 2>&1 || fail "missing prerequisite: node"
+command -v npm >/dev/null 2>&1 || fail "missing prerequisite: npm"
+
+ensure_dashboard_deps() {
+  if [[ "$SKIP_DASHBOARD_DEPS" =~ ^(1|yes|true|on)$ ]]; then
+    say "skipping dashboard dependency install"
+    return
+  fi
+  local dashboard_dir="$TARGET_DIR/dashboard"
+  if [ ! -f "$dashboard_dir/package.json" ]; then
+    say "dashboard package.json missing; skipping dashboard dependencies"
+    return
+  fi
+  if [ -d "$dashboard_dir/node_modules" ]; then
+    say "dashboard dependencies already present"
+    return
+  fi
+  if [ -f "$dashboard_dir/package-lock.json" ]; then
+    say "installing dashboard dependencies (npm ci)"
+    npm --prefix "$dashboard_dir" ci
+  else
+    say "installing dashboard dependencies (npm install)"
+    npm --prefix "$dashboard_dir" install
+  fi
+}
 
 ensure_ast_grep_cli() {
   if command -v ast-grep >/dev/null 2>&1; then
@@ -77,15 +118,13 @@ ensure_ast_grep_cli() {
   printf 'installed_at=%s\nsource=@ast-grep/cli\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$AST_GREP_CLI_MARKER"
 }
 
+ensure_dashboard_deps
+
 say "checking extension TypeScript/runtime checks"
-if command -v npm >/dev/null 2>&1; then
-  if [ -f "$TARGET_DIR/package.json" ]; then
-    (cd "$TARGET_DIR" && npm run check >/dev/null)
-  else
-    say "package.json missing; skipping npm check"
-  fi
+if [ -f "$TARGET_DIR/package.json" ]; then
+  (cd "$TARGET_DIR" && npm run check >/dev/null)
 else
-  say "npm not found; skipping check"
+  say "package.json missing; skipping npm check"
 fi
 
 CMD=(pi install "$TARGET_DIR")

@@ -2,7 +2,7 @@
 
 ## 0.1.0 - Unreleased
 
-Initial public-prep release of PIDEX, a Codex-oriented Pi package with `pidex-*` agents, project context, quality reporting, optional parallel review lanes, dashboard, project memory, wiki hygiene, and public-readiness guardrails.
+Initial public-prep release of PIDEX, a Codex-oriented Pi package with `pidex-*` agents, project context, quality reporting, quality governance, optional parallel review lanes, dashboard, project memory, wiki hygiene, and public-readiness guardrails.
 
 Public-readiness changes include:
 
@@ -14,3 +14,8 @@ Public-readiness changes include:
 - Pi SDK dependency namespace updated to `@earendil-works/*`.
 - `analysis/**` and local `wiki/**` removed from public source.
 - `npm run public:check` added for repeatable public-release validation.
+- PDQ operator-contract transparency, trace normalization, valid operator-decision evidence, and disabled-by-default contract governor added.
+- Dashboard Quality page expanded with selector-scoped PDQ state, background governance status, and Settings → Quality Governance controls.
+- Linux install now installs dashboard dependencies when needed; Windows bootstrap already does this unless skipped.
+- Install/public-readiness hardening: no-git-history installs skip historical parity fixtures, and public-readiness uses per-user temporary files.
+- Dashboard model-quality success-rate bug fixed.
