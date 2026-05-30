@@ -62,7 +62,7 @@ if (agent === 'orchestrator') {
       phase: itemPhase,
       status: itemPhase === phase ? 'current' : 'other',
       capabilities: entries
-        .filter((entry) => entry.capability.phases.includes(itemPhase) && entry.capability.allowed_agents.includes(agent))
+        .filter((entry) => entry.capability.phases.includes(itemPhase))
         .map((entry) => formatCapability(entry, agent, itemPhase)),
     })),
   };
@@ -74,7 +74,7 @@ if (agent === 'orchestrator') {
     project,
     pidex_root: pidexRoot,
     capabilities: entries
-      .filter((entry) => entry.capability.phases.includes(phase) && entry.capability.allowed_agents.includes(agent))
+      .filter((entry) => entry.capability.phases.includes(phase))
       .map((entry) => formatCapability(entry, agent, phase)),
   };
 }

@@ -25,3 +25,17 @@ test('run-check executes command and writes structured evidence', () => {
   assert.equal(row.capability_id, 'release.reference-integrity');
   assert.equal(row.status, 'passed');
 });
+
+test('run-check rejects unknown capability', () => {
+  const { root, project } = makeModuleFixture();
+  const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'missing.capability', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stderr, /unknown capability/);
+});
+
+test('run-check rejects disabled capability', () => {
+  const { root, project } = makeModuleFixture({ releaseEnabled: false });
+  const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stderr, /capability unavailable: module_disabled/);
+});
