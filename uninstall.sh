@@ -58,8 +58,8 @@ if [ ! -d "$TARGET_DIR" ]; then
   fail "target path does not exist: $TARGET_DIR"
 fi
 
-if [ -f "$TARGET_DIR/package.json" ] && ! grep -Eq '"name"[[:space:]]*:[[:space:]]*"pidex"' "$TARGET_DIR/package.json"; then
-  fail "target path does not look like a pidex checkout: missing package name pidex"
+if [ -f "$TARGET_DIR/package.json" ] && ! grep -Eq '"name"[[:space:]]*:[[:space:]]*"(@d-trattner/)?pidex"' "$TARGET_DIR/package.json"; then
+  fail "target path does not look like a pidex checkout: missing package name @d-trattner/pidex"
 fi
 
 command -v pi >/dev/null 2>&1 || fail "missing prerequisite: pi"
