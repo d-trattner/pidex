@@ -49,6 +49,11 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 16. **Execution Profile Diff Guard**: Before Stage 1 commit, verify actual changed files/surfaces still match approved Execution Profile and skipped-agent assumptions. Use a HIGH-confidence baseline (plan start/base commit, implementation commit list, or coherent target merge-base). If baseline is broad/mixed/low-confidence, record `LOW-CONFIDENCE-DIFF-BASE` and ask orchestrator for the plan base/commit list instead of deciding from unrelated history. If mismatch invalidates skipped gates, block commit and route to missing gates.
 17. **User Preview Before G4**: For UI-involved work, after Stage 1 local commit route to orchestrator with `gate: G9` for user preview before any G4 `push/local/hold/abort` decision. If uncertain whether UI changed, require preview.
 18. **Post-release Artifact Hygiene**: If selective staging leaves dirty durable docs/state after release/tag/push/final artifact commit, classify every remaining path per `post-release-artifact-hygiene.md`. Do a narrow hygiene commit/delete for durable docs/state only; never stage `agents.output/**`; never delete `pidex/context/**` because it is durable project context; stop and ask for product/source/config/test/script/lockfile/context ambiguity. Do not start a full pipeline solely for artifact hygiene.
+19. **Module Capability Context**: For pre-release, public-readiness, npm publication, or PIDEX self-release work, generate current-phase module context before choosing release checks:
+    ```bash
+    node scripts/modules/context.mjs --agent pidex-devops --phase pre-release --project "$PWD"
+    ```
+    Treat the output as advisory metadata only. It does not grant execution authority. Execute only checks explicitly requested by the handoff/operator, and execute module capabilities only through `scripts/modules/run-check.mjs` runner invocations. Do not execute raw manifest commands from discovery/debug output. `scripts/release/public-readiness.sh` remains the release authority until a later approved module stage replaces it.
 
 # Constraints
 
@@ -125,6 +130,11 @@ Security (no credentials), performance (size), maintainability (versioning), cle
 4. Validate packaging: Build, package, verify all bundled changes
 5. Check workspace: All plan commits present, no uncommitted changes
 6. Create deployment readiness doc listing ALL included plans
+7. For pre-release/publication-sensitive work, generate module capability context with:
+   ```bash
+   node scripts/modules/context.mjs --agent pidex-devops --phase pre-release --project "$PWD"
+   ```
+   Include required available checks and unavailable required/current-phase capabilities in the readiness doc. Execute only explicitly requested checks through the module runner; do not treat discovery/context output as auto-execution authority.
 
 ### Phase 2B: User Confirmation (MANDATORY)
 

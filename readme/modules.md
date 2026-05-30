@@ -164,6 +164,26 @@ Discovery returns runner invocations by default, not raw implementation commands
 
 `context.mjs` turns discovery into handoff markdown. Its output is advisory-only metadata; it does not grant permission to execute checks. Agents should execute only checks explicitly requested by the handoff and should use `scripts/modules/run-check.mjs` runner invocations.
 
+## DevOps pre-release handoff integration
+
+For pre-release, public-readiness, npm publication, and PIDEX self-release work, `pidex-devops` should generate module capability context before choosing release checks:
+
+```bash
+node scripts/modules/context.mjs \
+  --agent pidex-devops \
+  --phase pre-release \
+  --project "$PWD"
+```
+
+The generated section may be pasted into a deployment/readiness artifact, but it remains advisory-only. It should help the agent see required checks and unavailable capability reasons. It must not cause automatic execution.
+
+Execution rule:
+
+- only execute checks explicitly requested by the handoff/operator;
+- execute module checks only through `scripts/modules/run-check.mjs`;
+- do not execute raw manifest commands from discovery/debug output;
+- keep `scripts/release/public-readiness.sh` as release authority until a later approved module stage changes that.
+
 ## Evidence
 
 `run-check` writes structured JSONL evidence.
