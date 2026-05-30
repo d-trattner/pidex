@@ -17,7 +17,7 @@
       "mutability": ["read-only"],
       "command": {
         "bin": "node",
-        "args": ["scripts/release/reference-integrity.mjs"]
+        "args": ["modules/pidex/release-safety/scripts/reference-integrity.mjs"]
       }
     },
     {
@@ -31,7 +31,7 @@
       "mutability": ["read-only", "writes-artifacts"],
       "command": {
         "bin": "bash",
-        "args": ["scripts/release/public-readiness.sh"]
+        "args": ["modules/pidex/release-safety/scripts/public-readiness.sh"]
       }
     }
   ]
