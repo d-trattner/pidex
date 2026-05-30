@@ -4,6 +4,10 @@ import { spawnSync } from 'node:child_process';
 import { allCapabilities, appendJsonLine, capabilityAvailability, evidencePath, loadModuleSystem, parseArgs, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  console.log(`Usage: node scripts/modules/run-check.mjs --capability <id> --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nRuns a PIDEX module capability through the module runner and writes structured evidence.\n\nOptions:\n  --capability <id>    Required. Capability id, for example release.reference-integrity.\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --help               Show this help.`);
+  process.exit(0);
+}
 const pidexRoot = args['pidex-root'] ? path.resolve(String(args['pidex-root'])) : scriptPidexRoot(import.meta.url);
 const capabilityId = args.capability;
 const agent = args.agent;

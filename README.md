@@ -29,6 +29,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Optional parallel agents](readme/parallel-agents.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
+- [PIDEX modules](readme/modules.md)
 - [Project session memory](readme/project-memory.md)
 - [Project context](readme/project-context.md)
 - [Windows status](readme/windows.md)

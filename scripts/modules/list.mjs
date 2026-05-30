@@ -2,6 +2,10 @@
 import { loadModuleSystem, moduleEnabled, parseArgs, scriptPidexRoot, validateSystem } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  console.log(`Usage: node scripts/modules/list.mjs [--pidex-root <path>] [--json]\n\nLists PIDEX module manifests, enablement state, dependencies, and capability counts.\n\nOptions:\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --json               Emit JSON. JSON is currently the default output.\n  --help               Show this help.`);
+  process.exit(0);
+}
 const pidexRoot = args['pidex-root'] ? String(args['pidex-root']) : scriptPidexRoot(import.meta.url);
 const system = loadModuleSystem(pidexRoot);
 const validation = validateSystem(system);

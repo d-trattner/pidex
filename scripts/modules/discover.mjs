@@ -3,6 +3,10 @@ import path from 'node:path';
 import { allCapabilities, capabilityAvailability, loadModuleSystem, parseArgs, runnerInvocation, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  console.log(`Usage: node scripts/modules/discover.mjs --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nDiscovers agent-aware PIDEX module capabilities for a lifecycle phase. Returns runner invocations, not raw commands, unless --debug is used.\n\nOptions:\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --debug              Include raw manifest command for operators/tests.\n  --help               Show this help.`);
+  process.exit(0);
+}
 const pidexRoot = args['pidex-root'] ? path.resolve(String(args['pidex-root'])) : scriptPidexRoot(import.meta.url);
 const agent = args.agent;
 const phase = args.phase;
