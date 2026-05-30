@@ -92,6 +92,17 @@ const __dirname = path.dirname(__filename);
 const BOOTSTRAP_ROOT = path.resolve(__dirname, "../..");
 const CANONICAL_HOME_ROOT = process.env.PIDEX_HOME_ROOT ?? path.join(os.homedir(), "pidex");
 
+function readPackageVersion(root: string): string | undefined {
+	try {
+		const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+		return typeof pkg?.version === "string" ? pkg.version : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+const BOOTSTRAP_PACKAGE_VERSION = readPackageVersion(BOOTSTRAP_ROOT);
+
 function isPidexRuntimeRoot(root: string): boolean {
 	try {
 		const pkgPath = path.join(root, "package.json");
@@ -1853,10 +1864,12 @@ async function initializePidexHome(ctx: any): Promise<void> {
 		await ctx.ui.notify(`PIDEX install failed. Checkout remains at ${status.path}.\n\n${result.output}`, "error");
 		return;
 	}
-	const cleanup = [
-		runCommandForInit("pi", ["remove", "npm:@d-trattner/pidex"]),
-		runCommandForInit("pi", ["remove", "git:https://github.com/d-trattner/pidex"]),
-	];
+	const cleanupSpecs = [
+		"npm:@d-trattner/pidex",
+		BOOTSTRAP_PACKAGE_VERSION ? `npm:@d-trattner/pidex@${BOOTSTRAP_PACKAGE_VERSION}` : undefined,
+		"git:https://github.com/d-trattner/pidex",
+	].filter(Boolean) as string[];
+	const cleanup = cleanupSpecs.map((spec) => runCommandForInit("pi", ["remove", spec]));
 	const cleanupNotes = cleanup.map((entry) => entry.output).filter(Boolean).join("\n");
 	await ctx.ui.notify([
 		`PIDEX initialized at ${status.path}.`,
