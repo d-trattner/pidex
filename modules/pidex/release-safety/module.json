@@ -1,0 +1,38 @@
+{
+  "id": "pidex.release-safety",
+  "schema_version": 1,
+  "name": "Release Safety",
+  "kind": "core-toggleable",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "release.reference-integrity",
+      "kind": "check",
+      "phases": ["pre-release"],
+      "scope": "install",
+      "importance": "required",
+      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["scripts/release/reference-integrity.mjs"]
+      }
+    },
+    {
+      "id": "release.public-readiness",
+      "kind": "check",
+      "phases": ["pre-release"],
+      "scope": "install",
+      "importance": "required",
+      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only", "writes-artifacts"],
+      "command": {
+        "bin": "bash",
+        "args": ["scripts/release/public-readiness.sh"]
+      }
+    }
+  ]
+}

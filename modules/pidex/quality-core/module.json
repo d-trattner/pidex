@@ -1,0 +1,9 @@
+{
+  "id": "pidex.quality-core",
+  "schema_version": 1,
+  "name": "PIDEX Quality Core",
+  "kind": "core-required",
+  "default_enabled": true,
+  "dependencies": ["pidex.core", "pidex.process-rules"],
+  "capabilities": []
+}

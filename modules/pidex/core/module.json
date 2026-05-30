@@ -1,0 +1,9 @@
+{
+  "id": "pidex.core",
+  "schema_version": 1,
+  "name": "PIDEX Core",
+  "kind": "core-required",
+  "default_enabled": true,
+  "dependencies": [],
+  "capabilities": []
+}

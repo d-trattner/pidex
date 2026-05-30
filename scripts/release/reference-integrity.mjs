@@ -23,6 +23,13 @@ const allowedMissing = new Set([
   'rules/config',
   'rules/prompts',
   'agents/status.json',
+  // Documented local-only override files are intentionally untracked.
+  'config/balance.local.json',
+  'config/contract-governor.local.json',
+  'config/dashboard.local.json',
+  'config/modules.local.json',
+  'config/operator-contracts.local.json',
+  'config/parallel-agents.local.json',
   // Preferred future Windows-owned path documented in the compatibility matrix.
   'scripts/git-hooks/install-global.windows.ps1',
 ]);
