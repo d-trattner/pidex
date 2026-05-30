@@ -8,7 +8,7 @@ import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type ModulePayload = {
   ok: boolean;
-  pidex_root: string;
+  runtime_root: string;
   totals: { modules: number; enabled: number; capabilities: number };
   modules: Array<{
     id: string;
@@ -40,7 +40,7 @@ function ModulesPage() {
       <GlassPanel className="glass-card overview-hero" style={{ gridColumn: '1 / -1' }}>
         <h2 className="h2">Modules</h2>
         <p className="muted">Read-only PIDEX module status, capability ownership, and latest runner evidence.</p>
-        {data?.pidex_root ? <p className="muted">Runtime root: <code>{data.pidex_root}</code></p> : null}
+        {data?.runtime_root ? <p className="muted">Runtime root: <code>{data.runtime_root}</code></p> : null}
       </GlassPanel>
 
       {query.isLoading ? (

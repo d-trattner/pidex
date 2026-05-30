@@ -107,7 +107,7 @@ function readEvidence(root: string): Map<string, EvidenceRow> {
   return latest;
 }
 
-export function getModulesStatus(root = PIDEX_ROOT): { ok: true; pidex_root: string; modules: ModuleStatus[]; totals: { modules: number; enabled: number; capabilities: number } } {
+export function getModulesStatus(root = PIDEX_ROOT): { ok: true; runtime_root: string; modules: ModuleStatus[]; totals: { modules: number; enabled: number; capabilities: number } } {
   const evidence = readEvidence(root);
   const modules = walkModuleManifests(root).map((file) => {
     const manifest = readJson<ModuleManifest>(file, { id: path.basename(path.dirname(file)), kind: 'optional-internal', capabilities: [] });
@@ -136,7 +136,7 @@ export function getModulesStatus(root = PIDEX_ROOT): { ok: true; pidex_root: str
   });
   return {
     ok: true,
-    pidex_root: root,
+    runtime_root: path.basename(root) || 'pidex',
     modules,
     totals: {
       modules: modules.length,

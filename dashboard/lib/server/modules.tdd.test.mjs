@@ -25,6 +25,8 @@ function fixture() {
   const root = fixture();
   const status = getModulesStatus(root);
   assert.equal(status.ok, true);
+  assert.equal(status.runtime_root, path.basename(root));
+  assert.equal(status.pidex_root, undefined);
   assert.equal(status.totals.modules, 2);
   assert.equal(status.totals.enabled, 2);
   assert.equal(status.totals.capabilities, 1);
