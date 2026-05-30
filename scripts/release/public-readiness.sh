@@ -14,6 +14,7 @@ Usage: scripts/release/public-readiness.sh [--dirty-ok] [--skip-check]
 Checks the PIDEX public-release invariants:
 - checkout path is exactly ~/pidex
 - npm run check passes unless --skip-check
+- module manifests/config validate even when --skip-check is used
 - no forbidden tracked runtime/private paths
 - no high-confidence secret tokens or local operator path leaks in tracked text
 - public default configs do not include local balances or enabled optional secondary lanes
@@ -97,6 +98,8 @@ if [ "$SKIP_CHECK" != "1" ]; then
   ok "npm run check passed"
 else
   ok "npm run check skipped"
+  node scripts/modules/validate.mjs --project "$PWD" >/dev/null
+  ok "module manifests/config validate"
 fi
 
 PACK_JSON=$(mktemp)

@@ -108,6 +108,8 @@ node scripts/modules/validate.mjs --project "$PWD"
 npm run modules:validate
 ```
 
+Module validation is part of the standard `npm run check` chain. `scripts/release/public-readiness.sh --skip-check` still runs the cheap module validation directly, so release preflights cannot bypass invalid module manifests/config. Full module TDD coverage remains separate under `npm run modules:test`.
+
 Discover capabilities for an agent and phase:
 
 ```bash
