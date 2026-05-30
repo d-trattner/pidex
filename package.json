@@ -54,7 +54,7 @@
     "reference:check": "node scripts/release/reference-integrity.mjs",
     "doctor": "bash scripts/doctor.sh",
     "modules:list": "node scripts/modules/list.mjs --json",
-    "modules:validate": "node scripts/modules/validate.mjs --project \"$HOME/pidex\"",
+    "modules:validate": "node scripts/modules/validate.mjs --project \"$PWD\"",
     "modules:test": "node scripts/modules/list.tdd.test.mjs && node scripts/modules/validate.tdd.test.mjs && node scripts/modules/discover.tdd.test.mjs && node scripts/modules/run-check.tdd.test.mjs"
   }
 }
