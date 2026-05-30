@@ -17,6 +17,7 @@ import { Route as RunsRouteImport } from './../routes/runs'
 import { Route as QualityRouteImport } from './../routes/quality'
 import { Route as PipelinesRouteImport } from './../routes/pipelines'
 import { Route as OverviewRouteImport } from './../routes/overview'
+import { Route as ModulesRouteImport } from './../routes/modules'
 import { Route as LiveRouteImport } from './../routes/live'
 import { Route as LimitsRouteImport } from './../routes/limits'
 import { Route as DashboardRouteImport } from './../routes/dashboard'
@@ -29,6 +30,7 @@ import { Route as DashboardRunsRouteImport } from './../routes/dashboard/runs'
 import { Route as DashboardQualityRouteImport } from './../routes/dashboard/quality'
 import { Route as DashboardPipelinesRouteImport } from './../routes/dashboard/pipelines'
 import { Route as DashboardOverviewRouteImport } from './../routes/dashboard/overview'
+import { Route as DashboardModulesRouteImport } from './../routes/dashboard/modules'
 import { Route as DashboardLiveRouteImport } from './../routes/dashboard/live'
 import { Route as DashboardLimitsRouteImport } from './../routes/dashboard/limits'
 import { Route as DashboardAnalysisRouteImport } from './../routes/dashboard/analysis'
@@ -42,6 +44,7 @@ import { Route as ApiProviderLimitsRouteImport } from './../routes/api/provider-
 import { Route as ApiProjectsRouteImport } from './../routes/api/projects'
 import { Route as ApiPipelinesRouteImport } from './../routes/api/pipelines'
 import { Route as ApiParallelAgentsRouteImport } from './../routes/api/parallel-agents'
+import { Route as ApiModulesRouteImport } from './../routes/api/modules'
 import { Route as ApiMdBrowserRouteImport } from './../routes/api/md-browser'
 import { Route as ApiMalformedRouteImport } from './../routes/api/malformed'
 import { Route as ApiLiveRouteImport } from './../routes/api/live'
@@ -102,6 +105,11 @@ const OverviewRoute = OverviewRouteImport.update({
   path: '/overview',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ModulesRoute = ModulesRouteImport.update({
+  id: '/modules',
+  path: '/modules',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LiveRoute = LiveRouteImport.update({
   id: '/live',
   path: '/live',
@@ -160,6 +168,11 @@ const DashboardPipelinesRoute = DashboardPipelinesRouteImport.update({
 const DashboardOverviewRoute = DashboardOverviewRouteImport.update({
   id: '/overview',
   path: '/overview',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardModulesRoute = DashboardModulesRouteImport.update({
+  id: '/modules',
+  path: '/modules',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardLiveRoute = DashboardLiveRouteImport.update({
@@ -225,6 +238,11 @@ const ApiPipelinesRoute = ApiPipelinesRouteImport.update({
 const ApiParallelAgentsRoute = ApiParallelAgentsRouteImport.update({
   id: '/api/parallel-agents',
   path: '/api/parallel-agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiModulesRoute = ApiModulesRouteImport.update({
+  id: '/api/modules',
+  path: '/api/modules',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMdBrowserRoute = ApiMdBrowserRouteImport.update({
@@ -333,6 +351,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/limits': typeof LimitsRoute
   '/live': typeof LiveRoute
+  '/modules': typeof ModulesRoute
   '/overview': typeof OverviewRoute
   '/pipelines': typeof PipelinesRoute
   '/quality': typeof QualityRoute
@@ -348,6 +367,7 @@ export interface FileRoutesByFullPath {
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
   '/api/md-browser': typeof ApiMdBrowserRoute
+  '/api/modules': typeof ApiModulesRoute
   '/api/parallel-agents': typeof ApiParallelAgentsRouteWithChildren
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
@@ -361,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/analysis': typeof DashboardAnalysisRoute
   '/dashboard/limits': typeof DashboardLimitsRoute
   '/dashboard/live': typeof DashboardLiveRoute
+  '/dashboard/modules': typeof DashboardModulesRoute
   '/dashboard/overview': typeof DashboardOverviewRoute
   '/dashboard/pipelines': typeof DashboardPipelinesRoute
   '/dashboard/quality': typeof DashboardQualityRoute
@@ -386,6 +407,7 @@ export interface FileRoutesByTo {
   '/context': typeof ContextRoute
   '/limits': typeof LimitsRoute
   '/live': typeof LiveRoute
+  '/modules': typeof ModulesRoute
   '/overview': typeof OverviewRoute
   '/pipelines': typeof PipelinesRoute
   '/quality': typeof QualityRoute
@@ -401,6 +423,7 @@ export interface FileRoutesByTo {
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
   '/api/md-browser': typeof ApiMdBrowserRoute
+  '/api/modules': typeof ApiModulesRoute
   '/api/parallel-agents': typeof ApiParallelAgentsRouteWithChildren
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
@@ -414,6 +437,7 @@ export interface FileRoutesByTo {
   '/dashboard/analysis': typeof DashboardAnalysisRoute
   '/dashboard/limits': typeof DashboardLimitsRoute
   '/dashboard/live': typeof DashboardLiveRoute
+  '/dashboard/modules': typeof DashboardModulesRoute
   '/dashboard/overview': typeof DashboardOverviewRoute
   '/dashboard/pipelines': typeof DashboardPipelinesRoute
   '/dashboard/quality': typeof DashboardQualityRoute
@@ -441,6 +465,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/limits': typeof LimitsRoute
   '/live': typeof LiveRoute
+  '/modules': typeof ModulesRoute
   '/overview': typeof OverviewRoute
   '/pipelines': typeof PipelinesRoute
   '/quality': typeof QualityRoute
@@ -456,6 +481,7 @@ export interface FileRoutesById {
   '/api/live': typeof ApiLiveRoute
   '/api/malformed': typeof ApiMalformedRoute
   '/api/md-browser': typeof ApiMdBrowserRoute
+  '/api/modules': typeof ApiModulesRoute
   '/api/parallel-agents': typeof ApiParallelAgentsRouteWithChildren
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/projects': typeof ApiProjectsRoute
@@ -469,6 +495,7 @@ export interface FileRoutesById {
   '/dashboard/analysis': typeof DashboardAnalysisRoute
   '/dashboard/limits': typeof DashboardLimitsRoute
   '/dashboard/live': typeof DashboardLiveRoute
+  '/dashboard/modules': typeof DashboardModulesRoute
   '/dashboard/overview': typeof DashboardOverviewRoute
   '/dashboard/pipelines': typeof DashboardPipelinesRoute
   '/dashboard/quality': typeof DashboardQualityRoute
@@ -497,6 +524,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/limits'
     | '/live'
+    | '/modules'
     | '/overview'
     | '/pipelines'
     | '/quality'
@@ -512,6 +540,7 @@ export interface FileRouteTypes {
     | '/api/live'
     | '/api/malformed'
     | '/api/md-browser'
+    | '/api/modules'
     | '/api/parallel-agents'
     | '/api/pipelines'
     | '/api/projects'
@@ -525,6 +554,7 @@ export interface FileRouteTypes {
     | '/dashboard/analysis'
     | '/dashboard/limits'
     | '/dashboard/live'
+    | '/dashboard/modules'
     | '/dashboard/overview'
     | '/dashboard/pipelines'
     | '/dashboard/quality'
@@ -550,6 +580,7 @@ export interface FileRouteTypes {
     | '/context'
     | '/limits'
     | '/live'
+    | '/modules'
     | '/overview'
     | '/pipelines'
     | '/quality'
@@ -565,6 +596,7 @@ export interface FileRouteTypes {
     | '/api/live'
     | '/api/malformed'
     | '/api/md-browser'
+    | '/api/modules'
     | '/api/parallel-agents'
     | '/api/pipelines'
     | '/api/projects'
@@ -578,6 +610,7 @@ export interface FileRouteTypes {
     | '/dashboard/analysis'
     | '/dashboard/limits'
     | '/dashboard/live'
+    | '/dashboard/modules'
     | '/dashboard/overview'
     | '/dashboard/pipelines'
     | '/dashboard/quality'
@@ -604,6 +637,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/limits'
     | '/live'
+    | '/modules'
     | '/overview'
     | '/pipelines'
     | '/quality'
@@ -619,6 +653,7 @@ export interface FileRouteTypes {
     | '/api/live'
     | '/api/malformed'
     | '/api/md-browser'
+    | '/api/modules'
     | '/api/parallel-agents'
     | '/api/pipelines'
     | '/api/projects'
@@ -632,6 +667,7 @@ export interface FileRouteTypes {
     | '/dashboard/analysis'
     | '/dashboard/limits'
     | '/dashboard/live'
+    | '/dashboard/modules'
     | '/dashboard/overview'
     | '/dashboard/pipelines'
     | '/dashboard/quality'
@@ -659,6 +695,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   LimitsRoute: typeof LimitsRoute
   LiveRoute: typeof LiveRoute
+  ModulesRoute: typeof ModulesRoute
   OverviewRoute: typeof OverviewRoute
   PipelinesRoute: typeof PipelinesRoute
   QualityRoute: typeof QualityRoute
@@ -674,6 +711,7 @@ export interface RootRouteChildren {
   ApiLiveRoute: typeof ApiLiveRoute
   ApiMalformedRoute: typeof ApiMalformedRoute
   ApiMdBrowserRoute: typeof ApiMdBrowserRoute
+  ApiModulesRoute: typeof ApiModulesRoute
   ApiParallelAgentsRoute: typeof ApiParallelAgentsRouteWithChildren
   ApiPipelinesRoute: typeof ApiPipelinesRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
@@ -749,6 +787,13 @@ declare module '@tanstack/react-router' {
       path: '/overview'
       fullPath: '/overview'
       preLoaderRoute: typeof OverviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/modules': {
+      id: '/modules'
+      path: '/modules'
+      fullPath: '/modules'
+      preLoaderRoute: typeof ModulesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/live': {
@@ -833,6 +878,13 @@ declare module '@tanstack/react-router' {
       path: '/overview'
       fullPath: '/dashboard/overview'
       preLoaderRoute: typeof DashboardOverviewRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/modules': {
+      id: '/dashboard/modules'
+      path: '/modules'
+      fullPath: '/dashboard/modules'
+      preLoaderRoute: typeof DashboardModulesRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/live': {
@@ -924,6 +976,13 @@ declare module '@tanstack/react-router' {
       path: '/api/parallel-agents'
       fullPath: '/api/parallel-agents'
       preLoaderRoute: typeof ApiParallelAgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/modules': {
+      id: '/api/modules'
+      path: '/api/modules'
+      fullPath: '/api/modules'
+      preLoaderRoute: typeof ApiModulesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/md-browser': {
@@ -1066,6 +1125,7 @@ interface DashboardRouteChildren {
   DashboardAnalysisRoute: typeof DashboardAnalysisRoute
   DashboardLimitsRoute: typeof DashboardLimitsRoute
   DashboardLiveRoute: typeof DashboardLiveRoute
+  DashboardModulesRoute: typeof DashboardModulesRoute
   DashboardOverviewRoute: typeof DashboardOverviewRoute
   DashboardPipelinesRoute: typeof DashboardPipelinesRoute
   DashboardQualityRoute: typeof DashboardQualityRoute
@@ -1078,6 +1138,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAnalysisRoute: DashboardAnalysisRoute,
   DashboardLimitsRoute: DashboardLimitsRoute,
   DashboardLiveRoute: DashboardLiveRoute,
+  DashboardModulesRoute: DashboardModulesRoute,
   DashboardOverviewRoute: DashboardOverviewRoute,
   DashboardPipelinesRoute: DashboardPipelinesRoute,
   DashboardQualityRoute: DashboardQualityRoute,
@@ -1144,6 +1205,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   LimitsRoute: LimitsRoute,
   LiveRoute: LiveRoute,
+  ModulesRoute: ModulesRoute,
   OverviewRoute: OverviewRoute,
   PipelinesRoute: PipelinesRoute,
   QualityRoute: QualityRoute,
@@ -1159,6 +1221,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLiveRoute: ApiLiveRoute,
   ApiMalformedRoute: ApiMalformedRoute,
   ApiMdBrowserRoute: ApiMdBrowserRoute,
+  ApiModulesRoute: ApiModulesRoute,
   ApiParallelAgentsRoute: ApiParallelAgentsRouteWithChildren,
   ApiPipelinesRoute: ApiPipelinesRoute,
   ApiProjectsRoute: ApiProjectsRoute,
