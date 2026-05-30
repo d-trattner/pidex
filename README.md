@@ -68,7 +68,9 @@ See [Windows status](readme/windows.md) for support boundaries and the PowerShel
 
 ## Install
 
-PIDEX v0.1 expects the checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other checkout paths are not supported yet.
+PIDEX v0.1 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other runtime paths are not supported yet.
+
+### Full checkout install
 
 Linux / WSL2:
 
@@ -92,6 +94,24 @@ Useful Linux/WSL2 install flags:
 
 The same controls also exist as environment variables for automation, but flags are preferred for manual use.
 
+### Pi package bootstrap install
+
+PIDEX can also be installed as a lightweight Pi bootstrap package:
+
+```bash
+pi install npm:@d-trattner/pidex
+```
+
+The npm package provides the Pi commands/skills only. It does not replace the canonical `~/pidex` runtime checkout. After installing the package, run this in Pi:
+
+```text
+/pidex-init-home
+```
+
+That command clones PIDEX into `~/pidex`, runs the full installer, removes the bootstrap package registration when possible, and asks you to run `/reload`. Normal `/pidex` and `/pd` pipeline runs require `~/pidex` and will stop with setup guidance if it is missing.
+
+### Windows experimental bootstrap
+
 Windows experimental bootstrap:
 
 ```powershell
@@ -107,7 +127,7 @@ Useful Windows install flags when running a downloaded script locally:
 
 For the one-line `irm ... | iex` form, use the defaults unless you specifically need an advanced automation override.
 
-In the detailed docs, `<pidex-root>` means `~/pidex` for Linux/WSL2 and `$HOME\pidex` for the Windows bootstrap.
+In the detailed docs, `<pidex-root>` means the canonical runtime checkout: `~/pidex` for Linux/WSL2 and `$HOME\pidex` for the Windows bootstrap.
 
 Uninstall:
 

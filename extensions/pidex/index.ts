@@ -89,7 +89,30 @@ type RoutingConfig = {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PACKAGE_ROOT = path.resolve(__dirname, "../..");
+const BOOTSTRAP_ROOT = path.resolve(__dirname, "../..");
+const CANONICAL_HOME_ROOT = process.env.PIDEX_HOME_ROOT ?? path.join(os.homedir(), "pidex");
+
+function isPidexRuntimeRoot(root: string): boolean {
+	try {
+		const pkgPath = path.join(root, "package.json");
+		if (!fs.existsSync(pkgPath)) return false;
+		const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+		if (pkg?.name !== "@d-trattner/pidex" && pkg?.name !== "pidex") return false;
+		return fs.existsSync(path.join(root, "agents"))
+			&& fs.existsSync(path.join(root, "config", "agents.json"))
+			&& fs.existsSync(path.join(root, "scripts"));
+	} catch {
+		return false;
+	}
+}
+
+function resolvePidexRuntimeRoot(): string {
+	if (process.env.PIDEX_ROOT && isPidexRuntimeRoot(process.env.PIDEX_ROOT)) return path.resolve(process.env.PIDEX_ROOT);
+	if (isPidexRuntimeRoot(CANONICAL_HOME_ROOT)) return path.resolve(CANONICAL_HOME_ROOT);
+	return BOOTSTRAP_ROOT;
+}
+
+const PACKAGE_ROOT = resolvePidexRuntimeRoot();
 const AGENTS_DIR = path.join(PACKAGE_ROOT, "agents");
 const CONFIG_PATH = process.env.PIDEX_CONFIG_FILE ?? path.join(PACKAGE_ROOT, "config", "agents.json");
 const DELEGATE_DIR = path.join(PACKAGE_ROOT, "scripts", "delegate");
@@ -1769,6 +1792,79 @@ function runWikiHygieneAudit(projectRoot: string): { ok: boolean; summary: strin
 	}
 }
 
+function canonicalHomeStatus(): { ok: boolean; path: string; message?: string } {
+	const homeRoot = path.resolve(CANONICAL_HOME_ROOT);
+	if (isPidexRuntimeRoot(homeRoot)) return { ok: true, path: homeRoot };
+	if (fs.existsSync(homeRoot)) {
+		return {
+			ok: false,
+			path: homeRoot,
+			message: `PIDEX canonical runtime root exists but is not a valid PIDEX checkout: ${homeRoot}`,
+		};
+	}
+	return {
+		ok: false,
+		path: homeRoot,
+		message: `PIDEX canonical runtime root is missing: ${homeRoot}`,
+	};
+}
+
+function canonicalHomeMissingMessage(): string {
+	return [
+		"PIDEX is installed as a Pi bootstrap package, but the canonical runtime checkout is not initialized.",
+		`Required path: ${path.resolve(CANONICAL_HOME_ROOT)}`,
+		"",
+		"Run:",
+		"  /pidex-init-home",
+		"",
+		"This will clone PIDEX into ~/pidex, run the full installer, and remove the bootstrap package registration so /reload uses the canonical checkout.",
+	].join("\n");
+}
+
+function runCommandForInit(command: string, args: string[], cwd?: string): { ok: boolean; output: string } {
+	const proc = spawnSync(command, args, { cwd, encoding: "utf8", timeout: 10 * 60_000 });
+	const output = [proc.stdout, proc.stderr].filter(Boolean).join("\n").trim();
+	return { ok: proc.status === 0, output };
+}
+
+async function initializePidexHome(ctx: any): Promise<void> {
+	const status = canonicalHomeStatus();
+	if (status.ok) {
+		await ctx.ui.notify(`PIDEX canonical runtime root already exists: ${status.path}`, "info");
+		return;
+	}
+	if (fs.existsSync(status.path)) {
+		await ctx.ui.notify(`${status.message}\nMove or remove that directory before running /pidex-init-home.`, "error");
+		return;
+	}
+	if (ctx.hasUI) {
+		const choice = await ctx.ui.select(`Initialize PIDEX canonical runtime root at ${status.path}?\n\nThis clones https://github.com/d-trattner/pidex.git, runs install.sh, then removes the npm/git bootstrap package registration if present.`, ["Initialize", "Cancel"]);
+		if (choice !== "Initialize") return;
+	}
+	const parent = path.dirname(status.path);
+	fs.mkdirSync(parent, { recursive: true });
+	let result = runCommandForInit("git", ["clone", "https://github.com/d-trattner/pidex.git", status.path], parent);
+	if (!result.ok) {
+		await ctx.ui.notify(`PIDEX clone failed:\n${result.output}`, "error");
+		return;
+	}
+	result = runCommandForInit("bash", ["install.sh", "--skip-global-git-hook"], status.path);
+	if (!result.ok) {
+		await ctx.ui.notify(`PIDEX install failed. Checkout remains at ${status.path}.\n\n${result.output}`, "error");
+		return;
+	}
+	const cleanup = [
+		runCommandForInit("pi", ["remove", "npm:@d-trattner/pidex"]),
+		runCommandForInit("pi", ["remove", "git:https://github.com/d-trattner/pidex"]),
+	];
+	const cleanupNotes = cleanup.map((entry) => entry.output).filter(Boolean).join("\n");
+	await ctx.ui.notify([
+		`PIDEX initialized at ${status.path}.`,
+		"Run /reload so Pi loads the canonical ~/pidex package.",
+		cleanupNotes ? `\nBootstrap cleanup output:\n${cleanupNotes}` : "",
+	].join("\n"), "info");
+}
+
 function inspectBashForGitHookRisk(command: string): { block?: string; warn?: string } | undefined {
 	const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
 	if (!compact) return undefined;
@@ -1820,6 +1916,11 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.registerCommand("pidexaudit", {
 		description: "Audit pidex context usage from metrics + child logs.",
 		handler: async (argLine, ctx) => {
+			const homeStatus = canonicalHomeStatus();
+			if (!homeStatus.ok) {
+				await ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before running pidexaudit.` : canonicalHomeMissingMessage(), "warning");
+				return;
+			}
 			const parsed = parseRpAuditOptions(argLine);
 			if (parsed.help) {
 				await ctx.ui.notify(rpAuditUsage(), "info");
@@ -1840,6 +1941,11 @@ export default function runningPi(pi: ExtensionAPI) {
 
 	const startRunningPi = async (args: string | undefined, ctx: any) => {
 		const task = args?.trim();
+		const homeStatus = canonicalHomeStatus();
+		if (!homeStatus.ok) {
+			ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before starting PIDEX.` : canonicalHomeMissingMessage(), "warning");
+			return;
+		}
 		const authPreflight = await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
 		if (!authPreflight.ok) {
@@ -1864,6 +1970,16 @@ export default function runningPi(pi: ExtensionAPI) {
 		pi.sendUserMessage(kickoff);
 	};
 
+	pi.registerCommand("pidex-init-home", {
+		description: "Initialize the canonical PIDEX runtime checkout at ~/pidex from the bootstrap package.",
+		handler: async (_argLine, ctx) => initializePidexHome(ctx),
+	});
+
+	pi.registerCommand("pidex", {
+		description: "Start the pidex pidex-* software-delivery pipeline (direct-mode MVP).",
+		handler: startRunningPi,
+	});
+
 	pi.registerCommand("pd", {
 		description: "Start the pidex pidex-* software-delivery pipeline (direct-mode MVP).",
 		handler: startRunningPi,
@@ -1872,6 +1988,11 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.registerCommand("pdq", {
 		description: "Run read-only PIDEX quality/self-improvement report.",
 		handler: async (argLine, ctx) => {
+			const homeStatus = canonicalHomeStatus();
+			if (!homeStatus.ok) {
+				await ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before running PDQ.` : canonicalHomeMissingMessage(), "warning");
+				return;
+			}
 			const result = runPidexQualityReport(ctx.cwd ?? PACKAGE_ROOT, argLine);
 			await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
 		},
@@ -1892,6 +2013,11 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.registerCommand("pdwiki", {
 		description: "Run a read-only PIDEX wiki hygiene audit for the current or given project root.",
 		handler: async (argLine, ctx) => {
+			const homeStatus = canonicalHomeStatus();
+			if (!homeStatus.ok) {
+				await ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before running wiki hygiene.` : canonicalHomeMissingMessage(), "warning");
+				return;
+			}
 			const raw = argLine?.trim();
 			const projectRoot = raw ? path.resolve(ctx.cwd ?? process.cwd(), raw) : path.resolve(ctx.cwd ?? process.cwd());
 			const result = runWikiHygieneAudit(projectRoot);
@@ -1902,6 +2028,11 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.registerCommand("pdparallel", {
 		description: "Inspect or test optional PIDEX parallel agent lanes.",
 		handler: async (argLine, ctx) => {
+			const homeStatus = canonicalHomeStatus();
+			if (!homeStatus.ok) {
+				await ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before inspecting parallel agents.` : canonicalHomeMissingMessage(), "warning");
+				return;
+			}
 			const result = runParallelAgentsCommand(argLine, ctx.cwd);
 			await ctx.ui.notify(result.summary, result.ok ? "info" : "warning");
 		},
@@ -1923,6 +2054,8 @@ export default function runningPi(pi: ExtensionAPI) {
 		parameters: RpAgentParams as any,
 		async execute(_toolCallId, params: any, signal, onUpdate, ctx) {
 			try {
+				const homeStatus = canonicalHomeStatus();
+				if (!homeStatus.ok) throw new Error(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before using pidex_agent.` : canonicalHomeMissingMessage());
 				const result = await runConfiguredAgent({
 					agent: params.agent,
 					task: params.task,
