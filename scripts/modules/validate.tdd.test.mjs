@@ -18,3 +18,10 @@ test('rejects core-required modules in config', () => {
   assert.notEqual(proc.status, 0);
   assert.match(proc.stdout, /core-required module must not be configurable/);
 });
+
+test('rejects disabled release-safety for pidex self-release context', () => {
+  const { root } = makeModuleFixture({ releaseEnabled: false });
+  const proc = spawnSync(process.execPath, ['scripts/modules/validate.mjs', '--pidex-root', root, '--project', root], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stdout, /pidex\.release-safety cannot be disabled/);
+});

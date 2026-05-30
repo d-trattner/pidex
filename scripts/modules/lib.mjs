@@ -92,7 +92,7 @@ export function validateProjectPath(project) {
 }
 
 export function currentPlatformId() {
-  if (process.platform === 'win32') return 'windows-native';
+  if (process.platform === 'win32') return commandExists('bash') ? 'windows-git-bash' : 'windows-native';
   if (process.platform === 'linux' && /microsoft|wsl/i.test(readFileSafe('/proc/version'))) return 'wsl2';
   if (process.platform === 'linux') return 'linux';
   if (process.platform === 'darwin') return 'macos';
@@ -106,6 +106,19 @@ function readFileSafe(file) {
 export function commandExists(bin) {
   const proc = spawnSync(process.platform === 'win32' ? 'where' : 'command', process.platform === 'win32' ? [bin] : ['-v', bin], { shell: process.platform !== 'win32', stdio: 'ignore' });
   return proc.status === 0;
+}
+
+export function validateProtectedContexts(system, projectRoot) {
+  const errors = [];
+  if (!projectRoot) return errors;
+  const project = path.resolve(projectRoot);
+  const pidexRoot = path.resolve(system.pidexRoot);
+  if (project !== pidexRoot) return errors;
+  const release = system.byId.get('pidex.release-safety');
+  if (release && !moduleEnabled(system, release.manifest).enabled) {
+    errors.push('pidex.release-safety cannot be disabled for PIDEX self-release/publication context');
+  }
+  return errors;
 }
 
 export function validateSystem(system) {
@@ -163,11 +176,15 @@ export function allCapabilities(system) {
   return out;
 }
 
-export function capabilityAvailability(system, entry, agent, phase) {
+export function capabilityAvailability(system, entry, agent, phase, projectRoot) {
   const { module, moduleState, capability } = entry;
   const platform = currentPlatformId();
   const supported = capability.supported_platforms || [];
-  if (!moduleState.enabled) return { available: false, reason: 'module_disabled', requirement_active: false };
+  if (!moduleState.enabled) {
+    const protectedErrors = validateProtectedContexts(system, projectRoot);
+    if (protectedErrors.length && module.id === 'pidex.release-safety') return { available: false, reason: 'protected_module_disabled', requirement_active: true };
+    return { available: false, reason: 'module_disabled', requirement_active: false };
+  }
   for (const dep of module.dependencies || []) {
     const depItem = system.byId.get(dep);
     if (!depItem || !moduleEnabled(system, depItem.manifest).enabled) return { available: false, reason: 'dependency_disabled', requirement_active: true };

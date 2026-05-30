@@ -1,9 +1,10 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 export function makeModuleFixture(options = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-modules-test-'));
+  if (options.cleanup !== false) process.on('exit', () => rmSync(root, { recursive: true, force: true }));
   const project = path.join(root, 'project');
   mkdirSync(project, { recursive: true });
   mkdirSync(path.join(root, 'agents'), { recursive: true });

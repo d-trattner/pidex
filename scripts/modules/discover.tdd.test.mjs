@@ -24,6 +24,15 @@ test('discovery includes disabled capability with module_disabled reason', () =>
   assert.equal(data.capabilities[0].reason, 'module_disabled');
 });
 
+test('discovery marks disabled release-safety protected for pidex self-release context', () => {
+  const { root } = makeModuleFixture({ releaseEnabled: false });
+  const out = execFileSync(process.execPath, ['scripts/modules/discover.mjs', '--pidex-root', root, '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', root], { cwd: process.cwd(), encoding: 'utf8' });
+  const data = JSON.parse(out);
+  assert.equal(data.capabilities[0].available, false);
+  assert.equal(data.capabilities[0].reason, 'protected_module_disabled');
+  assert.equal(data.capabilities[0].requirement_active, true);
+});
+
 test('orchestrator discovery returns phase-grouped map', () => {
   const { root, project } = makeModuleFixture();
   const out = execFileSync(process.execPath, ['scripts/modules/discover.mjs', '--pidex-root', root, '--agent', 'orchestrator', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });

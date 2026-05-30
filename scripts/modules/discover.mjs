@@ -26,7 +26,7 @@ if (!validation.ok) {
 }
 
 function formatCapability(entry, requestedAgent, requestedPhase) {
-  const availability = capabilityAvailability(system, entry, requestedAgent, requestedPhase);
+  const availability = capabilityAvailability(system, entry, requestedAgent, requestedPhase, project);
   const base = {
     capability_id: entry.capability.id,
     module_id: entry.module.id,

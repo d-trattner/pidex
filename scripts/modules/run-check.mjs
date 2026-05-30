@@ -31,7 +31,7 @@ if (!entry) {
   console.error(`unknown capability: ${capabilityId}`);
   process.exit(1);
 }
-const availability = capabilityAvailability(system, entry, agent, phase);
+const availability = capabilityAvailability(system, entry, agent, phase, project);
 if (!availability.available) {
   console.error(`capability unavailable: ${availability.reason}`);
   process.exit(1);
