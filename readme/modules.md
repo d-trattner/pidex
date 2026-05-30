@@ -21,7 +21,7 @@ Not implemented yet:
 - third-party modules;
 - module registry/install;
 - dashboard module management UI;
-- physical migration of release scripts into module folders;
+- removal of compatibility wrappers for migrated release scripts;
 - automatic agent handoff injection;
 - external rule contributions.
 
@@ -211,7 +211,7 @@ Evidence rows use:
 
 ## Stage 1 guardrails
 
-- Do not move existing release files yet.
+- Keep release-safety compatibility wrappers at `scripts/release/*` until a dedicated wrapper-retirement stage.
 - Do not expose raw script paths to agents as the normal execution path.
 - Do not add dashboard UI yet.
 - Do not add third-party loading yet.
