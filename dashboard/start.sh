@@ -58,6 +58,11 @@ cd "$ROOT"
 LOG="/tmp/pidex-dashboard-$PORT.log"
 PID_FILE="$ROOT/.dashboard-$PORT.pid"
 
+VITE_BIN="$ROOT/node_modules/.bin/vite"
+if [ ! -x "$VITE_BIN" ] && [ -x "$PIDEX_ROOT/node_modules/.bin/vite" ]; then
+  VITE_BIN="$PIDEX_ROOT/node_modules/.bin/vite"
+fi
+
 stop_pid() {
   local pid="$1"
   [ -n "$pid" ] || return 0
@@ -89,8 +94,12 @@ if [ "$INGEST" = "1" ]; then
 fi
 
 if [ "$DEV" = "0" ] && [ "$BUILD" = "1" ]; then
+  if [ ! -x "$VITE_BIN" ]; then
+    echo "Missing dashboard dependency: vite. Run npm --prefix '$ROOT' ci, or install PIDEX through the full installer." >&2
+    exit 1
+  fi
   echo "==> Building dashboard"
-  npm run build --silent
+  "$VITE_BIN" build
 fi
 
 export PIDEX_DASHBOARD_ROOT="$ROOT"
@@ -124,10 +133,15 @@ EOF
   fi
 }
 
+if [ ! -x "$VITE_BIN" ]; then
+  echo "Missing dashboard dependency: vite. Run npm --prefix '$ROOT' ci, or install PIDEX through the full installer." >&2
+  exit 1
+fi
+
 if [ "$DEV" = "1" ]; then
-  CMD=("$ROOT/node_modules/.bin/vite" --host "$HOST" --port "$PORT" --strictPort)
+  CMD=("$VITE_BIN" --host "$HOST" --port "$PORT" --strictPort)
 else
-  CMD=("$ROOT/node_modules/.bin/vite" preview --host "$HOST" --port "$PORT" --strictPort)
+  CMD=("$VITE_BIN" preview --host "$HOST" --port "$PORT" --strictPort)
 fi
 
 if [ "$FOREGROUND" = "1" ]; then

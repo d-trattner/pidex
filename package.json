@@ -84,7 +84,20 @@
     "reference:check": "node scripts/release/reference-integrity.mjs",
     "doctor": "bash scripts/doctor.sh"
   },
-  "devDependencies": {
-    "typescript": "^5.9.0"
+  "dependencies": {
+    "@tanstack/react-query": "^5.80.7",
+    "@tanstack/react-router": "1.169.2",
+    "@tanstack/react-start": "1.167.65",
+    "lucide-react": "^1.14.0",
+    "motion": "^12.18.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1",
+    "@tanstack/router-plugin": "1.167.35",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "~5.9.2",
+    "vite": "^7.0.0"
   }
 }
