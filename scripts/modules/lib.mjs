@@ -125,11 +125,24 @@ export function validateCapabilityCommand(pidexRoot, capability) {
   const errors = [];
   const command = capability.command;
   if (!command || typeof command.bin !== 'string' || !Array.isArray(command.args)) return errors;
+  const allowedBins = new Set(['node', 'bash']);
+  const riskyFlags = new Set(['-e', '--eval', '-c', '--command']);
+  if (!allowedBins.has(command.bin)) errors.push(`${capability.id}: command bin is not allowed: ${command.bin}`);
   for (const arg of command.args) {
     if (typeof arg !== 'string') {
       errors.push(`${capability.id}: command args must be strings`);
       continue;
     }
+    if (riskyFlags.has(arg)) errors.push(`${capability.id}: risky interpreter flag is not allowed: ${arg}`);
+  }
+  const firstArg = command.args[0];
+  if (command.bin === 'node' || command.bin === 'bash') {
+    if (typeof firstArg !== 'string' || !/\.(mjs|js|sh)$/.test(firstArg)) {
+      errors.push(`${capability.id}: ${command.bin} command must start with a relative script path`);
+    }
+  }
+  for (const arg of command.args) {
+    if (typeof arg !== 'string') continue;
     if (!/\.(mjs|js|sh|ps1|ts|tsx|json|md|txt|yml|yaml)$/.test(arg)) continue;
     if (path.isAbsolute(arg)) {
       errors.push(`${capability.id}: command file args must be relative to PIDEX root: ${arg}`);
