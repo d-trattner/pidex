@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+import path from 'node:path';
+import { allCapabilities, capabilityAvailability, loadModuleSystem, parseArgs, runnerInvocation, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
+
+function usage() {
+  return `Usage: node scripts/modules/context.mjs --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nFormats current-phase PIDEX module capability discovery as compact advisory markdown for agent handoffs. The output is metadata only; it is not execution authority.\n\nOptions:\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --help               Show this help.`;
+}
+
+function shellQuote(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./:@=-]+$/.test(text)) return text;
+  return `'${text.replaceAll("'", `'\\''`)}'`;
+}
+
+function commandLine(invocation) {
+  return [invocation.bin, ...invocation.args].map(shellQuote).join(' ');
+}
+
+function formatReasons(reasons) {
+  return reasons.filter(Boolean).join(', ') || 'none';
+}
+
+export function buildCapabilityContext({ system, agent, phase, project }) {
+  const entries = allCapabilities(system).filter((entry) => entry.capability.phases.includes(phase));
+  const rows = entries.map((entry) => {
+    const availability = capabilityAvailability(system, entry, agent, phase, project);
+    return {
+      entry,
+      availability,
+      execute: runnerInvocation(entry.capability.id, agent, phase, project),
+    };
+  });
+  const requiredAvailable = rows.filter((row) => row.entry.capability.importance === 'required' && row.availability.available);
+  const unavailable = rows.filter((row) => !row.availability.available && (row.entry.capability.importance === 'required' || row.availability.requirement_active));
+  const recommendedAvailable = rows.filter((row) => row.entry.capability.importance !== 'required' && row.availability.available);
+
+  const lines = [];
+  lines.push('## Module capabilities for this phase');
+  lines.push('');
+  lines.push('Advisory only: discovery/context output does not grant execution authority. Execute only checks explicitly requested by the handoff, and execute them through `scripts/modules/run-check.mjs`.');
+  lines.push('');
+  lines.push('Discovery command:');
+  lines.push('```bash');
+  lines.push(commandLine({ bin: 'node', args: ['scripts/modules/discover.mjs', '--agent', agent, '--phase', phase, '--project', project] }));
+  lines.push('```');
+  lines.push('');
+
+  if (requiredAvailable.length) {
+    lines.push('Required available checks:');
+    for (const row of requiredAvailable) {
+      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})`);
+      lines.push('  Execute through runner:');
+      lines.push('  ```bash');
+      lines.push(`  ${commandLine(row.execute)}`);
+      lines.push('  ```');
+    }
+  } else {
+    lines.push('Required available checks: none');
+  }
+  lines.push('');
+
+  if (unavailable.length) {
+    lines.push('Unavailable required/current-phase capabilities:');
+    for (const row of unavailable) {
+      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id}): ${formatReasons([row.availability.reason])}`);
+    }
+  } else {
+    lines.push('Unavailable required/current-phase capabilities: none');
+  }
+  lines.push('');
+
+  if (recommendedAvailable.length) {
+    lines.push('Other available checks:');
+    for (const row of recommendedAvailable) lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})`);
+    lines.push('');
+  }
+
+  lines.push('Raw manifest commands are intentionally omitted. Use module runner invocations only.');
+  return `${lines.join('\n')}\n`;
+}
+
+const args = parseArgs(process.argv.slice(2));
+if (args.help) {
+  console.log(usage());
+  process.exit(0);
+}
+
+const pidexRoot = args['pidex-root'] ? path.resolve(String(args['pidex-root'])) : scriptPidexRoot(import.meta.url);
+const agent = args.agent;
+const phase = args.phase;
+if (!agent || !phase) {
+  console.error('--agent and --phase are required');
+  process.exit(2);
+}
+let project;
+try {
+  project = validateProjectPath(args.project);
+} catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
+
+const system = loadModuleSystem(pidexRoot);
+const validation = validateSystem(system);
+if (!validation.ok) {
+  console.error(`module validation failed:\n- ${validation.errors.join('\n- ')}`);
+  process.exit(1);
+}
+
+console.log(buildCapabilityContext({ system, agent, phase, project }));
