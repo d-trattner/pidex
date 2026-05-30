@@ -58,10 +58,22 @@ cd "$ROOT"
 LOG="/tmp/pidex-dashboard-$PORT.log"
 PID_FILE="$ROOT/.dashboard-$PORT.pid"
 
-VITE_BIN="$ROOT/node_modules/.bin/vite"
-if [ ! -x "$VITE_BIN" ] && [ -x "$PIDEX_ROOT/node_modules/.bin/vite" ]; then
-  VITE_BIN="$PIDEX_ROOT/node_modules/.bin/vite"
-fi
+find_node_bin_upwards() {
+  local start="$1"
+  local bin_name="$2"
+  local dir="$start"
+  while [ -n "$dir" ] && [ "$dir" != "/" ]; do
+    local candidate="$dir/node_modules/.bin/$bin_name"
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    dir=$(dirname "$dir")
+  done
+  return 1
+}
+
+VITE_BIN="$(find_node_bin_upwards "$ROOT" vite || true)"
 
 stop_pid() {
   local pid="$1"
