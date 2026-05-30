@@ -4,6 +4,8 @@ The PIDEX dashboard is a local analytics UI for pipeline state, quality, provide
 
 ## Start
 
+Dashboard commands assume the canonical `<pidex-root>` checkout. If you installed PIDEX through the lightweight Pi package bootstrap, run `/pidex-init-home` first and then `/reload` so `<pidex-root>` resolves to `~/pidex`.
+
 Linux / WSL2:
 
 ```bash

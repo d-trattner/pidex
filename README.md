@@ -70,6 +70,13 @@ See [Windows status](readme/windows.md) for support boundaries and the PowerShel
 
 PIDEX v0.1 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other runtime paths are not supported yet.
 
+### Install modes
+
+| Mode | Command | Result |
+| --- | --- | --- |
+| Full checkout | `git clone https://github.com/d-trattner/pidex.git ~/pidex && cd ~/pidex && ./install.sh` | Creates the canonical runtime checkout directly. Best for servers, development, and dashboard use. |
+| Pi package bootstrap | `pi install npm:@d-trattner/pidex`, then `/pidex-init-home` in Pi | Installs lightweight Pi commands first, then initializes the canonical `~/pidex` checkout. |
+
 ### Full checkout install
 
 Linux / WSL2:
