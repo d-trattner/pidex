@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { makeModuleFixture } from './test-helpers.mjs';
@@ -38,4 +38,20 @@ test('run-check rejects disabled capability', () => {
   const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
   assert.notEqual(proc.status, 0);
   assert.match(proc.stderr, /capability unavailable: module_disabled/);
+});
+
+test('run-check propagates command failure and writes failed evidence', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.args = ['scripts/release/fail.mjs'];
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.equal(proc.status, 7);
+  assert.match(proc.stderr, /fixture failure/);
+  const evidenceDir = path.join(root, 'state/modules/evidence');
+  const file = path.join(evidenceDir, readdirSync(evidenceDir)[0]);
+  const row = JSON.parse(readFileSync(file, 'utf8').trim());
+  assert.equal(row.status, 'failed');
+  assert.equal(row.exit_code, 7);
 });

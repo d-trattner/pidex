@@ -24,5 +24,6 @@ export function makeModuleFixture(options = {}) {
     }],
   }, null, 2));
   writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log('fixture reference ok');\n");
+  writeFileSync(path.join(root, 'scripts/release/fail.mjs'), "console.error('fixture failure'); process.exit(7);\n");
   return { root, project };
 }

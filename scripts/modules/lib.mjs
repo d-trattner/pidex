@@ -121,6 +121,28 @@ export function validateProtectedContexts(system, projectRoot) {
   return errors;
 }
 
+export function validateCapabilityCommand(pidexRoot, capability) {
+  const errors = [];
+  const command = capability.command;
+  if (!command || typeof command.bin !== 'string' || !Array.isArray(command.args)) return errors;
+  for (const arg of command.args) {
+    if (typeof arg !== 'string') {
+      errors.push(`${capability.id}: command args must be strings`);
+      continue;
+    }
+    if (!/\.(mjs|js|sh|ps1|ts|tsx|json|md|txt|yml|yaml)$/.test(arg)) continue;
+    if (path.isAbsolute(arg)) {
+      errors.push(`${capability.id}: command file args must be relative to PIDEX root: ${arg}`);
+      continue;
+    }
+    const resolved = path.resolve(pidexRoot, arg);
+    if (path.relative(pidexRoot, resolved).startsWith('..') || path.relative(pidexRoot, resolved) === '') {
+      errors.push(`${capability.id}: command file arg escapes PIDEX root: ${arg}`);
+    }
+  }
+  return errors;
+}
+
 export function validateSystem(system) {
   const errors = [];
   const moduleIds = new Set();
@@ -149,6 +171,7 @@ export function validateSystem(system) {
       if (!Array.isArray(capability.mutability) || capability.mutability.length === 0) errors.push(`${capability.id}: mutability must be non-empty array`);
       for (const item of capability.mutability || []) if (!VALID_MUTABILITY.has(item)) errors.push(`${capability.id}: invalid mutability ${item}`);
       if (!capability.command || typeof capability.command.bin !== 'string' || !Array.isArray(capability.command.args)) errors.push(`${capability.id}: command must use structured {bin,args}`);
+      errors.push(...validateCapabilityCommand(system.pidexRoot, capability));
     }
   }
   for (const configuredId of Object.keys(system.configModules)) {

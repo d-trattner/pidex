@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { makeModuleFixture } from './test-helpers.mjs';
@@ -24,4 +24,15 @@ test('rejects disabled release-safety for pidex self-release context', () => {
   const proc = spawnSync(process.execPath, ['scripts/modules/validate.mjs', '--pidex-root', root, '--project', root], { cwd: process.cwd(), encoding: 'utf8' });
   assert.notEqual(proc.status, 0);
   assert.match(proc.stdout, /pidex\.release-safety cannot be disabled/);
+});
+
+test('rejects command file args escaping pidex root', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.args = ['../outside.mjs'];
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/validate.mjs', '--pidex-root', root, '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stdout, /command file arg escapes PIDEX root/);
 });
