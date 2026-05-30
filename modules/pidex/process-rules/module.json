@@ -1,0 +1,9 @@
+{
+  "id": "pidex.process-rules",
+  "schema_version": 1,
+  "name": "PIDEX Process Rules",
+  "kind": "core-required",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": []
+}

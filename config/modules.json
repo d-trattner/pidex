@@ -1,0 +1,7 @@
+{
+  "modules": {
+    "pidex.release-safety": {
+      "enabled": true
+    }
+  }
+}
