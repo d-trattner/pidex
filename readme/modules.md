@@ -117,6 +117,17 @@ node scripts/modules/discover.mjs \
   --project "$PWD"
 ```
 
+Format current-phase capabilities as compact advisory markdown for agent handoffs:
+
+```bash
+node scripts/modules/context.mjs \
+  --agent pidex-devops \
+  --phase pre-release \
+  --project "$PWD"
+
+npm run modules:context
+```
+
 Run a capability through the module runner:
 
 ```bash
@@ -150,6 +161,8 @@ platform_command_unavailable
 The pseudo-agent `orchestrator` receives a phase-grouped capability map with the current phase highlighted.
 
 Discovery returns runner invocations by default, not raw implementation commands. Raw commands are visible only with `--debug`.
+
+`context.mjs` turns discovery into handoff markdown. Its output is advisory-only metadata; it does not grant permission to execute checks. Agents should execute only checks explicitly requested by the handoff and should use `scripts/modules/run-check.mjs` runner invocations.
 
 ## Evidence
 
