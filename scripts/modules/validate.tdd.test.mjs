@@ -48,6 +48,29 @@ test('rejects risky interpreter flags in module commands', () => {
   assert.match(proc.stdout, /risky interpreter flag is not allowed/);
 });
 
+test('rejects passthrough capability without policy', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/validate.mjs', '--pidex-root', root, '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stdout, /passthrough commands must define passthrough_policy/);
+});
+
+test('rejects passthrough capability with invalid policy regex', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['['] };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/validate.mjs', '--pidex-root', root, '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stdout, /invalid passthrough allowed pattern/);
+});
+
 test('rejects command bins outside the stage 1 allowlist', () => {
   const { root, project } = makeModuleFixture();
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');

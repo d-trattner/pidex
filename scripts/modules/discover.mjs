@@ -46,6 +46,7 @@ function formatCapability(entry, requestedAgent, requestedPhase) {
     requirement_active: availability.requirement_active,
     platform: availability.platform,
     execute: runnerInvocation(entry.capability.id, requestedAgent, requestedPhase, project),
+    passthrough: entry.capability.command?.passthrough === true,
   };
   if (args.debug) base.command = entry.capability.command;
   return base;

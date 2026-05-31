@@ -3,7 +3,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { allCapabilities, appendJsonLine, capabilityAvailability, evidencePath, loadModuleSystem, parseArgs, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
 
-const args = parseArgs(process.argv.slice(2));
+const rawArgv = process.argv.slice(2);
+const passthroughSeparator = rawArgv.indexOf('--');
+const runnerArgv = passthroughSeparator === -1 ? rawArgv : rawArgv.slice(0, passthroughSeparator);
+const passthroughArgs = passthroughSeparator === -1 ? [] : rawArgv.slice(passthroughSeparator + 1);
+const args = parseArgs(runnerArgv);
 if (args.help) {
   console.log(`Usage: node scripts/modules/run-check.mjs --capability <id> --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nRuns a PIDEX module capability through the module runner and writes structured evidence.\n\nOptions:\n  --capability <id>    Required. Capability id, for example release.reference-integrity.\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --help               Show this help.`);
   process.exit(0);
@@ -43,8 +47,45 @@ if (!availability.available) {
 
 const startedAt = new Date().toISOString();
 const command = entry.capability.command;
+if (passthroughArgs.length && command.passthrough !== true) {
+  console.error(`capability does not allow passthrough args: ${capabilityId}`);
+  process.exit(2);
+}
+function passthroughAllowed(command, argsToCheck) {
+  const patterns = command.passthrough_policy?.allowed_patterns || [];
+  return argsToCheck.every((arg) => patterns.some((pattern) => new RegExp(pattern).test(arg)));
+}
+
+function redactArgs(argsToRedact) {
+  const sensitive = /(?:token|secret|password|passwd|api[-_]?key|credential|auth)/i;
+  const out = [];
+  let redactNext = false;
+  for (const arg of argsToRedact) {
+    if (redactNext) {
+      out.push('[REDACTED]');
+      redactNext = false;
+      continue;
+    }
+    const eq = String(arg).match(/^(--?[^=]+)=(.*)$/);
+    if (eq && sensitive.test(eq[1])) {
+      out.push(`${eq[1]}=[REDACTED]`);
+      continue;
+    }
+    out.push(arg);
+    if (sensitive.test(String(arg))) redactNext = true;
+  }
+  return out;
+}
+
+if (passthroughArgs.length && !passthroughAllowed(command, passthroughArgs)) {
+  console.error(`passthrough args rejected by capability policy: ${capabilityId}`);
+  process.exit(2);
+}
 const execArgs = command.args.map((arg) => String(arg).replaceAll('__PIDEX_PROJECT__', project));
-const proc = spawnSync(command.bin, execArgs, { cwd: pidexRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const executedArgs = [...execArgs, ...passthroughArgs];
+const redactedPassthroughArgs = redactArgs(passthroughArgs);
+const redactedExecutedArgs = [...execArgs, ...redactedPassthroughArgs];
+const proc = spawnSync(command.bin, executedArgs, { cwd: pidexRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const endedAt = new Date().toISOString();
 const status = proc.status === 0 ? 'passed' : 'failed';
 const evidence = {
@@ -61,7 +102,8 @@ const evidence = {
   exit_code: proc.status,
   signal: proc.signal,
   command: { bin: command.bin, args: command.args },
-  executed_command: { bin: command.bin, args: execArgs },
+  executed_command: { bin: command.bin, args: redactedExecutedArgs },
+  passthrough_args: redactedPassthroughArgs,
   artifacts: [],
 };
 const file = evidencePath(pidexRoot, project, entry.capability.scope);

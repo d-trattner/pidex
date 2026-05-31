@@ -34,6 +34,10 @@ export function buildCapabilityContext({ system, agent, phase, project }) {
   const unavailable = rows.filter((row) => !row.availability.available);
   const recommendedAvailable = rows.filter((row) => row.entry.capability.importance !== 'required' && row.availability.available);
 
+  function passthroughNote(row) {
+    return row.entry.capability.command?.passthrough === true ? ' Passthrough args are allowed after `--`.' : '';
+  }
+
   const lines = [];
   lines.push('## Module capabilities for this phase');
   lines.push('');
@@ -48,7 +52,7 @@ export function buildCapabilityContext({ system, agent, phase, project }) {
   if (requiredAvailable.length) {
     lines.push('Required available checks:');
     for (const row of requiredAvailable) {
-      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})`);
+      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})${passthroughNote(row)}`);
       lines.push('  Execute through runner:');
       lines.push('  ```bash');
       lines.push(`  ${commandLine(row.execute)}`);
@@ -72,7 +76,7 @@ export function buildCapabilityContext({ system, agent, phase, project }) {
   if (recommendedAvailable.length) {
     lines.push('Other available checks:');
     for (const row of recommendedAvailable) {
-      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})`);
+      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})${passthroughNote(row)}`);
       lines.push('  Execute through runner when explicitly requested:');
       lines.push('  ```bash');
       lines.push(`  ${commandLine(row.execute)}`);

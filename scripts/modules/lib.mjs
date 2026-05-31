@@ -127,6 +127,19 @@ export function validateCapabilityCommand(pidexRoot, capability) {
   const allowedBins = new Set(['node', 'bash']);
   const riskyFlags = new Set(['-e', '--eval', '-c', '--command']);
   if (!allowedBins.has(command.bin)) errors.push(`${capability.id}: command bin is not allowed: ${command.bin}`);
+  if (command.passthrough === true) {
+    const policy = command.passthrough_policy;
+    if (!policy || typeof policy !== 'object') {
+      errors.push(`${capability.id}: passthrough commands must define passthrough_policy`);
+    } else if (!Array.isArray(policy.allowed_patterns) || policy.allowed_patterns.length === 0) {
+      errors.push(`${capability.id}: passthrough_policy.allowed_patterns must be a non-empty array`);
+    } else {
+      for (const pattern of policy.allowed_patterns) {
+        if (typeof pattern !== 'string') errors.push(`${capability.id}: passthrough allowed pattern must be a string`);
+        else { try { new RegExp(pattern); } catch { errors.push(`${capability.id}: invalid passthrough allowed pattern: ${pattern}`); } }
+      }
+    }
+  }
   for (const arg of command.args) {
     if (typeof arg !== 'string') {
       errors.push(`${capability.id}: command args must be strings`);
