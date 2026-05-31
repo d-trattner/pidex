@@ -14,9 +14,9 @@ Wrappers for documented/user-facing paths that may retire only after an explicit
 
 Examples:
 
-- `scripts/release/public-readiness-check.mjs`
-- `scripts/release/reference-integrity.mjs`
 - migrated module command paths under `scripts/**`
+
+Fixed-core release helpers (`scripts/release/public-readiness-check.mjs`, `scripts/release/reference-integrity.mjs`) are core helpers, not compatibility wrappers.
 
 ### Internal compatibility wrappers
 

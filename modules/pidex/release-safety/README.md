@@ -21,7 +21,7 @@ scripts/release/reference-integrity.mjs
 
 ## Module capability
 
-This module may expose non-authority helper checks, currently:
+This module exposes non-authority helper checks, currently:
 
 ```text
 release.reference-integrity
@@ -29,14 +29,6 @@ release.reference-integrity
 
 That capability invokes the core helper through the module runner. It is advisory/recommended for agent workflows; it is not the public release authority.
 
-## Compatibility shims
+## Shim retirement
 
-Temporary compatibility shims remain under:
-
-```text
-modules/pidex/release-safety/scripts/public-readiness.sh
-modules/pidex/release-safety/scripts/public-readiness-check.mjs
-modules/pidex/release-safety/scripts/reference-integrity.mjs
-```
-
-These shims forward to the fixed core scripts and must not be treated as authority. They may be retired after one successful release cycle after this reclassification, once no internal references depend on them.
+The temporary module-tree release-safety compatibility shims have been retired. Use fixed-core release scripts above, or invoke the remaining helper capability through `scripts/modules/run-check.mjs`.
