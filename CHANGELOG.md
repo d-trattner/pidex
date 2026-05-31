@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - Unreleased
+## 0.1.7 - Unreleased
 
 Initial public-prep release of PIDEX, a Codex-oriented Pi package with `pidex-*` agents, project context, quality reporting, quality governance, optional parallel review lanes, dashboard, project memory, wiki hygiene, and public-readiness guardrails.
 
@@ -20,4 +20,6 @@ Public-readiness changes include:
 - Install/public-readiness hardening: no-git-history installs skip historical parity fixtures, and public-readiness uses per-user temporary files.
 - Dashboard model-quality success-rate bug fixed.
 - Module capability reference hardening added: install/uninstall use fixed module capability IDs for git-hook actions, module reference guard blocks caller-zone implementation path leaks, and module docs clarify deterministic script policy.
+- Public-readiness reclassified as fixed-core public release authority at `scripts/release/public-readiness.sh`; release-safety module now exposes only non-authority helper capability `release.reference-integrity`.
 - UAT Complete for Plan 6 (`module-capability-reference-hardening`): deterministic capability invocation and wrapper-preserving compatibility checks approved for release lane.
+- UAT Complete for Plan 7 (`public-readiness-fixed-core-reclassification`): public-readiness authority moved to fixed-core release path; module release-safety retains helper-only role.

@@ -100,7 +100,7 @@ Current public default:
 }
 ```
 
-`pidex.release-safety` is generally toggleable, but PIDEX core protects it for PIDEX self-release/publication context.
+`pidex.release-safety` is toggleable. Public-readiness is fixed-core authority at `scripts/release/public-readiness.sh`, so disabling this module does not disable or bypass PIDEX public-readiness. The fixed-core public-readiness gate still validates module manifests/config directly.
 
 ## Commands
 
@@ -164,7 +164,6 @@ Normal agents receive current-phase capabilities only. Unavailable current-phase
 
 ```text
 module_disabled
-protected_module_disabled
 agent_not_allowed
 platform_not_declared
 platform_command_unavailable
@@ -196,7 +195,7 @@ Execution rule:
 - only execute checks explicitly requested by the handoff/operator;
 - execute module checks only through `scripts/modules/run-check.mjs`;
 - do not execute raw manifest commands from discovery/debug output;
-- keep `scripts/release/public-readiness.sh` as release authority until a later approved module stage changes that.
+- run fixed-core public release authority through `scripts/release/public-readiness.sh`; public-readiness is intentionally not a module capability.
 
 ## Evidence
 
@@ -224,7 +223,7 @@ Evidence rows use:
 ## Rationalized modularity guardrails
 
 - Keep compatibility wrappers at stable legacy `scripts/**` paths until wrapper lifecycle gates allow retirement.
-- Keep `scripts/release/public-readiness.sh` as the permanent public release authority wrapper unless the operator explicitly approves changing that contract.
+- Treat `scripts/release/public-readiness.sh` as fixed-core public release authority, not a compatibility wrapper and not a module capability.
 - Do not expose raw script paths to agents as the normal execution path.
 - Do not expose physical module implementation script paths from caller zones. Those paths belong in module manifests, module internals, thin compatibility wrappers, and validation fixtures.
 - Run `node scripts/modules/reference-guard.mjs --mode fail --pidex-root "$PWD"` to enforce the hard-coded implementation-path guardrail.

@@ -20,7 +20,7 @@ export function makeModuleFixture(options = {}) {
   }, null, 2));
   writeFileSync(path.join(root, 'modules/pidex/release-safety/module.json'), JSON.stringify({
     id: 'pidex.release-safety', schema_version: 1, name: 'Release Safety', kind: 'core-toggleable', default_enabled: true, dependencies: ['pidex.core'], capabilities: [{
-      id: 'release.reference-integrity', kind: 'check', phases: ['pre-release'], scope: 'install', importance: 'required', allowed_agents: ['orchestrator', 'pidex-devops', 'pidex-pi'], supported_platforms: ['linux', 'wsl2', 'macos'], mutability: ['read-only'], command: { bin: 'node', args: ['scripts/release/reference-integrity.mjs'] },
+      id: 'release.reference-integrity', kind: 'check', phases: ['pre-release'], scope: 'install', importance: 'recommended', allowed_agents: ['orchestrator', 'pidex-devops', 'pidex-pi'], supported_platforms: ['linux', 'wsl2', 'macos'], mutability: ['read-only'], command: { bin: 'node', args: ['scripts/release/reference-integrity.mjs'] },
     }],
   }, null, 2));
   writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log('fixture reference ok');\n");

@@ -5,33 +5,22 @@
   "kind": "core-toggleable",
   "default_enabled": true,
   "dependencies": ["pidex.core"],
+  "status": "reclassified",
+  "authority": "scripts/release/public-readiness.sh",
+  "notes": "Public-readiness is fixed core authority and is intentionally not exposed as a module capability. Remaining release-safety capabilities are non-authority helpers.",
   "capabilities": [
     {
       "id": "release.reference-integrity",
       "kind": "check",
       "phases": ["pre-release"],
       "scope": "install",
-      "importance": "required",
+      "importance": "recommended",
       "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
       "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
       "mutability": ["read-only"],
       "command": {
         "bin": "node",
-        "args": ["modules/pidex/release-safety/scripts/reference-integrity.mjs"]
-      }
-    },
-    {
-      "id": "release.public-readiness",
-      "kind": "check",
-      "phases": ["pre-release"],
-      "scope": "install",
-      "importance": "required",
-      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
-      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
-      "mutability": ["read-only", "writes-artifacts"],
-      "command": {
-        "bin": "bash",
-        "args": ["modules/pidex/release-safety/scripts/public-readiness.sh"]
+        "args": ["scripts/release/reference-integrity.mjs"]
       }
     }
   ]

@@ -2,15 +2,11 @@
 
 PIDEX keeps stable public paths while moving real implementations into first-party module folders.
 
+## Fixed-core public authority
+
+`scripts/release/public-readiness.sh` is fixed-core public release authority. It is not a compatibility wrapper and is intentionally not a normal module capability.
+
 ## Wrapper classes
-
-### Permanent public authority wrappers
-
-Wrappers that are stable public/API authority and should normally remain forever.
-
-Current permanent wrapper:
-
-- `scripts/release/public-readiness.sh`
 
 ### Long-soak compatibility wrappers
 
@@ -42,7 +38,7 @@ Minimum parity cases:
 
 ## Minimum soak before retirement
 
-- Public authority wrappers: no automatic retirement.
+- Fixed-core public authority (`scripts/release/public-readiness.sh`): no retirement; it is outside wrapper lifecycle.
 - Long-soak wrappers: minimum two public releases or explicit operator approval.
 - Internal wrappers: minimum one clean release/readiness cycle and dependency inventory proving no references remain.
 
