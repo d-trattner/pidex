@@ -53,7 +53,7 @@ function isModuleFrameworkTest(file) {
 }
 
 function isValidationHarness(file) {
-  return file === 'package.json';
+  return file === 'package.json' || file === 'scripts/release/public-readiness-check.mjs';
 }
 
 function isGeneratedOrBinary(file) {

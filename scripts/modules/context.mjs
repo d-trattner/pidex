@@ -31,7 +31,7 @@ export function buildCapabilityContext({ system, agent, phase, project }) {
     };
   });
   const requiredAvailable = rows.filter((row) => row.entry.capability.importance === 'required' && row.availability.available);
-  const unavailable = rows.filter((row) => !row.availability.available && (row.entry.capability.importance === 'required' || row.availability.requirement_active));
+  const unavailable = rows.filter((row) => !row.availability.available);
   const recommendedAvailable = rows.filter((row) => row.entry.capability.importance !== 'required' && row.availability.available);
 
   const lines = [];
@@ -71,7 +71,13 @@ export function buildCapabilityContext({ system, agent, phase, project }) {
 
   if (recommendedAvailable.length) {
     lines.push('Other available checks:');
-    for (const row of recommendedAvailable) lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})`);
+    for (const row of recommendedAvailable) {
+      lines.push(`- ${row.entry.capability.id} (${row.entry.module.id})`);
+      lines.push('  Execute through runner when explicitly requested:');
+      lines.push('  ```bash');
+      lines.push(`  ${commandLine(row.execute)}`);
+      lines.push('  ```');
+    }
     lines.push('');
   }
 

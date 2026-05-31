@@ -111,13 +111,12 @@ export function commandExists(bin) {
 export function validateProtectedContexts(system, projectRoot) {
   const errors = [];
   if (!projectRoot) return errors;
-  const project = path.resolve(projectRoot);
-  const pidexRoot = path.resolve(system.pidexRoot);
-  if (project !== pidexRoot) return errors;
-  const release = system.byId.get('pidex.release-safety');
-  if (release && !moduleEnabled(system, release.manifest).enabled) {
-    errors.push('pidex.release-safety cannot be disabled for PIDEX self-release/publication context');
-  }
+  // Public-readiness is fixed-core authority under scripts/release/public-readiness.sh.
+  // Toggleable modules must not gate PIDEX self-release/publication readiness.
+  // Keep this hook for future protected fixed-core contexts, but do not protect
+  // pidex.release-safety module enablement here.
+  path.resolve(projectRoot);
+  path.resolve(system.pidexRoot);
   return errors;
 }
 
@@ -217,8 +216,6 @@ export function capabilityAvailability(system, entry, agent, phase, projectRoot)
   const platform = currentPlatformId();
   const supported = capability.supported_platforms || [];
   if (!moduleState.enabled) {
-    const protectedErrors = validateProtectedContexts(system, projectRoot);
-    if (protectedErrors.length && module.id === 'pidex.release-safety') return { available: false, reason: 'protected_module_disabled', requirement_active: true };
     return { available: false, reason: 'module_disabled', requirement_active: false };
   }
   for (const dep of module.dependencies || []) {
