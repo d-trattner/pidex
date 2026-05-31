@@ -85,11 +85,16 @@ Keep orchestrator context lean by default:
 4. After a project is selected, if roadmap/open-work signals exist, present a compact lettered shortlist immediately instead of asking a blank "what deliverable?" question. Include up to 5 items from canonical roadmap plus reconciled newer roadmap/planning artifacts, clearly labelling status/source such as `Interview`, `Planned (canonical)`, `Pending roadmap update`, or `Backlog candidate`. Always include options for `Other/manual task` and `Show more/open work`. If an item is `Interview`, or if the orchestrator can see unresolved user story/acceptance/scope/dependency/UI-intent ambiguity, label it interview-first and start the interview/grill phase when selected; do not route directly to planner.
 5. Default summary depth: top 3-5 actionable items, then ask whether to drill deeper.
 
-### Project boundary write guard (mandatory)
+### Orchestrator write guards (mandatory)
 
-Before any direct-mode pipeline mutation or `pidex-*` spawn, load and apply `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`.
+Before any direct-mode pipeline mutation or `pidex-*` spawn, load and apply:
+
+- `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`
+- `<pidex-root>/rules/orchestrator/no-direct-implementation.md`
 
 A pipeline may only mutate its declared `<project-root>` / allowed write root. Other repositories, including `<pidex-root>` when the active project is not PIDEX itself, are read-only references unless the user explicitly switches project and starts a new pipeline for that root.
+
+The orchestrator must not directly implement product/project changes. It may create coordination artifacts such as context packs and required PIDEX bootstrap context, but source/docs/config/test implementation changes must go through `pidex_agent` specialist handoffs, except for the documented repeated-stall fallback.
 
 Every specialist handoff must include a `PROJECT BOUNDARY` block naming current project root, allowed write root, read-only external reference roots, and the rule: do not edit/commit/tag/push outside allowed write root.
 
@@ -1055,6 +1060,8 @@ Terminal lifecycle events (`pipeline_completed`, `pipeline_failed`, `pipeline_ab
 **1b. pidex_agent routing (MANDATORY before every agent spawn)**
 
 Use the `pidex_agent` tool for every specialist handoff. Do **not** use legacy `dispatch.sh` in normal direct mode; `pidex_agent` already honors `<pidex-root>/config/agents.json`, routes to Pi/Codex/Claude/Gemini as configured, stores raw child logs under `state/runs/`, and validates ROUTING/context files.
+
+Before writing any implementation file, apply `<pidex-root>/rules/orchestrator/no-direct-implementation.md`: the orchestrator may prepare context/coordination artifacts, but implementation changes belong to `pidex-implementer` unless the documented repeated-stall fallback is active.
 
 Before each spawn:
 
