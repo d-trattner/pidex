@@ -19,6 +19,34 @@
         "bin": "bash",
         "args": ["modules/pidex/git-security-hooks/scripts/install-global.sh", "--dry-run", "--yes"]
       }
+    },
+    {
+      "id": "git-security-hooks.install",
+      "kind": "tool",
+      "phases": ["maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-config", "external-side-effects"],
+      "command": {
+        "bin": "bash",
+        "args": ["modules/pidex/git-security-hooks/scripts/install-global.sh", "--yes"]
+      }
+    },
+    {
+      "id": "git-security-hooks.uninstall",
+      "kind": "tool",
+      "phases": ["maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-config", "external-side-effects"],
+      "command": {
+        "bin": "bash",
+        "args": ["modules/pidex/git-security-hooks/scripts/uninstall-global.sh"]
+      }
     }
   ]
 }

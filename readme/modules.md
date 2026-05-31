@@ -176,6 +176,8 @@ Discovery returns runner invocations by default, not raw implementation commands
 
 `context.mjs` turns discovery into handoff markdown. Its output is advisory-only metadata; it does not grant permission to execute checks. Agents should execute only checks explicitly requested by the handoff and should use `scripts/modules/run-check.mjs` runner invocations.
 
+Deterministic scripts are different from agents: `install.sh`, `uninstall.sh`, `doctor.sh`, smoke scripts, and package scripts must not discover capabilities and choose one dynamically. They own their policy decision and call fixed capability IDs through `run-check.mjs`; the module system owns only path resolution, availability checks, execution, and evidence.
+
 ## DevOps pre-release handoff integration
 
 For pre-release, public-readiness, npm publication, and PIDEX self-release work, `pidex-devops` should generate module capability context before choosing release checks:
@@ -224,6 +226,8 @@ Evidence rows use:
 - Keep compatibility wrappers at stable legacy `scripts/**` paths until wrapper lifecycle gates allow retirement.
 - Keep `scripts/release/public-readiness.sh` as the permanent public release authority wrapper unless the operator explicitly approves changing that contract.
 - Do not expose raw script paths to agents as the normal execution path.
+- Do not expose physical module implementation script paths from caller zones. Those paths belong in module manifests, module internals, thin compatibility wrappers, and validation fixtures.
+- Run `node scripts/modules/reference-guard.mjs --mode fail --pidex-root "$PWD"` to enforce the hard-coded implementation-path guardrail.
 - Do not modularize dashboard host/core as a normal module.
 - Do not move dashboard feature slices until a dashboard contribution/feature-loader design exists.
 - Do not add third-party loading yet.

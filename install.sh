@@ -129,10 +129,27 @@ fi
 
 CMD=(pi install "$TARGET_DIR")
 
+run_module_capability() {
+  local capability="$1"
+  node "$TARGET_DIR/scripts/modules/run-check.mjs" \
+    --capability "$capability" \
+    --agent orchestrator \
+    --phase maintenance \
+    --project "$TARGET_DIR"
+}
+
 if [ "$DRY_RUN" = "1" ]; then
   printf 'DRY-RUN: '
   printf '%q ' "${CMD[@]}"
   printf '\n'
+  case "$INSTALL_GLOBAL_GIT_HOOK" in
+    0|no|false|off)
+      say "DRY-RUN: would skip PIDEX global Git hook install"
+      ;;
+    *)
+      run_module_capability git-security-hooks.install-dry-run
+      ;;
+  esac
   exit 0
 fi
 
@@ -141,28 +158,26 @@ ensure_ast_grep_cli
 say "installing package into Pi settings"
 "${CMD[@]}"
 
-if [ -x "$TARGET_DIR/scripts/git-hooks/install-global.sh" ]; then
-  case "$INSTALL_GLOBAL_GIT_HOOK" in
-    1|yes|true|on)
-      "$TARGET_DIR/scripts/git-hooks/install-global.sh" --yes
-      ;;
-    0|no|false|off)
-      say "skipping PIDEX global Git hook install"
-      ;;
-    ask|*)
-      if [ -t 0 ]; then
-        printf '\nInstall PIDEX global Git security hook? This sets git config --global core.hooksPath to PIDEX hooks while installed. Previous value will be saved and restored on uninstall. [y/N] '
-        read -r REPLY
-        case "$REPLY" in
-          y|Y|yes|YES) "$TARGET_DIR/scripts/git-hooks/install-global.sh" --yes ;;
-          *) say "skipping PIDEX global Git hook install" ;;
-        esac
-      else
-        say "non-interactive install; skipping PIDEX global Git hook (set PIDEX_INSTALL_GLOBAL_GIT_HOOK=1 to enable)"
-      fi
-      ;;
-  esac
-fi
+case "$INSTALL_GLOBAL_GIT_HOOK" in
+  1|yes|true|on)
+    run_module_capability git-security-hooks.install
+    ;;
+  0|no|false|off)
+    say "skipping PIDEX global Git hook install"
+    ;;
+  ask|*)
+    if [ -t 0 ]; then
+      printf '\nInstall PIDEX global Git security hook? This sets git config --global core.hooksPath to PIDEX hooks while installed. Previous value will be saved and restored on uninstall. [y/N] '
+      read -r REPLY
+      case "$REPLY" in
+        y|Y|yes|YES) run_module_capability git-security-hooks.install ;;
+        *) say "skipping PIDEX global Git hook install" ;;
+      esac
+    else
+      say "non-interactive install; skipping PIDEX global Git hook (set PIDEX_INSTALL_GLOBAL_GIT_HOOK=1 to enable)"
+    fi
+    ;;
+esac
 
 say "install complete"
 printf '\nRun in Pi:\n  /reload\n  /pidex <your task>\n\nShortcut:\n  /pd <your task>\n'

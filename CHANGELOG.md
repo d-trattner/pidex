@@ -19,3 +19,5 @@ Public-readiness changes include:
 - Linux install now installs dashboard dependencies when needed; Windows bootstrap already does this unless skipped.
 - Install/public-readiness hardening: no-git-history installs skip historical parity fixtures, and public-readiness uses per-user temporary files.
 - Dashboard model-quality success-rate bug fixed.
+- Module capability reference hardening added: install/uninstall use fixed module capability IDs for git-hook actions, module reference guard blocks caller-zone implementation path leaks, and module docs clarify deterministic script policy.
+- UAT Complete for Plan 6 (`module-capability-reference-hardening`): deterministic capability invocation and wrapper-preserving compatibility checks approved for release lane.
