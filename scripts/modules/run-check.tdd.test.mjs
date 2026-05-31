@@ -26,6 +26,22 @@ test('run-check executes command and writes structured evidence', () => {
   assert.equal(row.status, 'passed');
 });
 
+test('run-check substitutes __PIDEX_PROJECT__ in manifest commands', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.args = ['scripts/release/reference-integrity.mjs', '__PIDEX_PROJECT__', '__PIDEX_PROJECT__/pidex/state'];
+  writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log(process.argv.slice(2).join('\\n'));\n");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const out = execFileSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.match(out, new RegExp(project.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const evidenceDir = path.join(root, 'state/modules/evidence');
+  const file = path.join(evidenceDir, readdirSync(evidenceDir)[0]);
+  const row = JSON.parse(readFileSync(file, 'utf8').trim());
+  assert.deepEqual(row.command.args, ['scripts/release/reference-integrity.mjs', '__PIDEX_PROJECT__', '__PIDEX_PROJECT__/pidex/state']);
+  assert.deepEqual(row.executed_command.args, ['scripts/release/reference-integrity.mjs', project, `${project}/pidex/state`]);
+});
+
 test('run-check rejects unknown capability', () => {
   const { root, project } = makeModuleFixture();
   const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'missing.capability', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project], { cwd: process.cwd(), encoding: 'utf8' });

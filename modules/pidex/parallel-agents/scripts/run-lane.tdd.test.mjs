@@ -6,13 +6,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const script = path.join(root, 'scripts/parallel-agents/run-lane.mjs');
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-run-lane-'));
 try {
   mkdirSync(path.join(tmp, 'config'), { recursive: true });
   mkdirSync(path.join(tmp, 'scripts', 'parallel-agents'), { recursive: true });
-  writeFileSync(path.join(tmp, 'scripts', 'parallel-agents', 'status.mjs'), readFileSync(path.join(root, 'scripts', 'parallel-agents', 'status.mjs')), 'utf8');
+  writeFileSync(path.join(tmp, 'scripts', 'parallel-agents', 'status.mjs'), readFileSync(path.join(root, 'modules', 'pidex', 'parallel-agents', 'scripts', 'status.mjs')), 'utf8');
   writeFileSync(path.join(tmp, 'config', 'parallel-agents.json'), JSON.stringify({ enabled: true, agents: { 'pidex-critic': { enabled: true, provider_models: [{ provider: 'deepseek', model: 'model' }] } } }), 'utf8');
   const cp = spawnSync(process.execPath, [script, '--root', tmp, '--lane', 'pidex-critic:deepseek:model', '--project', tmp, '--force'], { encoding: 'utf8' });
   assert.equal(cp.status, 1, cp.stderr || cp.stdout);

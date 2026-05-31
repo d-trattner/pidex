@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# PIDEX global commit-msg hook.
+# Reserved for future security-review trailer policy.
+set -euo pipefail
+exit 0

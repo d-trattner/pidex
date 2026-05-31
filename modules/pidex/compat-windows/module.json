@@ -1,0 +1,24 @@
+{
+  "id": "pidex.compat-windows",
+  "schema_version": 1,
+  "name": "PIDEX Windows Compatibility",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "compat-windows.audit",
+      "kind": "check",
+      "phases": ["maintenance", "devops", "pre-release"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-qa", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/compat-windows/scripts/compat/windows-audit.mjs"]
+      }
+    }
+  ]
+}

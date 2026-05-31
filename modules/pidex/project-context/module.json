@@ -1,0 +1,24 @@
+{
+  "id": "pidex.project-context",
+  "schema_version": 1,
+  "name": "PIDEX Project Context",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "project-context.init",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "maintenance"],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-project"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-context/scripts/project-context/init.mjs", "__PIDEX_PROJECT__"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "pidex.provider-governance",
+  "schema_version": 1,
+  "name": "PIDEX Provider Governance",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "provider-governance.probe",
+      "kind": "report",
+      "phases": ["preflight", "planning", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only", "writes-artifacts"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/provider-governance/scripts/provider-limits/probe.mjs"]
+      }
+    }
+  ]
+}

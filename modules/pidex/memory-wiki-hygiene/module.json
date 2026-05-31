@@ -1,0 +1,24 @@
+{
+  "id": "pidex.memory-wiki-hygiene",
+  "schema_version": 1,
+  "name": "PIDEX Memory/Wiki Hygiene",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "memory-wiki-hygiene.check",
+      "kind": "check",
+      "phases": ["maintenance", "quality-refresh"],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-wiki-hygienist", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only", "writes-artifacts"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/memory-wiki-hygiene/scripts/wiki/hygiene.mjs", "audit", "--project", "__PIDEX_PROJECT__"]
+      }
+    }
+  ]
+}
