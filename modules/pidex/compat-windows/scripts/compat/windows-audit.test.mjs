@@ -9,7 +9,7 @@ const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'windows-
 function runAudit(args = []) {
   const result = spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8',
-    cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'),
+    cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..'),
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   return result.stdout;

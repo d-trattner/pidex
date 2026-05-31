@@ -43,7 +43,8 @@ if (!availability.available) {
 
 const startedAt = new Date().toISOString();
 const command = entry.capability.command;
-const proc = spawnSync(command.bin, command.args, { cwd: pidexRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const execArgs = command.args.map((arg) => String(arg).replaceAll('__PIDEX_PROJECT__', project));
+const proc = spawnSync(command.bin, execArgs, { cwd: pidexRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const endedAt = new Date().toISOString();
 const status = proc.status === 0 ? 'passed' : 'failed';
 const evidence = {
@@ -60,6 +61,7 @@ const evidence = {
   exit_code: proc.status,
   signal: proc.signal,
   command: { bin: command.bin, args: command.args },
+  executed_command: { bin: command.bin, args: execArgs },
   artifacts: [],
 };
 const file = evidencePath(pidexRoot, project, entry.capability.scope);

@@ -1,0 +1,24 @@
+{
+  "id": "pidex.git-security-hooks",
+  "schema_version": 1,
+  "name": "PIDEX Git Security Hooks",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "git-security-hooks.install-dry-run",
+      "kind": "check",
+      "phases": ["security", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "bash",
+        "args": ["modules/pidex/git-security-hooks/scripts/install-global.sh", "--dry-run", "--yes"]
+      }
+    }
+  ]
+}

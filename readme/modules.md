@@ -4,25 +4,28 @@ PIDEX modules are an internal architecture boundary for PIDEX-owned workflow fea
 
 ## Current status
 
-The module framework is in MVP Stage 1.
+The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, and read-only dashboard transparency.
 
-Implemented now:
+Physically migrated first-party modules now include:
 
-- module manifests under `modules/pidex/**/module.json`;
-- install-level module config at `config/modules.json`;
-- deterministic list/validate/discover/run-check scripts;
-- first core-toggleable module: `pidex.release-safety`;
-- first capabilities:
-  - `release.reference-integrity`;
-  - `release.public-readiness`.
+- `pidex.release-safety`;
+- `pidex.parallel-agents`;
+- `pidex.git-security-hooks`;
+- `pidex.provider-governance`;
+- `pidex.project-context`;
+- `pidex.memory-wiki-hygiene`;
+- `pidex.compat-windows`;
+- `pidex.analysis-metrics-history`.
+
+The migration is intentionally rationalized: not every PIDEX surface should become a physical module. Dashboard host/core, process-rule authority, quality governance core, package-facing Pi extension/prompts/skills/agents, and root install/bootstrap files remain fixed infrastructure or public-contract exceptions unless a later approved design changes that.
 
 Not implemented yet:
 
 - third-party modules;
 - module registry/install;
+- dashboard feature contribution loader;
 - dashboard module management UI;
-- removal of compatibility wrappers for migrated release scripts;
-- automatic agent handoff injection;
+- removal of compatibility wrappers;
 - external rule contributions.
 
 ## Runtime root
@@ -61,10 +64,17 @@ optional-internal  future first-party optional module
 Current modules:
 
 ```text
-pidex.core              core-required
-pidex.process-rules     core-required
-pidex.quality-core      core-required
-pidex.release-safety    core-toggleable
+pidex.core                       core-required
+pidex.process-rules              core-required
+pidex.quality-core               core-required
+pidex.release-safety             core-toggleable
+pidex.parallel-agents            optional-internal
+pidex.git-security-hooks         optional-internal
+pidex.provider-governance        optional-internal
+pidex.project-context            optional-internal
+pidex.memory-wiki-hygiene        optional-internal
+pidex.compat-windows             optional-internal
+pidex.analysis-metrics-history   optional-internal
 ```
 
 Core-required modules do not appear in `config/modules.json` as configurable entries.
@@ -209,13 +219,20 @@ Evidence rows use:
 }
 ```
 
-## Stage 1 guardrails
+## Rationalized modularity guardrails
 
-- Keep release-safety compatibility wrappers at `scripts/release/*` until a dedicated wrapper-retirement stage.
+- Keep compatibility wrappers at stable legacy `scripts/**` paths until wrapper lifecycle gates allow retirement.
+- Keep `scripts/release/public-readiness.sh` as the permanent public release authority wrapper unless the operator explicitly approves changing that contract.
 - Do not expose raw script paths to agents as the normal execution path.
-- Do not add dashboard UI yet.
+- Do not modularize dashboard host/core as a normal module.
+- Do not move dashboard feature slices until a dashboard contribution/feature-loader design exists.
 - Do not add third-party loading yet.
-- Keep `scripts/release/public-readiness.sh` as the release authority until the module runner is proven over more runs.
+- Do not let optional modules silently add process rules.
+- Treat 100% first-party modularity as an ownership/classification scorecard: physical module-owned, fixed core, public-contract exception, or explicit deferred backlog.
+
+## Wrapper lifecycle
+
+See `readme/module-wrapper-lifecycle.md` for wrapper classes, parity matrix requirements, soak periods, and retirement gates.
 
 ## Related docs
 

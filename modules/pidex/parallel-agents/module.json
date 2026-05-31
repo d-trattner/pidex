@@ -1,0 +1,24 @@
+{
+  "id": "pidex.parallel-agents",
+  "schema_version": 1,
+  "name": "PIDEX Parallel Agents",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "parallel-agents.status",
+      "kind": "report",
+      "phases": ["planning", "implementation", "code-review", "qa", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-code-reviewer", "pidex-qa", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/parallel-agents/scripts/status.mjs", "show"]
+      }
+    }
+  ]
+}

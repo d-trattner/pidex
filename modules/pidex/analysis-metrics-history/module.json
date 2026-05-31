@@ -1,0 +1,24 @@
+{
+  "id": "pidex.analysis-metrics-history",
+  "schema_version": 1,
+  "name": "PIDEX Analysis, Metrics, and History",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "analysis-metrics-history.record-event",
+      "kind": "tool",
+      "phases": ["planning", "implementation", "code-review", "qa", "uat", "devops", "maintenance"],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-code-reviewer", "pidex-qa", "pidex-uat", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs", "--project", "__PIDEX_PROJECT__", "--state-dir", "__PIDEX_PROJECT__/pidex/state", "--event", "module_check", "--source", "module-runner"]
+      }
+    }
+  ]
+}

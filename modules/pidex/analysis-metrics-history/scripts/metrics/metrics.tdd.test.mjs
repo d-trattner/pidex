@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-metrics-'));
 try {
   const env = { ...process.env, RUNNING_PI_STATE_DIR: state };

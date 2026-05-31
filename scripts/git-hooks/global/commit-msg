@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# PIDEX global commit-msg hook.
-# Reserved for future security-review trailer policy.
 set -euo pipefail
-exit 0
+ROOT=$(cd "$(dirname "$0")/../../.." && pwd -P)
+exec bash "$ROOT/modules/pidex/git-security-hooks/scripts/global/commit-msg" "$@"
