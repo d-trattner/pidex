@@ -56,7 +56,7 @@ Wrapper retirement requires:
 4. code review;
 5. QA validation;
 6. security review if command execution, auth, config, release, or write paths are involved;
-7. remote smoke on `10.0.0.107`;
+7. remote clean smoke on the configured PIDEX test server;
 8. explicit operator approval for public paths.
 
 ## Rollback rule
