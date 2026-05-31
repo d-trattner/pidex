@@ -24,3 +24,4 @@ Public-readiness changes include:
 - Retired temporary module-tree release-safety compatibility shims after fixed-core reclassification validation.
 - UAT Complete for Plan 6 (`module-capability-reference-hardening`): deterministic capability invocation and wrapper-preserving compatibility checks approved for release lane.
 - UAT Complete for Plan 7 (`public-readiness-fixed-core-reclassification`): public-readiness authority moved to fixed-core release path; module release-safety retains helper-only role.
+- UAT Complete for Plan 9 (`remove-root-legacy-wrappers`): conservative root wrapper cleanup passed (`analysis/run-pipeline-analysis.sh`, `metrics/{record,summarize}`, `parallel-agents/run-lane`, `project-metadata/migrate-to-pidex-folder` removed; active/deferred wrappers retained by plan).

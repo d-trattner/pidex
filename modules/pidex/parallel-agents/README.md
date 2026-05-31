@@ -10,10 +10,11 @@ Owns optional internal parallel-agent lane configuration/status helpers.
 
 ## Compatibility wrappers
 
-Stable legacy entrypoints remain as thin wrappers:
+Stable legacy status entrypoint remains while active docs/skills callers migrate:
 
 - `scripts/parallel-agents/status.mjs`
-- `scripts/parallel-agents/run-lane.mjs`
+
+The internal run-lane wrapper has been retired; use the module-owned implementation.
 
 ## Config/public surface
 

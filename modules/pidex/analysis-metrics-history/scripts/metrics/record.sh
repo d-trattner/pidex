@@ -3,5 +3,5 @@
 # No prompts, task text, secrets, or model credentials are recorded.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/../../../../.." && pwd -P)
-exec node "$ROOT/scripts/metrics/record.mjs" "$@"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
+exec node "$SCRIPT_DIR/record.mjs" "$@"

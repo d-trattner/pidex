@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-const script = path.join(root, 'scripts/parallel-agents/run-lane.mjs');
+const script = path.join(root, 'modules/pidex/parallel-agents/scripts/run-lane.mjs');
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-run-lane-'));
 try {
   mkdirSync(path.join(tmp, 'config'), { recursive: true });

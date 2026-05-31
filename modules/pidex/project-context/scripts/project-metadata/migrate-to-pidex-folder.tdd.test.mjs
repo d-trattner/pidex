@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
-const script = path.join(root, 'scripts/project-metadata/migrate-to-pidex-folder.mjs');
+const script = path.join(root, 'modules/pidex/project-context/scripts/project-metadata/migrate-to-pidex-folder.mjs');
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-metadata-migrate-'));
 try {
   mkdirSync(path.join(tmp, 'wiki', 'rules'), { recursive: true });

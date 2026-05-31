@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pidex: advisory pipeline analysis stub for completed runs.
 # Usage:
-#   scripts/analysis/run-pipeline-analysis.sh --project /path/to/project --plan plan-123 [--out /path/out.md]
+#   modules/pidex/analysis-metrics-history/scripts/analysis/run-pipeline-analysis.sh --project /path/to/project --plan plan-123 [--out /path/out.md]
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../../../.." && pwd -P)

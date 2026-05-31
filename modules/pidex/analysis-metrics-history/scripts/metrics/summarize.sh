@@ -2,5 +2,5 @@
 # Summarize Running Pi metrics for a plan.
 set -euo pipefail
 
-ROOT=$(cd "$(dirname "$0")/../../../../.." && pwd -P)
-exec node "$ROOT/scripts/metrics/summarize.mjs" "$@"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
+exec node "$SCRIPT_DIR/summarize.mjs" "$@"

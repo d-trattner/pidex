@@ -9,8 +9,8 @@ Owns project context initialization and project metadata migration helpers.
 
 ## Compatibility wrappers
 
-- `scripts/project-context/init.mjs`
-- `scripts/project-metadata/migrate-to-pidex-folder.mjs`
+- `scripts/project-context/init.mjs` remains while active skill/docs callers migrate.
+- The former root project-metadata migration wrapper has been retired; use the module-owned implementation or a module capability when one is added.
 
 ## Safety
 
