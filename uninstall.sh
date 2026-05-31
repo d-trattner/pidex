@@ -92,10 +92,19 @@ fi
 
 remove_pidex_ast_grep_cli
 
-if [ -x "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh" ] && [ -f "$TARGET_DIR/state/git-hooks/global-state.json" ]; then
+run_module_capability() {
+  local capability="$1"
+  node "$TARGET_DIR/scripts/modules/run-check.mjs" \
+    --capability "$capability" \
+    --agent orchestrator \
+    --phase maintenance \
+    --project "$TARGET_DIR"
+}
+
+if [ -f "$TARGET_DIR/state/git-hooks/global-state.json" ]; then
   case "$UNINSTALL_GLOBAL_GIT_HOOK" in
     1|yes|true|on)
-      "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh"
+      run_module_capability git-security-hooks.uninstall
       ;;
     0|no|false|off)
       say "leaving global Git hook config unchanged"
@@ -106,7 +115,7 @@ if [ -x "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh" ] && [ -f "$TARGET_D
         read -r REPLY
         case "$REPLY" in
           n|N|no|NO) say "leaving global Git hook config unchanged" ;;
-          *) "$TARGET_DIR/scripts/git-hooks/uninstall-global.sh" ;;
+          *) run_module_capability git-security-hooks.uninstall ;;
         esac
       else
         say "non-interactive uninstall; leaving global Git hook config unchanged (set PIDEX_UNINSTALL_GLOBAL_GIT_HOOK=1 to restore)"
