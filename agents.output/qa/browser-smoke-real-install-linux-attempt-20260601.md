@@ -87,11 +87,24 @@ Result: PASS as bounded infra classification:
 }
 ```
 
+## Runaway finding after retry
+
+After the retry, the operator inspected the host console while SSH was timing out. The culprit was confirmed as Playwright's out-of-process browser downloader:
+
+```text
+/usr/local/bin/node /tmp/pidex-browser-smoke-linux/state/browser-smoke/node_modules/playwright-core/lib/entry/oopBrowserDownload.js
+node /tmp/pidex-browser-smoke-linux/state/browser-smoke/node_modules/.bin/playwright install chromium
+```
+
+Observed states included `Dl` and high CPU. Manual cleanup killed these processes and restarted SSH.
+
+This exposed an install-command lifecycle gap: an outer shell `timeout` can leave Playwright/npm grandchildren behind. The module install implementation was therefore hardened to run commands in a managed process group on Linux and use `taskkill /t /f` on Windows timeout.
+
 ## Verdict
 
 `BLOCKED_INFRA`, not feature failure.
 
-The real install path partially succeeded for PIDEX-local npm package setup, but browser binary download was blocked by remote network timeout. The launch path now fails bounded and reports `BROWSER-SMOKE-BLOCKED-INFRA` instead of hanging.
+The real install path partially succeeded for PIDEX-local npm package setup, but browser binary download was blocked/hung in Playwright's downloader on this server. The launch path now fails bounded and reports `BROWSER-SMOKE-BLOCKED-INFRA` instead of hanging, and install command timeouts now attempt process-tree cleanup.
 
 ## Follow-up
 
