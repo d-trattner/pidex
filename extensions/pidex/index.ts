@@ -1760,13 +1760,15 @@ function shellEscapeForRegex(value: string): string {
 }
 
 function getGlobalGitHookStatus(): string {
-	const expected = path.join(PACKAGE_ROOT, "scripts", "git-hooks", "global");
+	const expected = path.join(PACKAGE_ROOT, "modules", "pidex", "git-security-hooks", "scripts", "global");
+	const legacy = path.join(PACKAGE_ROOT, "scripts", "git-hooks", "global");
 	const current = spawnSync("git", ["config", "--global", "--get", "core.hooksPath"], { encoding: "utf8" });
 	const currentPath = current.status === 0 ? current.stdout.trim() : "";
 	const preCommit = path.join(expected, "pre-commit");
 	const commitMsg = path.join(expected, "commit-msg");
 	const executable = fs.existsSync(preCommit) && fs.existsSync(commitMsg);
 	if (currentPath === expected && executable) return "installed/current";
+	if (currentPath === legacy) return `legacy PIDEX hook path active; run git-security-hooks.install capability to migrate (expected ${expected})`;
 	if (!currentPath) return `not active; global core.hooksPath is unset (expected ${expected})`;
 	return `not active; global core.hooksPath=${currentPath} (expected ${expected})`;
 }
@@ -1774,20 +1776,21 @@ function getGlobalGitHookStatus(): string {
 function runParallelAgentsCommand(args: string | undefined, cwd: string | undefined): { ok: boolean; summary: string } {
 	const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
 	const action = parts[0] || "status";
-	const script = path.join(PACKAGE_ROOT, "scripts", "parallel-agents", action === "test" ? "run-lane.mjs" : "status.mjs");
-	let commandArgs: string[];
-	if (action === "status") commandArgs = [script, "show"];
-	else if (action === "clear" && parts[1]) commandArgs = [script, "clear", "--lane", parts[1]];
-	else if (action === "test" && parts[1]) commandArgs = [script, "--lane", parts[1], "--project", path.resolve(cwd ?? process.cwd(), parts[2] || "."), "--task-text", "Read-only PIDEX parallel lane smoke test", "--force"];
-	else return { ok: false, summary: "Usage: /pdparallel status | clear <lane-id> | test <lane-id> [project-root]" };
+	const runner = path.join(PACKAGE_ROOT, "scripts", "modules", "run-check.mjs");
+	const project = path.resolve(cwd ?? process.cwd(), ".");
+	let passthrough: string[];
+	if (action === "status") passthrough = ["show"];
+	else if (action === "clear" && parts[1]) passthrough = ["clear", "--lane", parts[1]];
+	else return { ok: false, summary: "Usage: /pdparallel status | clear <lane-id>" };
+	const commandArgs = [runner, "--capability", "parallel-agents.status", "--agent", "orchestrator", "--phase", "planning", "--project", project, "--", ...passthrough];
 	const proc = spawnSync(process.execPath, commandArgs, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
 	const output = `${proc.stdout ?? ""}\n${proc.stderr ?? ""}`.trim();
 	return { ok: proc.status === 0, summary: clipEnd(output || `pdparallel ${action} exit=${proc.status}`, 1600) };
 }
 
 function runWikiHygieneAudit(projectRoot: string): { ok: boolean; summary: string; reportMd?: string } {
-	const script = path.join(PACKAGE_ROOT, "scripts", "wiki", "hygiene.mjs");
-	const proc = spawnSync(process.execPath, [script, "audit", "--project", projectRoot], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
+	const runner = path.join(PACKAGE_ROOT, "scripts", "modules", "run-check.mjs");
+	const proc = spawnSync(process.execPath, [runner, "--capability", "memory-wiki-hygiene.check", "--agent", "pidex-wiki-hygienist", "--phase", "maintenance", "--project", projectRoot], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000 });
 	const output = `${proc.stdout ?? ""}\n${proc.stderr ?? ""}`.trim();
 	const line = (proc.stdout ?? "").split(/\r?\n/).find((entry) => entry.startsWith("PIDEX_WIKI_HYGIENE_RESULT="));
 	if (proc.status !== 0 || !line) {
