@@ -38,7 +38,7 @@
         "args": ["modules/pidex/browser-smoke/scripts/browser-smoke/install.mjs"],
         "passthrough": true,
         "passthrough_policy": {
-          "allowed_patterns": ["^--dry-run$", "^--yes$", "^--package-only$", "^--with-browsers$", "^--timeout-ms$", "^[0-9]{1,6}$"]
+          "allowed_patterns": ["^--dry-run$", "^--yes$", "^--package-only$", "^--with-browsers$", "^--with-system-deps$", "^--timeout-ms$", "^[0-9]{1,6}$"]
         }
       }
     },

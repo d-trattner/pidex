@@ -5,13 +5,14 @@ import path from 'node:path';
 import { browserSmokePaths } from './paths.mjs';
 
 function parseArgs(argv) {
-  const out = { dryRun: false, yes: false, packageOnly: false, withBrowsers: true, timeoutMs: 300000 };
+  const out = { dryRun: false, yes: false, packageOnly: false, withBrowsers: true, withSystemDeps: false, timeoutMs: 300000 };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--dry-run') out.dryRun = true;
     else if (arg === '--yes') out.yes = true;
     else if (arg === '--package-only') { out.packageOnly = true; out.withBrowsers = false; }
     else if (arg === '--with-browsers') out.withBrowsers = true;
+    else if (arg === '--with-system-deps') out.withSystemDeps = true;
     else if (arg === '--timeout-ms') out.timeoutMs = Number(argv[++i] || out.timeoutMs);
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -78,6 +79,7 @@ try {
   if (args.dryRun) {
     console.log(`DRY-RUN: mkdir -p ${paths.stateDir} ${paths.cacheDir}`);
     console.log(`DRY-RUN: npm --prefix ${paths.stateDir} install @playwright/test`);
+    if (args.withSystemDeps) console.log(`DRY-RUN: PLAYWRIGHT_BROWSERS_PATH=${paths.cacheDir} npm --prefix ${paths.stateDir} exec playwright -- install-deps chromium`);
     if (args.withBrowsers) console.log(`DRY-RUN: PLAYWRIGHT_BROWSERS_PATH=${paths.cacheDir} npm --prefix ${paths.stateDir} exec playwright -- install chromium`);
     else console.log('DRY-RUN: browser binary install skipped (--package-only)');
     process.exit(0);
@@ -85,6 +87,13 @@ try {
   ensurePackageJson(paths.stateDir);
   mkdirSync(paths.cacheDir, { recursive: true });
   await run('npm', ['--prefix', paths.stateDir, 'install', '@playwright/test'], { timeout: Math.max(args.timeoutMs, 300000) });
+  if (args.withSystemDeps) {
+    console.log('Installing Linux system dependencies for Chromium. This may use apt and modify the host.');
+    await run('npm', ['--prefix', paths.stateDir, 'exec', 'playwright', '--', 'install-deps', 'chromium'], {
+      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: paths.cacheDir },
+      timeout: args.timeoutMs,
+    });
+  }
   if (args.withBrowsers) {
     await run('npm', ['--prefix', paths.stateDir, 'exec', 'playwright', '--', 'install', 'chromium'], {
       env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: paths.cacheDir },
