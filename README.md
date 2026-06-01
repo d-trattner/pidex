@@ -176,7 +176,6 @@ Project session memory:
 - `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark variants
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `pidex.analysis-metrics-history` module – analytics, metrics, history helpers
-- `scripts/analysis/` – pipeline analysis scaffold
 - `pidex.memory-wiki-hygiene` module – wiki hygiene audit/cadence module
 - `dashboard/` – local analytics UI
 - `readme/` – detailed feature docs
