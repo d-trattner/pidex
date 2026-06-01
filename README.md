@@ -175,9 +175,9 @@ Project session memory:
 - `config/agents.json` – default agent routing configuration
 - `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark variants
 - `scripts/delegate/` – `codex` delegate/auth wrapper
-- `scripts/metrics/` + `scripts/pipeline/` – analytics helpers
+- `pidex.analysis-metrics-history` module – analytics, metrics, history helpers
 - `scripts/analysis/` – pipeline analysis scaffold
-- `scripts/wiki/` – wiki hygiene audit/cadence helpers
+- `pidex.memory-wiki-hygiene` module – wiki hygiene audit/cadence module
 - `dashboard/` – local analytics UI
 - `readme/` – detailed feature docs
 
@@ -188,7 +188,7 @@ cd ~/pidex
 bash scripts/doctor.sh
 npm run check
 bash scripts/smoke-test.sh
-node scripts/wiki/hygiene.mjs audit --project ~/pidex
+node scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project ~/pidex
 ```
 
 ## Dashboard
@@ -224,7 +224,7 @@ PIDEX can optionally install a global Git pre-commit security hook for this Linu
 
 ## Wiki hygiene
 
-Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `node scripts/wiki/hygiene.mjs audit --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `pidex/state/wiki-hygiene.json`. Project-specific PIDEX rules live under `pidex/rules/`. See [Wiki hygiene](readme/wiki-hygiene.md).
+Run a read-only wiki hygiene audit with `/pdwiki` after `/reload`, or directly with `node scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project <project-root>`. Reports are written to `agents.output/wiki-hygiene/`; cadence state is tracked in `pidex/state/wiki-hygiene.json`. Project-specific PIDEX rules live under `pidex/rules/`. See [Wiki hygiene](readme/wiki-hygiene.md).
 
 ## Project context
 

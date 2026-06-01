@@ -5,16 +5,10 @@ PIDEX can install one global Git hook path for the current Linux user.
 ## Install
 
 ```bash
-<pidex-root>/scripts/git-hooks/install-global.sh
+node <pidex-root>/scripts/modules/run-check.mjs --capability git-security-hooks.install --agent pidex-devops --phase maintenance --project <pidex-root>
 ```
 
-This sets:
-
-```bash
-git config --global core.hooksPath <pidex-root>/scripts/git-hooks/global
-```
-
-The previous global `core.hooksPath` is saved under:
+This sets global `core.hooksPath` to PIDEX's module-owned git hook directory. The previous global `core.hooksPath` is saved under:
 
 ```text
 <pidex-root>/state/git-hooks/global-state.json
@@ -25,7 +19,7 @@ Previous hooks are not chained or executed while PIDEX owns the global hook path
 ## Uninstall / restore
 
 ```bash
-<pidex-root>/scripts/git-hooks/uninstall-global.sh
+node <pidex-root>/scripts/modules/run-check.mjs --capability git-security-hooks.uninstall --agent pidex-devops --phase maintenance --project <pidex-root>
 ```
 
 If a previous global hook path existed, PIDEX restores it. If none existed, PIDEX unsets `core.hooksPath`.

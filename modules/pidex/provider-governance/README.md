@@ -9,10 +9,10 @@ Owns provider limit probing, profile selection helpers, and balance/profile gove
 
 ## Compatibility wrappers
 
-- `scripts/provider-limits/probe.mjs`
-- `scripts/profile/current.sh`
-- `scripts/profile/recommend.sh`
-- `scripts/profile/use.sh`
+- retired root wrapper; use `provider-governance.probe` through `scripts/modules/run-check.mjs`
+- retired root wrapper; use `provider-governance.profile-current` through `scripts/modules/run-check.mjs`
+- retired root wrapper; use `provider-governance.profile-recommend` through `scripts/modules/run-check.mjs`
+- retired root wrapper; use `provider-governance.profile-use` through `scripts/modules/run-check.mjs`
 
 ## Stable config/public surface
 

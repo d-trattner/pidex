@@ -179,7 +179,7 @@ if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditScript)) {
 
 Write-Step "Running read-only Windows audit"
 if ($DryRun) {
-  Write-Host "DRY-RUN: node scripts/compat/windows-audit.mjs"
+  Write-Host "DRY-RUN: node scripts/modules/run-check.mjs --capability compat-windows.audit --agent pidex-devops --phase maintenance --project <pidex-root>"
 } else {
   Push-Location $PidexRoot
   try {

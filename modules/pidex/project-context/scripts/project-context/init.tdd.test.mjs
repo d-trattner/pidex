@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
-const script = path.join(root, 'scripts/project-context/init.mjs');
+const script = path.join(root, 'modules/pidex/project-context/scripts/project-context/init.mjs');
 
 function run(args) {
   return spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });

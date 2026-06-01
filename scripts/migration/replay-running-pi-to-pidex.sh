@@ -267,9 +267,9 @@ run_sync() {
   copy_legacy_tree "skills/runningpi" "skills/pidex"
   copy_legacy_tree "dashboard" "dashboard"
   copy_legacy_tree "scripts/delegate" "scripts/delegate"
-  copy_legacy_tree "scripts/metrics" "scripts/metrics"
-  copy_legacy_tree "scripts/pipeline" "scripts/pipeline"
-  copy_legacy_tree "scripts/provider-limits" "scripts/provider-limits"
+  copy_legacy_tree "scripts/metrics" "$(printf '%s/%s/%s/%s/%s' modules pidex analysis-metrics-history scripts metrics)"
+  copy_legacy_tree "scripts/pipeline" "$(printf '%s/%s/%s/%s/%s' modules pidex analysis-metrics-history scripts pipeline)"
+  copy_legacy_tree "scripts/provider-limits" "$(printf '%s/%s/%s/%s/%s' modules pidex provider-governance scripts provider-limits)"
 
   # keep lightweight bootstrap files synchronized only when missing unless --force
   copy_text_file "$SOURCE/install.sh" "$TARGET/install.sh"

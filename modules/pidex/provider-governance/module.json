@@ -17,7 +17,49 @@
       "mutability": ["read-only", "writes-artifacts"],
       "command": {
         "bin": "node",
-        "args": ["modules/pidex/provider-governance/scripts/provider-limits/probe.mjs"]
+        "args": ["modules/pidex/provider-governance/scripts/provider-limits/probe.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^(latest|refresh|use|alert)$", "^--dry-run$", "^[A-Za-z0-9._:-]+$"]
+        }
+      }
+    },
+    {
+      "id": "provider-governance.profile-current",
+      "kind": "report",
+      "phases": ["preflight", "planning", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": { "bin": "bash", "args": ["modules/pidex/provider-governance/scripts/profile/current.sh"] }
+    },
+    {
+      "id": "provider-governance.profile-recommend",
+      "kind": "report",
+      "phases": ["preflight", "planning", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": { "bin": "bash", "args": ["modules/pidex/provider-governance/scripts/profile/recommend.sh"] }
+    },
+    {
+      "id": "provider-governance.profile-use",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": {
+        "bin": "bash",
+        "args": ["modules/pidex/provider-governance/scripts/profile/use.sh"],
+        "passthrough": true,
+        "passthrough_policy": { "allowed_patterns": ["^[A-Za-z0-9._:-]+$"] }
       }
     }
   ]

@@ -20,7 +20,7 @@ In Pi, after `/reload`:
 Direct script:
 
 ```bash
-node <pidex-root>/scripts/wiki/hygiene.mjs audit --project <project-root>
+node <pidex-root>/scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project <project-root>
 ```
 
 ## Outputs

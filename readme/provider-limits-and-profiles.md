@@ -29,7 +29,7 @@ Current state is stored under:
 The probe/alert helpers live under:
 
 ```text
-<pidex-root>/scripts/provider-limits/
+`provider-governance.*` module capabilities (run via `<pidex-root>/scripts/modules/run-check.mjs`)
 ```
 
 ## Spark alert suppression

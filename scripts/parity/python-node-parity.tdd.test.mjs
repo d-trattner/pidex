@@ -140,7 +140,7 @@ try {
   const nodeProject = path.join(tmp, 'node-project');
   cpSync(oldProject, nodeProject, { recursive: true });
   const oldAudit = stable(runHygiene(oldHygiene, oldProject));
-  const nodeAudit = stable(runHygiene(path.join(root, 'scripts/wiki/hygiene.mjs'), nodeProject));
+  const nodeAudit = stable(runHygiene(path.join(root, 'modules/pidex/memory-wiki-hygiene/scripts/wiki/hygiene.mjs'), nodeProject));
   // Paths differ because projects are separate temp directories; compare semantic report fields.
   assert.deepEqual(nodeAudit.summary, oldAudit.summary);
   assert.deepEqual(nodeAudit.graph_conventions, oldAudit.graph_conventions);

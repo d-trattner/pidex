@@ -14,7 +14,7 @@ const RISKY_ENTRYPOINTS = [
   ['uninstall.sh', 'linux-owned', 'Prefer a future uninstall.windows.ps1.'],
   ['dashboard/start.sh', 'linux-owned', 'Prefer a future dashboard/start.windows.mjs or dashboard/start.windows.ps1.'],
   ['scripts/release/public-readiness.sh', 'linux-owned', 'Use this read-only audit or a future public-readiness.windows.mjs for Windows checks.'],
-  ['scripts/git-hooks/install-global.sh', 'linux-owned', 'Use a future Windows-specific hook installer or document unsupported behavior.'],
+  ['modules/pidex/git-security-hooks/scripts/install-global.sh', 'linux-owned', 'Use a future Windows-specific hook installer or document unsupported behavior.'],
 ];
 
 function repoRoot() {

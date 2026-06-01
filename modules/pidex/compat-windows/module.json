@@ -17,7 +17,9 @@
       "mutability": ["read-only"],
       "command": {
         "bin": "node",
-        "args": ["modules/pidex/compat-windows/scripts/compat/windows-audit.mjs"]
+        "args": ["modules/pidex/compat-windows/scripts/compat/windows-audit.mjs"],
+        "passthrough": true,
+        "passthrough_policy": { "allowed_patterns": ["^--json$"] }
       }
     }
   ]

@@ -8,6 +8,6 @@ Owns wiki hygiene and memory freshness checks.
 
 ## Compatibility wrappers
 
-- `scripts/wiki/hygiene.mjs`
+- retired root wrapper; use `memory-wiki-hygiene.check` through `scripts/modules/run-check.mjs`
 
 Initiative docs remain in the wiki; runtime code lives here.

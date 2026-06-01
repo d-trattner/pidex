@@ -24,8 +24,8 @@ Preferred future pattern:
 | `install.sh` | `install.windows.ps1` |
 | `uninstall.sh` | `uninstall.windows.ps1` |
 | `dashboard/start.sh` | `dashboard/start.windows.ps1` |
-| `scripts/release/public-readiness.sh` | `scripts/compat/windows-audit.mjs` |
-| `scripts/git-hooks/install-global.sh` | `scripts/git-hooks/install-global.windows.ps1` or explicit unsupported docs |
+| `scripts/release/public-readiness.sh` | `compat-windows.audit` capability |
+| `git-security-hooks.install` capability | `scripts/git-hooks/install-global.windows.ps1` or explicit unsupported docs |
 
 Do not add `if Windows then ... else ...` branches to Linux-owned runtime files unless explicitly approved and regression-proven.
 
@@ -34,13 +34,13 @@ Do not add `if Windows then ... else ...` branches to Linux-owned runtime files 
 Run the audit script to collect local readiness signals without changing files or settings:
 
 ```bash
-node scripts/compat/windows-audit.mjs
+node scripts/modules/run-check.mjs --capability compat-windows.audit --agent pidex-devops --phase maintenance --project "$PWD"
 ```
 
 For machine-readable output:
 
 ```bash
-node scripts/compat/windows-audit.mjs --json
+node scripts/modules/run-check.mjs --capability compat-windows.audit --agent pidex-devops --phase maintenance --project "$PWD" -- --json
 ```
 
 The audit reports:

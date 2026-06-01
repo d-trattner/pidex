@@ -4,20 +4,92 @@
   "name": "PIDEX Memory/Wiki Hygiene",
   "kind": "optional-internal",
   "default_enabled": true,
-  "dependencies": ["pidex.core"],
+  "dependencies": [
+    "pidex.core"
+  ],
   "capabilities": [
     {
       "id": "memory-wiki-hygiene.check",
       "kind": "check",
-      "phases": ["maintenance", "quality-refresh"],
+      "phases": [
+        "maintenance",
+        "quality-refresh"
+      ],
       "scope": "project",
       "importance": "optional",
-      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-wiki-hygienist", "pidex-pi"],
-      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
-      "mutability": ["read-only", "writes-artifacts"],
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-qa",
+        "pidex-wiki-hygienist",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "read-only",
+        "writes-artifacts"
+      ],
       "command": {
         "bin": "node",
-        "args": ["modules/pidex/memory-wiki-hygiene/scripts/wiki/hygiene.mjs", "audit", "--project", "__PIDEX_PROJECT__"]
+        "args": [
+          "modules/pidex/memory-wiki-hygiene/scripts/wiki/hygiene.mjs",
+          "audit",
+          "--project",
+          "__PIDEX_PROJECT__"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--(json|json-only|include-archives|fail-on-critical)$",
+            "^--(stale-days|output-dir)$",
+            "^[A-Za-z0-9 ._:/=@-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
+      }
+    },
+    {
+      "id": "memory-wiki-hygiene.cadence",
+      "kind": "tool",
+      "phases": [
+        "maintenance",
+        "quality-refresh"
+      ],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-qa",
+        "pidex-wiki-hygienist",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "writes-artifacts"
+      ],
+      "command": {
+        "bin": "node",
+        "args": [
+          "modules/pidex/memory-wiki-hygiene/scripts/wiki/hygiene.mjs",
+          "cadence",
+          "--project",
+          "__PIDEX_PROJECT__"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--(plan|pipeline-id|terminal-event)$",
+            "^[A-Za-z0-9 ._:/=@-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
       }
     }
   ]

@@ -58,13 +58,16 @@ console.log(models.join(" "));
 fi
 
 printf '\n==> Global Git Hook Health\n'
-HOOKS_PATH="$ROOT/scripts/git-hooks/global"
+HOOKS_PATH="$(printf '%s/%s/%s/%s/%s/%s' "$ROOT" modules pidex git-security-hooks scripts global)"
+LEGACY_HOOKS_PATH="$(printf '%s/%s/%s/%s' "$ROOT" scripts git-hooks global)"
 STATE_FILE="$ROOT/state/git-hooks/global-state.json"
-SCANNER="$ROOT/scripts/git-hooks/lib/security-scan.sh"
+SCANNER="$(printf '%s/%s/%s/%s/%s/%s/%s' "$ROOT" modules pidex git-security-hooks scripts lib security-scan.sh)"
 if command -v git >/dev/null 2>&1; then
   CURRENT_HOOKS=$(git config --global --get core.hooksPath || true)
   if [ "$CURRENT_HOOKS" = "$HOOKS_PATH" ]; then
     ok "global core.hooksPath points to PIDEX hooks"
+  elif [ "$CURRENT_HOOKS" = "$LEGACY_HOOKS_PATH" ]; then
+    warn "global PIDEX Git hook uses legacy path" "run install.sh to migrate to module-owned hooks path"
   elif [ -z "$CURRENT_HOOKS" ]; then
     warn "global PIDEX Git hook not installed; core.hooksPath is unset"
   else

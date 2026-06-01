@@ -3,7 +3,8 @@
 set -euo pipefail
 
 PIDEX_ROOT=$(cd "$(dirname "$0")/../../../.." && pwd -P)
-HOOKS_PATH="$PIDEX_ROOT/scripts/git-hooks/global"
+HOOKS_PATH="$PIDEX_ROOT/modules/pidex/git-security-hooks/scripts/global"
+LEGACY_HOOKS_PATH="$PIDEX_ROOT/scripts/git-hooks/global"
 STATE_DIR="$PIDEX_ROOT/state/git-hooks"
 STATE_FILE="$STATE_DIR/global-state.json"
 YES=0
@@ -42,7 +43,7 @@ command -v node >/dev/null 2>&1 || fail "missing prerequisite: node"
 
 [ -x "$HOOKS_PATH/pre-commit" ] || fail "missing or non-executable hook: $HOOKS_PATH/pre-commit"
 [ -x "$HOOKS_PATH/commit-msg" ] || fail "missing or non-executable hook: $HOOKS_PATH/commit-msg"
-[ -x "$PIDEX_ROOT/scripts/git-hooks/lib/security-scan.sh" ] || fail "missing or non-executable scanner: $PIDEX_ROOT/scripts/git-hooks/lib/security-scan.sh"
+[ -x "$PIDEX_ROOT/modules/pidex/git-security-hooks/scripts/lib/security-scan.sh" ] || fail "missing or non-executable scanner: $PIDEX_ROOT/modules/pidex/git-security-hooks/scripts/lib/security-scan.sh"
 
 CURRENT=$(git config --global --get core.hooksPath || true)
 STATE_INSTALLED=0
@@ -53,6 +54,13 @@ if [ -f "$STATE_FILE" ]; then
   STATE_INSTALLED=$(printf '%s\n' "$STATE_INFO" | sed -n '1p')
   STATE_PREVIOUS=$(printf '%s\n' "$STATE_INFO" | sed -n '2p')
   STATE_PREVIOUS_EXISTS=$(printf '%s\n' "$STATE_INFO" | sed -n '3p')
+fi
+
+if [ "$CURRENT" = "$LEGACY_HOOKS_PATH" ]; then
+  say "Migrating legacy PIDEX global Git hook path to module-owned path."
+  STATE_INSTALLED=1
+  STATE_PREVIOUS=""
+  STATE_PREVIOUS_EXISTS=false
 fi
 
 if [ "$CURRENT" = "$HOOKS_PATH" ]; then
@@ -69,7 +77,13 @@ if [ "$CURRENT" = "$HOOKS_PATH" ]; then
   exit 0
 fi
 
-if [ "$STATE_INSTALLED" = "1" ] && [ "$FORCE" != 1 ]; then
+if [ -n "$CURRENT" ] && [ "$CURRENT" != "$LEGACY_HOOKS_PATH" ] && [ "$CURRENT" != "$HOOKS_PATH" ] && [ "$STATE_INSTALLED" != "1" ] && [ "$FORCE" != 1 ]; then
+  warn "Refusing to overwrite existing non-PIDEX global core.hooksPath: $CURRENT"
+  warn "Use --force only if you want PIDEX to save and replace that value."
+  exit 1
+fi
+
+if [ "$STATE_INSTALLED" = "1" ] && [ "$FORCE" != 1 ] && [ -n "$CURRENT" ] && [ "$CURRENT" != "$LEGACY_HOOKS_PATH" ] && [ "$CURRENT" != "$HOOKS_PATH" ]; then
   warn "PIDEX state says global hook is installed, but core.hooksPath now points elsewhere: ${CURRENT:-<unset>}"
   warn "Use --force to replace the current value with PIDEX hooks."
   exit 1
@@ -100,7 +114,10 @@ fi
 mkdir -p "$STATE_DIR"
 PREVIOUS_PATH="$CURRENT"
 PREVIOUS_EXISTS=false
-if [ "$STATE_INSTALLED" = "1" ]; then
+if [ "$CURRENT" = "$LEGACY_HOOKS_PATH" ]; then
+  PREVIOUS_PATH=""
+  PREVIOUS_EXISTS=false
+elif [ "$STATE_INSTALLED" = "1" ]; then
   PREVIOUS_PATH="$STATE_PREVIOUS"
   PREVIOUS_EXISTS="$STATE_PREVIOUS_EXISTS"
 elif [ -n "$PREVIOUS_PATH" ]; then
@@ -112,4 +129,4 @@ node -e 'const fs = require("fs"), path = require("path"); const [state_file, ro
 git config --global core.hooksPath "$HOOKS_PATH"
 say "PIDEX global Git hook installed: $HOOKS_PATH"
 say "Previous global hook path saved in: $STATE_FILE"
-say "Uninstall/restore with: $PIDEX_ROOT/scripts/git-hooks/uninstall-global.sh"
+say "Uninstall/restore with: $PIDEX_ROOT/modules/pidex/git-security-hooks/scripts/uninstall-global.sh"

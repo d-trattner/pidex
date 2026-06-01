@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
-const script = path.join(root, 'scripts/provider-limits/probe.mjs');
+const script = path.join(root, 'modules/pidex/provider-governance/scripts/provider-limits/probe.mjs');
 
 function run(args = [], cwd = root) {
   const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', cwd });

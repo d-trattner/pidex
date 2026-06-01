@@ -24,7 +24,7 @@ Rules for grilling inside pidex:
 - For every question, provide the recommended answer.
 - If a question can be answered by inspecting the codebase, docs, or `<project-root>/pidex/context/**`, inspect instead of asking.
 - For existing projects, challenge terms against `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md` when present.
-- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `node <pidex-root>/scripts/project-context/init.mjs <project-root>`.
+- If an existing project has no `<project-root>/pidex/context/CONTEXT.md` or `CONTEXT-MAP.md`, initialize the single-context template first with `node <pidex-root>/scripts/modules/run-check.mjs --capability project-context.init --agent orchestrator --phase preflight --project <project-root>`.
 - `CONTEXT.md` follows Matt Pocock's context format exactly. Use `<pidex-root>/skills/grill-with-docs/CONTEXT-FORMAT.md` as the single source of truth for context handling.
 - Put confirmed user statements and clear code/docs-evidenced project/domain terms directly into `## Language` only when they can be defined in one sentence. Do not put task specs, acceptance criteria, implementation plans, roadmap items, workflows, architecture notes, operational constraints, or release decisions in `CONTEXT.md`.
 - For fresh/new projects, create `pidex/context/CONTEXT.md` during the orchestrator preparation step before spawning agents so the first plan has a context home.
@@ -107,7 +107,7 @@ Before every `pidex-*` spawn, use a compact context pack instead of pasting broa
 Before asking "which project?", check the pidex history log and offer a shortlist of recently-touched **unique project directories**. This saves the user from typing paths they already used.
 
 ```bash
-bash <pidex-root>/scripts/history/list.sh --limit 5
+node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-list --agent orchestrator --phase planning --project <project-root> -- --limit 5
 ```
 
 If the script prints nothing (empty or missing `<pidex-root>/state/history.jsonl`), skip straight to Step 1. Otherwise present its output to the user with an explicit "new" option appended:
@@ -557,7 +557,7 @@ After the user confirms the epic, create the project directory, project context 
 
 ```bash
 mkdir -p <project-path>/agents.output <project-path>/pidex/state <project-path>/pidex/rules <project-path>/pidex/config <project-path>/pidex/prompts
-node <pidex-root>/scripts/project-context/init.mjs <project-path>
+node <pidex-root>/scripts/modules/run-check.mjs --capability project-context.init --agent orchestrator --phase preflight --project <project-path>
 printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n' >> <project-path>/.gitignore
 echo 0 > <project-path>/agents.output/.next-id
 ```
@@ -954,9 +954,9 @@ For wiki hygiene / project memory maintenance routes, the team prompt must inclu
 ```
 OPENING AGENT: pidex-wiki-hygienist
 This is a wiki hygiene / project memory maintenance task.
-Do not run /pdwiki or scripts/wiki/hygiene.mjs from the orchestrator before invoking the specialist.
+Do not run /pdwiki or memory-wiki-hygiene.check capability from the orchestrator before invoking the specialist.
 Invoke pidex-wiki-hygienist as the opening agent and instruct it to run the deterministic read-only audit itself:
-node <pidex-root>/scripts/wiki/hygiene.mjs audit --project <project-root>
+node <pidex-root>/scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project <project-root>
 pidex-wiki-hygienist MUST start read-only, run the audit, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only. If the user asked to execute/apply hygiene, pidex-wiki-hygienist must create a separate execution report at <project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md and must not overwrite the deterministic audit report. After audit/report-only wiki hygiene completes, provide a useful brief (score, counts, top findings, report path, state path, whether wiki content changed) and ask whether to commit the hygiene state. Suggested commit files must include <project-root>/pidex/state/wiki-hygiene.json only for audit-only runs; never suggest committing agents.output/**.
 Canonical wiki path is <project-root>/wiki/.
 ```
@@ -1002,13 +1002,14 @@ Do not copy agent files into the project. Use bundled agents from `<pidex-root>/
 Append a history entry so this run shows up in the next `/pidex`/`/pd` Step 0 shortlist, and emit an analytics-only pipeline lifecycle event for the dashboard:
 
 ```bash
-bash <pidex-root>/scripts/history/append.sh \
+node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-append --agent orchestrator --phase planning --project "<absolute project path>" -- \
   --event direct-start \
   --cwd "<absolute project path>" \
   --mode direct \
   --epic "<confirmed epic, first 200 chars on one line>"
 
-cd "<absolute project path>" && bash <pidex-root>/scripts/pipeline/event.sh \
+node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.record-event --agent orchestrator --phase planning --project "<absolute project path>" -- \
+  --project "<absolute project path>" \
   --plan "<plan-key-or-initial-id>" \
   --event pipeline_started \
   --status running \
@@ -1016,7 +1017,7 @@ cd "<absolute project path>" && bash <pidex-root>/scripts/pipeline/event.sh \
   --message "Started direct-mode pipeline"
 ```
 
-`pipeline/event.sh` is analytics-only. It writes JSONL under `<pidex-root>/state/pipeline-events/`; it does not drive a backend scheduler. Operators never pass SQLite `project_id`; ingest derives that from `project_path` (default `$PWD`).
+`analysis-metrics-history.record-event` is analytics-only. It writes JSONL under `<pidex-root>/state/pipeline-events/`; it does not drive a backend scheduler. Operators never pass SQLite `project_id`; ingest derives that from `project_path` (default `$PWD`).
 
 Before invoking the opening agent (`pidex-planner`, `pidex-architect`, `pidex-analyst`, or `pidex-wiki-hygienist`), emit the finalized project-scoped preflight operator event. This event is separate from the low-confidence `/pidex` kickoff skeleton and must use the resolved `<absolute project path>` and plan key:
 
@@ -1040,12 +1041,13 @@ If exact counts are not known, use best-effort conservative values and include t
 After the pipeline completes (step 9 / post-retro handoffs) or if the user aborts it, append closing history and lifecycle events:
 
 ```bash
-bash <pidex-root>/scripts/history/append.sh \
+node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-append --agent orchestrator --phase planning --project "<absolute project path>" -- \
   --event direct-complete \
   --cwd "<absolute project path>" \
   --mode direct
 
-cd "<absolute project path>" && bash <pidex-root>/scripts/pipeline/event.sh \
+node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.record-event --agent orchestrator --phase planning --project "<absolute project path>" -- \
+  --project "<absolute project path>" \
   --plan "<plan-key>" \
   --event pipeline_completed \
   --status completed \
@@ -1066,7 +1068,7 @@ Before writing any implementation file, apply `<pidex-root>/rules/orchestrator/n
 Before each spawn:
 
 1. Build a compact manual context pack and mark `CONTEXT-PACK-MANUAL`.
-2. Emit `pipeline_stage_started` with `scripts/pipeline/event.sh` (`--actor <pidex-agent>`, `--status running`).
+2. Emit `pipeline_stage_started` with `node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.record-event ... --` (`--actor <pidex-agent>`, `--status running`).
 3. Pass complete task context to `pidex_agent`: project cwd, current epic/plan, relevant artifact paths, expected output path, gate/ROUTING expectations, and the mandatory `PROJECT BOUNDARY` block from `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`.
 4. Set `cwd` to the project root (or lane worktree for implementer lanes). The `cwd` must be inside the allowed write root unless the lane worktree is explicitly declared for the same project pipeline.
 5. After return, parse the final `<!-- ROUTING -->` block. The authoritative artifact path field is `context_file:`.
@@ -1156,7 +1158,7 @@ Parallel implementer lanes are optional, not default. Use them only when the pla
 
 Before spawning `pidex-critic` or `pidex-code-reviewer`, run:
 ```bash
-node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent <agent> --trigger <trigger> --json
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- eligible --agent <agent> --trigger <trigger> --json
 ```
 If `.lanes[]` is non-empty, launch the primary lane and every eligible secondary lane as separate visible `pidex_agent` calls in the same assistant turn. `pidex_agent` itself must not spawn nested agents.
 

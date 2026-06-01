@@ -8,6 +8,6 @@ Owns Windows compatibility audit helpers. This does not claim full native Window
 
 ## Compatibility wrappers
 
-- `scripts/compat/windows-audit.mjs`
+- `compat-windows.audit` capability
 
 Windows install/start PowerShell wrappers remain public/platform contract surfaces unless a future platform package-boundary design moves them.

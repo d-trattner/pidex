@@ -36,13 +36,15 @@ else
   echo "WARN: codex binary missing; delegate runtime smoke skipped"
 fi
 bash "$ROOT/scripts/delegate/check-auth.sh"
-bash "$ROOT/scripts/profile/current.sh"
-bash "$ROOT/scripts/profile/recommend.sh"
+node "$ROOT/scripts/modules/run-check.mjs" --capability provider-governance.profile-current --agent pidex-devops --phase maintenance --project "$ROOT"
+node "$ROOT/scripts/modules/run-check.mjs" --capability provider-governance.profile-recommend --agent pidex-devops --phase maintenance --project "$ROOT"
 
 echo 'smoke metric' > "$TMP/pipeline-record.txt"
 PLAN_SMOKE="plan-000"
-RUNNING_PI_STATE_DIR="$TMP/state" bash "$ROOT/scripts/metrics/record.sh" \
-  --project /tmp/project-smoke \
+SMOKE_PROJECT="$TMP/project-smoke"
+mkdir -p "$SMOKE_PROJECT"
+RUNNING_PI_STATE_DIR="$TMP/state" node "$ROOT/scripts/modules/run-check.mjs" --capability analysis-metrics-history.metrics-record --agent pidex-devops --phase maintenance --project "$SMOKE_PROJECT" -- \
+  --project "$SMOKE_PROJECT" \
   --plan "$PLAN_SMOKE" \
   --agent pidex-smoke \
   --provider codex \
@@ -52,7 +54,7 @@ RUNNING_PI_STATE_DIR="$TMP/state" bash "$ROOT/scripts/metrics/record.sh" \
   --duration-ms 111 \
   --exit 0 \
   --source smoke >/dev/null
-RUNNING_PI_STATE_DIR="$TMP/state" bash "$ROOT/scripts/metrics/summarize.sh" "$PLAN_SMOKE" --project /tmp/project-smoke | grep -q 'pidex-smoke'
+RUNNING_PI_STATE_DIR="$TMP/state" node "$ROOT/scripts/modules/run-check.mjs" --capability analysis-metrics-history.metrics-summarize --agent pidex-devops --phase maintenance --project "$SMOKE_PROJECT" -- "$PLAN_SMOKE" --project "$SMOKE_PROJECT" | grep -q 'pidex-smoke'
 
 node --no-warnings scripts/dashboard/ingest.tdd.test.mjs
 

@@ -38,13 +38,13 @@ You can enable/disable the subsystem, choose up to two authenticated provider/mo
 ## CLI
 
 ```bash
-node <pidex-root>/scripts/parallel-agents/status.mjs show
-node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent pidex-critic --trigger after-plan --json
-node <pidex-root>/scripts/parallel-agents/status.mjs eligible --agent pidex-code-reviewer --trigger after-implementation --json
-node <pidex-root>/scripts/parallel-agents/status.mjs models --json
-node <pidex-root>/scripts/parallel-agents/status.mjs warn --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash' --message 'quota limit reached'
-node <pidex-root>/scripts/parallel-agents/status.mjs success --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
-node <pidex-root>/scripts/parallel-agents/status.mjs clear --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- show
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- eligible --agent pidex-critic --trigger after-plan --json
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- eligible --agent pidex-code-reviewer --trigger after-implementation --json
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- models --json
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- warn --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash' --message 'quota limit reached'
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- success --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
+node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- clear --lane 'pidex-code-reviewer:deepseek:deepseek-v4-flash'
 ```
 
 Pi command after `/reload`:

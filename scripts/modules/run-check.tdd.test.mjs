@@ -74,6 +74,45 @@ test('run-check redacts sensitive passthrough evidence', () => {
   assert.deepEqual(row.passthrough_args, ['--token', '[REDACTED]', '--api-key=[REDACTED]']);
 });
 
+test('run-check scrubs secret-like passthrough values even without sensitive flag names', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^[A-Za-z0-9_-]+$'] };
+  writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log('ok');\n");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  execFileSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', 'sk-proj-' + 'a'.repeat(48)], { cwd: process.cwd(), encoding: 'utf8' });
+  const evidenceDir = path.join(root, 'state/modules/evidence');
+  const file = path.join(evidenceDir, readdirSync(evidenceDir)[0]);
+  const row = JSON.parse(readFileSync(file, 'utf8').trim());
+  assert.deepEqual(row.passthrough_args, ['[REDACTED]']);
+});
+
+test('run-check rejects absolute passthrough paths outside project', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^/.*$'], allow_absolute_project_paths: true };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', '/etc/passwd'], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.equal(proc.status, 2);
+  assert.match(proc.stderr, /rejected by capability policy/);
+});
+
+test('run-check rejects parent traversal passthrough args', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^.*$'], allow_absolute_project_paths: true };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', '../state'], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.equal(proc.status, 2);
+  assert.match(proc.stderr, /rejected by capability policy/);
+});
+
 test('run-check rejects passthrough args that violate manifest policy', () => {
   const { root, project } = makeModuleFixture();
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');

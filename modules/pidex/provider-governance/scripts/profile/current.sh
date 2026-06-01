@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd -P)"
-PROBE="$ROOT/scripts/provider-limits/probe.mjs"
+PROBE="$ROOT/modules/pidex/provider-governance/scripts/provider-limits/probe.mjs"
 STATE="$ROOT/state/provider-limits/latest.json"
 
 if [ -x "$PROBE" ] && [ -f "$STATE" ]; then

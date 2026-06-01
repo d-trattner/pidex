@@ -3,7 +3,8 @@
 set -euo pipefail
 
 PIDEX_ROOT=$(cd "$(dirname "$0")/../../../.." && pwd -P)
-HOOKS_PATH="$PIDEX_ROOT/scripts/git-hooks/global"
+HOOKS_PATH="$PIDEX_ROOT/modules/pidex/git-security-hooks/scripts/global"
+LEGACY_HOOKS_PATH="$PIDEX_ROOT/scripts/git-hooks/global"
 STATE_FILE="$PIDEX_ROOT/state/git-hooks/global-state.json"
 FORCE=0
 DRY_RUN=0
@@ -44,7 +45,7 @@ STATE_HOOKS_PATH=$(printf '%s\n' "$STATE_INFO" | sed -n '3p')
 [ -n "$STATE_HOOKS_PATH" ] && HOOKS_PATH="$STATE_HOOKS_PATH"
 
 CURRENT=$(git config --global --get core.hooksPath || true)
-if [ "$CURRENT" != "$HOOKS_PATH" ] && [ "$FORCE" != 1 ]; then
+if [ "$CURRENT" != "$HOOKS_PATH" ] && [ "$CURRENT" != "$LEGACY_HOOKS_PATH" ] && [ "$FORCE" != 1 ]; then
   warn "Current global core.hooksPath does not point to PIDEX."
   warn "Current: ${CURRENT:-<unset>}"
   warn "PIDEX:   $HOOKS_PATH"

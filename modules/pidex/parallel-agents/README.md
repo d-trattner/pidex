@@ -12,7 +12,7 @@ Owns optional internal parallel-agent lane configuration/status helpers.
 
 Stable legacy status entrypoint remains while active docs/skills callers migrate:
 
-- `scripts/parallel-agents/status.mjs`
+- retired root wrapper; use `parallel-agents.status` through `scripts/modules/run-check.mjs`
 
 The internal run-lane wrapper has been retired; use the module-owned implementation.
 

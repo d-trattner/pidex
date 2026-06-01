@@ -1889,8 +1889,8 @@ function inspectBashForGitHookRisk(command: string): { block?: string; warn?: st
 		/git\s+config\s+(--global\s+)?(--unset\s+)?core\.hooksPath/,
 		/rm\s+.*\.git\/hooks\/(pre-commit|commit-msg)/,
 		/chmod\s+-x\s+.*\.git\/hooks\/(pre-commit|commit-msg)/,
-		new RegExp(`rm\\s+.*${escapedRoot}/scripts/git-hooks/global/(pre-commit|commit-msg)`),
-		new RegExp(`chmod\\s+-x\\s+.*${escapedRoot}/scripts/git-hooks/global/(pre-commit|commit-msg)`),
+		new RegExp(`rm\\s+.*${escapedRoot}/.*git-security-hooks/scripts/global/(pre-commit|commit-msg)`),
+		new RegExp(`chmod\\s+-x\\s+.*${escapedRoot}/.*git-security-hooks/scripts/global/(pre-commit|commit-msg)`),
 	];
 	if (tamperPatterns.some((pattern) => pattern.test(compact))) {
 		return { warn: "This command may modify Git hook protection. Continue only if intentionally installing/uninstalling or repairing PIDEX hooks." };

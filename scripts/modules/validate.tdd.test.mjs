@@ -71,6 +71,18 @@ test('rejects passthrough capability with invalid policy regex', () => {
   assert.match(proc.stdout, /invalid passthrough allowed pattern/);
 });
 
+test('rejects passthrough policy with non-boolean absolute path setting', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^--json$'], allow_absolute_project_paths: 'yes' };
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const proc = spawnSync(process.execPath, ['scripts/modules/validate.mjs', '--pidex-root', root, '--project', project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stdout, /allow_absolute_project_paths must be boolean/);
+});
+
 test('rejects command bins outside the stage 1 allowlist', () => {
   const { root, project } = makeModuleFixture();
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');

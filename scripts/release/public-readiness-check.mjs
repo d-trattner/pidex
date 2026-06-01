@@ -18,9 +18,7 @@ if (cmd === 'tracked-clean') {
   }
   const skipSuffixes = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf', '.woff', '.woff2', '.ttf', '.ico', '.lock', '.svg']);
   const allowFiles = new Set([
-    'scripts/git-hooks/lib/security-scan.sh',
     'scripts/doctor.sh',
-    'scripts/wiki/hygiene.mjs',
     'modules/pidex/git-security-hooks/scripts/lib/security-scan.sh',
     'modules/pidex/memory-wiki-hygiene/scripts/wiki/hygiene.mjs',
   ]);

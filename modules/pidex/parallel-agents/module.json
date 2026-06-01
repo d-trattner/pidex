@@ -14,10 +14,14 @@
       "importance": "optional",
       "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-code-reviewer", "pidex-qa", "pidex-devops", "pidex-pi"],
       "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
-      "mutability": ["read-only"],
+      "mutability": ["read-only", "writes-artifacts"],
       "command": {
         "bin": "node",
-        "args": ["modules/pidex/parallel-agents/scripts/status.mjs", "show"]
+        "args": ["modules/pidex/parallel-agents/scripts/status.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^(show|eligible|models|warn|success|clear)$", "^--(agent|trigger|lane|message)$", "^--json$", "^[A-Za-z0-9 ._:=@-]+$"]
+        }
       }
     }
   ]

@@ -4,4 +4,4 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../../../.." && pwd -P)
-exec node "$ROOT/scripts/pipeline/event.mjs" "$@"
+exec node "$ROOT/modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs" "$@"

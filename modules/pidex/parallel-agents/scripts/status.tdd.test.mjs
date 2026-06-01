@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-const script = path.join(root, 'scripts/parallel-agents/status.mjs');
+const script = path.join(root, 'modules/pidex/parallel-agents/scripts/status.mjs');
 
 function run(tmpRoot, args, ok = true) {
   const cp = spawnSync(process.execPath, [script, '--root', tmpRoot, ...args], { encoding: 'utf8' });

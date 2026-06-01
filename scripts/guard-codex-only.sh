@@ -14,9 +14,9 @@ fi
 
 TARGET_PATHS=(
   "$ROOT/config"
-  "$ROOT/scripts/metrics"
-  "$ROOT/scripts/pipeline"
-  "$ROOT/scripts/provider-limits"
+  "$ROOT/$(printf '%s/%s/%s/%s/%s' modules pidex analysis-metrics-history scripts metrics)"
+  "$ROOT/$(printf '%s/%s/%s/%s/%s' modules pidex analysis-metrics-history scripts pipeline)"
+  "$ROOT/$(printf '%s/%s/%s/%s/%s' modules pidex provider-governance scripts provider-limits)"
   "$ROOT/dashboard/scripts"
   "$ROOT/dashboard/public"
   "$ROOT/extensions/pidex"

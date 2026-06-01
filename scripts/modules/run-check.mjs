@@ -51,9 +51,29 @@ if (passthroughArgs.length && command.passthrough !== true) {
   console.error(`capability does not allow passthrough args: ${capabilityId}`);
   process.exit(2);
 }
+function pathAllowedByPolicy(policy, arg) {
+  const value = String(arg);
+  if (value.includes('..')) return false;
+  if (!path.isAbsolute(value)) return true;
+  if (policy.allow_absolute_project_paths !== true) return false;
+  const resolved = path.resolve(value);
+  const projectResolved = path.resolve(project);
+  return resolved === projectResolved || resolved.startsWith(`${projectResolved}${path.sep}`);
+}
+
 function passthroughAllowed(command, argsToCheck) {
-  const patterns = command.passthrough_policy?.allowed_patterns || [];
-  return argsToCheck.every((arg) => patterns.some((pattern) => new RegExp(pattern).test(arg)));
+  const policy = command.passthrough_policy || {};
+  const patterns = policy.allowed_patterns || [];
+  return argsToCheck.every((arg) => pathAllowedByPolicy(policy, arg) && patterns.some((pattern) => new RegExp(pattern).test(arg)));
+}
+
+function scrubSecretLike(value) {
+  return String(value)
+    .replace(/\b(AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g, '[REDACTED]')
+    .replace(/\b(ghp|gho|ghs)_[A-Za-z0-9]{36}\b|github_pat_[A-Za-z0-9_]{82}/g, '[REDACTED]')
+    .replace(/\bsk-(proj-)?[A-Za-z0-9_-]{40,}\b/g, '[REDACTED]')
+    .replace(/sk-ant-api03-[A-Za-z0-9_-]{80,}/g, '[REDACTED]')
+    .replace(/\b[A-Za-z0-9_-]{48,}\b/g, '[REDACTED]');
 }
 
 function redactArgs(argsToRedact) {
@@ -71,7 +91,7 @@ function redactArgs(argsToRedact) {
       out.push(`${eq[1]}=[REDACTED]`);
       continue;
     }
-    out.push(arg);
+    out.push(scrubSecretLike(arg));
     if (sensitive.test(String(arg))) redactNext = true;
   }
   return out;

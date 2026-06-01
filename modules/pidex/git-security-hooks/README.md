@@ -3,13 +3,13 @@
 PIDEX can install one global Git hook path for the current Linux user:
 
 ```bash
-<pidex-root>/scripts/git-hooks/install-global.sh
+node <pidex-root>/scripts/modules/run-check.mjs --capability git-security-hooks.install --agent pidex-devops --phase maintenance --project <pidex-root>
 ```
 
 This sets:
 
 ```bash
-git config --global core.hooksPath <pidex-root>/scripts/git-hooks/global
+git config --global core.hooksPath <pidex-root>/modules/pidex/git-security-hooks/scripts/global
 ```
 
 The previous global `core.hooksPath` is saved in:
@@ -21,13 +21,13 @@ The previous global `core.hooksPath` is saved in:
 Previous hooks are not chained. They are restored on uninstall:
 
 ```bash
-<pidex-root>/scripts/git-hooks/uninstall-global.sh
+node <pidex-root>/scripts/modules/run-check.mjs --capability git-security-hooks.uninstall --agent pidex-devops --phase maintenance --project <pidex-root>
 ```
 
 The pre-commit hook runs:
 
 ```text
-<pidex-root>/scripts/git-hooks/lib/security-scan.sh --staged
+<pidex-root>/modules/pidex/git-security-hooks/scripts/lib/security-scan.sh --staged
 ```
 
 It blocks dangerous credential files, key material, common provider tokens, credentialed connection strings, and high-confidence keyword-based secrets.

@@ -4,20 +4,243 @@
   "name": "PIDEX Analysis, Metrics, and History",
   "kind": "optional-internal",
   "default_enabled": true,
-  "dependencies": ["pidex.core"],
+  "dependencies": [
+    "pidex.core"
+  ],
   "capabilities": [
     {
       "id": "analysis-metrics-history.record-event",
       "kind": "tool",
-      "phases": ["planning", "implementation", "code-review", "qa", "uat", "devops", "maintenance"],
+      "phases": [
+        "planning",
+        "implementation",
+        "code-review",
+        "qa",
+        "uat",
+        "devops",
+        "maintenance"
+      ],
       "scope": "project",
       "importance": "optional",
-      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-code-reviewer", "pidex-qa", "pidex-uat", "pidex-devops", "pidex-pi"],
-      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
-      "mutability": ["writes-artifacts"],
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-planner",
+        "pidex-implementer",
+        "pidex-code-reviewer",
+        "pidex-qa",
+        "pidex-uat",
+        "pidex-devops",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "writes-artifacts"
+      ],
       "command": {
         "bin": "node",
-        "args": ["modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs", "--project", "__PIDEX_PROJECT__", "--state-dir", "__PIDEX_PROJECT__/pidex/state", "--event", "module_check", "--source", "module-runner"]
+        "args": [
+          "modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--(project|state-dir|event|source|actor|status|plan|pipeline-id)$",
+            "^[A-Za-z0-9 ._:/=@-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
+      }
+    },
+    {
+      "id": "analysis-metrics-history.history-append",
+      "kind": "tool",
+      "phases": [
+        "planning",
+        "implementation",
+        "code-review",
+        "qa",
+        "uat",
+        "devops",
+        "maintenance"
+      ],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-planner",
+        "pidex-implementer",
+        "pidex-code-reviewer",
+        "pidex-qa",
+        "pidex-uat",
+        "pidex-devops",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "writes-artifacts"
+      ],
+      "command": {
+        "bin": "bash",
+        "args": [
+          "modules/pidex/analysis-metrics-history/scripts/history/append.sh"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--[A-Za-z0-9-]+$",
+            "^[A-Za-z0-9 ._:/=@+-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
+      }
+    },
+    {
+      "id": "analysis-metrics-history.history-list",
+      "kind": "report",
+      "phases": [
+        "planning",
+        "implementation",
+        "code-review",
+        "qa",
+        "uat",
+        "devops",
+        "maintenance"
+      ],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-planner",
+        "pidex-implementer",
+        "pidex-code-reviewer",
+        "pidex-qa",
+        "pidex-uat",
+        "pidex-devops",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "read-only"
+      ],
+      "command": {
+        "bin": "bash",
+        "args": [
+          "modules/pidex/analysis-metrics-history/scripts/history/list.sh"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--(limit|project|json)$",
+            "^[A-Za-z0-9 ._:/=@-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
+      }
+    },
+    {
+      "id": "analysis-metrics-history.metrics-record",
+      "kind": "tool",
+      "phases": [
+        "planning",
+        "implementation",
+        "code-review",
+        "qa",
+        "uat",
+        "devops",
+        "maintenance"
+      ],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-planner",
+        "pidex-implementer",
+        "pidex-code-reviewer",
+        "pidex-qa",
+        "pidex-uat",
+        "pidex-devops",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "writes-artifacts"
+      ],
+      "command": {
+        "bin": "bash",
+        "args": [
+          "modules/pidex/analysis-metrics-history/scripts/metrics/record.sh"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--[A-Za-z0-9-]+$",
+            "^[A-Za-z0-9 ._:/=@+-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
+      }
+    },
+    {
+      "id": "analysis-metrics-history.metrics-summarize",
+      "kind": "report",
+      "phases": [
+        "planning",
+        "implementation",
+        "code-review",
+        "qa",
+        "uat",
+        "devops",
+        "maintenance"
+      ],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": [
+        "orchestrator",
+        "pidex-planner",
+        "pidex-implementer",
+        "pidex-code-reviewer",
+        "pidex-qa",
+        "pidex-uat",
+        "pidex-devops",
+        "pidex-pi"
+      ],
+      "supported_platforms": [
+        "linux",
+        "wsl2",
+        "windows-git-bash"
+      ],
+      "mutability": [
+        "read-only"
+      ],
+      "command": {
+        "bin": "bash",
+        "args": [
+          "modules/pidex/analysis-metrics-history/scripts/metrics/summarize.sh"
+        ],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": [
+            "^--[A-Za-z0-9-]+$",
+            "^[A-Za-z0-9 ._:/=@+-]+$"
+          ],
+          "allow_absolute_project_paths": true
+        }
       }
     }
   ]

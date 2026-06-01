@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd -P)"
-PROBE="$ROOT/scripts/provider-limits/probe.mjs"
+PROBE="$ROOT/modules/pidex/provider-governance/scripts/provider-limits/probe.mjs"
 PROFILE="${1:-}"
 
 if [ -z "$PROFILE" ] || [ "$PROFILE" = "-h" ] || [ "$PROFILE" = "--help" ]; then
