@@ -28,7 +28,16 @@ state/browser-smoke/node_modules/.package-lock.json
 
 ### Browser binary download
 
-Direct browser install command was attempted with a longer timeout:
+The browser install was retried after the operator asked to try again, using a clean PIDEX-owned browser cache and extended Playwright download connection timeout:
+
+```bash
+rm -rf .cache/ms-playwright
+PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 timeout 1200 node scripts/modules/run-check.mjs --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$PWD" -- --yes --timeout-ms 900000
+```
+
+Result: still timed out under the outer 1200s guard. Post-run inspection showed the PIDEX-local Playwright package remained installed, but browser binaries were still absent; `.cache/ms-playwright/` contained only `.links/` metadata.
+
+Direct browser install command was also attempted with a longer timeout:
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=$PWD/.cache/ms-playwright timeout 900 npm --prefix state/browser-smoke exec playwright -- install chromium
@@ -44,7 +53,7 @@ Downloading Chrome for Testing 148.0.7778.96 (playwright chromium v1223) from ht
 Error: Request to https://storage.googleapis.com/chrome-for-testing-public/148.0.7778.96/linux64/chrome-linux64.zip timed out after 30000ms
 ```
 
-The remote host/network could not complete the 175.4 MiB Chromium download reliably.
+The remote host/network could not complete the 175.4 MiB Chromium download reliably. Package-level Playwright setup is present (`Version 1.60.0`), but browser binary installation is incomplete on this server.
 
 ### Bounded launch probe hardening
 
