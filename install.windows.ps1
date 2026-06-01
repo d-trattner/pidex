@@ -7,7 +7,10 @@ param(
   [string]$PidexRoot = $(if ($env:PIDEX_ROOT) { $env:PIDEX_ROOT } else { Join-Path $HOME "pidex" }),
   [switch]$DryRun = $($env:PIDEX_INSTALL_DRY_RUN -in @("1", "true", "yes", "on")),
   [switch]$SkipDashboardDeps = $($env:PIDEX_SKIP_DASHBOARD_DEPS -in @("1", "true", "yes", "on")),
-  [switch]$SkipPiInstall = $($env:PIDEX_SKIP_PI_INSTALL -in @("1", "true", "yes", "on"))
+  [switch]$SkipPiInstall = $($env:PIDEX_SKIP_PI_INSTALL -in @("1", "true", "yes", "on")),
+  [switch]$WithBrowserSmoke = $(($env:PIDEX_WITH_BROWSER_SMOKE -in @("1", "true", "yes", "on")) -or ($env:PIDEX_INSTALL_BROWSER_SMOKE -in @("1", "true", "yes", "on"))),
+  [switch]$SkipBrowserSmoke = $(($env:PIDEX_SKIP_BROWSER_SMOKE -in @("1", "true", "yes", "on")) -or ($env:PIDEX_INSTALL_BROWSER_SMOKE -in @("0", "false", "no", "off"))),
+  [switch]$NonInteractive = $(($env:PIDEX_NONINTERACTIVE -in @("1", "true", "yes", "on")) -or ($env:CI -in @("1", "true", "yes", "on")))
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,6 +90,20 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
 function Invoke-PythonScript([hashtable]$Python, [string[]]$Arguments) {
   $AllArgs = @($Python.Prefix) + $Arguments
   Invoke-Checked $Python.Command $AllArgs
+}
+
+function Invoke-ModuleCapability([string]$Capability, [string[]]$PassthroughArgs = @()) {
+  $Runner = Join-Path $PidexRoot "scripts\modules\run-check.mjs"
+  $Args = @($Runner, "--capability", $Capability, "--agent", "orchestrator", "--phase", "maintenance", "--project", $PidexRoot)
+  if ($PassthroughArgs.Count -gt 0) { $Args += @("--") + $PassthroughArgs }
+  Invoke-Checked $Node $Args
+}
+
+function Test-InteractiveHost {
+  if ($NonInteractive) { return $false }
+  if (-not [Environment]::UserInteractive) { return $false }
+  if (-not $Host -or -not $Host.UI -or -not $Host.UI.RawUI) { return $false }
+  return $true
 }
 
 $PidexRoot = [System.IO.Path]::GetFullPath($PidexRoot)
@@ -213,6 +230,35 @@ if ($SkipPiInstall) {
   Write-Host "DRY-RUN: pi install $PidexRoot"
 } else {
   Invoke-Checked $Pi @("install", $PidexRoot)
+}
+
+if ($WithBrowserSmoke -and $SkipBrowserSmoke) {
+  Fail "Choose only one: -WithBrowserSmoke or -SkipBrowserSmoke"
+}
+
+if ($WithBrowserSmoke) {
+  Write-Step "Installing optional PIDEX browser-smoke support"
+  $BrowserArgs = @("--yes")
+  if ($DryRun) { $BrowserArgs = @("--dry-run", "--yes") }
+  Invoke-ModuleCapability "browser-smoke.install" $BrowserArgs
+} elseif ($SkipBrowserSmoke) {
+  Write-Step "Skipping PIDEX browser-smoke support install"
+} elseif (Test-InteractiveHost) {
+  Write-Host ""
+  Write-Host "Install optional PIDEX browser-smoke support now?" -ForegroundColor Cyan
+  Write-Host "This installs PIDEX-local Playwright/Chromium support for real-browser QA checks: page render, styles, console errors, and basic interactions."
+  Write-Host "Useful for web/UI/SSR/responsive work; unnecessary for CLI/API/docs/backend-only work."
+  Write-Host "It may download a large browser (~150-250MB), can be platform-sensitive, and can be installed later."
+  $Answer = Read-Host "Install browser-smoke support? [y/N]"
+  if ($Answer -in @("y", "Y", "yes", "YES")) {
+    $BrowserArgs = @("--yes")
+    if ($DryRun) { $BrowserArgs = @("--dry-run", "--yes") }
+    Invoke-ModuleCapability "browser-smoke.install" $BrowserArgs
+  } else {
+    Write-Step "Skipping PIDEX browser-smoke support install"
+  }
+} else {
+  Write-Step "Non-interactive install; skipping PIDEX browser-smoke support (use -WithBrowserSmoke or PIDEX_WITH_BROWSER_SMOKE=1 to enable)"
 }
 
 Write-Step "Windows bootstrap complete"

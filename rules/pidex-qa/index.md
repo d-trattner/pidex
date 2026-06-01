@@ -1,6 +1,6 @@
 # pidex-qa Rules Index
 
-Last updated: 2026-05-18 (PROC-NEW-7-2)
+Last updated: 2026-06-01 (QA-NO-IMMORTAL-SERVERS / QA-GENERATED-SCRIPT-CHECK)
 
 ## Active Rules
 
@@ -34,6 +34,8 @@ Last updated: 2026-05-18 (PROC-NEW-7-2)
 | Global Hook Mutation Full-Suite Smoke | [global-hook-mutation-full-suite-smoke.md](global-hook-mutation-full-suite-smoke.md) | PROC-NEW-2 | Global test lifecycle hook mutations require immediate full-suite smoke gate; block on race/flaky signal |
 | QA Status / Evidence Reconciliation | [status-evidence-reconciliation.md](status-evidence-reconciliation.md) | QA-STATUS-RECONCILE | When BLOCKED evidence is later supplied, patch the same QA artifact with final status/evidence/ROUTING before UAT/release |
 | QA Handoff Evidence Bundle | [qa-handoff-evidence-bundle.md](qa-handoff-evidence-bundle.md) | PROC-NEW-88-3 | QA handoff must include command transcripts, evidence hashes, version checks, failing artifact list, and retry boundary |
+| No Immortal QA Test Servers | [no-immortal-test-servers.md](no-immortal-test-servers.md) | QA-NO-IMMORTAL-SERVERS | QA-started servers/processes require bounded runtime, PID/handle capture, readiness, cleanup trap, and cleanup evidence |
+| Generated QA Script Syntax Check | [generated-script-syntax-check.md](generated-script-syntax-check.md) | QA-GENERATED-SCRIPT-CHECK | QA-generated helper scripts must pass runtime-appropriate syntax/check before execution; failures are infra-blocking |
 
 ## How to use
 

@@ -1,0 +1,62 @@
+{
+  "id": "pidex.browser-smoke",
+  "schema_version": 1,
+  "name": "PIDEX Browser Smoke",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "browser-smoke.preflight",
+      "kind": "check",
+      "phases": ["qa", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/browser-smoke/scripts/browser-smoke/preflight.mjs", "--project", "__PIDEX_PROJECT__"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--json$", "^--require$", "^--no-launch$", "^--timeout-ms$", "^[0-9]{1,6}$"]
+        }
+      }
+    },
+    {
+      "id": "browser-smoke.install",
+      "kind": "tool",
+      "phases": ["maintenance", "devops"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/browser-smoke/scripts/browser-smoke/install.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--dry-run$", "^--yes$", "^--package-only$", "^--with-browsers$", "^--timeout-ms$", "^[0-9]{1,6}$"]
+        }
+      }
+    },
+    {
+      "id": "browser-smoke.cleanup-check",
+      "kind": "check",
+      "phases": ["qa", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/browser-smoke/scripts/browser-smoke/cleanup-check.mjs"],
+        "passthrough": true,
+        "passthrough_policy": { "allowed_patterns": ["^--json$"] }
+      }
+    }
+  ]
+}

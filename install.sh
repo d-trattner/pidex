@@ -6,6 +6,9 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
 TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
 INSTALL_GLOBAL_GIT_HOOK="${PIDEX_INSTALL_GLOBAL_GIT_HOOK:-ask}"
+INSTALL_BROWSER_SMOKE="${PIDEX_INSTALL_BROWSER_SMOKE:-ask}"
+if [[ "${PIDEX_WITH_BROWSER_SMOKE:-}" =~ ^(1|yes|true|on)$ ]]; then INSTALL_BROWSER_SMOKE="1"; fi
+if [[ "${PIDEX_SKIP_BROWSER_SMOKE:-}" =~ ^(1|yes|true|on)$ ]]; then INSTALL_BROWSER_SMOKE="0"; fi
 SKIP_DASHBOARD_DEPS="${PIDEX_SKIP_DASHBOARD_DEPS:-0}"
 STATE_DIR="$TARGET_DIR/state/skills"
 AST_GREP_CLI_MARKER="$STATE_DIR/ast-grep-cli-installed-by-pidex"
@@ -23,11 +26,17 @@ Options:
   --skip-dashboard-deps      skip dashboard npm dependency install
   --install-global-git-hook  install PIDEX global Git hook non-interactively
   --skip-global-git-hook     skip PIDEX global Git hook prompt
+  --with-browser-smoke       install optional PIDEX browser-smoke support
+  --skip-browser-smoke       skip optional browser-smoke prompt/install
   --help                     show this help
 
 Environment equivalents:
   PIDEX_INSTALL_GLOBAL_GIT_HOOK=1  same as --install-global-git-hook
   PIDEX_INSTALL_GLOBAL_GIT_HOOK=0  same as --skip-global-git-hook
+  PIDEX_INSTALL_BROWSER_SMOKE=1    same as --with-browser-smoke
+  PIDEX_INSTALL_BROWSER_SMOKE=0    same as --skip-browser-smoke
+  PIDEX_WITH_BROWSER_SMOKE=1       same as --with-browser-smoke
+  PIDEX_SKIP_BROWSER_SMOKE=1       same as --skip-browser-smoke
   PIDEX_SKIP_DASHBOARD_DEPS=1      same as --skip-dashboard-deps
 
 Notes:
@@ -56,6 +65,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-global-git-hook)
       INSTALL_GLOBAL_GIT_HOOK="0"
+      shift
+      ;;
+    --with-browser-smoke)
+      INSTALL_BROWSER_SMOKE="1"
+      shift
+      ;;
+    --skip-browser-smoke)
+      INSTALL_BROWSER_SMOKE="0"
       shift
       ;;
     --*)
@@ -150,6 +167,21 @@ if [ "$DRY_RUN" = "1" ]; then
       run_module_capability git-security-hooks.install-dry-run
       ;;
   esac
+  case "$INSTALL_BROWSER_SMOKE" in
+    1|yes|true|on)
+      node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --dry-run --yes
+      ;;
+    0|no|false|off)
+      say "DRY-RUN: would skip PIDEX browser-smoke support install"
+      ;;
+    ask|*)
+      if [ -t 0 ]; then
+        say "DRY-RUN: would ask about optional browser-smoke support"
+      else
+        say "DRY-RUN: non-interactive install; would skip PIDEX browser-smoke support"
+      fi
+      ;;
+  esac
   exit 0
 fi
 
@@ -175,6 +207,27 @@ case "$INSTALL_GLOBAL_GIT_HOOK" in
       esac
     else
       say "non-interactive install; skipping PIDEX global Git hook (set PIDEX_INSTALL_GLOBAL_GIT_HOOK=1 to enable)"
+    fi
+    ;;
+esac
+
+case "$INSTALL_BROWSER_SMOKE" in
+  1|yes|true|on)
+    node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --yes
+    ;;
+  0|no|false|off)
+    say "skipping PIDEX browser-smoke support install"
+    ;;
+  ask|*)
+    if [ -t 0 ]; then
+      printf '\nInstall optional PIDEX browser-smoke support now? This installs PIDEX-local Playwright/Chromium support for real-browser QA checks (page render, styles, console errors, basic interactions). Useful for web/UI/SSR/responsive work; unnecessary for CLI/API/docs/backend-only work. This may download a large browser (~150-250MB), can be platform-sensitive, and can be installed later. [y/N] '
+      read -r REPLY
+      case "$REPLY" in
+        y|Y|yes|YES) node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --yes ;;
+        *) say "skipping PIDEX browser-smoke support install" ;;
+      esac
+    else
+      say "non-interactive install; skipping PIDEX browser-smoke support (set PIDEX_INSTALL_BROWSER_SMOKE=1 to enable)"
     fi
     ;;
 esac
