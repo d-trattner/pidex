@@ -90,7 +90,7 @@ cd ~/pidex
 ./install.sh --dry-run
 ```
 
-`install.sh` installs dashboard dependencies when needed, runs validation checks, runs `pi install ~/pidex`, and may optionally install the global Git security hook after an interactive prompt. Non-interactive installs skip the hook unless requested.
+`install.sh` installs dashboard dependencies when needed, runs validation checks, runs `pi install ~/pidex`, and may optionally install the global Git security hook and optional browser-smoke QA support after interactive prompts. Non-interactive installs skip optional features unless requested.
 
 Useful Linux/WSL2 install flags:
 
@@ -98,9 +98,14 @@ Useful Linux/WSL2 install flags:
 ./install.sh --skip-dashboard-deps
 ./install.sh --install-global-git-hook
 ./install.sh --skip-global-git-hook
+./install.sh --with-browser-smoke
+./install.sh --with-browser-smoke --with-browser-smoke-system-deps
+./install.sh --skip-browser-smoke
 ```
 
 The same controls also exist as environment variables for automation, but flags are preferred for manual use.
+
+Browser-smoke support is optional Playwright/Chromium-based QA for real browser checks (rendering, styles, console errors, and basic interactions). The normal browser-smoke install is PIDEX-local under `~/pidex/state/browser-smoke` and `~/pidex/.cache/ms-playwright`; it does not use npm-global Playwright and does not mutate user projects. On minimal Linux servers, actually launching Chromium may also require host-level packages. Use `--with-browser-smoke-system-deps` only when you accept that PIDEX may run Playwright's `install-deps chromium`, which uses apt, requires root/passwordless sudo, and modifies system packages.
 
 ### Pi package bootstrap install
 

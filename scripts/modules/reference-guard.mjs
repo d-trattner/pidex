@@ -57,7 +57,7 @@ function isValidationHarness(file) {
 }
 
 function isGeneratedOrBinary(file) {
-  return file.includes('__pycache__/') || file.endsWith('.pyc') || file.endsWith('dashboard/app/routeTree.gen.ts');
+  return file.startsWith('agents.output/') || file.includes('__pycache__/') || file.endsWith('.pyc') || file.endsWith('dashboard/app/routeTree.gen.ts');
 }
 
 const moduleViolations = [];

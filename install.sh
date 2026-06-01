@@ -7,8 +7,11 @@ TARGET_DIR="$HOME/pidex"
 DRY_RUN="0"
 INSTALL_GLOBAL_GIT_HOOK="${PIDEX_INSTALL_GLOBAL_GIT_HOOK:-ask}"
 INSTALL_BROWSER_SMOKE="${PIDEX_INSTALL_BROWSER_SMOKE:-ask}"
+INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="${PIDEX_INSTALL_BROWSER_SMOKE_SYSTEM_DEPS:-ask}"
 if [[ "${PIDEX_WITH_BROWSER_SMOKE:-}" =~ ^(1|yes|true|on)$ ]]; then INSTALL_BROWSER_SMOKE="1"; fi
 if [[ "${PIDEX_SKIP_BROWSER_SMOKE:-}" =~ ^(1|yes|true|on)$ ]]; then INSTALL_BROWSER_SMOKE="0"; fi
+if [[ "${PIDEX_WITH_BROWSER_SMOKE_SYSTEM_DEPS:-}" =~ ^(1|yes|true|on)$ ]]; then INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="1"; fi
+if [[ "${PIDEX_SKIP_BROWSER_SMOKE_SYSTEM_DEPS:-}" =~ ^(1|yes|true|on)$ ]]; then INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="0"; fi
 SKIP_DASHBOARD_DEPS="${PIDEX_SKIP_DASHBOARD_DEPS:-0}"
 STATE_DIR="$TARGET_DIR/state/skills"
 AST_GREP_CLI_MARKER="$STATE_DIR/ast-grep-cli-installed-by-pidex"
@@ -28,6 +31,10 @@ Options:
   --skip-global-git-hook     skip PIDEX global Git hook prompt
   --with-browser-smoke       install optional PIDEX browser-smoke support
   --skip-browser-smoke       skip optional browser-smoke prompt/install
+  --with-browser-smoke-system-deps
+                              also install Linux host packages required by Chromium (requires root/sudo)
+  --skip-browser-smoke-system-deps
+                              skip browser-smoke Linux system dependency prompt
   --help                     show this help
 
 Environment equivalents:
@@ -37,6 +44,8 @@ Environment equivalents:
   PIDEX_INSTALL_BROWSER_SMOKE=0    same as --skip-browser-smoke
   PIDEX_WITH_BROWSER_SMOKE=1       same as --with-browser-smoke
   PIDEX_SKIP_BROWSER_SMOKE=1       same as --skip-browser-smoke
+  PIDEX_INSTALL_BROWSER_SMOKE_SYSTEM_DEPS=1  same as --with-browser-smoke-system-deps
+  PIDEX_INSTALL_BROWSER_SMOKE_SYSTEM_DEPS=0  same as --skip-browser-smoke-system-deps
   PIDEX_SKIP_DASHBOARD_DEPS=1      same as --skip-dashboard-deps
 
 Notes:
@@ -73,6 +82,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-browser-smoke)
       INSTALL_BROWSER_SMOKE="0"
+      shift
+      ;;
+    --with-browser-smoke-system-deps)
+      INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="1"
+      shift
+      ;;
+    --skip-browser-smoke-system-deps)
+      INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="0"
       shift
       ;;
     --*)
@@ -155,6 +172,30 @@ run_module_capability() {
     --project "$TARGET_DIR"
 }
 
+browser_smoke_install_args() {
+  local -n out_ref=$1
+  out_ref=(--yes)
+  case "$INSTALL_BROWSER_SMOKE_SYSTEM_DEPS" in
+    1|yes|true|on) out_ref+=(--with-system-deps) ;;
+  esac
+}
+
+maybe_prompt_browser_smoke_system_deps() {
+  case "$INSTALL_BROWSER_SMOKE_SYSTEM_DEPS" in
+    1|yes|true|on|0|no|false|off) return ;;
+  esac
+  if [ "$(uname -s 2>/dev/null || printf unknown)" != "Linux" ]; then
+    INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="0"
+    return
+  fi
+  printf '\nAlso install Linux system packages required by headless Chromium? This may run apt via Playwright install-deps, requires root/passwordless sudo, modifies host packages, and may install fonts/X11 libraries. Recommended for minimal servers that should actually launch browser smoke. [y/N] '
+  read -r REPLY
+  case "$REPLY" in
+    y|Y|yes|YES) INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="1" ;;
+    *) INSTALL_BROWSER_SMOKE_SYSTEM_DEPS="0" ;;
+  esac
+}
+
 if [ "$DRY_RUN" = "1" ]; then
   printf 'DRY-RUN: '
   printf '%q ' "${CMD[@]}"
@@ -169,7 +210,9 @@ if [ "$DRY_RUN" = "1" ]; then
   esac
   case "$INSTALL_BROWSER_SMOKE" in
     1|yes|true|on)
-      node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --dry-run --yes
+      BROWSER_SMOKE_ARGS=()
+      browser_smoke_install_args BROWSER_SMOKE_ARGS
+      node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --dry-run "${BROWSER_SMOKE_ARGS[@]}"
       ;;
     0|no|false|off)
       say "DRY-RUN: would skip PIDEX browser-smoke support install"
@@ -177,6 +220,7 @@ if [ "$DRY_RUN" = "1" ]; then
     ask|*)
       if [ -t 0 ]; then
         say "DRY-RUN: would ask about optional browser-smoke support"
+        say "DRY-RUN: if accepted on Linux, would also ask whether to install host-level Chromium system packages (requires root/sudo)"
       else
         say "DRY-RUN: non-interactive install; would skip PIDEX browser-smoke support"
       fi
@@ -213,7 +257,9 @@ esac
 
 case "$INSTALL_BROWSER_SMOKE" in
   1|yes|true|on)
-    node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --yes
+    BROWSER_SMOKE_ARGS=()
+    browser_smoke_install_args BROWSER_SMOKE_ARGS
+    node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- "${BROWSER_SMOKE_ARGS[@]}"
     ;;
   0|no|false|off)
     say "skipping PIDEX browser-smoke support install"
@@ -223,7 +269,12 @@ case "$INSTALL_BROWSER_SMOKE" in
       printf '\nInstall optional PIDEX browser-smoke support now? This installs PIDEX-local Playwright/Chromium support for real-browser QA checks (page render, styles, console errors, basic interactions). Useful for web/UI/SSR/responsive work; unnecessary for CLI/API/docs/backend-only work. This may download a large browser (~150-250MB), can be platform-sensitive, and can be installed later. [y/N] '
       read -r REPLY
       case "$REPLY" in
-        y|Y|yes|YES) node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- --yes ;;
+        y|Y|yes|YES)
+          maybe_prompt_browser_smoke_system_deps
+          BROWSER_SMOKE_ARGS=()
+          browser_smoke_install_args BROWSER_SMOKE_ARGS
+          node "$TARGET_DIR/scripts/modules/run-check.mjs" --capability browser-smoke.install --agent orchestrator --phase maintenance --project "$TARGET_DIR" -- "${BROWSER_SMOKE_ARGS[@]}"
+          ;;
         *) say "skipping PIDEX browser-smoke support install" ;;
       esac
     else

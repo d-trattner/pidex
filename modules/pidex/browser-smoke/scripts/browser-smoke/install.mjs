@@ -69,6 +69,18 @@ function ensurePackageJson(stateDir) {
   }
 }
 
+function systemDepsAllowedOrExplain() {
+  if (!process.platform.startsWith('linux')) return { ok: false, reason: '--with-system-deps is currently supported only on Linux' };
+  if (typeof process.getuid === 'function' && process.getuid() === 0) return { ok: true, mode: 'root' };
+  const sudoCheck = spawn('sudo', ['-n', 'true'], { stdio: 'ignore' });
+  return new Promise((resolve) => {
+    sudoCheck.on('error', () => resolve({ ok: false, reason: '--with-system-deps requires root or passwordless sudo; run as root or run Playwright install-deps manually' }));
+    sudoCheck.on('close', (code) => resolve(code === 0
+      ? { ok: true, mode: 'sudo' }
+      : { ok: false, reason: '--with-system-deps requires root or passwordless sudo in non-interactive module runs; run as root or run Playwright install-deps manually' }));
+  });
+}
+
 try {
   const args = parseArgs(process.argv.slice(2));
   const paths = browserSmokePaths();
@@ -76,6 +88,9 @@ try {
   console.log(`state: ${paths.stateDir}`);
   console.log(`cache: ${paths.cacheDir}`);
   console.log('This installs optional PIDEX-local Playwright support. It does not use npm global and does not mutate user projects.');
+  if (args.withSystemDeps) {
+    console.log('WARNING: --with-system-deps installs host-level Linux packages via Playwright install-deps. This requires root/passwordless sudo and may modify apt packages.');
+  }
   if (args.dryRun) {
     console.log(`DRY-RUN: mkdir -p ${paths.stateDir} ${paths.cacheDir}`);
     console.log(`DRY-RUN: npm --prefix ${paths.stateDir} install @playwright/test`);
@@ -83,6 +98,11 @@ try {
     if (args.withBrowsers) console.log(`DRY-RUN: PLAYWRIGHT_BROWSERS_PATH=${paths.cacheDir} npm --prefix ${paths.stateDir} exec playwright -- install chromium`);
     else console.log('DRY-RUN: browser binary install skipped (--package-only)');
     process.exit(0);
+  }
+  if (args.withSystemDeps) {
+    const allowed = await systemDepsAllowedOrExplain();
+    if (!allowed.ok) throw new Error(allowed.reason);
+    console.log(`system dependency install authorization: ${allowed.mode}`);
   }
   ensurePackageJson(paths.stateDir);
   mkdirSync(paths.cacheDir, { recursive: true });
