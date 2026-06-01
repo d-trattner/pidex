@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { access } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { BROWSER_SMOKE_STATUS } from './status.mjs';
 import { browserSmokePaths } from './paths.mjs';
 
@@ -46,33 +46,20 @@ function choosePlaywright(project, stateDir) {
   return { ok: false, source: 'not-configured' };
 }
 
-async function withTimeout(promise, ms, label) {
-  let timer;
+function launchProbe(resolvedModule, cacheDir, timeoutMs) {
+  const probeScript = path.join(path.dirname(fileURLToPath(import.meta.url)), 'launch-probe.mjs');
+  const proc = spawnSync(process.execPath, [probeScript, resolvedModule, cacheDir], {
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: cacheDir },
+  });
+  if (proc.error?.code === 'ETIMEDOUT') return { ok: false, reason: 'browser_launch_probe_timeout', error: `launch probe timed out after ${timeoutMs}ms` };
+  const text = String(proc.stdout || '').trim().split(/\r?\n/).pop() || '';
   try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms); }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function launchProbe(resolvedModule, cacheDir, timeoutMs) {
-  process.env.PLAYWRIGHT_BROWSERS_PATH ||= cacheDir;
-  const mod = await import(pathToFileURL(resolvedModule).href);
-  const chromium = mod.chromium || mod.default?.chromium;
-  if (!chromium) return { ok: false, reason: 'chromium_api_unavailable' };
-  const executablePath = chromium.executablePath();
-  try { await access(executablePath); } catch { return { ok: false, reason: 'browser_executable_missing', executable_path: executablePath }; }
-  let browser;
-  try {
-    browser = await withTimeout(chromium.launch({ headless: true, args: ['--no-sandbox'] }), timeoutMs, 'browser launch probe');
-    await withTimeout(browser.close(), Math.min(timeoutMs, 5000), 'browser close');
-    return { ok: true, executable_path: executablePath };
-  } catch (error) {
-    try { if (browser) await browser.close(); } catch {}
-    return { ok: false, reason: 'browser_launch_failed', executable_path: executablePath, error: String(error?.message || error) };
+    const parsed = JSON.parse(text);
+    return { ...parsed, exit_code: proc.status, stderr: proc.stderr?.trim() || undefined };
+  } catch {
+    return { ok: false, reason: 'browser_launch_probe_unparseable', exit_code: proc.status, stdout: proc.stdout?.trim(), stderr: proc.stderr?.trim() };
   }
 }
 
@@ -103,7 +90,7 @@ try {
   if (chosen.ok) {
     result = { ...result, status: BROWSER_SMOKE_STATUS.PASS, reason: 'playwright_package_available', source: chosen.source, package: chosen.package, resolved: chosen.resolved };
     if (!args.noLaunch) {
-      const probe = await launchProbe(chosen.resolved, paths.cacheDir, args.timeoutMs);
+      const probe = launchProbe(chosen.resolved, paths.cacheDir, args.timeoutMs);
       result = probe.ok
         ? { ...result, status: BROWSER_SMOKE_STATUS.PASS, reason: 'browser_launch_probe_passed', ...probe }
         : { ...result, status: BROWSER_SMOKE_STATUS.BLOCKED_INFRA, reason: probe.reason, ...probe };

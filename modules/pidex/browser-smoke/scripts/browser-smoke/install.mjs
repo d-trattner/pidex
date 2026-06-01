@@ -42,7 +42,7 @@ try {
   if (args.dryRun) {
     console.log(`DRY-RUN: mkdir -p ${paths.stateDir} ${paths.cacheDir}`);
     console.log(`DRY-RUN: npm --prefix ${paths.stateDir} install @playwright/test`);
-    if (args.withBrowsers) console.log(`DRY-RUN: PLAYWRIGHT_BROWSERS_PATH=${paths.cacheDir} npx --prefix ${paths.stateDir} playwright install chromium`);
+    if (args.withBrowsers) console.log(`DRY-RUN: PLAYWRIGHT_BROWSERS_PATH=${paths.cacheDir} npm --prefix ${paths.stateDir} exec playwright -- install chromium`);
     else console.log('DRY-RUN: browser binary install skipped (--package-only)');
     process.exit(0);
   }
@@ -50,7 +50,7 @@ try {
   mkdirSync(paths.cacheDir, { recursive: true });
   run('npm', ['--prefix', paths.stateDir, 'install', '@playwright/test']);
   if (args.withBrowsers) {
-    run('npx', ['--prefix', paths.stateDir, 'playwright', 'install', 'chromium'], {
+    run('npm', ['--prefix', paths.stateDir, 'exec', 'playwright', '--', 'install', 'chromium'], {
       env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: paths.cacheDir },
       timeout: args.timeoutMs,
     });

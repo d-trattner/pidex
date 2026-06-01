@@ -1,0 +1,96 @@
+# Browser Smoke QA Substrate — Linux Real Install/Launch Attempt
+
+Date: 2026-06-01
+Remote: `root@10.0.0.107`
+Workspace: `/tmp/pidex-browser-smoke-linux`
+
+## Scope
+
+Operator approved testing the deferred real opt-in install/launch path on the disposable Linux test server.
+
+## Results
+
+### PIDEX-local package install
+
+The real `browser-smoke.install` command timed out under an outer 600s timeout. Inspection showed PIDEX-local package dependencies were installed under:
+
+```text
+/tmp/pidex-browser-smoke-linux/state/browser-smoke/
+```
+
+Observed files:
+
+```text
+state/browser-smoke/package.json
+state/browser-smoke/package-lock.json
+state/browser-smoke/node_modules/.package-lock.json
+```
+
+### Browser binary download
+
+Direct browser install command was attempted with a longer timeout:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=$PWD/.cache/ms-playwright timeout 900 npm --prefix state/browser-smoke exec playwright -- install chromium
+```
+
+Result: `BLOCKED_INFRA`.
+
+Evidence:
+
+```text
+Downloading Chrome for Testing 148.0.7778.96 (playwright chromium v1223) from https://cdn.playwright.dev/builds/cft/148.0.7778.96/linux64/chrome-linux64.zip
+0% of 175.4 MiB
+Error: Request to https://storage.googleapis.com/chrome-for-testing-public/148.0.7778.96/linux64/chrome-linux64.zip timed out after 30000ms
+```
+
+The remote host/network could not complete the 175.4 MiB Chromium download reliably.
+
+### Bounded launch probe hardening
+
+The initial preflight launch probe could hang until the outer process timeout. Implementation was hardened to execute browser launch in a child process with a `spawnSync(..., { timeout })` boundary via:
+
+```text
+modules/pidex/browser-smoke/scripts/browser-smoke/launch-probe.mjs
+```
+
+Revalidation after hardening:
+
+```bash
+node --check modules/pidex/browser-smoke/scripts/browser-smoke/preflight.mjs
+node --check modules/pidex/browser-smoke/scripts/browser-smoke/launch-probe.mjs
+npm run modules:validate
+timeout 45 node scripts/modules/run-check.mjs --capability browser-smoke.preflight --agent orchestrator --phase maintenance --project "$PWD" -- --json --timeout-ms 20000
+```
+
+Result: PASS as bounded infra classification:
+
+```json
+{
+  "type": "browser-smoke-preflight",
+  "status": "BROWSER-SMOKE-BLOCKED-INFRA",
+  "reason": "browser_launch_probe_timeout",
+  "source": "pidex-local",
+  "package": "playwright",
+  "resolved": "/tmp/pidex-browser-smoke-linux/state/browser-smoke/node_modules/playwright/index.js",
+  "ok": false,
+  "error": "launch probe timed out after 20000ms"
+}
+```
+
+## Verdict
+
+`BLOCKED_INFRA`, not feature failure.
+
+The real install path partially succeeded for PIDEX-local npm package setup, but browser binary download was blocked by remote network timeout. The launch path now fails bounded and reports `BROWSER-SMOKE-BLOCKED-INFRA` instead of hanging.
+
+## Follow-up
+
+- Actual browser download/launch should be tested on a host with reliable access to Playwright/Chrome CDN, e.g. the operator's Windows host where browser tooling may already be available.
+- The module install command was corrected to use:
+
+```bash
+npm --prefix <state/browser-smoke> exec playwright -- install chromium
+```
+
+instead of the less reliable `npx --prefix ...` form.
