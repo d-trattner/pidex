@@ -51,12 +51,13 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 FOUND=0
+HEADER="COMMIT BLOCKED: Possible secrets found"
 
 print_header() {
   if [ "$FOUND" -eq 0 ]; then
     if [ "$QUIET" != "1" ]; then
       echo ""
-      echo "COMMIT BLOCKED: Possible secrets found"
+      echo "$HEADER"
       echo "================================================"
     fi
     FOUND=1
@@ -81,6 +82,22 @@ report() {
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
 [ -z "$STAGED" ] && exit 0
+
+IGNORED_STAGED=""
+while IFS= read -r FILE; do
+  [ -z "$FILE" ] && continue
+  if git check-ignore --no-index -q -- "$FILE" 2>/dev/null; then
+    IGNORED_STAGED="${IGNORED_STAGED}${FILE}"$'\n'
+  fi
+done <<< "$STAGED"
+
+if [ -n "$IGNORED_STAGED" ]; then
+  HEADER="COMMIT BLOCKED: Ignored files are staged"
+  while IFS= read -r FILE; do
+    [ -z "$FILE" ] && continue
+    report "$FILE" "File matches .gitignore/excludes" "Remove it from the index with: git rm --cached -- '$FILE'"
+  done <<< "$IGNORED_STAGED"
+fi
 
 SKIP_CONTENT='(\.lock|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|\.min\.(js|css)|\.svg|\.png|\.jpg|\.jpeg|\.gif|\.ico|\.woff2?|\.ttf|\.eot|\.pdf|\.zip|\.tar|\.gz|\.wasm)$'
 

@@ -140,6 +140,7 @@ Uncommitted work = unrecoverable on crash/budget exhaustion. Impl doc = intent; 
 3. **Release-prep slices** (CHANGELOG, version bump): CHANGELOG entry is the FIRST file written. → See `<pidex-root>/rules/pidex-implementer/changelog-ordering.md`
 4. After each commit, update impl doc Slice Table row with commit hash via `Edit`.
 5. **Dep-pruning slice completeness (PROC-NEW-23)**: Any slice that removes packages from `package.json` is not complete without regenerating the detected lockfile with the detected package-manager equivalent and committing it in the same slice. pnpm projects update `pnpm-lock.yaml`; npm compatibility projects update `package-lock.json`. Lockfile regeneration is not an optional follow-up — it is part of the slice definition. Stale lockfile = CVEs for removed packages persist.
+6. **Ignored-file commit guard (PROC-GIT-IGNORE-1)**: Never use `git add -f` for generated/runtime artifacts and never commit files matching `.gitignore`/Git excludes. Before final handoff, run `node scripts/git/ignored-tracked-guard.mjs`; if it fails, remove artifacts from index or fix the overbroad ignore pattern before committing.
 
 **Slice completion definition (MANDATORY)**: Slice NOT complete until commit hash exists in `git log`. Tests passing ≠ complete. Coverage met ≠ complete. Playwright smoke passed ≠ complete. Committed = complete.
 
@@ -149,7 +150,8 @@ git log --oneline -3
 ```
 Verify final slice commit appears. If not, commit immediately:
 ```bash
-git add -p   # stage relevant changes
+node scripts/git/ignored-tracked-guard.mjs
+git add -p   # stage relevant non-ignored changes only; do not use git add -f for artifacts
 git commit -m "<slice description>"
 ```
 Then write ROUTING. `verdict: COMPLETE` without final slice committed = false signal.
