@@ -68,6 +68,28 @@ function Get-PythonCommand {
   return $null
 }
 
+function Assert-SafeRepoUrl([string]$Value) {
+  if (-not $Value) { Fail "RepoUrl must not be empty" }
+  if ($Value.StartsWith('-')) { Fail "RepoUrl must not start with '-': $Value" }
+  $Uri = $null
+  if ([System.Uri]::TryCreate($Value, [System.UriKind]::Absolute, [ref]$Uri)) {
+    if ($Uri.Scheme -notin @('https', 'http', 'ssh', 'git')) {
+      Fail "Unsupported RepoUrl scheme '$($Uri.Scheme)'. Use https/http/ssh/git."
+    }
+    return
+  }
+  if ($Value -match '^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:.+\.git$') { return }
+  Fail "RepoUrl must be an absolute git URL or scp-style SSH URL: $Value"
+}
+
+function Assert-SafeBranchName([string]$Value, [string]$GitPath) {
+  if (-not $Value) { return }
+  if ($Value.StartsWith('-')) { Fail "Branch must not start with '-': $Value" }
+  if ($Value -match '\s') { Fail "Branch must not contain whitespace: $Value" }
+  & $GitPath check-ref-format --branch $Value *> $null
+  if ($LASTEXITCODE -ne 0) { Fail "Invalid branch name: $Value" }
+}
+
 function Assert-NodeVersion([string]$NodePath) {
   $VersionText = (& $NodePath --version).Trim().TrimStart('v')
   $Parts = $VersionText.Split('.')
@@ -128,6 +150,8 @@ $GitBash = Find-GitBash
 if (-not $GitBash) {
   Fail "Missing Bash required by Pi on Windows. Install Git for Windows: https://git-scm.com/download/win"
 }
+Assert-SafeRepoUrl $RepoUrl
+Assert-SafeBranchName $Branch $Git
 $NodeVersion = Assert-NodeVersion $Node
 
 Write-Step "Prerequisites found"
@@ -155,9 +179,9 @@ if (-not $GitBashOnPath) {
 if (-not (Test-Path -LiteralPath $PidexRoot)) {
   Write-Step "Cloning PIDEX into $PidexRoot"
   if ($DryRun) {
-    Write-Host "DRY-RUN: git clone $RepoUrl $PidexRoot"
+    Write-Host "DRY-RUN: git clone -- $RepoUrl $PidexRoot"
   } else {
-    Invoke-Checked $Git @("clone", $RepoUrl, $PidexRoot)
+    Invoke-Checked $Git @("clone", "--", $RepoUrl, $PidexRoot)
   }
 } else {
   Write-Step "PIDEX root already exists"
@@ -180,10 +204,10 @@ if ($Branch) {
   } else {
     Invoke-Checked $Git @("-C", $PidexRoot, "fetch", "origin", $Branch)
     $LocalBranchExists = $false
-    & $Git -C $PidexRoot rev-parse --verify $Branch *> $null
+    & $Git -C $PidexRoot rev-parse --verify -- $Branch *> $null
     if ($LASTEXITCODE -eq 0) { $LocalBranchExists = $true }
     if ($LocalBranchExists) {
-      Invoke-Checked $Git @("-C", $PidexRoot, "switch", $Branch)
+      Invoke-Checked $Git @("-C", $PidexRoot, "switch", "--", $Branch)
       Invoke-Checked $Git @("-C", $PidexRoot, "pull", "--ff-only")
     } else {
       Invoke-Checked $Git @("-C", $PidexRoot, "switch", "-c", $Branch, "--track", "origin/$Branch")
@@ -191,9 +215,9 @@ if ($Branch) {
   }
 }
 
-$AuditScript = Join-Path $PidexRoot "scripts\compat\windows-audit.mjs"
-if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditScript)) {
-  Fail "Missing audit script: $AuditScript"
+$AuditRunner = Join-Path $PidexRoot "scripts\modules\run-check.mjs"
+if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditRunner)) {
+  Fail "Missing module runner: $AuditRunner"
 }
 
 Write-Step "Running read-only Windows audit"
@@ -202,7 +226,7 @@ if ($DryRun) {
 } else {
   Push-Location $PidexRoot
   try {
-    Invoke-Checked $Node @($AuditScript)
+    Invoke-Checked $Node @($AuditRunner, "--capability", "compat-windows.audit", "--agent", "pidex-devops", "--phase", "maintenance", "--project", $PidexRoot)
   } finally {
     Pop-Location
   }
