@@ -248,7 +248,7 @@ if ($WithBrowserSmoke) {
   Write-Host "Install optional PIDEX browser-smoke support now?" -ForegroundColor Cyan
   Write-Host "This installs PIDEX-local Playwright/Chromium support for real-browser QA checks: page render, styles, console errors, and basic interactions."
   Write-Host "Useful for web/UI/SSR/responsive work; unnecessary for CLI/API/docs/backend-only work."
-  Write-Host "It may download a large browser (~150-250MB), can be platform-sensitive, and can be installed later."
+  Write-Host "It may download hundreds of MB (~150-350MB+ depending on platform/browser payload), can be platform-sensitive, and can be installed later."
   $Answer = Read-Host "Install browser-smoke support? [y/N]"
   if ($Answer -in @("y", "Y", "yes", "YES")) {
     $BrowserArgs = @("--yes")

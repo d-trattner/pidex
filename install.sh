@@ -266,7 +266,7 @@ case "$INSTALL_BROWSER_SMOKE" in
     ;;
   ask|*)
     if [ -t 0 ]; then
-      printf '\nInstall optional PIDEX browser-smoke support now? This installs PIDEX-local Playwright/Chromium support for real-browser QA checks (page render, styles, console errors, basic interactions). Useful for web/UI/SSR/responsive work; unnecessary for CLI/API/docs/backend-only work. This may download a large browser (~150-250MB), can be platform-sensitive, and can be installed later. [y/N] '
+      printf '\nInstall optional PIDEX browser-smoke support now? This installs PIDEX-local Playwright/Chromium support for real-browser QA checks (page render, styles, console errors, basic interactions). Useful for web/UI/SSR/responsive work; unnecessary for CLI/API/docs/backend-only work. This may download hundreds of MB (~150-350MB+ depending on platform/browser payload), can be platform-sensitive, and can be installed later. [y/N] '
       read -r REPLY
       case "$REPLY" in
         y|Y|yes|YES)
