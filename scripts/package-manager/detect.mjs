@@ -113,6 +113,16 @@ function nearestWorkspaceDir(ancestors) {
   return ancestors.find((dir) => existsSync(path.join(dir, 'pnpm-workspace.yaml'))) || null;
 }
 
+function nearestAncestorLocks(ancestors, packageRoot) {
+  const start = ancestors.indexOf(packageRoot);
+  const search = start >= 0 ? ancestors.slice(start + 1) : ancestors.slice(1);
+  for (const dir of search) {
+    const evidence = lockEvidenceAt(dir);
+    if (evidence.length) return evidence;
+  }
+  return [];
+}
+
 function lockfileLabel(evidence) {
   if (!evidence.length) return 'none';
   const files = [...new Set(evidence.map((item) => item.file))];
@@ -132,14 +142,16 @@ export function detectPackageManager(options = {}) {
   const pkg = existsSync(packageJsonPath) ? readJson(packageJsonPath) : null;
   const packageManagerField = typeof pkg?.packageManager === 'string' ? pkg.packageManager : null;
   const fieldManager = packageManagerName(packageManagerField);
-  const fieldSupported = fieldManager && SUPPORTED_FIELDS.has(fieldManager);
-  if (packageManagerField && !fieldSupported) warnings.push(`unsupported_packageManager_field:${packageManagerField}`);
+  const fieldKnown = fieldManager && SUPPORTED_FIELDS.has(fieldManager);
+  const hasUnsupportedPackageManagerField = Boolean(packageManagerField && !fieldKnown);
+  if (hasUnsupportedPackageManagerField) warnings.push(`unsupported_packageManager_field:${packageManagerField}`);
   if (pkg && !packageManagerField && pkg.scripts && Object.keys(pkg.scripts).some((name) => String(pkg.scripts[name]).includes('npm '))) warnings.push('npm_script_convention_detected');
 
   const sameRootLocks = lockEvidenceAt(packageRoot);
   const sameRootManagers = uniqueManagers(sameRootLocks);
   const workspaceRoot = nearestWorkspaceDir(ancestors);
   const workspaceLocks = workspaceRoot && workspaceRoot !== packageRoot ? lockEvidenceAt(workspaceRoot).filter((item) => item.manager === 'pnpm') : [];
+  const ancestorLocks = nearestAncestorLocks(ancestors, packageRoot);
 
   let selectedLocks = sameRootLocks;
   let lockfileRoot = sameRootLocks.length ? packageRoot : null;
@@ -148,6 +160,9 @@ export function detectPackageManager(options = {}) {
     selectedLocks = workspaceLocks;
     lockfileRoot = workspaceRoot;
     workspaceMembership = true;
+  } else if (!selectedLocks.length && ancestorLocks.length) {
+    selectedLocks = ancestorLocks;
+    lockfileRoot = ancestorLocks[0].dir;
   }
 
   let packageManager = 'unknown';
@@ -160,12 +175,21 @@ export function detectPackageManager(options = {}) {
     support = 'conflict';
     confidence = 'conflict';
     warnings.push(`multiple_lockfiles_same_root:${sameRootLocks.map((item) => item.file).join(',')}`);
-  } else if (fieldSupported && selectedLocks.length && fieldManager !== selectedLocks[0].manager && !workspaceMembership) {
+  } else if (hasUnsupportedPackageManagerField && selectedLocks.length) {
+    packageManager = 'unknown';
+    support = 'conflict';
+    confidence = 'conflict';
+    warnings.push(`packageManager_lockfile_conflict:${fieldManager || 'unsupported'}:${selectedLocks[0].manager}`);
+  } else if (hasUnsupportedPackageManagerField) {
+    packageManager = 'unknown';
+    support = 'unsupported';
+    confidence = 'packageManager';
+  } else if (fieldKnown && selectedLocks.length && fieldManager !== selectedLocks[0].manager && !workspaceMembership) {
     packageManager = 'unknown';
     support = 'conflict';
     confidence = 'conflict';
     warnings.push(`packageManager_lockfile_conflict:${fieldManager}:${selectedLocks[0].manager}`);
-  } else if (fieldSupported) {
+  } else if (fieldKnown) {
     packageManager = fieldManager;
     support = supportFor(fieldManager);
     confidence = 'packageManager';

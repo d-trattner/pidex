@@ -150,6 +150,38 @@ test('yarn and bun are detected as unsupported', () => {
   assert.equal(bun.support, 'unsupported');
 });
 
+test('unsupported packageManager field fails closed instead of falling through to lockfile', () => {
+  const fieldOnly = fixture('unsupported-field');
+  pkg(fieldOnly, 'package.json', { packageManager: 'foo@1.0.0' });
+  const unsupported = detectPackageManager({ project: fieldOnly, mode: 'existing' });
+  assert.equal(unsupported.package_manager, 'unknown');
+  assert.equal(unsupported.support, 'unsupported');
+  assert.equal(unsupported.confidence, 'packageManager');
+  assert.match(unsupported.warnings.join('\n'), /unsupported_packageManager_field:foo@1.0.0/);
+
+  const withLock = fixture('unsupported-field-lock');
+  pkg(withLock, 'package.json', { packageManager: 'foo@1.0.0' });
+  file(withLock, 'package-lock.json', '{}\n');
+  const conflict = detectPackageManager({ project: withLock, mode: 'existing' });
+  assert.equal(conflict.support, 'conflict');
+  assert.match(conflict.warnings.join('\n'), /packageManager_lockfile_conflict:foo:npm/);
+});
+
+test('ancestor npm lockfile classifies nested package as npm compatibility', () => {
+  const root = fixture('ancestor-npm');
+  pkg(root);
+  file(root, 'package-lock.json', '{}\n');
+  pkg(root, 'packages/app/package.json', { name: '@fixture/app' });
+  const project = path.join(root, 'packages/app/src');
+  mkdirSync(project, { recursive: true });
+  const result = detectPackageManager({ project, mode: 'existing' });
+  assert.equal(result.package_manager, 'npm');
+  assert.equal(result.support, 'compatibility');
+  assert.equal(result.package_root, path.join(root, 'packages/app'));
+  assert.equal(result.lockfile_root, root);
+  assert.equal(result.lockfile, 'package-lock.json');
+});
+
 test('CLI emits JSON and defaults to existing mode', () => {
   const root = fixture('cli');
   pkg(root);
