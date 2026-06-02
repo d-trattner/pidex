@@ -16,7 +16,7 @@ Last updated: 2026-05-18 (PROC-NEW-2)
 | Skip-Safety Pre-Review Checklist | [skip-safety-pre-review-checklist.md](skip-safety-pre-review-checklist.md) | 021-2 | When skip logic touched, require pre-review safety checklist + negative-test proof before first review handoff |
 | Security Remediation Dual Proof | [security-remediation-dual-proof.md](security-remediation-dual-proof.md) | 020-2 | Security remediation slices must show both adversarial block proof and fresh-run happy-path proof |
 | Shared UI Primitives Default | [shared-ui-primitives-default.md](shared-ui-primitives-default.md) | UI-SHARED-PRIMITIVES | Inventory existing shared primitives before bespoke UI markup; semantic tables default to Table*/real table primitives |
-| Release-Prep Typecheck Preflight | [release-prep-typecheck-preflight.md](release-prep-typecheck-preflight.md) | 5 | Run workspace `npm run typecheck` before opening release-prep QA/UAT chain |
+| Release-Prep Typecheck Preflight | [release-prep-typecheck-preflight.md](release-prep-typecheck-preflight.md) | 5 | Run detected workspace/root typecheck equivalent before opening release-prep QA/UAT chain |
 | Draft ROUTING | [draft-routing.md](draft-routing.md) | 1 (enforcement) | Emit IN_PROGRESS ROUTING immediately after first file write/edit |
 | Design Review Must-Fix | [design-review-must-fix.md](design-review-must-fix.md) | 11 | Read design review Must-Fix section FIRST; each item = mandatory TDD requirement |
 | Fix Loop Scope Cap | [fix-loop-scope-cap.md](fix-loop-scope-cap.md) | 14 | Address at most 3 findings per fix spawn; request second spawn for remainder |
@@ -24,7 +24,7 @@ Last updated: 2026-05-18 (PROC-NEW-2)
 | Stall-Recovery Checkpoint | [stall-recovery.md](stall-recovery.md) | 16 | At >75% maxTurns: stop, commit, finalize doc, emit ROUTING |
 | Route-Deletion Test-Reference Audit | [route-deletion-test-audit.md](route-deletion-test-audit.md) | 21 | Before any route-deletion slice, grep all test files for deleted path strings and update/remove in same slice |
 | Port-Change Package.json Audit | [port-change-package-audit.md](port-change-package-audit.md) | 22 | When plan changes server.port in vite.config.ts, audit package.json scripts for --port overrides and fix in same slice |
-| Dep-Pruning Lockfile Regeneration | [dep-pruning-lockfile-regen.md](dep-pruning-lockfile-regen.md) | 23 | Any dep-pruning slice must include rm -rf node_modules package-lock.json && npm install as an explicit step |
+| Dep-Pruning Lockfile Regeneration | [dep-pruning-lockfile-regen.md](dep-pruning-lockfile-regen.md) | 23 | Any dep-pruning slice must regenerate the detected lockfile with the detected package-manager equivalent in the same slice |
 | Impl Doc Before Final Tests | [impl-doc-before-final-tests.md](impl-doc-before-final-tests.md) | 35c | At >65% maxTurns: commit current state, write impl doc summary, THEN run final tests — not after |
 | Provider-Optional Hook Pattern | [provider-optional-hook.md](provider-optional-hook.md) | 2 (Plan 38) | Use useSyncExternalStore with no-op fallback for Provider-optional components; conditional hooks prohibited |
 | Block Comment Route-Path Hazard | [block-comment-route-hazard.md](block-comment-route-hazard.md) | 40a | Use `//` line comments in TS/JS files; `/* */` block comments with `*/route-path` substrings cause esbuild parse errors |
