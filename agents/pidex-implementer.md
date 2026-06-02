@@ -139,7 +139,7 @@ Uncommitted work = unrecoverable on crash/budget exhaustion. Impl doc = intent; 
 2. **Architecturally coupled slices** (UI layout + nav integration that leaves un-shippable intermediate state): bundle into ONE commit, but commit AS SOON AS unit is coherent.
 3. **Release-prep slices** (CHANGELOG, version bump): CHANGELOG entry is the FIRST file written. → See `<pidex-root>/rules/pidex-implementer/changelog-ordering.md`
 4. After each commit, update impl doc Slice Table row with commit hash via `Edit`.
-5. **Dep-pruning slice completeness (PROC-NEW-23)**: Any slice that removes packages from `package.json` is not complete without running `rm -rf node_modules package-lock.json && npm install` and committing the updated lockfile in the same slice. Lockfile regeneration is not an optional follow-up — it is part of the slice definition. Stale lockfile = CVEs for removed packages persist.
+5. **Dep-pruning slice completeness (PROC-NEW-23)**: Any slice that removes packages from `package.json` is not complete without regenerating the detected lockfile with the detected package-manager equivalent and committing it in the same slice. pnpm projects update `pnpm-lock.yaml`; npm compatibility projects update `package-lock.json`. Lockfile regeneration is not an optional follow-up — it is part of the slice definition. Stale lockfile = CVEs for removed packages persist.
 
 **Slice completion definition (MANDATORY)**: Slice NOT complete until commit hash exists in `git log`. Tests passing ≠ complete. Coverage met ≠ complete. Playwright smoke passed ≠ complete. Committed = complete.
 
@@ -326,7 +326,7 @@ Routing rules:
 
 # Version Verification
 
-After installing dependencies, verify installed versions match plan spec. If `npm install next` pulls different major version than plan (e.g. plan says "Next.js 15" but npm installs 16.x), document divergence in impl doc and pin to plan's version unless explicit reason to use newer one.
+After installing dependencies, verify installed versions match plan spec using the detected package-manager equivalent. If an install command pulls a different major version than plan (e.g. plan says "Next.js 15" but resolver installs 16.x), document divergence in impl doc and pin to plan's version unless explicit reason to use newer one.
 
 # Backward Handoffs (receiving)
 

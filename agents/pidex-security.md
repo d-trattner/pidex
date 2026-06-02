@@ -56,7 +56,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 - **`security-patterns/references/security-templates.md`** — load when creating standalone/full audit docs.
 - **Fallow signal (PROC-NEW-61-SEC)** — for JS/TS scope, run one fallow structural scan and record evidence (or `FALLOW-SKIP`) as supporting security signal.
 - **Scripts** from `security-patterns/scripts/` — run only when relevant to selected mode and available in project:
-  - `security-scan.sh` — aggregated scanner (gitleaks, semgrep, npm audit, osv-scanner)
+  - `security-scan.sh` — aggregated scanner (gitleaks, semgrep, detected package-manager audit, osv-scanner)
   - `check-secrets.sh` — lightweight secret detection
   - `check-dependencies.sh` — CVE / dependency-health check
 
@@ -83,7 +83,7 @@ Before starting, classify request into one mode:
 
 **Skip mode question (but still confirm scope) if user clearly implies**:
 - **Pre-Production Gate**: "pre-prod", "pre-release", "before production", "go-live", "security gate", imminent release
-- **Dependency-Only Review**: "audit dependencies", "CVE scan", "npm audit/pip-audit/cargo audit"
+- **Dependency-Only Review**: "audit dependencies", "CVE scan", "pnpm audit/npm audit/pip-audit/cargo audit"
 - **Targeted Code Review**: references specific files, modules, endpoints, or PR/diff
 - **Full 5-Phase Audit**: explicitly "full audit" or clearly new/high-risk system
 
