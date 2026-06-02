@@ -144,14 +144,24 @@ function pathShape(root) {
   };
 }
 
+function pnpmViaCorepack(commands) {
+  if (!commands.corepack.available || !commands.corepack.path) return { available: false, version: null };
+  const result = spawnSync(commands.corepack.path, ['pnpm', '--version'], { encoding: 'utf8', timeout: 10000 });
+  const output = `${result.stdout || ''}${result.stderr || ''}`.trim().split(/\r?\n/).filter(Boolean);
+  return { available: result.status === 0, version: output[0] || null };
+}
+
 function dashboardPrerequisites(root, commands) {
   const dashboard = path.join(root, 'dashboard');
+  const pnpm = pnpmViaCorepack(commands);
   return {
     dashboard_dir_exists: existsSync(dashboard),
     package_json_exists: existsSync(path.join(dashboard, 'package.json')),
     node_available: commands.node.available,
     npm_available: commands.npm.available,
     corepack_available: commands.corepack.available,
+    pnpm_via_corepack_available: pnpm.available,
+    pnpm_via_corepack_version: pnpm.version,
     node_modules_present: existsSync(path.join(dashboard, 'node_modules')),
     suggested_checks: ['corepack pnpm -C dashboard run typecheck', 'corepack pnpm -C dashboard run build'],
   };
@@ -186,6 +196,10 @@ function findings(environment, commands, paths) {
   const nodeVersion = parseNodeMajorMinor(commands.node.version);
   if (nodeVersion && (nodeVersion[0] < 22 || (nodeVersion[0] === 22 && nodeVersion[1] < 12))) {
     items.push({ level: 'warning', message: 'PIDEX Windows bootstrap/dashboard dependencies require Node >=22.12.0; current node appears older.' });
+  }
+  if (commands.corepack.available) {
+    const pnpm = pnpmViaCorepack(commands);
+    if (!pnpm.available) items.push({ level: 'warning', message: 'Corepack is available, but `corepack pnpm --version` failed; pnpm workspace install may fail.' });
   }
   if (paths.contains_spaces) items.push({ level: 'warning', message: 'PIDEX checkout path contains spaces; this is not yet validated for Windows support.' });
   if (!paths.is_expected_linux_checkout) items.push({ level: 'info', message: 'PIDEX v0.1 documents ~/pidex / $HOME\\pidex as the expected checkout path.' });
