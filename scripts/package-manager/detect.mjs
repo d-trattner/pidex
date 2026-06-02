@@ -184,7 +184,7 @@ export function detectPackageManager(options = {}) {
     packageManager = 'unknown';
     support = 'unsupported';
     confidence = 'packageManager';
-  } else if (fieldKnown && selectedLocks.length && fieldManager !== selectedLocks[0].manager && !workspaceMembership) {
+  } else if (fieldKnown && selectedLocks.length && fieldManager !== selectedLocks[0].manager) {
     packageManager = 'unknown';
     support = 'conflict';
     confidence = 'conflict';

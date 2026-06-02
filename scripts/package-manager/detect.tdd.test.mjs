@@ -116,6 +116,19 @@ test('nested package local lockfile overrides parent workspace lockfile without 
   assert.equal(result.workspace_root, root);
 });
 
+test('child packageManager mismatch with workspace lockfile is conflict', () => {
+  const root = fixture('workspace-field-mismatch');
+  pkg(root, 'package.json', { packageManager: 'pnpm@10.1.2' });
+  file(root, 'pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
+  file(root, 'pnpm-lock.yaml', 'lockfileVersion: 9.0\n');
+  pkg(root, 'packages/legacy/package.json', { name: 'legacy', packageManager: 'npm@10.9.0' });
+  const result = detectPackageManager({ project: path.join(root, 'packages/legacy'), mode: 'existing' });
+  assert.equal(result.package_manager, 'unknown');
+  assert.equal(result.support, 'conflict');
+  assert.equal(result.confidence, 'conflict');
+  assert.match(result.warnings.join('\n'), /packageManager_lockfile_conflict:npm:pnpm/);
+});
+
 test('existing project with no evidence remains unknown', () => {
   const root = fixture('unknown-existing');
   pkg(root);
