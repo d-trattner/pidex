@@ -7,6 +7,7 @@ Last updated: 2026-06-01 (QA-NO-IMMORTAL-SERVERS / QA-GENERATED-SCRIPT-CHECK)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Package Manager Equivalence | [../shared/package-manager-equivalence.md](../shared/package-manager-equivalence.md) | PROC-PACKAGE-MANAGER-1 | Use detected package-manager equivalents; pnpm native/default, npm compatibility, yarn/bun unsupported; avoid lockfile type changes and npx auto-downloads |
 | Authority Change Full-Suite + Fixture Isolation Gate | [authority-change-full-suite-isolation-gate.md](authority-change-full-suite-isolation-gate.md) | 2 | Resolver/path authority changes require early full-suite run and explicit fixture-isolation evidence before QA COMPLETE |
 | Combined Command + Fixture Isolation Gate | [combined-command-fixture-isolation-gate.md](combined-command-fixture-isolation-gate.md) | PROC-NEW-3 | Fixture/catalog artifact edits require combined-command parity, artifact-root isolation, and cross-command consistency evidence at QA close |
 | Docs-Only Release Reconciliation Triad Audit | [docs-only-release-reconciliation-triad-audit.md](docs-only-release-reconciliation-triad-audit.md) | 027-PI-3 | Docs-only release reconciliation QA must audit remote tag proof, roadmap shipped status, and dirty-tree provenance before QA COMPLETE |

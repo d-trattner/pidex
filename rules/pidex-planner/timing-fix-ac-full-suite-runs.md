@@ -10,7 +10,7 @@ For any plan whose primary scope is fixing a test timing race, flake, or async a
 
 Add this AC row to the plan's Acceptance Criteria table:
 
-> **AC-X: Full-Suite Parallel Flake Verification** — `npm run test:run` (or equivalent full-suite command without test-filter flags) passes on 4 consecutive runs with 0 failures. Isolated file runs are a useful quick check but do NOT substitute for this requirement. Full-suite parallel load is the canonical environment for validating timing fixes — a flake rate as high as 50% can be invisible in a single full-suite run and always invisible in isolated runs.
+> **AC-X: Full-Suite Parallel Flake Verification** — detected package-manager equivalent full-suite command such as `pnpm run test:run` or `npm run test:run` (without test-filter flags) passes on 4 consecutive runs with 0 failures. Isolated file runs are a useful quick check but do NOT substitute for this requirement. Full-suite parallel load is the canonical environment for validating timing fixes — a flake rate as high as 50% can be invisible in a single full-suite run and always invisible in isolated runs.
 
 ## Why 4 Runs
 

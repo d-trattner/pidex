@@ -6,29 +6,37 @@ PROC-NEW-23 | pidex-implementer
 
 **Any slice that removes packages from `package.json` is not complete without lockfile regeneration in the same slice.**
 
-Removing packages from `package.json` without regenerating the lockfile leaves the lockfile stale. The removed packages remain in `package-lock.json` with their pinned versions and any associated CVEs — meaning security scanners will still flag them.
+Removing packages from `package.json` without regenerating the detected lockfile leaves the lockfile stale. Removed packages remain pinned in the lockfile with any associated CVEs — meaning security scanners will still flag them.
+
+Also follow [Package Manager Equivalence](../shared/package-manager-equivalence.md): pnpm is PIDEX's native/default manager, existing npm projects use the compatibility path, and lockfile type must not change unless migration is explicit.
 
 ## Required steps (in order)
 
 When a slice removes one or more packages from `package.json`:
 
-1. Edit `package.json` to remove the packages (or run `npm uninstall <pkg>`).
-2. Run lockfile regeneration:
+1. Detect package manager / lockfile type.
+2. Edit `package.json` to remove the packages, or run the detected package-manager remove/uninstall command.
+3. Regenerate the lockfile using the detected package-manager equivalent:
    ```bash
+   # pnpm project
+   rm -rf node_modules pnpm-lock.yaml
+   pnpm install
+
+   # npm compatibility project
    rm -rf node_modules package-lock.json
    npm install
    ```
-3. Run `npm audit` to verify no new critical/high CVEs introduced.
-4. Stage and commit both `package.json` AND `package-lock.json` in the same commit.
+4. Run the detected audit equivalent (`pnpm audit --audit-level moderate` or `npm audit --audit-level=moderate`) to verify no new critical/high CVEs introduced.
+5. Stage and commit both `package.json` AND the detected lockfile in the same commit.
 
 ## The lockfile is a deliverable of the dep-pruning slice
 
-The slice is not "done" after `package.json` is edited. `package-lock.json` is an implicit deliverable of every dep-pruning slice. Omitting it from the commit = incomplete slice.
+The slice is not "done" after `package.json` is edited. The detected lockfile (`pnpm-lock.yaml` or `package-lock.json`) is an implicit deliverable of every dep-pruning slice. Omitting it from the commit = incomplete slice.
 
 ## Scope
 
 Applies when a slice:
-- Runs `npm uninstall <pkg>`
+- Runs a package-manager remove/uninstall command
 - Removes a dependency from the `dependencies`, `devDependencies`, or `peerDependencies` field of any `package.json`
 - Removes a workspace package that other packages depended on
 

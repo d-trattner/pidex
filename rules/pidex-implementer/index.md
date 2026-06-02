@@ -7,6 +7,7 @@ Last updated: 2026-05-18 (PROC-NEW-2)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Package Manager Equivalence | [../shared/package-manager-equivalence.md](../shared/package-manager-equivalence.md) | PROC-PACKAGE-MANAGER-1 | Use detected package-manager equivalents; pnpm native/default, npm compatibility, yarn/bun unsupported; avoid lockfile type changes and npx auto-downloads |
 | Local Operator Config Guard | [../shared/local-operator-config-guard.md](../shared/local-operator-config-guard.md) | PROC-LOCAL-CONFIG-1 | Mutable operator config must use ignored local overrides; public-default cleanup must not overwrite live dashboard/agent settings |
 | Final ROUTING Parser Fixture Pack | [final-routing-parser-fixture-pack.md](final-routing-parser-fixture-pack.md) | 029-PI-3 | Prompt-contract/parser work must reuse shared final-ROUTING fixture pack with positive + required negative cases |
 | API Fan-out Pre-CR Checklist | [api-fanout-pre-cr-checklist.md](api-fanout-pre-cr-checklist.md) | 71-1 | Fan-out API work requires pre-CR checklist for origin trust, dynamic port, timeout bounds, KPI truthfulness, sanitized errors |

@@ -7,6 +7,7 @@ Last updated: 2026-05-18 (PROC-104-D)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Package Manager Equivalence | [../shared/package-manager-equivalence.md](../shared/package-manager-equivalence.md) | PROC-PACKAGE-MANAGER-1 | Use detected package-manager equivalents; pnpm native/default, npm compatibility, yarn/bun unsupported; avoid lockfile type changes and npx auto-downloads |
 | Local Operator Config Guard | [../shared/local-operator-config-guard.md](../shared/local-operator-config-guard.md) | PROC-LOCAL-CONFIG-1 | Reject changes that overwrite live operator settings with public defaults or write mutable settings to tracked defaults |
 | Hotfix Lane Runtime-Unchanged Proof | [hotfix-lane-runtime-unchanged-proof.md](hotfix-lane-runtime-unchanged-proof.md) | 3 | Post-QA narrow-diff hotfix approval requires runtime-unchanged proof + targeted/full-suite test pair evidence |
 | Structural Evidence First-Pass Review | [structural-evidence-first-pass.md](structural-evidence-first-pass.md) | 026-2 | Structural pipeline/orchestration reviews require executable evidence for state, artifact, authz, response, and cwd/path invariants |
