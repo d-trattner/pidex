@@ -6,18 +6,17 @@ PROC-NEW-23 | pidex-critic
 
 **Flag as BLOCKING any dep-pruning slice that lacks an explicit lockfile regeneration step.**
 
-A dep-pruning slice that only edits `package.json` (removing packages) without specifying `npm install` / lockfile regen leaves the lockfile stale. Stale lockfile = removed packages' CVEs persist in the pinned lockfile. pidex-security will catch this, but the critic gate is earlier and cheaper.
+A dep-pruning slice that only edits `package.json` (removing packages) without specifying detected package-manager lockfile regeneration leaves the lockfile stale. Stale lockfile = removed packages' CVEs persist in the pinned lockfile. pidex-security will catch this, but the critic gate is earlier and cheaper.
 
 ## Check
 
 When reviewing a plan that contains a dep-pruning slice (a slice described as "dependency pruning", "remove unused packages", "uninstall X", or equivalent):
 
 1. Find the slice's steps or description.
-2. Verify the slice explicitly includes one of:
-   - `npm install` (after removing packages)
-   - `rm -rf node_modules package-lock.json && npm install`
-   - `npm uninstall <pkg>` (which auto-updates lockfile)
-3. Verify the slice's commit step includes `package-lock.json`.
+2. Verify the slice explicitly includes detected package-manager lockfile regeneration, for example:
+   - pnpm: `pnpm install` after dependency removal, committing `pnpm-lock.yaml`
+   - npm compatibility: `npm install` or `npm uninstall <pkg>`, committing `package-lock.json`
+3. Verify the slice's commit step includes the detected lockfile.
 
 If any of these are missing: flag as BLOCKING.
 
@@ -29,8 +28,8 @@ Severity: BLOCKING
 Slice: <slice name/ID>
 Details: Slice removes packages from package.json but does not include lockfile regeneration.
 Stale lockfile retains CVEs for removed packages; pidex-security will catch this as a must-fix.
-Fix: Add explicit step — rm -rf node_modules package-lock.json && npm install — to the slice.
-Commit package-lock.json as part of the same slice.
+Fix: Add explicit detected package-manager lockfile regeneration step to the slice.
+Commit the detected lockfile (`pnpm-lock.yaml` or `package-lock.json`) as part of the same slice.
 ```
 
 ## Scope

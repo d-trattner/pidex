@@ -19,18 +19,20 @@ else
 fi
 
 if command -v node >/dev/null 2>&1; then ok "node found: $(node --version)"; else fail "node not found"; fi
-if command -v npm >/dev/null 2>&1; then ok "npm found: $(npm --version)"; else fail "npm not found"; fi
+if command -v npm >/dev/null 2>&1; then ok "npm found: $(npm --version)"; else fail "npm not found (required for Pi/npm bootstrap)"; fi
+if command -v corepack >/dev/null 2>&1; then ok "corepack found: $(corepack --version)"; else fail "corepack not found"; fi
+if command -v corepack >/dev/null 2>&1; then ok "pnpm via corepack: $(corepack pnpm --version)"; else warn "pnpm check skipped; corepack unavailable"; fi
 if command -v pi >/dev/null 2>&1; then ok "pi found: $(command -v pi)"; else fail "pi command not found"; fi
 
 if [ -f "$ROOT/config/agents.json" ]; then ok "config/agents.json present"; else fail "config/agents.json missing"; fi
 if compgen -G "$ROOT/config/profiles/*.json" >/dev/null; then ok "codex profiles present"; else fail "config/profiles/*.json missing"; fi
 if [ -f "$ROOT/package.json" ]; then ok "package.json present"; else fail "package.json missing"; fi
 
-if command -v npm >/dev/null 2>&1 && [ -f "$ROOT/package.json" ]; then
-  if (cd "$ROOT" && npm run check >/tmp/pidex-doctor-check.log 2>&1); then
-    ok "npm run check passed"
+if command -v corepack >/dev/null 2>&1 && [ -f "$ROOT/package.json" ]; then
+  if (cd "$ROOT" && corepack pnpm run check >/tmp/pidex-doctor-check.log 2>&1); then
+    ok "pnpm run check passed"
   else
-    fail "npm run check failed; see /tmp/pidex-doctor-check.log"
+    fail "pnpm run check failed; see /tmp/pidex-doctor-check.log"
   fi
 fi
 

@@ -16,10 +16,10 @@ if command -v jq >/dev/null 2>&1; then
   jq empty "$ROOT/config/agents.json"
 fi
 
-if command -v npm >/dev/null 2>&1; then
-  (cd "$ROOT" && npm run check)
+if command -v corepack >/dev/null 2>&1; then
+  (cd "$ROOT" && corepack pnpm run check)
 else
-  echo "WARN: npm not found; skipping npm run check"
+  echo "WARN: corepack not found; skipping pnpm run check"
 fi
 
 if command -v pi >/dev/null 2>&1; then

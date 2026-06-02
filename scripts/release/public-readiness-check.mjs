@@ -50,7 +50,9 @@ if (cmd === 'tracked-clean') {
   const file = 'config/parallel-agents.json';
   if (existsSync(file)) { const data = JSON.parse(readFileSync(file, 'utf8')); if (data.enabled !== false) fail('config/parallel-agents.json must be disabled by default for public release'); for (const [name, cfg] of Object.entries(data.agents || {})) { if (cfg.enabled !== false) fail(`parallel agent ${name} must be disabled by default for public release`); for (const lane of cfg.provider_models || []) if (lane.enabled !== false) fail(`parallel lane ${name}:${lane.provider}:${lane.model} must be disabled by default`); } }
 } else if (cmd === 'pack-clean') {
-  const pkg = JSON.parse(readFileSync(process.argv[3], 'utf8'))[0]; const bad = [];
+  const rawPack = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+  const pkg = Array.isArray(rawPack) ? rawPack[0] : rawPack;
+  const bad = [];
   const forbiddenPrefixes = [
     'dashboard-old/', 'analysis/', 'wiki/', 'state/', 'agents.output/', 'logs/',
     'dashboard/node_modules/', 'dashboard/.playwright/', 'dashboard/.fallow/',

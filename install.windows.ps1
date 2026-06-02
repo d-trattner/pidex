@@ -121,6 +121,7 @@ if ($PidexRoot -ne $ExpectedRoot) {
 $Git = Require-Command @("git") "Install Git for Windows: https://git-scm.com/download/win"
 $Node = Require-Command @("node") "Install Node.js LTS: https://nodejs.org/"
 $Npm = Require-Command @("npm") "Install Node.js/npm: https://nodejs.org/"
+$Corepack = Require-Command @("corepack") "Install Node.js with Corepack support or enable Corepack: https://nodejs.org/"
 $Pi = Require-Command @("pi") "Install Pi first: npm install -g @earendil-works/pi-coding-agent"
 $Python = Get-PythonCommand
 $GitBash = Find-GitBash
@@ -133,6 +134,7 @@ Write-Step "Prerequisites found"
 Write-Host "git:    $Git"
 Write-Host "node:   $Node ($NodeVersion)"
 Write-Host "npm:    $Npm"
+Write-Host "corepack: $Corepack"
 if ($Python) {
   Write-Host "python: $($Python.Command) $($Python.Prefix -join ' ')"
 } else {
@@ -209,13 +211,18 @@ if ($DryRun) {
 $DashboardDir = Join-Path $PidexRoot "dashboard"
 $DashboardNodeModules = Join-Path $DashboardDir "node_modules"
 if (-not $SkipDashboardDeps -and -not (Test-Path -LiteralPath $DashboardNodeModules)) {
-  Write-Step "Installing dashboard dependencies"
-  $DashboardLock = Join-Path $DashboardDir "package-lock.json"
-  $NpmInstallCommand = if (Test-Path -LiteralPath $DashboardLock) { "ci" } else { "install" }
+  Write-Step "Installing PIDEX workspace dependencies"
+  $PnpmLock = Join-Path $PidexRoot "pnpm-lock.yaml"
+  $PnpmArgs = if (Test-Path -LiteralPath $PnpmLock) { @("pnpm", "install", "--frozen-lockfile", "--ignore-scripts") } else { @("pnpm", "install", "--ignore-scripts") }
   if ($DryRun) {
-    Write-Host "DRY-RUN: npm --prefix $DashboardDir $NpmInstallCommand"
+    Write-Host "DRY-RUN: corepack $($PnpmArgs -join ' ')"
   } else {
-    Invoke-Checked $Npm @("--prefix", $DashboardDir, $NpmInstallCommand)
+    Push-Location $PidexRoot
+    try {
+      Invoke-Checked $Corepack $PnpmArgs
+    } finally {
+      Pop-Location
+    }
   }
 } elseif ($SkipDashboardDeps) {
   Write-Step "Skipping dashboard dependency install"
@@ -267,6 +274,6 @@ Write-Host "Global Git hooks were intentionally not installed on Windows."
 Write-Host "Next steps:"
 Write-Host "  1. Open Pi and run: /reload"
 Write-Host "  2. Try: /pidex <your task>"
-Write-Host "  3. For this PowerShell session, expose Git Bash before npm checks:"
+Write-Host "  3. For this PowerShell session, expose Git Bash before pnpm checks:"
 Write-Host "     `$env:Path = `"$GitBashDir;`$env:Path`""
-Write-Host "  4. Run checks: npm run public:check; npm --prefix dashboard run typecheck; npm --prefix dashboard run build"
+Write-Host "  4. Run checks: corepack pnpm run public:check; corepack pnpm -C dashboard run typecheck; corepack pnpm -C dashboard run build"

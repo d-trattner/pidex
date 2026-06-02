@@ -48,16 +48,21 @@ $PidexRoot = Split-Path -Parent $DashboardRoot
 if (-not $Domain) { $Domain = Read-DashboardDomain $PidexRoot }
 
 $Node = Get-CommandPath @("node")
-$Npm = Get-CommandPath @("npm")
+$Corepack = Get-CommandPath @("corepack")
 if (-not $Node) { Fail "Missing prerequisite: node" }
-if (-not $Npm) { Fail "Missing prerequisite: npm" }
+if (-not $Corepack) { Fail "Missing prerequisite: corepack" }
 
 $NodeModules = Join-Path $DashboardRoot "node_modules"
 if (-not (Test-Path -LiteralPath $NodeModules)) {
-  $Lock = Join-Path $DashboardRoot "package-lock.json"
-  $InstallCommand = if (Test-Path -LiteralPath $Lock) { "ci" } else { "install" }
-  Write-Step "Installing dashboard dependencies (npm $InstallCommand)"
-  Invoke-Checked $Npm @("--prefix", $DashboardRoot, $InstallCommand)
+  $Lock = Join-Path $PidexRoot "pnpm-lock.yaml"
+  $PnpmArgs = if (Test-Path -LiteralPath $Lock) { @("pnpm", "install", "--frozen-lockfile", "--ignore-scripts") } else { @("pnpm", "install", "--ignore-scripts") }
+  Write-Step "Installing PIDEX workspace dependencies (pnpm)"
+  Push-Location $PidexRoot
+  try {
+    Invoke-Checked $Corepack $PnpmArgs
+  } finally {
+    Pop-Location
+  }
 }
 
 if (-not $NoIngest) {
@@ -72,7 +77,7 @@ if (-not $NoIngest) {
 
 if (-not $Dev -and -not $NoBuild) {
   Write-Step "Building dashboard"
-  Invoke-Checked $Npm @("--prefix", $DashboardRoot, "run", "build")
+  Invoke-Checked $Corepack @("pnpm", "-C", $DashboardRoot, "run", "build")
 }
 
 $env:PIDEX_DASHBOARD_ROOT = $DashboardRoot
@@ -83,7 +88,7 @@ $env:PIDEX_DASHBOARD_PUBLIC_BIND = if ($HostName -in @("127.0.0.1", "localhost",
 
 $Vite = Join-Path $DashboardRoot "node_modules/.bin/vite.cmd"
 if (-not (Test-Path -LiteralPath $Vite)) { $Vite = Join-Path $DashboardRoot "node_modules/.bin/vite" }
-if (-not (Test-Path -LiteralPath $Vite)) { Fail "Missing Vite binary. Run npm --prefix $DashboardRoot ci" }
+if (-not (Test-Path -LiteralPath $Vite)) { Fail "Missing Vite binary. Run corepack pnpm install --frozen-lockfile --ignore-scripts from $PidexRoot" }
 
 Write-Step "Starting dashboard in foreground on ${HostName}:${Port}"
 Write-Host "Local:  http://127.0.0.1:$Port/dashboard"

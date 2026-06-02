@@ -8,7 +8,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const COMMANDS = ['bash', 'node', 'npm', 'git', 'pi'];
+const COMMANDS = ['bash', 'node', 'npm', 'corepack', 'git', 'pi'];
 const RISKY_ENTRYPOINTS = [
   ['install.sh', 'linux-owned', 'Prefer a future install.windows.ps1; do not add inline Windows branches to install.sh.'],
   ['uninstall.sh', 'linux-owned', 'Prefer a future uninstall.windows.ps1.'],
@@ -64,6 +64,7 @@ function commandVersion(command, executable) {
     bash: ['--version'],
     node: ['--version'],
     npm: ['--version'],
+    corepack: ['--version'],
     git: ['--version'],
     pi: ['--version'],
   };
@@ -71,7 +72,7 @@ function commandVersion(command, executable) {
   let runArgs = argsByCommand[command];
   if (process.platform === 'win32') {
     const lower = executable.toLowerCase();
-    if (['npm', 'pi'].includes(command)) {
+    if (['npm', 'corepack', 'pi'].includes(command)) {
       runCommand = process.env.ComSpec || 'cmd.exe';
       runArgs = ['/d', '/c', `${command} ${argsByCommand[command].join(' ')}`];
     } else if (lower.endsWith('.ps1')) {
@@ -150,8 +151,9 @@ function dashboardPrerequisites(root, commands) {
     package_json_exists: existsSync(path.join(dashboard, 'package.json')),
     node_available: commands.node.available,
     npm_available: commands.npm.available,
+    corepack_available: commands.corepack.available,
     node_modules_present: existsSync(path.join(dashboard, 'node_modules')),
-    suggested_checks: ['npm --prefix dashboard run typecheck', 'npm --prefix dashboard run build'],
+    suggested_checks: ['corepack pnpm -C dashboard run typecheck', 'corepack pnpm -C dashboard run build'],
   };
 }
 
@@ -178,7 +180,7 @@ function findings(environment, commands, paths) {
   else if (environment.kind === 'windows-native') items.push({ level: 'warning', message: 'Native Windows detected; PIDEX does not currently claim full PowerShell/CMD runtime support.' });
   else items.push({ level: 'warning', message: `Unvalidated platform detected: ${environment.kind}.` });
 
-  for (const command of ['bash', 'node', 'npm', 'git', 'pi']) {
+  for (const command of ['bash', 'node', 'npm', 'corepack', 'git', 'pi']) {
     if (!commands[command].available) items.push({ level: 'warning', message: `Required or expected command not found on PATH/standard location: ${command}.` });
   }
   const nodeVersion = parseNodeMajorMinor(commands.node.version);
