@@ -7,7 +7,7 @@
 # Input env vars:
 #   PROMPT_FILE — path to fully-assembled prompt (stdin-redirected into codex)
 #   OUTPUT_FILE — path where codex writes the result (via -o flag)
-#   MODEL       — codex model (default: gpt-5.3-codex)
+#   MODEL       — codex model (default: gpt-5.4-mini)
 #   EFFORT      — optional reasoning effort: low, medium, high, xhigh
 #
 # Exit codes:
@@ -17,14 +17,14 @@
 #   3  empty output
 #
 # Usage:
-#   PROMPT_FILE=/tmp/p.md OUTPUT_FILE=/tmp/out.md MODEL=gpt-5.3-codex \
+#   PROMPT_FILE=/tmp/p.md OUTPUT_FILE=/tmp/out.md MODEL=gpt-5.4-mini \
 #     bash <pidex-root>/scripts/delegate/codex.sh
 
 set -euo pipefail
 
 : "${PROMPT_FILE:?PROMPT_FILE is required}"
 : "${OUTPUT_FILE:?OUTPUT_FILE is required}"
-MODEL="${MODEL:-gpt-5.3-codex}"
+MODEL="${MODEL:-gpt-5.4-mini}"
 EFFORT="${EFFORT:-}"
 
 if ! command -v codex >/dev/null 2>&1; then

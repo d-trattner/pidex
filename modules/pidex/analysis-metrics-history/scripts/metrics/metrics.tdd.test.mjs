@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-metrics-'));
 try {
   const env = { ...process.env, RUNNING_PI_STATE_DIR: state };
-  const rec = spawnSync(process.execPath, [path.join(root, 'modules/pidex/analysis-metrics-history/scripts/metrics/record.mjs'), '--project', 'My Project', '--plan', 'plan-001', '--agent', 'pidex-planner', '--provider', 'codex', '--model', 'gpt-5.3-codex', '--input-tokens', '100', '--output-tokens', '50', '--duration-ms', '1200', '--exit-code', '0'], { encoding: 'utf8', env });
+  const rec = spawnSync(process.execPath, [path.join(root, 'modules/pidex/analysis-metrics-history/scripts/metrics/record.mjs'), '--project', 'My Project', '--plan', 'plan-001', '--agent', 'pidex-planner', '--provider', 'codex', '--model', 'gpt-5.4-mini', '--input-tokens', '100', '--output-tokens', '50', '--duration-ms', '1200', '--exit-code', '0'], { encoding: 'utf8', env });
   assert.equal(rec.status, 0, rec.stderr || rec.stdout);
   const file = rec.stdout.trim();
   const row = JSON.parse(readFileSync(file, 'utf8').trim());

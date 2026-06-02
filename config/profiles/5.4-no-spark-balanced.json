@@ -1,97 +1,97 @@
 {
   "$schema": "https://pidex.dev/agents.schema.json",
   "version": "1.3.0",
-  "description": "PIDEX no-spark xhigh profile: Codex 5.3 for all PIDEX agents with xhigh effort.",
+  "description": "PIDEX no-spark balanced profile: GPT-5.4 mini for PIDEX agents with medium effort except high-effort analyst/architect/planner.",
   "defaults": {
     "provider": "pi",
-    "model": "openai-codex/gpt-5.3-codex",
+    "model": "openai-codex/gpt-5.4-mini",
     "timeout_seconds": 300
   },
   "agents": {
     "pidex-analyst": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 300,
-      "effort": "xhigh"
+      "effort": "high"
     },
     "pidex-architect": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 360,
-      "effort": "xhigh"
+      "effort": "high"
     },
     "pidex-code-reviewer": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 600,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-critic": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 480,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-designer": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 600,
-      "effort": "xhigh",
+      "effort": "medium",
       "condition": "plan_has_ui_scope"
     },
     "pidex-devops": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 1200,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-implementer": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 1800,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-pi": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 300,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-planner": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.5",
       "timeout_seconds": 360,
-      "effort": "xhigh"
+      "effort": "high"
     },
     "pidex-qa": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 1200,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-retrospective": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 600,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-roadmap": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 600,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-security": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 900,
-      "effort": "xhigh"
+      "effort": "medium"
     },
     "pidex-uat": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.3-codex",
+      "model": "openai-codex/gpt-5.4-mini",
       "timeout_seconds": 600,
-      "effort": "xhigh"
+      "effort": "medium"
     }
   },
   "fallback": {

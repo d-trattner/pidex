@@ -110,7 +110,7 @@ function nonSparkFallbackProfile(current, profiles) {
   if (!noSpark.length || noSpark.includes(current)) return null;
   const exact = current.replace('plus-spark', 'no-spark');
   if (noSpark.includes(exact)) return exact;
-  if (current.startsWith('5.3') && noSpark.includes('5.3-no-spark-balanced')) return '5.3-no-spark-balanced';
+  if (current.startsWith('5.4') && noSpark.includes('5.4-no-spark-balanced')) return '5.4-no-spark-balanced';
   if (current.startsWith('5.5') && noSpark.includes('5.5-no-spark-balanced')) return '5.5-no-spark-balanced';
   return noSpark[0];
 }

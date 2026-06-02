@@ -48,8 +48,8 @@ If Spark usage reaches 99%, or the provider reports Spark as blocked, PIDEX auto
 
 Example mappings:
 
-- `5.3-plus-spark-balanced` → `5.3-no-spark-balanced`
-- `5.3-plus-spark-xhigh` → `5.3-no-spark-xhigh`
+- `5.4-plus-spark-balanced` → `5.4-no-spark-balanced`
+- `5.4-plus-spark-xhigh` → `5.4-no-spark-xhigh`
 - `5.5-plus-spark-balanced` → `5.5-no-spark-balanced`
 
 ## Profile files

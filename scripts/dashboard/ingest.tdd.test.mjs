@@ -35,7 +35,7 @@ try {
   mkdirSync(path.join(project, 'agents.output', 'parallel-agents'), { recursive: true });
 
   writeFileSync(path.join(state, 'metrics', 'tmp-project', 'plan-001.jsonl'), `${JSON.stringify({
-    timestamp: '2026-01-01T00:00:00Z', project, plan: '1', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.3-codex', input_tokens_estimate: 10, output_tokens_estimate: 20,
+    timestamp: '2026-01-01T00:00:00Z', project, plan: '1', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.4-mini', input_tokens_estimate: 10, output_tokens_estimate: 20,
   })}\n`);
   writeFileSync(path.join(state, 'pipeline-events', 'project', 'pipe-1.jsonl'), `${JSON.stringify({
     timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',

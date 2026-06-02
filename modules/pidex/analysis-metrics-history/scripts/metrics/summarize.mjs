@@ -5,7 +5,7 @@ import process from 'node:process';
 
 function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unknown'; }
 function parse(argv) { const out = { project: '', plan: '' }; for (let i = 0; i < argv.length; i++) { const a = argv[i]; if (a === '--project') out.project = argv[++i] || ''; else if (a === '--plan') out.plan = argv[++i] || ''; else if (a === '-h' || a === '--help') { console.log('Usage: summarize.mjs <plan-id> [--project PROJECT]\n       summarize.mjs --plan <plan-id> [--project PROJECT]'); process.exit(0); } else if (!out.plan) out.plan = a; else { console.error(`Unknown arg: ${a}`); process.exit(2); } } if (!out.plan) { console.error('plan id required'); process.exit(2); } return out; }
-function isCodexRecord(rec) { if (['1', 'true', 'yes'].includes(String(process.env.PIDEX_SUMMARY_INCLUDE_ALL || '0').toLowerCase())) return true; const provider = String(rec.provider || '').toLowerCase(); const model = String(rec.model || '').toLowerCase(); return provider.includes('codex') || provider.includes('openai-codex') || model.includes('gpt-5.3-codex') || model.startsWith('openai-codex/'); }
+function isCodexRecord(rec) { if (['1', 'true', 'yes'].includes(String(process.env.PIDEX_SUMMARY_INCLUDE_ALL || '0').toLowerCase())) return true; const provider = String(rec.provider || '').toLowerCase(); const model = String(rec.model || '').toLowerCase(); return provider.includes('codex') || provider.includes('openai-codex') || model.includes('codex') || model.startsWith('gpt-5.') || model.startsWith('openai-codex/'); }
 function esc(value) { return String(value ?? '').replaceAll('|', '\\|'); }
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');

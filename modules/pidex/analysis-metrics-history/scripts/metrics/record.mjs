@@ -11,7 +11,7 @@ function parse(argv) {
   }
   return out;
 }
-function isCodexProvider(provider, model) { const v = String(provider || '').toLowerCase().trim(); const m = String(model || '').toLowerCase(); return v === 'codex' || v === 'openai' || v.startsWith('openai-codex/') || v.includes('codex') || m.includes('gpt-5.3-codex'); }
+function isCodexProvider(provider, model) { const v = String(provider || '').toLowerCase().trim(); const m = String(model || '').toLowerCase(); return v === 'codex' || v === 'openai' || v.startsWith('openai-codex/') || v.includes('codex') || m.includes('codex') || m.startsWith('gpt-5.'); }
 function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unknown'; }
 function asInt(value, fallback = 0) { const n = Math.trunc(Number(value)); return Number.isFinite(n) ? n : fallback; }
 

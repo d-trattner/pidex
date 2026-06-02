@@ -48,7 +48,7 @@ RUNNING_PI_STATE_DIR="$TMP/state" node "$ROOT/scripts/modules/run-check.mjs" --c
   --plan "$PLAN_SMOKE" \
   --agent pidex-smoke \
   --provider codex \
-  --model gpt-5.3-codex \
+  --model gpt-5.4-mini \
   --input-tokens 10 \
   --output-tokens 4 \
   --duration-ms 111 \
