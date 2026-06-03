@@ -56,7 +56,7 @@ try {
     assert.equal(row.physical_action.json_report ?? null, null);
     assert.equal(row.physical_action.markdown_report ?? null, null);
   }
-  cleanup.push(row.physical_action.json_report, row.physical_action.markdown_report, opOut.op_quality_review, path.dirname(opOut.op_quality_review));
+  cleanup.push(...[row.physical_action.json_report, row.physical_action.markdown_report, opOut.op_quality_review, path.dirname(opOut.op_quality_review)].filter(Boolean));
 } finally {
   for (const target of cleanup) rmSync(target, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
