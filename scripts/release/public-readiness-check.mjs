@@ -43,6 +43,21 @@ if (cmd === 'tracked-clean') {
   if (paths.includes('config/operator-contracts.local.json')) fail('config/operator-contracts.local.json must remain local/untracked');
   if (paths.includes('config/contract-governor.local.json')) fail('config/contract-governor.local.json must remain local/untracked');
   if (bad.length) fail([...new Set(bad)].sort().join('\n'));
+} else if (cmd === 'pnpm-workspace') {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+  const dashPkg = JSON.parse(readFileSync('dashboard/package.json', 'utf8'));
+  const pm = String(pkg.packageManager || '');
+  if (!/^pnpm@\d+\.\d+\.\d+/.test(pm)) fail('package.json must pin packageManager as pnpm@<exact-version>');
+  if (!existsSync('pnpm-lock.yaml')) fail('pnpm-lock.yaml must be committed');
+  if (!existsSync('pnpm-workspace.yaml')) fail('pnpm-workspace.yaml must be committed');
+  const workspace = readFileSync('pnpm-workspace.yaml', 'utf8');
+  if (!/^\s*-\s*dashboard\s*$/m.test(workspace)) fail('pnpm-workspace.yaml must include dashboard workspace package');
+  if (existsSync('package-lock.json')) fail('root package-lock.json must not exist after pnpm migration');
+  if (existsSync('dashboard/package-lock.json')) fail('dashboard/package-lock.json must not exist after pnpm migration');
+  if (dashPkg.name !== '@pidex/dashboard') fail('dashboard package name must be @pidex/dashboard');
+  if (dashPkg.private !== true) fail('dashboard package must remain private');
+  const trackedLocks = gitFiles().filter((file) => file === 'package-lock.json' || file.endsWith('/package-lock.json'));
+  if (trackedLocks.length) fail(`package-lock.json files must not be tracked in PIDEX pnpm workspace:\n${trackedLocks.join('\n')}`);
 } else if (cmd === 'parallel-defaults') {
   const governorFile = 'config/contract-governor.json';
   if (existsSync(governorFile)) { const g = JSON.parse(readFileSync(governorFile, 'utf8')); if (g.enabled !== false) fail('config/contract-governor.json must be disabled by default'); if (g.hot_mode !== false) fail('contract governor hot_mode must be false by default'); if (!['off', 0, false, null, undefined].includes(g.auto_apply)) fail('contract governor auto_apply must be off by default'); if (g.max_cost_usd_per_run !== 0) fail('contract governor public max_cost_usd_per_run must be 0'); }

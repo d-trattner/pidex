@@ -18,6 +18,8 @@ Checks the PIDEX public-release invariants:
 - no forbidden tracked runtime/private paths
 - no high-confidence secret tokens or local operator path leaks in tracked text
 - public default configs do not include local balances or enabled optional secondary lanes
+- ignored files are not tracked/force-added
+- pnpm workspace metadata and lockfiles are coherent
 - pnpm pack does not include excluded paths
 - no legacy dashboard archive
 - README documents the ~/pidex install contract
@@ -53,6 +55,9 @@ fi
 
 node scripts/release/public-readiness-check.mjs tracked-clean
 ok "no forbidden tracked runtime/private files or high-confidence secrets"
+
+node scripts/git/ignored-tracked-guard.mjs >/dev/null
+ok "no ignored files are tracked"
 
 node scripts/release/reference-integrity.mjs
 ok "package-facing references resolve"
@@ -92,6 +97,9 @@ ok "Pi SDK namespace uses @earendil-works"
 
 node scripts/release/public-readiness-check.mjs parallel-defaults
 ok "public default optional parallel agents are disabled"
+
+node scripts/release/public-readiness-check.mjs pnpm-workspace
+ok "pnpm workspace metadata is coherent"
 
 REQUIRED_PNPM=$(node -e "const p=require('./package.json'); const m=/^pnpm@(.+)$/.exec(p.packageManager||''); if(!m) process.exit(1); console.log(m[1]);")
 PNPM=()
