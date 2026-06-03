@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import process from 'node:process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { detectPackageManager } from './detect.mjs';
 
 const OPERATIONS = new Set([
@@ -112,4 +114,4 @@ function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])) main();
