@@ -53,8 +53,8 @@ try {
     assert.equal(row.physical_action.json_report, reportOut.json);
     assert.equal(row.physical_action.markdown_report, reportOut.markdown);
   } else {
-    assert.ok(row.physical_action.json_report, 'json report path missing');
-    assert.ok(row.physical_action.markdown_report, 'markdown report path missing');
+    assert.equal(row.physical_action.json_report ?? null, null);
+    assert.equal(row.physical_action.markdown_report ?? null, null);
   }
   cleanup.push(row.physical_action.json_report, row.physical_action.markdown_report, opOut.op_quality_review, path.dirname(opOut.op_quality_review));
 } finally {
