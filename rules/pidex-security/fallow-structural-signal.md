@@ -15,8 +15,12 @@ FALLOW-SKIP: non-JS/TS scope
 Run fallow once as structural signal to complement security scans.
 
 ## Command (preferred)
+Use detected package-manager equivalent per [Package Manager Equivalence](../shared/package-manager-equivalence.md):
+
 ```bash
-npx fallow dead-code --format json --quiet --explain --unused-deps --unlisted-deps --circular-deps --boundary-violations 2>/dev/null || true
+pnpm exec fallow dead-code --format json --quiet --explain --unused-deps --unlisted-deps --circular-deps --boundary-violations 2>/dev/null || true
+# npm compatibility path:
+npm exec -- fallow dead-code --format json --quiet --explain --unused-deps --unlisted-deps --circular-deps --boundary-violations 2>/dev/null || true
 ```
 
 ## Interpretation

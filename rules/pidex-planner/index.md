@@ -7,6 +7,8 @@ Last updated: 2026-05-18 (PROC-NEW-7-1)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Package Manager Equivalence | [../shared/package-manager-equivalence.md](../shared/package-manager-equivalence.md) | PROC-PACKAGE-MANAGER-1 | Use detected package-manager equivalents; pnpm native/default, npm compatibility, yarn/bun unsupported; avoid lockfile type changes and npx auto-downloads |
+| Greenfield JS/TS Package Manager Default | [greenfield-js-package-manager-default.md](greenfield-js-package-manager-default.md) | PROC-PACKAGE-MANAGER-2 | New PIDEX-generated JS/TS projects default to pnpm; existing unknown projects require package-manager clarification |
 | Epic Label vs Semver Disambiguation | [epic-label-semver-disambiguation.md](epic-label-semver-disambiguation.md) | PROC-NEW-SEMVER-1 | Plans must distinguish roadmap epic labels from package semver/tag lanes and record release-lane semantics |
 | Release-Artifact Milestone Owner + Gate Binding | [release-artifact-owner-gate-binding.md](release-artifact-owner-gate-binding.md) | PROC-NEW-94-1 | Release-artifact/version milestones must declare owner + target gate + closure proof before Stage 2 |
 | Artifact Authority Test Matrix | [artifact-authority-test-matrix.md](artifact-authority-test-matrix.md) | 1 | Resolver/path authority plans must include runtime-root, test override, fixture-isolation matrix with validation rows |

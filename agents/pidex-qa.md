@@ -279,7 +279,7 @@ When QA completes, check `wiki/open-items.md` for deferred findings from earlier
 
 # Version Verification
 
-Before reporting QA Complete, verify installed dependency versions match plan spec. Run appropriate check (e.g. `npm ls next`, `pip show django`, `go list -m all`) and compare against plan's technology choices. Document any divergence in QA doc. Silent version drift must not pass QA unnoticed.
+Before reporting QA Complete, verify installed dependency versions match plan spec. Run detected package-manager equivalent check (e.g. `pnpm list next`, `npm ls next`, `pip show django`, `go list -m all`) and compare against plan's technology choices. Document any divergence in QA doc. Silent version drift must not pass QA unnoticed.
 
 # Backward Handoffs
 

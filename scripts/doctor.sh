@@ -19,18 +19,36 @@ else
 fi
 
 if command -v node >/dev/null 2>&1; then ok "node found: $(node --version)"; else fail "node not found"; fi
-if command -v npm >/dev/null 2>&1; then ok "npm found: $(npm --version)"; else fail "npm not found"; fi
+if command -v npm >/dev/null 2>&1; then ok "npm found: $(npm --version)"; else fail "npm not found (required for Pi/npm bootstrap)"; fi
+if command -v corepack >/dev/null 2>&1; then ok "corepack found: $(corepack --version)"; else warn "corepack not found; standalone pnpm fallback required"; fi
 if command -v pi >/dev/null 2>&1; then ok "pi found: $(command -v pi)"; else fail "pi command not found"; fi
+
+PNPM=()
+REQUIRED_PNPM=""
+if command -v node >/dev/null 2>&1 && [ -f "$ROOT/package.json" ]; then
+  REQUIRED_PNPM=$(node -e "const p=require(process.argv[1]); const m=/^pnpm@(.+)$/.exec(p.packageManager||''); if(!m) process.exit(1); console.log(m[1]);" "$ROOT/package.json" 2>/dev/null || true)
+  if [ -n "$REQUIRED_PNPM" ] && command -v corepack >/dev/null 2>&1 && [ "$(corepack pnpm --version 2>/dev/null || true)" = "$REQUIRED_PNPM" ]; then
+    PNPM=(corepack pnpm)
+    ok "pnpm via Corepack: $REQUIRED_PNPM"
+  elif [ -n "$REQUIRED_PNPM" ] && command -v pnpm >/dev/null 2>&1 && [ "$(pnpm --version 2>/dev/null || true)" = "$REQUIRED_PNPM" ]; then
+    PNPM=(pnpm)
+    ok "standalone pnpm found: $REQUIRED_PNPM"
+  elif [ -n "$REQUIRED_PNPM" ]; then
+    fail "pnpm $REQUIRED_PNPM not available via Corepack or standalone pnpm; install with: npm install -g pnpm@$REQUIRED_PNPM"
+  else
+    fail "package.json missing packageManager pnpm@<version>"
+  fi
+fi
 
 if [ -f "$ROOT/config/agents.json" ]; then ok "config/agents.json present"; else fail "config/agents.json missing"; fi
 if compgen -G "$ROOT/config/profiles/*.json" >/dev/null; then ok "codex profiles present"; else fail "config/profiles/*.json missing"; fi
 if [ -f "$ROOT/package.json" ]; then ok "package.json present"; else fail "package.json missing"; fi
 
-if command -v npm >/dev/null 2>&1 && [ -f "$ROOT/package.json" ]; then
-  if (cd "$ROOT" && npm run check >/tmp/pidex-doctor-check.log 2>&1); then
-    ok "npm run check passed"
+if [ ${#PNPM[@]} -gt 0 ] && [ -f "$ROOT/package.json" ]; then
+  if (cd "$ROOT" && "${PNPM[@]}" run check >/tmp/pidex-doctor-check.log 2>&1); then
+    ok "pnpm run check passed"
   else
-    fail "npm run check failed; see /tmp/pidex-doctor-check.log"
+    fail "pnpm run check failed; see /tmp/pidex-doctor-check.log"
   fi
 fi
 

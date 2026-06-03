@@ -108,17 +108,17 @@ List modules:
 
 ```bash
 node scripts/modules/list.mjs --json
-npm run modules:list
+pnpm run modules:list
 ```
 
 Validate modules:
 
 ```bash
 node scripts/modules/validate.mjs --project "$PWD"
-npm run modules:validate
+pnpm run modules:validate
 ```
 
-Module validation is part of the standard `npm run check` chain. `scripts/release/public-readiness.sh --skip-check` still runs the cheap module validation directly, so release preflights cannot bypass invalid module manifests/config. Full module TDD coverage remains separate under `npm run modules:test`.
+Module validation is part of the standard `pnpm run check` chain. `scripts/release/public-readiness.sh --skip-check` still runs the cheap module validation directly, so release preflights cannot bypass invalid module manifests/config. Full module TDD coverage remains separate under `pnpm run modules:test`.
 
 Discover capabilities for an agent and phase:
 
@@ -137,7 +137,7 @@ node scripts/modules/context.mjs \
   --phase pre-release \
   --project "$PWD"
 
-npm run modules:context
+pnpm run modules:context
 ```
 
 Run a capability through the module runner:
@@ -153,7 +153,7 @@ node scripts/modules/run-check.mjs \
 Run module tests:
 
 ```bash
-npm run modules:test
+pnpm run modules:test
 ```
 
 ## Discovery contract

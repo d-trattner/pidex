@@ -46,7 +46,7 @@ node scripts/modules/run-check.mjs --capability compat-windows.audit --agent pid
 The audit reports:
 
 - OS/platform and likely environment (`linux`, `wsl`, `windows-git-bash`, `windows-native`, etc.)
-- availability of `bash`, `node`, `npm`, `git`, and `pi`
+- availability of `bash`, `node`, `npm`, pinned `pnpm`, optional `corepack`, `git`, and `pi`
 - PIDEX checkout path shape
 - dashboard prerequisite signals
 - known unsupported or risky Windows entrypoints
@@ -74,7 +74,7 @@ irm https://raw.githubusercontent.com/d-trattner/pidex/master/install.windows.ps
 For testing this initiative branch before merge:
 
 ```powershell
-$env:PIDEX_INSTALL_BRANCH='initiative-016-windows-milestone-a'; irm https://raw.githubusercontent.com/d-trattner/pidex/initiative-016-windows-milestone-a/install.windows.ps1 | iex
+$env:PIDEX_INSTALL_BRANCH='feat/pnpm-package-manager-hardening'; irm https://raw.githubusercontent.com/d-trattner/pidex/feat/pnpm-package-manager-hardening/install.windows.ps1 | iex
 ```
 
 Safer inspect-first form:
@@ -85,7 +85,7 @@ notepad .\install.windows.ps1
 powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 ```
 
-The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs dashboard dependencies when missing with `npm ci` when a dashboard lockfile is present, and runs `pi install`. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
+The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/pinned pnpm/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs PIDEX workspace dependencies when missing with `pnpm install --frozen-lockfile --ignore-scripts` when `pnpm-lock.yaml` is present, and runs `pi install`. Corepack may provide pnpm, but standalone `pnpm@10.33.0` is also supported. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
 
 ## Experimental uninstall helper
 
@@ -108,14 +108,14 @@ Useful options:
 
 `-RemoveAstGrep` only removes `@ast-grep/cli` when the PIDEX install marker exists.
 
-For a separate PowerShell window/session, expose Git Bash before running Bash-backed npm checks:
+For a separate PowerShell window/session, expose Git Bash before running Bash-backed pnpm checks:
 
 ```powershell
 $env:Path = "C:\Program Files\Git\bin;$env:Path"
-npm run public:check
+pnpm run public:check
 ```
 
-Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `npm run public:check` passed via PowerShell after adding Git Bash to PATH, and `npm --prefix dashboard run typecheck` plus `npm --prefix dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
+Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `pnpm run public:check` passed via PowerShell after adding Git Bash to PATH, and `pnpm -C dashboard run typecheck` plus `pnpm -C dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
 
 ## Experimental dashboard launcher
 

@@ -60,9 +60,9 @@ Wrapper retirement requires:
 Any wrapper retirement or implementation movement must be reversible by restoring the wrapper to call the previous module implementation and rerunning:
 
 ```bash
-npm run modules:test
-npm run check
-npm run modules:validate
-npm run reference:check
+pnpm run modules:test
+pnpm run check
+pnpm run modules:validate
+pnpm run reference:check
 bash scripts/release/public-readiness.sh --dirty-ok --skip-check
 ```

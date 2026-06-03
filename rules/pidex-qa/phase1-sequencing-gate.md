@@ -19,7 +19,7 @@ Plan 32: pidex-qa entered Playwright before Phase 1 doc was complete — minor b
 ## Enforcement
 
 Phase 1 done checklist (all must be true before first Playwright call):
-- [ ] Test run command executed (`npx vitest run` / `pytest` / equivalent)
+- [ ] Test run command executed using detected package-manager equivalent (`pnpm exec vitest run`, `npm exec -- vitest run`, `pytest`, or equivalent)
 - [ ] Pass/fail count written to QA doc
 - [ ] Coverage percentage written to QA doc
 - [ ] Phase 1 section in QA doc marked complete

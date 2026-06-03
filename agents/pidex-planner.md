@@ -169,6 +169,7 @@ Each slice **demoable and verifiable end-to-end**. Implementer proves path works
 - Later slices widen path (more features, edge cases, polish)
 - Each slice independently testable
 - Bootstrap/scaffold allowed as separate pre-slice (Slice 0) for greenfield projects
+- For greenfield JavaScript/TypeScript projects, declare package manager explicitly; default to pnpm unless the user chooses npm compatibility. Existing projects with no lockfile/packageManager are unknown and require clarification before dependency/script commands.
 
 **Why:** Horizontal milestones hide integration bugs until end. First test run of this pipeline built DB → API → UI separately; cross-origin WebSocket bug invisible until all layers connected in browser. Vertical slices force early integration.
 

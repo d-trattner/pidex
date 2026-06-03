@@ -9,7 +9,7 @@ Apply when either condition true:
 - handoff marked release-prep.
 
 ## Command
-- `npm run typecheck` (workspace/root)
+- detected package-manager equivalent for root/workspace typecheck, e.g. `pnpm run typecheck` or `npm run typecheck`
 
 ## Enforcement
 If typecheck fails, stop handoff. Fix or escalate. Do not open QA/UAT chain until pass evidence recorded.

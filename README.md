@@ -48,7 +48,8 @@ Linux / WSL2 recommended prerequisites:
 
 - Git
 - Node.js `>=22.19.0`
-- npm
+- npm (for Pi/npm bootstrap)
+- pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
 - Pi CLI installed globally:
   ```bash
   npm install -g @earendil-works/pi-coding-agent
@@ -59,7 +60,8 @@ Windows prerequisites for the experimental PowerShell bootstrap:
 
 - Git for Windows, including Git Bash
 - Node.js `>=22.12.0`
-- npm
+- npm (for Pi/npm bootstrap)
+- pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
 - Pi CLI installed globally:
   ```powershell
   npm install -g @earendil-works/pi-coding-agent
@@ -105,7 +107,7 @@ Useful Linux/WSL2 install flags:
 
 The same controls also exist as environment variables for automation, but flags are preferred for manual use.
 
-Browser-smoke support is optional Playwright/Chromium-based QA for real browser checks (rendering, styles, console errors, and basic interactions). The normal browser-smoke install is PIDEX-local under `~/pidex/state/browser-smoke` and `~/pidex/.cache/ms-playwright`; it does not use npm-global Playwright and does not mutate user projects. On minimal Linux servers, actually launching Chromium may also require host-level packages. Use `--with-browser-smoke-system-deps` only when you accept that PIDEX may run Playwright's `install-deps chromium`, which uses apt, requires root/passwordless sudo, and modifies system packages.
+Browser-smoke support is optional Playwright/Chromium-based QA for real browser checks (rendering, styles, console errors, and basic interactions). The normal browser-smoke install is PIDEX-local under runtime state/cache directories; it does not use npm-global Playwright and does not mutate user projects. On minimal Linux servers, actually launching Chromium may also require host-level packages. Use `--with-browser-smoke-system-deps` only when you accept that PIDEX may run Playwright's `install-deps chromium`, which uses apt, requires root/passwordless sudo, and modifies system packages.
 
 ### Pi package bootstrap install
 
@@ -190,7 +192,7 @@ Project session memory:
 ```bash
 cd ~/pidex
 bash scripts/doctor.sh
-npm run check
+pnpm run check
 bash scripts/smoke-test.sh
 node scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project ~/pidex
 ```

@@ -15,12 +15,16 @@ FALLOW-SKIP: non-JS/TS scope
 Before final QA verdict, run a fallow static audit and record result in QA doc.
 
 ## Command (preferred)
+Use detected package-manager equivalent per [Package Manager Equivalence](../shared/package-manager-equivalence.md):
+
 ```bash
-npx fallow audit --format json --quiet --explain 2>/dev/null || true
+pnpm exec fallow audit --format json --quiet --explain 2>/dev/null || true
+# npm compatibility path:
+npm exec -- fallow audit --format json --quiet --explain 2>/dev/null || true
 ```
 
 ## Fallback
-If `npx fallow` unavailable (offline/tooling issue):
+If fallow is unavailable as a project/local tool (offline/tooling issue):
 1. Mark `FALLOW-SKIP` in QA doc with reason.
 2. Continue QA (non-blocking), but include follow-up note.
 

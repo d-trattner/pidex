@@ -18,8 +18,12 @@ Run one lightweight Fallow signal or document why it was skipped. This supports 
 
 ## Preferred command
 
+Use detected package-manager equivalent per [Package Manager Equivalence](../shared/package-manager-equivalence.md):
+
 ```bash
-npx fallow audit --format json --quiet --explain 2>/dev/null || true
+pnpm exec fallow audit --format json --quiet --explain 2>/dev/null || true
+# npm compatibility path:
+npm exec -- fallow audit --format json --quiet --explain 2>/dev/null || true
 ```
 
 ## Evidence section

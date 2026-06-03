@@ -23,6 +23,29 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   & $FilePath @Arguments
   if ($LASTEXITCODE -ne 0) { Fail "Command failed with exit ${LASTEXITCODE}: $FilePath $($Arguments -join ' ')" }
 }
+function Get-RequiredPnpmVersion([string]$PidexRoot) {
+  $PackageJson = Join-Path $PidexRoot "package.json"
+  $Json = Get-Content -LiteralPath $PackageJson -Raw | ConvertFrom-Json
+  if (-not $Json.packageManager -or (-not ([string]$Json.packageManager).StartsWith("pnpm@"))) { Fail "package.json must declare packageManager pnpm@<version>" }
+  return ([string]$Json.packageManager).Substring(5)
+}
+function Resolve-PnpmCommand([string]$Required) {
+  $CorepackPath = Get-CommandPath @("corepack")
+  if ($CorepackPath) {
+    $Version = (& $CorepackPath pnpm --version 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0 -and $Version -eq $Required) { return @{ File = $CorepackPath; Prefix = @("pnpm"); Source = "Corepack"; Version = $Version } }
+  }
+  $PnpmPath = Get-CommandPath @("pnpm")
+  if ($PnpmPath) {
+    $Version = (& $PnpmPath --version 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0 -and $Version -eq $Required) { return @{ File = $PnpmPath; Prefix = @(); Source = "standalone pnpm"; Version = $Version } }
+    Fail "pnpm version mismatch: expected $Required, got $(if ($Version) { $Version } else { '<unknown>' }). Install with: npm install -g pnpm@$Required"
+  }
+  Fail "Missing pnpm $Required. Install standalone pnpm with: npm install -g pnpm@$Required (or install Corepack and ensure 'corepack pnpm --version' works)."
+}
+function Invoke-Pnpm([hashtable]$Pnpm, [string[]]$Arguments) {
+  Invoke-Checked $Pnpm.File (@($Pnpm.Prefix) + $Arguments)
+}
 function Get-CommandPath([string[]]$Names) {
   foreach ($Name in $Names) {
     $Command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -48,16 +71,21 @@ $PidexRoot = Split-Path -Parent $DashboardRoot
 if (-not $Domain) { $Domain = Read-DashboardDomain $PidexRoot }
 
 $Node = Get-CommandPath @("node")
-$Npm = Get-CommandPath @("npm")
 if (-not $Node) { Fail "Missing prerequisite: node" }
-if (-not $Npm) { Fail "Missing prerequisite: npm" }
+$RequiredPnpm = Get-RequiredPnpmVersion $PidexRoot
+$Pnpm = Resolve-PnpmCommand $RequiredPnpm
 
 $NodeModules = Join-Path $DashboardRoot "node_modules"
 if (-not (Test-Path -LiteralPath $NodeModules)) {
-  $Lock = Join-Path $DashboardRoot "package-lock.json"
-  $InstallCommand = if (Test-Path -LiteralPath $Lock) { "ci" } else { "install" }
-  Write-Step "Installing dashboard dependencies (npm $InstallCommand)"
-  Invoke-Checked $Npm @("--prefix", $DashboardRoot, $InstallCommand)
+  $Lock = Join-Path $PidexRoot "pnpm-lock.yaml"
+  $PnpmArgs = if (Test-Path -LiteralPath $Lock) { @("install", "--frozen-lockfile", "--ignore-scripts") } else { @("install", "--ignore-scripts") }
+  Write-Step "Installing PIDEX workspace dependencies (pnpm via $($Pnpm.Source))"
+  Push-Location $PidexRoot
+  try {
+    Invoke-Pnpm $Pnpm $PnpmArgs
+  } finally {
+    Pop-Location
+  }
 }
 
 if (-not $NoIngest) {
@@ -72,7 +100,7 @@ if (-not $NoIngest) {
 
 if (-not $Dev -and -not $NoBuild) {
   Write-Step "Building dashboard"
-  Invoke-Checked $Npm @("--prefix", $DashboardRoot, "run", "build")
+  Invoke-Pnpm $Pnpm @("-C", $DashboardRoot, "run", "build")
 }
 
 $env:PIDEX_DASHBOARD_ROOT = $DashboardRoot
@@ -83,7 +111,7 @@ $env:PIDEX_DASHBOARD_PUBLIC_BIND = if ($HostName -in @("127.0.0.1", "localhost",
 
 $Vite = Join-Path $DashboardRoot "node_modules/.bin/vite.cmd"
 if (-not (Test-Path -LiteralPath $Vite)) { $Vite = Join-Path $DashboardRoot "node_modules/.bin/vite" }
-if (-not (Test-Path -LiteralPath $Vite)) { Fail "Missing Vite binary. Run npm --prefix $DashboardRoot ci" }
+if (-not (Test-Path -LiteralPath $Vite)) { Fail "Missing Vite binary. Run pnpm install --frozen-lockfile --ignore-scripts from $PidexRoot using pnpm $RequiredPnpm" }
 
 Write-Step "Starting dashboard in foreground on ${HostName}:${Port}"
 Write-Host "Local:  http://127.0.0.1:$Port/dashboard"

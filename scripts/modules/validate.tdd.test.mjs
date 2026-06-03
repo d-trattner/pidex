@@ -11,6 +11,15 @@ test('validates a correct module fixture', () => {
   assert.equal(JSON.parse(out).ok, true);
 });
 
+test('accepts relative project paths and resolves them to absolute paths', () => {
+  const { root } = makeModuleFixture();
+  const script = path.resolve('scripts/modules/validate.mjs');
+  const out = execFileSync(process.execPath, [script, '--pidex-root', root, '--project', '.'], { cwd: root, encoding: 'utf8' });
+  const parsed = JSON.parse(out);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.project, root);
+});
+
 test('rejects core-required modules in config', () => {
   const { root, project } = makeModuleFixture();
   writeFileSync(path.join(root, 'config/modules.json'), JSON.stringify({ modules: { 'pidex.core': { enabled: false } } }, null, 2));

@@ -26,7 +26,7 @@ Usage:
 
 Options:
   --dry-run                  print pi install command without executing
-  --skip-dashboard-deps      skip dashboard npm dependency install
+  --skip-dashboard-deps      skip dashboard pnpm dependency install
   --install-global-git-hook  install PIDEX global Git hook non-interactively
   --skip-global-git-hook     skip PIDEX global Git hook prompt
   --with-browser-smoke       install optional PIDEX browser-smoke support
@@ -115,7 +115,39 @@ fi
 
 command -v pi >/dev/null 2>&1 || fail "missing prerequisite: pi"
 command -v node >/dev/null 2>&1 || fail "missing prerequisite: node"
-command -v npm >/dev/null 2>&1 || fail "missing prerequisite: npm"
+command -v npm >/dev/null 2>&1 || fail "missing prerequisite: npm (required for Pi/npm bootstrap and ast-grep global install)"
+
+required_pnpm_version() {
+  node -e "const p=require(process.argv[1]); const m=/^pnpm@(.+)$/.exec(p.packageManager||''); if(!m) process.exit(1); console.log(m[1]);" "$TARGET_DIR/package.json"
+}
+
+resolve_pnpm() {
+  local required="$1"
+  if command -v corepack >/dev/null 2>&1; then
+    local corepack_version=""
+    corepack_version=$(corepack pnpm --version 2>/dev/null || true)
+    if [ "$corepack_version" = "$required" ]; then
+      PNPM=(corepack pnpm)
+      say "pnpm provided by Corepack: $corepack_version"
+      return 0
+    fi
+  fi
+  if command -v pnpm >/dev/null 2>&1; then
+    local standalone_version=""
+    standalone_version=$(pnpm --version 2>/dev/null || true)
+    if [ "$standalone_version" = "$required" ]; then
+      PNPM=(pnpm)
+      say "pnpm found: $standalone_version"
+      return 0
+    fi
+    fail "pnpm version mismatch: expected $required, got ${standalone_version:-unknown}. Install with: npm install -g pnpm@$required"
+  fi
+  fail "missing prerequisite: pnpm $required. Install standalone pnpm with: npm install -g pnpm@$required (or install Corepack and ensure 'corepack pnpm --version' works)"
+}
+
+REQUIRED_PNPM=$(required_pnpm_version) || fail "package.json must declare packageManager pnpm@<version>"
+PNPM=()
+resolve_pnpm "$REQUIRED_PNPM"
 
 ensure_dashboard_deps() {
   if [[ "$SKIP_DASHBOARD_DEPS" =~ ^(1|yes|true|on)$ ]]; then
@@ -131,12 +163,12 @@ ensure_dashboard_deps() {
     say "dashboard dependencies already present"
     return
   fi
-  if [ -f "$dashboard_dir/package-lock.json" ]; then
-    say "installing dashboard dependencies (npm ci)"
-    npm --prefix "$dashboard_dir" ci
+  if [ -f "$TARGET_DIR/pnpm-lock.yaml" ]; then
+    say "installing PIDEX workspace dependencies (pnpm install --frozen-lockfile --ignore-scripts)"
+    (cd "$TARGET_DIR" && "${PNPM[@]}" install --frozen-lockfile --ignore-scripts)
   else
-    say "installing dashboard dependencies (npm install)"
-    npm --prefix "$dashboard_dir" install
+    say "installing PIDEX workspace dependencies (pnpm install --ignore-scripts)"
+    (cd "$TARGET_DIR" && "${PNPM[@]}" install --ignore-scripts)
   fi
 }
 
@@ -156,9 +188,9 @@ ensure_dashboard_deps
 
 say "checking extension TypeScript/runtime checks"
 if [ -f "$TARGET_DIR/package.json" ]; then
-  (cd "$TARGET_DIR" && npm run check >/dev/null)
+  (cd "$TARGET_DIR" && "${PNPM[@]}" run check >/dev/null)
 else
-  say "package.json missing; skipping npm check"
+  say "package.json missing; skipping pnpm check"
 fi
 
 CMD=(pi install "$TARGET_DIR")

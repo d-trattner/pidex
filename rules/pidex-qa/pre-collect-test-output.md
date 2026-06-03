@@ -14,8 +14,9 @@ suite internally on such projects.
 > number alone did not communicate urgency. The 1000-test threshold matches real-world suite
 > sizes on this project where the stall is guaranteed, not just likely.
 
-Threshold check (for orchestrator):
-  npx vitest run --reporter=verbose 2>&1 | tee /tmp/vitest-output.txt
+Threshold check (for orchestrator; use detected package-manager equivalent per [Package Manager Equivalence](../shared/package-manager-equivalence.md)):
+  pnpm exec vitest run --reporter=verbose 2>&1 | tee /tmp/vitest-output.txt
+  # or npm compatibility path: npm exec -- vitest run --reporter=verbose 2>&1 | tee /tmp/vitest-output.txt
   wc -l /tmp/vitest-output.txt   (>~3000 lines = likely >1000 tests)
 
   Quick count alternative (faster, no test run needed):

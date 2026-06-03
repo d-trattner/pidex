@@ -68,6 +68,28 @@ function Get-PythonCommand {
   return $null
 }
 
+function Assert-SafeRepoUrl([string]$Value) {
+  if (-not $Value) { Fail "RepoUrl must not be empty" }
+  if ($Value.StartsWith('-')) { Fail "RepoUrl must not start with '-': $Value" }
+  $Uri = $null
+  if ([System.Uri]::TryCreate($Value, [System.UriKind]::Absolute, [ref]$Uri)) {
+    if ($Uri.Scheme -notin @('https', 'http', 'ssh', 'git')) {
+      Fail "Unsupported RepoUrl scheme '$($Uri.Scheme)'. Use https/http/ssh/git."
+    }
+    return
+  }
+  if ($Value -match '^[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:.+\.git$') { return }
+  Fail "RepoUrl must be an absolute git URL or scp-style SSH URL: $Value"
+}
+
+function Assert-SafeBranchName([string]$Value, [string]$GitPath) {
+  if (-not $Value) { return }
+  if ($Value.StartsWith('-')) { Fail "Branch must not start with '-': $Value" }
+  if ($Value -match '\s') { Fail "Branch must not contain whitespace: $Value" }
+  & $GitPath check-ref-format --branch $Value *> $null
+  if ($LASTEXITCODE -ne 0) { Fail "Invalid branch name: $Value" }
+}
+
 function Assert-NodeVersion([string]$NodePath) {
   $VersionText = (& $NodePath --version).Trim().TrimStart('v')
   $Parts = $VersionText.Split('.')
@@ -85,6 +107,39 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   if ($LASTEXITCODE -ne 0) {
     Fail "Command failed with exit ${LASTEXITCODE}: $FilePath $($Arguments -join ' ')"
   }
+}
+
+function Get-RequiredPnpmVersion([string]$Root) {
+  $PackageJson = Join-Path $Root "package.json"
+  if (-not (Test-Path -LiteralPath $PackageJson)) { throw "Missing package.json; cannot resolve pinned pnpm version" }
+  $Json = Get-Content -LiteralPath $PackageJson -Raw | ConvertFrom-Json
+  if (-not $Json.packageManager -or (-not ([string]$Json.packageManager).StartsWith("pnpm@"))) {
+    throw "package.json must declare packageManager pnpm@<version>"
+  }
+  return ([string]$Json.packageManager).Substring(5)
+}
+
+function Resolve-PnpmCommand([string]$Required) {
+  $CorepackPath = Get-CommandPath @("corepack")
+  if ($CorepackPath) {
+    $Version = (& $CorepackPath pnpm --version 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0 -and $Version -eq $Required) {
+      return @{ File = $CorepackPath; Prefix = @("pnpm"); Source = "Corepack"; Version = $Version }
+    }
+  }
+  $PnpmPath = Get-CommandPath @("pnpm")
+  if ($PnpmPath) {
+    $Version = (& $PnpmPath --version 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0 -and $Version -eq $Required) {
+      return @{ File = $PnpmPath; Prefix = @(); Source = "standalone pnpm"; Version = $Version }
+    }
+    Fail "pnpm version mismatch: expected $Required, got $(if ($Version) { $Version } else { '<unknown>' }). Install with: npm install -g pnpm@$Required"
+  }
+  Fail "Missing pnpm $Required. Install standalone pnpm with: npm install -g pnpm@$Required (or install Corepack and ensure 'corepack pnpm --version' works)."
+}
+
+function Invoke-Pnpm([hashtable]$Pnpm, [string[]]$Arguments) {
+  Invoke-Checked $Pnpm.File (@($Pnpm.Prefix) + $Arguments)
 }
 
 function Invoke-PythonScript([hashtable]$Python, [string[]]$Arguments) {
@@ -127,7 +182,11 @@ $GitBash = Find-GitBash
 if (-not $GitBash) {
   Fail "Missing Bash required by Pi on Windows. Install Git for Windows: https://git-scm.com/download/win"
 }
+Assert-SafeRepoUrl $RepoUrl
+Assert-SafeBranchName $Branch $Git
 $NodeVersion = Assert-NodeVersion $Node
+$RequiredPnpm = $null
+$Pnpm = $null
 
 Write-Step "Prerequisites found"
 Write-Host "git:    $Git"
@@ -153,9 +212,9 @@ if (-not $GitBashOnPath) {
 if (-not (Test-Path -LiteralPath $PidexRoot)) {
   Write-Step "Cloning PIDEX into $PidexRoot"
   if ($DryRun) {
-    Write-Host "DRY-RUN: git clone $RepoUrl $PidexRoot"
+    Write-Host "DRY-RUN: git clone -- $RepoUrl $PidexRoot"
   } else {
-    Invoke-Checked $Git @("clone", $RepoUrl, $PidexRoot)
+    Invoke-Checked $Git @("clone", "--", $RepoUrl, $PidexRoot)
   }
 } else {
   Write-Step "PIDEX root already exists"
@@ -178,10 +237,10 @@ if ($Branch) {
   } else {
     Invoke-Checked $Git @("-C", $PidexRoot, "fetch", "origin", $Branch)
     $LocalBranchExists = $false
-    & $Git -C $PidexRoot rev-parse --verify $Branch *> $null
+    & $Git -C $PidexRoot rev-parse --verify -- $Branch *> $null
     if ($LASTEXITCODE -eq 0) { $LocalBranchExists = $true }
     if ($LocalBranchExists) {
-      Invoke-Checked $Git @("-C", $PidexRoot, "switch", $Branch)
+      Invoke-Checked $Git @("-C", $PidexRoot, "switch", "--", $Branch)
       Invoke-Checked $Git @("-C", $PidexRoot, "pull", "--ff-only")
     } else {
       Invoke-Checked $Git @("-C", $PidexRoot, "switch", "-c", $Branch, "--track", "origin/$Branch")
@@ -189,9 +248,28 @@ if ($Branch) {
   }
 }
 
-$AuditScript = Join-Path $PidexRoot "scripts\compat\windows-audit.mjs"
-if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditScript)) {
-  Fail "Missing audit script: $AuditScript"
+$PackageJson = Join-Path $PidexRoot "package.json"
+if (Test-Path -LiteralPath $PackageJson) {
+  try {
+    $RequiredPnpm = Get-RequiredPnpmVersion $PidexRoot
+  } catch {
+    if ($DryRun) {
+      $RequiredPnpm = "10.33.0"
+      Write-Warn "target checkout does not yet declare packageManager; dry-run assumes pnpm $RequiredPnpm. Use -Branch feat/pnpm-package-manager-hardening or update `$HOME\pidex before real install."
+    } else {
+      Fail $_.Exception.Message
+    }
+  }
+} else {
+  $RequiredPnpm = "10.33.0"
+  Write-Warn "package.json not available in dry-run path; assuming pnpm $RequiredPnpm"
+}
+$Pnpm = Resolve-PnpmCommand $RequiredPnpm
+Write-Host "pnpm:   $($Pnpm.Source) $($Pnpm.Version)"
+
+$AuditRunner = Join-Path $PidexRoot "scripts\modules\run-check.mjs"
+if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditRunner)) {
+  Fail "Missing module runner: $AuditRunner"
 }
 
 Write-Step "Running read-only Windows audit"
@@ -200,7 +278,7 @@ if ($DryRun) {
 } else {
   Push-Location $PidexRoot
   try {
-    Invoke-Checked $Node @($AuditScript)
+    Invoke-Checked $Node @($AuditRunner, "--capability", "compat-windows.audit", "--agent", "pidex-devops", "--phase", "maintenance", "--project", $PidexRoot)
   } finally {
     Pop-Location
   }
@@ -209,13 +287,18 @@ if ($DryRun) {
 $DashboardDir = Join-Path $PidexRoot "dashboard"
 $DashboardNodeModules = Join-Path $DashboardDir "node_modules"
 if (-not $SkipDashboardDeps -and -not (Test-Path -LiteralPath $DashboardNodeModules)) {
-  Write-Step "Installing dashboard dependencies"
-  $DashboardLock = Join-Path $DashboardDir "package-lock.json"
-  $NpmInstallCommand = if (Test-Path -LiteralPath $DashboardLock) { "ci" } else { "install" }
+  Write-Step "Installing PIDEX workspace dependencies"
+  $PnpmLock = Join-Path $PidexRoot "pnpm-lock.yaml"
+  $PnpmArgs = if (Test-Path -LiteralPath $PnpmLock) { @("install", "--frozen-lockfile", "--ignore-scripts") } else { @("install", "--ignore-scripts") }
   if ($DryRun) {
-    Write-Host "DRY-RUN: npm --prefix $DashboardDir $NpmInstallCommand"
+    Write-Host "DRY-RUN: $($Pnpm.Source) pnpm $($PnpmArgs -join ' ')"
   } else {
-    Invoke-Checked $Npm @("--prefix", $DashboardDir, $NpmInstallCommand)
+    Push-Location $PidexRoot
+    try {
+      Invoke-Pnpm $Pnpm $PnpmArgs
+    } finally {
+      Pop-Location
+    }
   }
 } elseif ($SkipDashboardDeps) {
   Write-Step "Skipping dashboard dependency install"
@@ -267,6 +350,6 @@ Write-Host "Global Git hooks were intentionally not installed on Windows."
 Write-Host "Next steps:"
 Write-Host "  1. Open Pi and run: /reload"
 Write-Host "  2. Try: /pidex <your task>"
-Write-Host "  3. For this PowerShell session, expose Git Bash before npm checks:"
+Write-Host "  3. For this PowerShell session, expose Git Bash before pnpm checks:"
 Write-Host "     `$env:Path = `"$GitBashDir;`$env:Path`""
-Write-Host "  4. Run checks: npm run public:check; npm --prefix dashboard run typecheck; npm --prefix dashboard run build"
+Write-Host "  4. Run checks with pinned pnpm ${RequiredPnpm}: pnpm run public:check; pnpm -C dashboard run typecheck; pnpm -C dashboard run build"

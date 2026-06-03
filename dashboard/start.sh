@@ -107,7 +107,7 @@ fi
 
 if [ "$DEV" = "0" ] && [ "$BUILD" = "1" ]; then
   if [ ! -x "$VITE_BIN" ]; then
-    echo "Missing dashboard dependency: vite. Run npm --prefix '$ROOT' ci, or install PIDEX through the full installer." >&2
+    echo "Missing dashboard dependency: vite. Run pnpm install --frozen-lockfile --ignore-scripts from '$PIDEX_ROOT' using pnpm $(node -e "const p=require('$PIDEX_ROOT/package.json'); console.log((p.packageManager||'pnpm@<version>').replace(/^pnpm@/,''))" 2>/dev/null || printf '<pinned-version>'), or install PIDEX through the full installer." >&2
     exit 1
   fi
   echo "==> Building dashboard"
@@ -146,7 +146,7 @@ EOF
 }
 
 if [ ! -x "$VITE_BIN" ]; then
-  echo "Missing dashboard dependency: vite. Run npm --prefix '$ROOT' ci, or install PIDEX through the full installer." >&2
+  echo "Missing dashboard dependency: vite. Run pnpm install --frozen-lockfile --ignore-scripts from '$PIDEX_ROOT' using the pinned pnpm version, or install PIDEX through the full installer." >&2
   exit 1
 fi
 
