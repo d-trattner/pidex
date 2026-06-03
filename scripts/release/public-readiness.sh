@@ -93,8 +93,19 @@ ok "Pi SDK namespace uses @earendil-works"
 node scripts/release/public-readiness-check.mjs parallel-defaults
 ok "public default optional parallel agents are disabled"
 
+REQUIRED_PNPM=$(node -e "const p=require('./package.json'); const m=/^pnpm@(.+)$/.exec(p.packageManager||''); if(!m) process.exit(1); console.log(m[1]);")
+PNPM=()
+if command -v corepack >/dev/null 2>&1 && [ "$(corepack pnpm --version 2>/dev/null || true)" = "$REQUIRED_PNPM" ]; then
+  PNPM=(corepack pnpm)
+elif command -v pnpm >/dev/null 2>&1 && [ "$(pnpm --version 2>/dev/null || true)" = "$REQUIRED_PNPM" ]; then
+  PNPM=(pnpm)
+else
+  fail "pnpm $REQUIRED_PNPM not available via Corepack or standalone pnpm; install with: npm install -g pnpm@$REQUIRED_PNPM"
+fi
+ok "pnpm $REQUIRED_PNPM available"
+
 if [ "$SKIP_CHECK" != "1" ]; then
-  corepack pnpm run check
+  "${PNPM[@]}" run check
   ok "pnpm run check passed"
 else
   ok "pnpm run check skipped"
@@ -104,7 +115,7 @@ fi
 
 PACK_JSON=$(mktemp)
 trap 'rm -f "$PACK_JSON"' EXIT
-corepack pnpm pack --dry-run --json >"$PACK_JSON"
+"${PNPM[@]}" pack --dry-run --json >"$PACK_JSON"
 node scripts/release/public-readiness-check.mjs pack-clean "$PACK_JSON"
 ok "pnpm package contents clean"
 

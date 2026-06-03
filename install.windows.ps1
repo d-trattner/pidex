@@ -109,6 +109,39 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
   }
 }
 
+function Get-RequiredPnpmVersion([string]$Root) {
+  $PackageJson = Join-Path $Root "package.json"
+  if (-not (Test-Path -LiteralPath $PackageJson)) { Fail "Missing package.json; cannot resolve pinned pnpm version" }
+  $Json = Get-Content -LiteralPath $PackageJson -Raw | ConvertFrom-Json
+  if (-not $Json.packageManager -or (-not ([string]$Json.packageManager).StartsWith("pnpm@"))) {
+    Fail "package.json must declare packageManager pnpm@<version>"
+  }
+  return ([string]$Json.packageManager).Substring(5)
+}
+
+function Resolve-PnpmCommand([string]$Required) {
+  $CorepackPath = Get-CommandPath @("corepack")
+  if ($CorepackPath) {
+    $Version = (& $CorepackPath pnpm --version 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0 -and $Version -eq $Required) {
+      return @{ File = $CorepackPath; Prefix = @("pnpm"); Source = "Corepack"; Version = $Version }
+    }
+  }
+  $PnpmPath = Get-CommandPath @("pnpm")
+  if ($PnpmPath) {
+    $Version = (& $PnpmPath --version 2>$null).Trim()
+    if ($LASTEXITCODE -eq 0 -and $Version -eq $Required) {
+      return @{ File = $PnpmPath; Prefix = @(); Source = "standalone pnpm"; Version = $Version }
+    }
+    Fail "pnpm version mismatch: expected $Required, got $(if ($Version) { $Version } else { '<unknown>' }). Install with: npm install -g pnpm@$Required"
+  }
+  Fail "Missing pnpm $Required. Install standalone pnpm with: npm install -g pnpm@$Required (or install Corepack and ensure 'corepack pnpm --version' works)."
+}
+
+function Invoke-Pnpm([hashtable]$Pnpm, [string[]]$Arguments) {
+  Invoke-Checked $Pnpm.File (@($Pnpm.Prefix) + $Arguments)
+}
+
 function Invoke-PythonScript([hashtable]$Python, [string[]]$Arguments) {
   $AllArgs = @($Python.Prefix) + $Arguments
   Invoke-Checked $Python.Command $AllArgs
@@ -143,7 +176,6 @@ if ($PidexRoot -ne $ExpectedRoot) {
 $Git = Require-Command @("git") "Install Git for Windows: https://git-scm.com/download/win"
 $Node = Require-Command @("node") "Install Node.js LTS: https://nodejs.org/"
 $Npm = Require-Command @("npm") "Install Node.js/npm: https://nodejs.org/"
-$Corepack = Require-Command @("corepack") "Install Node.js with Corepack support or enable Corepack: https://nodejs.org/"
 $Pi = Require-Command @("pi") "Install Pi first: npm install -g @earendil-works/pi-coding-agent"
 $Python = Get-PythonCommand
 $GitBash = Find-GitBash
@@ -153,12 +185,13 @@ if (-not $GitBash) {
 Assert-SafeRepoUrl $RepoUrl
 Assert-SafeBranchName $Branch $Git
 $NodeVersion = Assert-NodeVersion $Node
+$RequiredPnpm = $null
+$Pnpm = $null
 
 Write-Step "Prerequisites found"
 Write-Host "git:    $Git"
 Write-Host "node:   $Node ($NodeVersion)"
 Write-Host "npm:    $Npm"
-Write-Host "corepack: $Corepack"
 if ($Python) {
   Write-Host "python: $($Python.Command) $($Python.Prefix -join ' ')"
 } else {
@@ -215,6 +248,16 @@ if ($Branch) {
   }
 }
 
+$PackageJson = Join-Path $PidexRoot "package.json"
+if (Test-Path -LiteralPath $PackageJson) {
+  $RequiredPnpm = Get-RequiredPnpmVersion $PidexRoot
+} else {
+  $RequiredPnpm = "10.33.0"
+  Write-Warn "package.json not available in dry-run path; assuming pnpm $RequiredPnpm"
+}
+$Pnpm = Resolve-PnpmCommand $RequiredPnpm
+Write-Host "pnpm:   $($Pnpm.Source) $($Pnpm.Version)"
+
 $AuditRunner = Join-Path $PidexRoot "scripts\modules\run-check.mjs"
 if (-not $DryRun -and -not (Test-Path -LiteralPath $AuditRunner)) {
   Fail "Missing module runner: $AuditRunner"
@@ -237,13 +280,13 @@ $DashboardNodeModules = Join-Path $DashboardDir "node_modules"
 if (-not $SkipDashboardDeps -and -not (Test-Path -LiteralPath $DashboardNodeModules)) {
   Write-Step "Installing PIDEX workspace dependencies"
   $PnpmLock = Join-Path $PidexRoot "pnpm-lock.yaml"
-  $PnpmArgs = if (Test-Path -LiteralPath $PnpmLock) { @("pnpm", "install", "--frozen-lockfile", "--ignore-scripts") } else { @("pnpm", "install", "--ignore-scripts") }
+  $PnpmArgs = if (Test-Path -LiteralPath $PnpmLock) { @("install", "--frozen-lockfile", "--ignore-scripts") } else { @("install", "--ignore-scripts") }
   if ($DryRun) {
-    Write-Host "DRY-RUN: corepack $($PnpmArgs -join ' ')"
+    Write-Host "DRY-RUN: $($Pnpm.Source) pnpm $($PnpmArgs -join ' ')"
   } else {
     Push-Location $PidexRoot
     try {
-      Invoke-Checked $Corepack $PnpmArgs
+      Invoke-Pnpm $Pnpm $PnpmArgs
     } finally {
       Pop-Location
     }
@@ -300,4 +343,4 @@ Write-Host "  1. Open Pi and run: /reload"
 Write-Host "  2. Try: /pidex <your task>"
 Write-Host "  3. For this PowerShell session, expose Git Bash before pnpm checks:"
 Write-Host "     `$env:Path = `"$GitBashDir;`$env:Path`""
-Write-Host "  4. Run checks: corepack pnpm run public:check; corepack pnpm -C dashboard run typecheck; corepack pnpm -C dashboard run build"
+Write-Host "  4. Run checks with pinned pnpm ${RequiredPnpm}: pnpm run public:check; pnpm -C dashboard run typecheck; pnpm -C dashboard run build"

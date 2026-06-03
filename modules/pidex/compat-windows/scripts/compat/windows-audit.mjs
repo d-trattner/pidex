@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Read-only Windows compatibility audit for PIDEX. No installs, no mutation.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const COMMANDS = ['bash', 'node', 'npm', 'corepack', 'git', 'pi'];
+const COMMANDS = ['bash', 'node', 'npm', 'pnpm', 'corepack', 'git', 'pi'];
 const RISKY_ENTRYPOINTS = [
   ['install.sh', 'linux-owned', 'Prefer a future install.windows.ps1; do not add inline Windows branches to install.sh.'],
   ['uninstall.sh', 'linux-owned', 'Prefer a future uninstall.windows.ps1.'],
@@ -64,6 +64,7 @@ function commandVersion(command, executable) {
     bash: ['--version'],
     node: ['--version'],
     npm: ['--version'],
+    pnpm: ['--version'],
     corepack: ['--version'],
     git: ['--version'],
     pi: ['--version'],
@@ -72,7 +73,7 @@ function commandVersion(command, executable) {
   let runArgs = argsByCommand[command];
   if (process.platform === 'win32') {
     const lower = executable.toLowerCase();
-    if (['npm', 'corepack', 'pi'].includes(command)) {
+    if (['npm', 'pnpm', 'corepack', 'pi'].includes(command)) {
       runCommand = process.env.ComSpec || 'cmd.exe';
       runArgs = ['/d', '/c', `${command} ${argsByCommand[command].join(' ')}`];
     } else if (lower.endsWith('.ps1')) {
@@ -144,6 +145,16 @@ function pathShape(root) {
   };
 }
 
+function requiredPnpmVersion(root) {
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+    const match = /^pnpm@(.+)$/.exec(pkg.packageManager || '');
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 function pnpmViaCorepack(commands) {
   if (!commands.corepack.available || !commands.corepack.path) return { available: false, version: null };
   const result = spawnSync(commands.corepack.path, ['pnpm', '--version'], { encoding: 'utf8', timeout: 10000 });
@@ -151,19 +162,30 @@ function pnpmViaCorepack(commands) {
   return { available: result.status === 0, version: output[0] || null };
 }
 
+function resolvedPnpm(root, commands) {
+  const required = requiredPnpmVersion(root);
+  const corepackPnpm = pnpmViaCorepack(commands);
+  if (required && corepackPnpm.available && corepackPnpm.version === required) return { available: true, source: 'corepack', version: corepackPnpm.version, required };
+  if (required && commands.pnpm.available && commands.pnpm.version === required) return { available: true, source: 'standalone', version: commands.pnpm.version, required };
+  return { available: false, source: null, version: commands.pnpm.version || corepackPnpm.version, required };
+}
+
 function dashboardPrerequisites(root, commands) {
   const dashboard = path.join(root, 'dashboard');
-  const pnpm = pnpmViaCorepack(commands);
+  const pnpm = resolvedPnpm(root, commands);
   return {
     dashboard_dir_exists: existsSync(dashboard),
     package_json_exists: existsSync(path.join(dashboard, 'package.json')),
     node_available: commands.node.available,
     npm_available: commands.npm.available,
     corepack_available: commands.corepack.available,
-    pnpm_via_corepack_available: pnpm.available,
-    pnpm_via_corepack_version: pnpm.version,
+    standalone_pnpm_available: commands.pnpm.available,
+    pnpm_available: pnpm.available,
+    pnpm_source: pnpm.source,
+    pnpm_version: pnpm.version,
+    pnpm_required_version: pnpm.required,
     node_modules_present: existsSync(path.join(dashboard, 'node_modules')),
-    suggested_checks: ['corepack pnpm -C dashboard run typecheck', 'corepack pnpm -C dashboard run build'],
+    suggested_checks: ['pnpm -C dashboard run typecheck', 'pnpm -C dashboard run build'],
   };
 }
 
@@ -190,17 +212,15 @@ function findings(environment, commands, paths) {
   else if (environment.kind === 'windows-native') items.push({ level: 'warning', message: 'Native Windows detected; PIDEX does not currently claim full PowerShell/CMD runtime support.' });
   else items.push({ level: 'warning', message: `Unvalidated platform detected: ${environment.kind}.` });
 
-  for (const command of ['bash', 'node', 'npm', 'corepack', 'git', 'pi']) {
+  for (const command of ['bash', 'node', 'npm', 'git', 'pi']) {
     if (!commands[command].available) items.push({ level: 'warning', message: `Required or expected command not found on PATH/standard location: ${command}.` });
   }
   const nodeVersion = parseNodeMajorMinor(commands.node.version);
   if (nodeVersion && (nodeVersion[0] < 22 || (nodeVersion[0] === 22 && nodeVersion[1] < 12))) {
     items.push({ level: 'warning', message: 'PIDEX Windows bootstrap/dashboard dependencies require Node >=22.12.0; current node appears older.' });
   }
-  if (commands.corepack.available) {
-    const pnpm = pnpmViaCorepack(commands);
-    if (!pnpm.available) items.push({ level: 'warning', message: 'Corepack is available, but `corepack pnpm --version` failed; pnpm workspace install may fail.' });
-  }
+  const pnpm = resolvedPnpm(paths.repo_root, commands);
+  if (!pnpm.available) items.push({ level: 'warning', message: `Pinned pnpm ${pnpm.required || '<unknown>'} is not available via Corepack or standalone pnpm.` });
   if (paths.contains_spaces) items.push({ level: 'warning', message: 'PIDEX checkout path contains spaces; this is not yet validated for Windows support.' });
   if (!paths.is_expected_linux_checkout) items.push({ level: 'info', message: 'PIDEX v0.1 documents ~/pidex / $HOME\\pidex as the expected checkout path.' });
   return items;

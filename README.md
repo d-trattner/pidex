@@ -49,7 +49,7 @@ Linux / WSL2 recommended prerequisites:
 - Git
 - Node.js `>=22.19.0`
 - npm (for Pi/npm bootstrap)
-- Corepack/pnpm (Node Corepack provides the pinned pnpm version)
+- pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
 - Pi CLI installed globally:
   ```bash
   npm install -g @earendil-works/pi-coding-agent
@@ -61,7 +61,7 @@ Windows prerequisites for the experimental PowerShell bootstrap:
 - Git for Windows, including Git Bash
 - Node.js `>=22.12.0`
 - npm (for Pi/npm bootstrap)
-- Corepack/pnpm (Node Corepack provides the pinned pnpm version)
+- pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
 - Pi CLI installed globally:
   ```powershell
   npm install -g @earendil-works/pi-coding-agent
@@ -192,7 +192,7 @@ Project session memory:
 ```bash
 cd ~/pidex
 bash scripts/doctor.sh
-corepack pnpm run check
+pnpm run check
 bash scripts/smoke-test.sh
 node scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project ~/pidex
 ```

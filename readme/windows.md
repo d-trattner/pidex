@@ -46,7 +46,7 @@ node scripts/modules/run-check.mjs --capability compat-windows.audit --agent pid
 The audit reports:
 
 - OS/platform and likely environment (`linux`, `wsl`, `windows-git-bash`, `windows-native`, etc.)
-- availability of `bash`, `node`, `npm`, `corepack`, `git`, and `pi`
+- availability of `bash`, `node`, `npm`, pinned `pnpm`, optional `corepack`, `git`, and `pi`
 - PIDEX checkout path shape
 - dashboard prerequisite signals
 - known unsupported or risky Windows entrypoints
@@ -85,7 +85,7 @@ notepad .\install.windows.ps1
 powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 ```
 
-The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/Corepack/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs PIDEX workspace dependencies when missing with `corepack pnpm install --frozen-lockfile --ignore-scripts` when `pnpm-lock.yaml` is present, and runs `pi install`. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
+The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/pinned pnpm/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs PIDEX workspace dependencies when missing with `pnpm install --frozen-lockfile --ignore-scripts` when `pnpm-lock.yaml` is present, and runs `pi install`. Corepack may provide pnpm, but standalone `pnpm@10.33.0` is also supported. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
 
 ## Experimental uninstall helper
 
@@ -112,10 +112,10 @@ For a separate PowerShell window/session, expose Git Bash before running Bash-ba
 
 ```powershell
 $env:Path = "C:\Program Files\Git\bin;$env:Path"
-corepack pnpm run public:check
+pnpm run public:check
 ```
 
-Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `corepack pnpm run public:check` passed via PowerShell after adding Git Bash to PATH, and `corepack pnpm -C dashboard run typecheck` plus `corepack pnpm -C dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
+Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `pnpm run public:check` passed via PowerShell after adding Git Bash to PATH, and `pnpm -C dashboard run typecheck` plus `pnpm -C dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
 
 ## Experimental dashboard launcher
 

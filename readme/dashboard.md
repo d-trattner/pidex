@@ -13,7 +13,7 @@ cd <pidex-root>/dashboard
 ./start.sh
 ```
 
-The Linux installer installs PIDEX workspace dependencies when needed. If you used `./install.sh --skip-dashboard-deps`, run `corepack pnpm install --frozen-lockfile --ignore-scripts` from the PIDEX root before starting the dashboard.
+The Linux installer installs PIDEX workspace dependencies when needed. If you used `./install.sh --skip-dashboard-deps`, run `pnpm install --frozen-lockfile --ignore-scripts` with pinned pnpm `10.33.0` from the PIDEX root before starting the dashboard.
 
 Windows native support is experimental. Use the additive PowerShell launcher instead of the Linux shell script:
 
@@ -81,5 +81,5 @@ The public default `config/dashboard.json` leaves the domain unset. PIDEX does n
 
 ```bash
 cd <pidex-root>
-corepack pnpm -C dashboard run typecheck
+pnpm -C dashboard run typecheck
 ```

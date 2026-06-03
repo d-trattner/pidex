@@ -16,10 +16,17 @@ if command -v jq >/dev/null 2>&1; then
   jq empty "$ROOT/config/agents.json"
 fi
 
-if command -v corepack >/dev/null 2>&1; then
-  (cd "$ROOT" && corepack pnpm run check)
+REQUIRED_PNPM=$(node -e "const p=require(process.argv[1]); const m=/^pnpm@(.+)$/.exec(p.packageManager||''); if(!m) process.exit(1); console.log(m[1]);" "$ROOT/package.json")
+PNPM=()
+if command -v corepack >/dev/null 2>&1 && [ "$(corepack pnpm --version 2>/dev/null || true)" = "$REQUIRED_PNPM" ]; then
+  PNPM=(corepack pnpm)
+elif command -v pnpm >/dev/null 2>&1 && [ "$(pnpm --version 2>/dev/null || true)" = "$REQUIRED_PNPM" ]; then
+  PNPM=(pnpm)
 else
-  echo "WARN: corepack not found; skipping pnpm run check"
+  echo "WARN: pnpm $REQUIRED_PNPM not found via Corepack or standalone pnpm; skipping pnpm run check"
+fi
+if [ ${#PNPM[@]} -gt 0 ]; then
+  (cd "$ROOT" && "${PNPM[@]}" run check)
 fi
 
 if command -v pi >/dev/null 2>&1; then

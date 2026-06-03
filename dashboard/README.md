@@ -6,8 +6,8 @@ Neue Dashboard-Implementierung (`dashboard`) auf TanStack Start mit Routenstrukt
 
 ```bash
 cd <pidex-root>
-corepack pnpm install --frozen-lockfile --ignore-scripts
-corepack pnpm -C dashboard run dev
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm -C dashboard run dev
 ```
 
 Standard: `http://127.0.0.1:18777`
