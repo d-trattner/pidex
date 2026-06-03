@@ -111,10 +111,10 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
 
 function Get-RequiredPnpmVersion([string]$Root) {
   $PackageJson = Join-Path $Root "package.json"
-  if (-not (Test-Path -LiteralPath $PackageJson)) { Fail "Missing package.json; cannot resolve pinned pnpm version" }
+  if (-not (Test-Path -LiteralPath $PackageJson)) { throw "Missing package.json; cannot resolve pinned pnpm version" }
   $Json = Get-Content -LiteralPath $PackageJson -Raw | ConvertFrom-Json
   if (-not $Json.packageManager -or (-not ([string]$Json.packageManager).StartsWith("pnpm@"))) {
-    Fail "package.json must declare packageManager pnpm@<version>"
+    throw "package.json must declare packageManager pnpm@<version>"
   }
   return ([string]$Json.packageManager).Substring(5)
 }
@@ -257,7 +257,7 @@ if (Test-Path -LiteralPath $PackageJson) {
       $RequiredPnpm = "10.33.0"
       Write-Warn "target checkout does not yet declare packageManager; dry-run assumes pnpm $RequiredPnpm. Use -Branch feat/pnpm-package-manager-hardening or update `$HOME\pidex before real install."
     } else {
-      throw
+      Fail $_.Exception.Message
     }
   }
 } else {
