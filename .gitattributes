@@ -1,0 +1,2 @@
+# Keep generated TanStack route tree stable across Windows/Linux checkouts.
+dashboard/app/routeTree.gen.ts text eol=lf

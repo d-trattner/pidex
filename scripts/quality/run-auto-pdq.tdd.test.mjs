@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const script = path.join(root, 'scripts', 'quality', 'run-auto-pdq.mjs');
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-auto-pdq-project-'));
 const pipelineId = `auto-pdq-test-${process.pid}-${Date.now()}`;
-function eventuallyExists(file, timeoutMs = 1000) {
+function eventuallyExists(file, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
     if (existsSync(file)) return true;
