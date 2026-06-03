@@ -250,7 +250,16 @@ if ($Branch) {
 
 $PackageJson = Join-Path $PidexRoot "package.json"
 if (Test-Path -LiteralPath $PackageJson) {
-  $RequiredPnpm = Get-RequiredPnpmVersion $PidexRoot
+  try {
+    $RequiredPnpm = Get-RequiredPnpmVersion $PidexRoot
+  } catch {
+    if ($DryRun) {
+      $RequiredPnpm = "10.33.0"
+      Write-Warn "target checkout does not yet declare packageManager; dry-run assumes pnpm $RequiredPnpm. Use -Branch feat/pnpm-package-manager-hardening or update `$HOME\pidex before real install."
+    } else {
+      throw
+    }
+  }
 } else {
   $RequiredPnpm = "10.33.0"
   Write-Warn "package.json not available in dry-run path; assuming pnpm $RequiredPnpm"
