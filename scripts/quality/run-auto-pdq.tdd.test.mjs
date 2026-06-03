@@ -10,6 +10,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const script = path.join(root, 'scripts', 'quality', 'run-auto-pdq.mjs');
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-auto-pdq-project-'));
 const pipelineId = `auto-pdq-test-${process.pid}-${Date.now()}`;
+function eventuallyExists(file, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (existsSync(file)) return true;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+  }
+  return existsSync(file);
+}
+
 const cleanup = [];
 try {
   const cp = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--pipeline-id', pipelineId, '--terminal-event', 'pipeline_completed'], { cwd: root, encoding: 'utf8' });
@@ -20,7 +29,7 @@ try {
   const reportOut = JSON.parse(lines.slice(0, -1).join('\n'));
   assert.equal(reportOut.plans[0], 'plan-007');
   assert.ok(opOut.op_quality_review);
-  assert.ok(existsSync(opOut.op_quality_review));
+  assert.ok(eventuallyExists(opOut.op_quality_review), JSON.stringify(opOut));
   const rows = readFileSync(opOut.op_quality_review, 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line));
   const row = rows.find((item) => item.operator_type === 'OpQualityReview' && item.pipeline_id === pipelineId);
   assert.ok(row, 'OpQualityReview row not found');
