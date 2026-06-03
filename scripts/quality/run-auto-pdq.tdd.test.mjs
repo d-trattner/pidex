@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -10,13 +10,26 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const script = path.join(root, 'scripts', 'quality', 'run-auto-pdq.mjs');
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-auto-pdq-project-'));
 const pipelineId = `auto-pdq-test-${process.pid}-${Date.now()}`;
-function eventuallyExists(file, timeoutMs = 10000) {
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function readEventually(file, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
+  let lastError;
   while (Date.now() <= deadline) {
-    if (existsSync(file)) return true;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    try {
+      return readFileSync(file, 'utf8');
+    } catch (error) {
+      lastError = error;
+      sleep(25);
+    }
   }
-  return existsSync(file);
+  if (process.platform === 'win32') {
+    const ps = spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Content -LiteralPath $args[0] -Raw', file], { encoding: 'utf8' });
+    if (ps.status === 0 && ps.stdout) return ps.stdout;
+  }
+  throw lastError;
 }
 
 const cleanup = [];
@@ -29,8 +42,7 @@ try {
   const reportOut = JSON.parse(lines.slice(0, -1).join('\n'));
   assert.equal(reportOut.plans[0], 'plan-007');
   assert.ok(opOut.op_quality_review);
-  assert.ok(eventuallyExists(opOut.op_quality_review), JSON.stringify(opOut));
-  const rows = readFileSync(opOut.op_quality_review, 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line));
+  const rows = readEventually(opOut.op_quality_review).trim().split(/\r?\n/).map((line) => JSON.parse(line));
   const row = rows.find((item) => item.operator_type === 'OpQualityReview' && item.pipeline_id === pipelineId);
   assert.ok(row, 'OpQualityReview row not found');
   assert.equal(row.plan_key, 'plan-007');
