@@ -86,9 +86,9 @@ export function moduleEnabled(system, manifest) {
 
 export function validateProjectPath(project) {
   if (!project) throw new Error('--project is required');
-  if (!path.isAbsolute(project)) throw new Error('--project must be absolute');
-  if (!existsSync(project)) throw new Error(`--project does not exist: ${project}`);
-  return path.resolve(project);
+  const resolved = path.resolve(project);
+  if (!existsSync(resolved)) throw new Error(`--project does not exist: ${resolved}`);
+  return resolved;
 }
 
 export function currentPlatformId() {
