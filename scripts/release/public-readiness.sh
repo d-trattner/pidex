@@ -122,10 +122,14 @@ else
 fi
 
 PACK_JSON=$(mktemp)
-trap 'rm -f "$PACK_JSON"' EXIT
+NPM_PACK_JSON=$(mktemp)
+trap 'rm -f "$PACK_JSON" "$NPM_PACK_JSON"' EXIT
 "${PNPM[@]}" pack --dry-run --json >"$PACK_JSON"
 node scripts/release/public-readiness-check.mjs pack-clean "$PACK_JSON"
 ok "pnpm package contents clean"
+npm pack --dry-run --json >"$NPM_PACK_JSON"
+node scripts/release/public-readiness-check.mjs pack-clean "$NPM_PACK_JSON"
+ok "npm publish package contents clean"
 
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || true)
 case "$CURRENT_BRANCH" in

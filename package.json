@@ -41,6 +41,7 @@
     "extensions/",
     "skills/",
     "prompts/",
+    "readme/",
     "README.md",
     "SECURITY.md",
     "CONTRIBUTING.md",
