@@ -1831,12 +1831,12 @@ function canonicalHomeMissingMessage(): string {
 		"Run:",
 		"  /pidex-init-home",
 		"",
-		"This will clone PIDEX into ~/pidex, run the full installer, and remove the bootstrap package registration so /reload uses the canonical checkout.",
+		"This will clone PIDEX into the canonical runtime checkout, run the platform installer, and remove the bootstrap package registration so /reload uses the canonical checkout.",
 	].join("\n");
 }
 
 function runCommandForInit(command: string, args: string[], cwd?: string): { ok: boolean; output: string } {
-	const proc = spawnSync(command, args, { cwd, encoding: "utf8", timeout: 10 * 60_000 });
+	const proc = spawnSync(command, args, { cwd, encoding: "utf8", timeout: 20 * 60_000 });
 	const output = [proc.stdout, proc.stderr].filter(Boolean).join("\n").trim();
 	return { ok: proc.status === 0, output };
 }
@@ -1852,19 +1852,25 @@ async function initializePidexHome(ctx: any): Promise<void> {
 		return;
 	}
 	if (ctx.hasUI) {
-		const choice = await ctx.ui.select(`Initialize PIDEX canonical runtime root at ${status.path}?\n\nThis clones https://github.com/d-trattner/pidex.git, runs install.sh, then removes the npm/git bootstrap package registration if present.`, ["Initialize", "Cancel"]);
+		const installer = process.platform === "win32" ? "install.windows.ps1" : "install.sh";
+		const choice = await ctx.ui.select(`Initialize PIDEX canonical runtime root at ${status.path}?\n\nThis clones https://github.com/d-trattner/pidex.git, runs ${installer}, then removes the npm/git bootstrap package registration if present.`, ["Initialize", "Cancel"]);
 		if (choice !== "Initialize") return;
 	}
 	const parent = path.dirname(status.path);
 	fs.mkdirSync(parent, { recursive: true });
-	let result = runCommandForInit("git", ["clone", "https://github.com/d-trattner/pidex.git", status.path], parent);
+	let result = runCommandForInit("git", ["clone", "--", "https://github.com/d-trattner/pidex.git", status.path], parent);
 	if (!result.ok) {
 		await ctx.ui.notify(`PIDEX clone failed:\n${result.output}`, "error");
 		return;
 	}
-	result = runCommandForInit("bash", ["install.sh", "--skip-global-git-hook"], status.path);
+	if (process.platform === "win32") {
+		result = runCommandForInit("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "install.windows.ps1", "-NonInteractive"], status.path);
+	} else {
+		result = runCommandForInit("bash", ["install.sh", "--skip-global-git-hook"], status.path);
+	}
 	if (!result.ok) {
-		await ctx.ui.notify(`PIDEX install failed. Checkout remains at ${status.path}.\n\n${result.output}`, "error");
+		const installer = process.platform === "win32" ? "install.windows.ps1" : "install.sh";
+		await ctx.ui.notify(`PIDEX ${installer} failed. Checkout remains at ${status.path}.\n\n${result.output}`, "error");
 		return;
 	}
 	const cleanupSpecs = [
@@ -1876,7 +1882,7 @@ async function initializePidexHome(ctx: any): Promise<void> {
 	const cleanupNotes = cleanup.map((entry) => entry.output).filter(Boolean).join("\n");
 	await ctx.ui.notify([
 		`PIDEX initialized at ${status.path}.`,
-		"Run /reload so Pi loads the canonical ~/pidex package.",
+		"Run /reload so Pi loads the canonical PIDEX checkout.",
 		cleanupNotes ? `\nBootstrap cleanup output:\n${cleanupNotes}` : "",
 	].join("\n"), "info");
 }

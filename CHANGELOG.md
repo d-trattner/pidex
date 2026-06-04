@@ -26,3 +26,8 @@ Public-readiness changes include:
 - UAT Complete for Plan 7 (`public-readiness-fixed-core-reclassification`): public-readiness authority moved to fixed-core release path; module release-safety retains helper-only role.
 - UAT Complete for Plan 9 (`remove-root-legacy-wrappers`): conservative root wrapper cleanup passed (`analysis/run-pipeline-analysis.sh`, `metrics/{record,summarize}`, `parallel-agents/run-lane`, `project-metadata/migrate-to-pidex-folder` removed; active/deferred wrappers retained by plan).
 - UAT Complete for Plan 10 (`seven-remaining-wrapper-migrations`): remaining agentic/project-bound root wrappers migrated to module capabilities and retired; fixed-core release scripts preserved; git hook install now migrates legacy root hook path to module-owned hook path safely.
+- PIDEX repository migrated to a pinned pnpm workspace (`pnpm@10.33.0`) with `pnpm-workspace.yaml`, `pnpm-lock.yaml`, dashboard package name `@pidex/dashboard`, and no tracked `package-lock.json` files.
+- Installers, dashboard launchers, doctor/smoke scripts, and public-readiness checks now prefer Corepack-provided pnpm when it resolves to `10.33.0`, while supporting standalone/global `pnpm@10.33.0` as a fallback.
+- Package-manager hardening added: target-project package-manager detection, pnpm default for new JS/TS projects, npm compatibility for existing npm projects, and fail-closed handling for unsupported yarn/bun execution paths.
+- Windows validation refreshed with standalone `pnpm@10.33.0`: install/check/typecheck/build/dashboard-start dry-run paths passed on Node.js 26.2.0.
+- npm bootstrap readiness refreshed after pnpm migration: `/pidex-init-home` now uses `install.windows.ps1` on native Windows and documents npm as a lightweight Pi-bootstrap path only.

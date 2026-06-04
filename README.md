@@ -117,13 +117,21 @@ PIDEX can also be installed as a lightweight Pi bootstrap package:
 pi install npm:@d-trattner/pidex
 ```
 
-The npm package provides the Pi commands/skills only. It does not replace the canonical `~/pidex` runtime checkout. After installing the package, run this in Pi:
+The npm package provides the Pi commands/skills only. It does not replace the canonical `~/pidex` runtime checkout, and it is not the dashboard/runtime distribution. After installing the package, run this in Pi:
 
 ```text
 /pidex-init-home
 ```
 
-That command clones PIDEX into `~/pidex`, runs the full installer, removes the bootstrap package registration when possible, and asks you to run `/reload`. Normal `/pidex` and `/pd` pipeline runs require `~/pidex` and will stop with setup guidance if it is missing.
+That command clones PIDEX into the canonical runtime checkout, runs the platform installer, removes the bootstrap package registration when possible, and asks you to run `/reload`. On Linux/WSL2 it uses `~/pidex` and `install.sh`; on native Windows it uses `$HOME\pidex` and `install.windows.ps1`. Normal `/pidex` and `/pd` pipeline runs require the canonical checkout and will stop with setup guidance if it is missing.
+
+Runtime installation requires `pnpm@10.33.0`. Corepack may provide it, or install standalone with:
+
+```bash
+npm install -g pnpm@10.33.0
+```
+
+Keep npm's role narrow: npm installs Pi and the lightweight PIDEX bootstrap package; pnpm installs/checks the PIDEX runtime workspace.
 
 ### Windows experimental bootstrap
 

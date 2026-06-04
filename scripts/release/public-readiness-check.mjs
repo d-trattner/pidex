@@ -47,7 +47,7 @@ if (cmd === 'tracked-clean') {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const dashPkg = JSON.parse(readFileSync('dashboard/package.json', 'utf8'));
   const pm = String(pkg.packageManager || '');
-  if (!/^pnpm@\d+\.\d+\.\d+/.test(pm)) fail('package.json must pin packageManager as pnpm@<exact-version>');
+  if (pm !== 'pnpm@10.33.0') fail('package.json must pin packageManager exactly as pnpm@10.33.0');
   if (!existsSync('pnpm-lock.yaml')) fail('pnpm-lock.yaml must be committed');
   if (!existsSync('pnpm-workspace.yaml')) fail('pnpm-workspace.yaml must be committed');
   const workspace = readFileSync('pnpm-workspace.yaml', 'utf8');
