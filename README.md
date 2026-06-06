@@ -16,7 +16,7 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 PIDEX is an experimental direct-mode MVP. Direct mode is the supported path today.
 
-The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. The next memory-hygiene work is being shaped as PDQ-adjacent operational-memory consistency checks, not as a separate autonomous cleanup loop.
+The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes an optional Docker-backed sandbox MVP for selected source-changing pipeline work; it is disabled by default and requires the canonical `~/pidex` runtime checkout.
 
 ## Detailed feature docs
 
@@ -27,6 +27,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Global Git security hook](readme/security-hooks.md)
 - [Wiki hygiene](readme/wiki-hygiene.md)
 - [Optional parallel agents](readme/parallel-agents.md)
+- [Docker sandbox](readme/sandbox.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
 - [PIDEX modules](readme/modules.md)
