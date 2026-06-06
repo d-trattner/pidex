@@ -87,6 +87,42 @@ type RoutingConfig = {
 	};
 };
 
+type SandboxProfile = {
+	enabled?: boolean;
+	image?: string;
+	network_default?: "none" | "default";
+	memory?: string;
+	cpus?: number;
+	pids_limit?: number;
+	timeout_seconds?: number;
+	preserve_on_failure?: boolean;
+	container_user_mode?: "image-default" | string;
+	container_user_enforced?: boolean;
+};
+
+type SandboxConfig = {
+	enabled?: boolean;
+	default_mode?: "off" | "hardened-pipeline" | string;
+	profiles?: Record<string, SandboxProfile>;
+};
+
+type SandboxState = {
+	mode: "off" | "hardened-pipeline";
+	enabled: boolean;
+	reason: string;
+	configPath: string;
+	localConfigPath: string;
+	profile?: SandboxProfile;
+};
+
+type SandboxRuntimeContext = {
+	mode: "hardened-pipeline";
+	runId: string;
+	hostProjectRoot: string;
+	sandboxWorkspace: string;
+	allowedWriteRoot: string;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const BOOTSTRAP_ROOT = path.resolve(__dirname, "../..");
@@ -126,6 +162,8 @@ function resolvePidexRuntimeRoot(): string {
 const PACKAGE_ROOT = resolvePidexRuntimeRoot();
 const AGENTS_DIR = path.join(PACKAGE_ROOT, "agents");
 const CONFIG_PATH = process.env.PIDEX_CONFIG_FILE ?? path.join(PACKAGE_ROOT, "config", "agents.json");
+const SANDBOX_CONFIG_PATH = process.env.PIDEX_SANDBOX_CONFIG_FILE ?? path.join(PACKAGE_ROOT, "config", "sandbox.json");
+const SANDBOX_LOCAL_CONFIG_PATH = process.env.PIDEX_SANDBOX_LOCAL_CONFIG_FILE ?? path.join(PACKAGE_ROOT, "config", "sandbox.local.json");
 const DELEGATE_DIR = path.join(PACKAGE_ROOT, "scripts", "delegate");
 const SKILL_PATH = path.join(PACKAGE_ROOT, "skills", "pd", "SKILL.md");
 const STATE_DIR = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state");
@@ -135,6 +173,7 @@ const PRICING_PATH = path.join(PACKAGE_ROOT, "config", "pricing.json");
 const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "latest.json");
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
+const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 
 const MAX_STDERR_CHARS = 64 * 1024;
 const MAX_STDERR_DETAILS_CHARS = 8 * 1024;
@@ -161,6 +200,7 @@ const TOOL_HEAVY_AGENTS = new Set([
 	"pidex-pi",
 ]);
 const TOOL_FORWARDING_AGENTS = new Set(["pidex-implementer", "pidex-security", "pidex-qa"]);
+const SANDBOXED_AGENT_NAMES = new Set(["pidex-implementer", "pidex-security", "pidex-qa"]);
 const TOOL_ALIASES: Record<string, string | undefined> = {
 	glob: "find",
 	grep: "grep",
@@ -225,6 +265,11 @@ function hasCustomTools(tools?: string[]): boolean {
 	return Boolean(tools?.some((tool) => !BUILTIN_TOOL_NAMES.has(tool)));
 }
 
+export function shouldDisableChildExtensions(tools?: string[], sandboxContext?: SandboxRuntimeContext): boolean {
+	if (sandboxContext?.mode === "hardened-pipeline") return false;
+	return !hasCustomTools(tools);
+}
+
 function parsePositiveInt(value: string | number | undefined): number | undefined {
 	if (value === undefined) return undefined;
 	const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
@@ -245,6 +290,183 @@ function resolveRoute(config: RoutingConfig, agentName: string): AgentRoute {
 		...(config.defaults ?? {}),
 		...(config.agents?.[agentName] ?? {}),
 	};
+}
+
+function readJsonObject<T extends Record<string, any>>(file: string, fallback: T): T {
+	try {
+		if (!fs.existsSync(file)) return fallback;
+		return JSON.parse(fs.readFileSync(file, "utf8"));
+	} catch {
+		return fallback;
+	}
+}
+
+function deepMerge<T extends Record<string, any>>(base: T, override: Record<string, any>): T {
+	const out: Record<string, any> = { ...base };
+	for (const [key, value] of Object.entries(override || {})) {
+		if (value && typeof value === "object" && !Array.isArray(value) && out[key] && typeof out[key] === "object" && !Array.isArray(out[key])) out[key] = deepMerge(out[key], value);
+		else out[key] = value;
+	}
+	return out as T;
+}
+
+function loadSandboxConfig(): SandboxConfig {
+	const base = readJsonObject<SandboxConfig>(SANDBOX_CONFIG_PATH, { enabled: false, default_mode: "off", profiles: {} });
+	const local = readJsonObject<Partial<SandboxConfig>>(SANDBOX_LOCAL_CONFIG_PATH, {});
+	return deepMerge(base, local);
+}
+
+function resolveSandboxState(): SandboxState {
+	const config = loadSandboxConfig();
+	const mode = config.default_mode === "hardened-pipeline" ? "hardened-pipeline" : "off";
+	const profile = config.profiles?.[mode];
+	const enabled = config.enabled === true && mode === "hardened-pipeline" && profile?.enabled === true;
+	return {
+		mode: enabled ? "hardened-pipeline" : "off",
+		enabled,
+		reason: enabled ? "config-enabled" : `disabled-or-off(enabled=${config.enabled === true}, default_mode=${config.default_mode ?? "off"}, profile_enabled=${profile?.enabled === true})`,
+		configPath: SANDBOX_CONFIG_PATH,
+		localConfigPath: SANDBOX_LOCAL_CONFIG_PATH,
+		profile,
+	};
+}
+
+function sandboxEvidenceLine(): string {
+	const state = resolveSandboxState();
+	return state.enabled
+		? `sandbox_mode: hardened-pipeline; sandbox_reason: ${state.reason}; image: ${state.profile?.image ?? "node:22-slim"}`
+		: `sandbox_mode: off; sandbox_reason: ${state.reason}`;
+}
+
+function probeSandboxAvailability(): { ok: boolean; summary: string } {
+	const script = path.join(PACKAGE_ROOT, "modules", "pidex", "sandbox-runtime", "scripts", "sandbox", "probe.mjs");
+	if (!fs.existsSync(script)) return { ok: false, summary: `sandbox runtime missing at ${script}. Sandbox requires the canonical ~/pidex runtime checkout with initiative 021 files; run /pidex-init-home or update ~/pidex.` };
+	const proc = spawnSync(process.execPath, [script, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 180_000 });
+	const raw = `${proc.stdout || ""}\n${proc.stderr || ""}`.trim();
+	try {
+		const parsed = JSON.parse(proc.stdout || "{}");
+		const ok = parsed?.ok === true && parsed?.available === true;
+		return { ok, summary: ok ? `probe ok (${parsed.os}, ${parsed.image})` : `probe unavailable: ${parsed.reason ?? "unknown"}; ${parsed.actionable ?? raw}` };
+	} catch {
+		return { ok: false, summary: `probe failed exit=${proc.status}: ${clipEnd(raw, 1200)}` };
+	}
+}
+
+function runSandboxJson(scriptName: string, args: string[], timeoutMs = 300_000): any {
+	const script = path.join(PACKAGE_ROOT, "modules", "pidex", "sandbox-runtime", "scripts", "sandbox", scriptName);
+	const proc = spawnSync(process.execPath, [script, ...args], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: timeoutMs, maxBuffer: 50 * 1024 * 1024 });
+	const raw = `${proc.stdout || ""}\n${proc.stderr || ""}`.trim();
+	let parsed: any;
+	try {
+		const start = (proc.stdout || "").indexOf("{");
+		const end = (proc.stdout || "").lastIndexOf("}");
+		parsed = start >= 0 && end >= start ? JSON.parse((proc.stdout || "").slice(start, end + 1)) : undefined;
+	} catch {}
+	if (proc.status !== 0) {
+		const detail = parsed ? JSON.stringify(parsed) : clipEnd(raw, 2000);
+		const error = new Error(`sandbox ${scriptName} failed exit=${proc.status}: ${detail}`) as Error & { sandboxResult?: any };
+		if (parsed) error.sandboxResult = parsed;
+		throw error;
+	}
+	if (!parsed) throw new Error(`sandbox ${scriptName} failed exit=${proc.status}: no JSON result; ${clipEnd(raw, 2000)}`);
+	if (parsed.ok === false) {
+		const error = new Error(`sandbox ${scriptName} returned ok=false: ${JSON.stringify(parsed)}`) as Error & { sandboxResult?: any };
+		error.sandboxResult = parsed;
+		throw error;
+	}
+	return parsed;
+}
+
+function isRuntimeDirtyPath(relPath: string | undefined): boolean {
+	const normalized = String(relPath || "").replaceAll("\\", "/").replace(/^\.\//, "");
+	return normalized.startsWith("agents.output/")
+		|| normalized.startsWith("pidex/state/")
+		|| normalized.startsWith("pidex/context/")
+		|| normalized.startsWith("state/")
+		|| normalized.startsWith("logs/");
+}
+
+function gitSourceStatusPorcelain(cwd: string): string {
+	const proc = spawnSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8", timeout: 10_000 });
+	if (proc.status !== 0) return "";
+	return proc.stdout.trim().split(/\r?\n/).filter(Boolean).filter((line) => {
+		const rel = line.slice(3).trim().split(" -> ").pop();
+		return !isRuntimeDirtyPath(rel);
+	}).join("\n");
+}
+
+function routingContextFile(text: string): string | undefined {
+	const block = extractRoutingBlock(text);
+	const value = extractRoutingField(block, "context_file");
+	return value || undefined;
+}
+
+function normalizeContextRel(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	return value.replaceAll("\\", "/").replace(/^\.\//, "");
+}
+
+async function runSandboxedConfiguredAgent(params: {
+	agent: string;
+	task: string;
+	cwd: string;
+	providerOverride?: string;
+	modelOverride?: string;
+	effortOverride?: string;
+	tools?: string[];
+	signal?: AbortSignal;
+	onUpdate?: (text: string) => void;
+}): Promise<RpResult> {
+	if (gitSourceStatusPorcelain(params.cwd)) throw new Error("PIDEX sandbox requires a clean host source worktree before sandbox creation; runtime artifacts under agents.output/ and pidex/state/context are ignored.");
+	const create = runSandboxJson("lifecycle.mjs", ["--project", params.cwd, "--pidex-root", PACKAGE_ROOT, "--mode", "hardened-pipeline", "--json"]);
+	const workspace = String(create.workspace || "");
+	const metadataPath = String(create.metadata_path || "");
+	const metadata = metadataPath && fs.existsSync(metadataPath) ? JSON.parse(fs.readFileSync(metadataPath, "utf8")) : create.metadata;
+	const baselineHead = metadata?.baseline_head;
+	const runId = String(create.run_id || metadata?.run_id || "");
+	const task = [
+		`SANDBOX RUN: ${runId}`,
+		`HOST_PROJECT_ROOT: ${params.cwd}`,
+		`SANDBOX_WORKSPACE: ${workspace}`,
+		"Write/edit only inside SANDBOX_WORKSPACE. Keep normal ROUTING context_file paths project-relative, usually agents.output/....",
+		params.task,
+	].join("\n\n");
+	try {
+		const sandboxContext: SandboxRuntimeContext = {
+			mode: "hardened-pipeline",
+			runId,
+			hostProjectRoot: path.resolve(params.cwd),
+			sandboxWorkspace: path.resolve(workspace),
+			allowedWriteRoot: path.resolve(workspace),
+		};
+		const result = await runConfiguredAgent({ ...params, task, cwd: workspace, sandboxContext });
+		const contextRel = normalizeContextRel(routingContextFile(result.finalText));
+		if (contextRel?.startsWith("agents.output/")) {
+			runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel, "--run-id", runId, "--check", "--json"]);
+		}
+		const patches = path.join(PACKAGE_ROOT, "state", "sandbox", "runs", runId, "patches");
+		const diff = runSandboxJson("diff.mjs", ["--workspace", workspace, "--patches", patches, "--json"]);
+		if (!diff.empty) {
+			runSandboxJson("apply.mjs", ["--project", params.cwd, "--patch", diff.patch_path, "--changed-files", diff.changed_files_path, "--baseline-head", baselineHead, "--json"]);
+		}
+		if (contextRel?.startsWith("agents.output/")) {
+			runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel, "--run-id", runId, "--json"]);
+		}
+		runSandboxJson("cleanup.mjs", ["--pidex-root", PACKAGE_ROOT, "--run-id", runId, "--success", "--json"], 120_000);
+		return {
+			...result,
+			warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; source_patch=${diff.empty ? "empty" : "applied"}; artifact=${contextRel?.startsWith("agents.output/") ? "extracted" : "none"}`],
+		};
+	} catch (error: any) {
+		let cleanupNote = "";
+		try {
+			const cleanup = runSandboxJson("cleanup.mjs", ["--pidex-root", PACKAGE_ROOT, "--run-id", runId, "--preserve-on-failure", "--json"], 120_000);
+			if (cleanup?.ok === false) cleanupNote = `; cleanup_failed=${JSON.stringify(cleanup)}`;
+		} catch (cleanupError: any) {
+			cleanupNote = `; cleanup_error=${cleanupError?.message ?? cleanupError}`;
+		}
+		throw new Error(`Sandboxed pidex_agent failed for ${params.agent}; run_id=${runId}; workspace=${workspace}; reason=${error?.message ?? error}${cleanupNote}`);
+	}
 }
 
 function normalizeProvider(provider: string | undefined): string {
@@ -1275,6 +1497,7 @@ async function runRpAgent(params: {
 	model?: string;
 	tools?: string[];
 	timeoutSeconds?: number;
+	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
 }): Promise<RpResult> {
@@ -1306,7 +1529,7 @@ async function runRpAgent(params: {
 			"--append-system-prompt",
 			systemPromptFile,
 		];
-		if (!hasCustomTools(tools)) args.push("--no-extensions");
+		if (shouldDisableChildExtensions(tools, params.sandboxContext)) args.push("--no-extensions");
 		if (model) args.push("--model", model);
 		if (tools && tools.length > 0) args.push("--tools", tools.join(","));
 		args.push(`@${taskFile}`);
@@ -1408,6 +1631,7 @@ async function runRpAgent(params: {
 				env: {
 					...process.env,
 					[PIDEX_CHILD_ENV]: "1",
+					...(params.sandboxContext ? { [PIDEX_SANDBOX_CONTEXT_ENV]: JSON.stringify(params.sandboxContext) } : {}),
 					PI_SKIP_VERSION_CHECK: "1",
 				},
 			});
@@ -1658,6 +1882,7 @@ async function runConfiguredAgent(params: {
 	modelOverride?: string;
 	effortOverride?: string;
 	tools?: string[];
+	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
 }): Promise<RpResult> {
@@ -1699,6 +1924,7 @@ async function runConfiguredAgent(params: {
 				model: piModel,
 				tools: explicitTools,
 				timeoutSeconds: route.timeout_seconds,
+				sandboxContext: params.sandboxContext,
 				signal: params.signal,
 				onUpdate: params.onUpdate,
 			});
@@ -1887,6 +2113,131 @@ async function initializePidexHome(ctx: any): Promise<void> {
 	].join("\n"), "info");
 }
 
+function sensitiveSandboxPath(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	const normalized = value.replaceAll("\\", "/");
+	const patterns = [
+		/(^|\/)\.env($|\.)/,
+		/(^|\/)\.npmrc$/,
+		/(^|\/)\.yarnrc(\.yml)?$/,
+		/(^|\/)\.git-credentials$/,
+		/(^|\/)\.netrc$/,
+		/(^|\/)secrets?\//,
+		/\.(pem|key|crt|p12|pfx|kubeconfig)$/,
+		/(^|\/)\.ssh\//,
+		/(^|\/)\.aws\//,
+	];
+	return patterns.some((pattern) => pattern.test(normalized)) ? normalized : undefined;
+}
+
+const SAFE_SANDBOX_HOST_HELPERS = new Set([
+	"probe.mjs",
+	"exec.mjs",
+	"run-command.mjs",
+	"status.mjs",
+	"diff.mjs",
+	"apply.mjs",
+	"extract-artifacts.mjs",
+	"cleanup.mjs",
+]);
+
+function sandboxRuntimeHelperMarker(): string {
+	return ["modules", "pidex", "sandbox-runtime", "scripts", "sandbox", ""].join("/");
+}
+
+function canonicalSandboxHelperPath(helperName: string): string | undefined {
+	if (!SAFE_SANDBOX_HOST_HELPERS.has(helperName)) return undefined;
+	const candidate = path.join(PACKAGE_ROOT, "modules", "pidex", "sandbox-runtime", "scripts", "sandbox", helperName);
+	try { return fs.realpathSync(candidate); } catch { return undefined; }
+}
+
+export function commandMentionsSandboxRuntimeHelper(command: string): boolean {
+	return command.replaceAll("\\", "/").includes(sandboxRuntimeHelperMarker());
+}
+
+function splitStrictHostHelperCommand(command: string): string[] | undefined {
+	const raw = String(command || "");
+	if (!raw.trim()) return [];
+	if (/[\r\n`<>|;&]/.test(raw) || /\$\s*\(/.test(raw) || /\b(?:&&|\|\|)\b/.test(raw)) return undefined;
+	if (/["']/.test(raw)) return undefined;
+	const tokens = raw.trim().split(/\s+/);
+	if (tokens.some((token) => !/^[A-Za-z0-9_@%+=:,./\\-]+$/.test(token))) return undefined;
+	return tokens;
+}
+
+export function sandboxHostBashAllowed(command: string): boolean {
+	const tokens = splitStrictHostHelperCommand(command);
+	if (!tokens) return false;
+	if (tokens.length === 0) return true;
+	const nodeBin = path.basename(tokens[0]).toLowerCase();
+	if (nodeBin !== "node" && nodeBin !== "node.exe") return false;
+	const helper = tokens[1];
+	if (!helper || !path.isAbsolute(helper)) return false;
+	const helperName = path.basename(helper);
+	const canonical = canonicalSandboxHelperPath(helperName);
+	if (!canonical) return false;
+	try {
+		const resolved = path.resolve(helper);
+		return resolved === canonical && !fs.lstatSync(resolved).isSymbolicLink() && fs.realpathSync(resolved) === canonical;
+	} catch {
+		return false;
+	}
+}
+
+function readSandboxRuntimeContext(): SandboxRuntimeContext | undefined {
+	const raw = process.env[PIDEX_SANDBOX_CONTEXT_ENV];
+	if (!raw) return undefined;
+	try {
+		const parsed = JSON.parse(raw);
+		if (parsed?.mode !== "hardened-pipeline") return undefined;
+		const hostProjectRoot = path.resolve(String(parsed.hostProjectRoot || ""));
+		const sandboxWorkspace = path.resolve(String(parsed.sandboxWorkspace || ""));
+		const allowedWriteRoot = path.resolve(String(parsed.allowedWriteRoot || sandboxWorkspace));
+		if (!hostProjectRoot || !sandboxWorkspace || !allowedWriteRoot) return undefined;
+		return { mode: "hardened-pipeline", runId: String(parsed.runId || ""), hostProjectRoot, sandboxWorkspace, allowedWriteRoot };
+	} catch {
+		return undefined;
+	}
+}
+
+function pathWithin(root: string, target: string): boolean {
+	const rel = path.relative(path.resolve(root), path.resolve(target));
+	return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+function toolPathCandidate(input: any): string | undefined {
+	if (!input || typeof input !== "object") return undefined;
+	const keys = ["path", "file", "filepath", "filePath", "target", "targetPath"];
+	for (const key of keys) if (typeof input[key] === "string" && input[key].trim()) return input[key];
+	return undefined;
+}
+
+export function inspectSandboxToolCall(event: any, ctx: any): { block: boolean; reason: string } | undefined {
+	const active = readSandboxRuntimeContext();
+	if (!active) return undefined;
+	const toolName = String(event?.toolName || "");
+	if (toolName === "read") {
+		const blocked = sensitiveSandboxPath(toolPathCandidate(event?.input));
+		if (blocked) return { block: true, reason: `PIDEX sandbox blocks reads of env/secret/runtime paths while active: ${blocked}` };
+		return undefined;
+	}
+	if (toolName === "write" || toolName === "edit") {
+		const raw = toolPathCandidate(event?.input);
+		if (!raw) return { block: true, reason: `PIDEX sandbox blocks ${toolName} without an explicit file path.` };
+		const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(ctx?.cwd || active.sandboxWorkspace, raw);
+		if (pathWithin(active.allowedWriteRoot, resolved)) return undefined;
+		return { block: true, reason: `PIDEX sandbox blocks ${toolName} outside sandbox workspace. target=${resolved}; allowed=${active.allowedWriteRoot}` };
+	}
+	if (toolName === "bash") {
+		const command = event?.input?.command;
+		if (typeof command !== "string") return { block: true, reason: "PIDEX sandbox blocks bash without an explicit command while sandbox context is active." };
+		if (sandboxHostBashAllowed(command)) return undefined;
+		const helperDetail = commandMentionsSandboxRuntimeHelper(command) ? " Malformed sandbox helper attempts must use one exact canonical node <sandbox-helper.mjs> invocation without shell chaining, pipes, redirects, substitutions, or quotes." : "";
+		return { block: true, reason: `PIDEX sandbox blocks raw host bash while sandbox context is active. Use canonical sandbox runtime helpers or operate through the sandbox/Docker runner.${helperDetail}` };
+	}
+	return undefined;
+}
+
 function inspectBashForGitHookRisk(command: string): { block?: string; warn?: string } | undefined {
 	const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
 	if (!compact) return undefined;
@@ -1918,9 +2269,15 @@ const RpAgentParams = Type.Object({
 });
 
 export default function runningPi(pi: ExtensionAPI) {
-	if (process.env[PIDEX_CHILD_ENV] === "1") return;
-
 	pi.on("tool_call", async (event: any, ctx: any) => {
+		const sandboxBlock = inspectSandboxToolCall(event, ctx);
+		if (sandboxBlock) return sandboxBlock;
+		if (process.env[PIDEX_CHILD_ENV] === "1") return undefined;
+		const sandboxState = resolveSandboxState();
+		if (sandboxState.enabled && event?.toolName === "read") {
+			const blocked = sensitiveSandboxPath(event?.input?.path || event?.input?.file || event?.input?.filepath);
+			if (blocked) return { block: true, reason: `PIDEX sandbox blocks reads of env/secret/runtime paths while active: ${blocked}` };
+		}
 		if (event?.toolName !== "bash") return undefined;
 		const command = event?.input?.command;
 		if (typeof command !== "string") return undefined;
@@ -1934,6 +2291,8 @@ export default function runningPi(pi: ExtensionAPI) {
 		}
 		return undefined;
 	});
+
+	if (process.env[PIDEX_CHILD_ENV] === "1") return;
 
 	pi.registerCommand("pidexaudit", {
 		description: "Audit pidex context usage from metrics + child logs.",
@@ -1970,6 +2329,12 @@ export default function runningPi(pi: ExtensionAPI) {
 		}
 		const authPreflight = await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
+		const sandboxState = resolveSandboxState();
+		const sandboxProbe = sandboxState.enabled ? probeSandboxAvailability() : { ok: true, summary: sandboxEvidenceLine() };
+		if (sandboxState.enabled && !sandboxProbe.ok) {
+			ctx.ui.notify(`PIDEX sandbox is enabled but unavailable: ${sandboxProbe.summary}`, "error");
+			return;
+		}
 		if (!authPreflight.ok) {
 			ctx.ui.notify("pidex delegate auth preflight failed; see injected instructions", "error");
 		} else if (authPreflight.output) {
@@ -1983,6 +2348,10 @@ export default function runningPi(pi: ExtensionAPI) {
 			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
+			`PIDEX sandbox preflight: ${sandboxState.enabled ? "hardened-pipeline enabled" : "off"}; ${sandboxProbe.summary}.`,
+			sandboxState.enabled
+				? "Sandbox is internal hardening, not a user workflow change. Continue normal /pidex orchestration and dynamic routing. For source-mutating/risky phases, use the sandbox runtime helpers and include sandbox evidence or SANDBOX-SKIP in artifacts. Do not ask the user mid-run for sandbox configuration."
+				: "Sandbox is off by config; do not probe Docker or alter normal /pidex routing for sandbox unless local config enables it.",
 			authPreflight.ok
 				? "Delegate auth preflight passed for configured non-Pi providers."
 				: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
@@ -2078,17 +2447,34 @@ export default function runningPi(pi: ExtensionAPI) {
 			try {
 				const homeStatus = canonicalHomeStatus();
 				if (!homeStatus.ok) throw new Error(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before using pidex_agent.` : canonicalHomeMissingMessage());
-				const result = await runConfiguredAgent({
+				const sandboxState = resolveSandboxState();
+				if (sandboxState.enabled) {
+					const probe = probeSandboxAvailability();
+					if (!probe.ok) throw new Error(`PIDEX sandbox is enabled but unavailable: ${probe.summary}`);
+				}
+				const sandboxTaskPrefix = sandboxState.enabled ? [
+					"SANDBOX ACTIVE: hardened-pipeline is enabled for this PIDEX run.",
+					"Sandbox is internal hardening; preserve normal specialist behavior and ROUTING.",
+					"Do not ask the user mid-run for sandbox configuration. If sandbox evidence cannot be produced, fail with an actionable reason.",
+					"Use sandbox runtime helpers for project commands when relevant. Do not read env/secret/runtime paths. Do not write host project paths outside the assigned workspace.",
+					"Include sandbox evidence or SANDBOX-SKIP in your artifact.",
+					"",
+				].join("\n") : "";
+				const agentCwd = path.resolve(params.cwd ?? ctx.cwd);
+				const runParams = {
 					agent: params.agent,
-					task: params.task,
-					cwd: params.cwd ?? ctx.cwd,
+					task: `${sandboxTaskPrefix}${params.task}`,
+					cwd: agentCwd,
 					providerOverride: params.provider,
 					modelOverride: params.model,
 					effortOverride: params.effort,
 					tools: params.tools,
 					signal,
-					onUpdate: (text) => onUpdate?.({ content: [{ type: "text", text: clipEnd(text, MAX_UPDATE_CHARS) }], details: {} }),
-				});
+					onUpdate: (text: string) => onUpdate?.({ content: [{ type: "text", text: clipEnd(text, MAX_UPDATE_CHARS) }], details: {} }),
+				};
+				const result = sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
+					? await runSandboxedConfiguredAgent(runParams)
+					: await runConfiguredAgent(runParams);
 				const contentText = formatToolContent(result);
 				const missingRouting = !hasRoutingBlock(result.finalText);
 				const invalidContextFile = !missingRouting && !hasValidRoutingContextFile(result.finalText, params.cwd ?? ctx.cwd);

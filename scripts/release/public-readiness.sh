@@ -98,6 +98,9 @@ ok "Pi SDK namespace uses @earendil-works"
 node scripts/release/public-readiness-check.mjs parallel-defaults
 ok "public default optional parallel agents are disabled"
 
+node scripts/release/public-readiness-check.mjs sandbox-defaults
+ok "sandbox public defaults are safe"
+
 node scripts/release/public-readiness-check.mjs pnpm-workspace
 ok "pnpm workspace metadata is coherent"
 

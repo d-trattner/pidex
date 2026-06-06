@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "default_mode": "off",
+  "profiles": {
+    "hardened-pipeline": {
+      "enabled": false,
+      "image": "node:22-slim",
+      "network_default": "none",
+      "memory": "4g",
+      "cpus": 2,
+      "pids_limit": 512,
+      "timeout_seconds": 300,
+      "preserve_on_failure": true,
+      "container_user_mode": "image-default",
+      "container_user_enforced": false
+    }
+  }
+}

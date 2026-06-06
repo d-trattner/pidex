@@ -58,6 +58,32 @@ if (cmd === 'tracked-clean') {
   if (dashPkg.private !== true) fail('dashboard package must remain private');
   const trackedLocks = gitFiles().filter((file) => file === 'package-lock.json' || file.endsWith('/package-lock.json'));
   if (trackedLocks.length) fail(`package-lock.json files must not be tracked in PIDEX pnpm workspace:\n${trackedLocks.join('\n')}`);
+} else if (cmd === 'sandbox-defaults') {
+  if (!existsSync('config/sandbox.json')) fail('config/sandbox.json is required once sandbox runtime exists');
+  const data = JSON.parse(readFileSync('config/sandbox.json', 'utf8'));
+  if (data.enabled !== false) fail('config/sandbox.json enabled must be false by default');
+  if (data.default_mode !== 'off') fail('config/sandbox.json default_mode must be off');
+  if (gitFiles().includes('config/sandbox.local.json')) fail('config/sandbox.local.json must remain local/untracked');
+  const tracked = gitFiles();
+  const runtimeState = tracked.filter((file) => /^state\/sandbox\/|^pidex\/state\/sandbox\/|^modules\/pidex\/sandbox-runtime\/state\//.test(file));
+  if (runtimeState.length) fail(`sandbox runtime state must not be tracked:\n${runtimeState.join('\n')}`);
+  const scanFiles = tracked.filter((file) => /^(config\/sandbox\.json|modules\/pidex\/sandbox-runtime\/scripts\/sandbox\/|rules\/)/.test(file));
+  const forbidden = [/\/var\/run\/docker\.sock/, /docker\.sock/, /--privileged/, /--pid=host/, /--network=host/, /-v\s+\$HOME/, /-v\s+~/, /\/\.ssh/, /\/\.aws/, /\/\.config/];
+  const findings = [];
+  for (const file of scanFiles) {
+    const text = readText(file) || '';
+    for (const re of forbidden) if (re.test(text)) findings.push(`${file}: unsafe sandbox default pattern ${re}`);
+  }
+  const runCommand = readText('modules/pidex/sandbox-runtime/scripts/sandbox/run-command.mjs') || '';
+  const policy = readText('modules/pidex/sandbox-runtime/scripts/sandbox/policy.mjs') || '';
+  if (!runCommand.includes('sensitive-env-keys-blocked')) findings.push('sandbox runner must fail closed on sensitive env keys');
+  if (!policy.includes('sensitiveEnvKeyReason')) findings.push('sandbox env policy must define sensitive key detection');
+  if (!policy.includes('ENV_ENABLED_PHASES') || !policy.includes('ENV_DISABLED_PHASES')) findings.push('sandbox env policy must keep explicit phase allow/deny sets');
+  const sandboxReadme = readText('modules/pidex/sandbox-runtime/README.md') || '';
+  const extension = readText('extensions/pidex/index.ts') || '';
+  if (!sandboxReadme.includes('canonical-checkout feature') || !sandboxReadme.includes('~/pidex')) findings.push('sandbox README must document canonical-checkout-only MVP boundary');
+  if (!extension.includes('Sandbox requires the canonical ~/pidex runtime checkout')) findings.push('extension must fail actionably when sandbox runtime is missing from canonical checkout');
+  if (findings.length) fail(findings.join('\n'));
 } else if (cmd === 'parallel-defaults') {
   const governorFile = 'config/contract-governor.json';
   if (existsSync(governorFile)) { const g = JSON.parse(readFileSync(governorFile, 'utf8')); if (g.enabled !== false) fail('config/contract-governor.json must be disabled by default'); if (g.hot_mode !== false) fail('contract governor hot_mode must be false by default'); if (!['off', 0, false, null, undefined].includes(g.auto_apply)) fail('contract governor auto_apply must be off by default'); if (g.max_cost_usd_per_run !== 0) fail('contract governor public max_cost_usd_per_run must be 0'); }

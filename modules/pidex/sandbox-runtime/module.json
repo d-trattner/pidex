@@ -1,0 +1,87 @@
+{
+  "id": "pidex.sandbox-runtime",
+  "schema_version": 1,
+  "name": "PIDEX Sandbox Runtime",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "sandbox.probe",
+      "kind": "check",
+      "phases": ["preflight", "planning", "implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/probe.mjs", "--json"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--json$", "^--image$", "^[A-Za-z0-9._:/@-]+$"] } }
+    },
+    {
+      "id": "sandbox.create",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/lifecycle.mjs"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--(project|pidex-root|mode|image)$", "^--json$", "^--keep$", "^[A-Za-z0-9_./:@\\ -]+$"] } }
+    },
+    {
+      "id": "sandbox.exec",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/exec.mjs"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--(project|pidex-root|mode|image|timeout-seconds|phase|preset)$", "^--json$", "^--$", "^[A-Za-z0-9_./:@\\ -]+$"] } }
+    },
+    {
+      "id": "sandbox.diff",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/diff.mjs"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--(workspace|patches)$", "^--json$", "^[A-Za-z0-9_./:@\\ -]+$"] } }
+    },
+    {
+      "id": "sandbox.apply",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-project"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/apply.mjs"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--(project|patch|changed-files|baseline-head)$", "^--json$", "^[A-Za-z0-9_./:@\\ -]+$"] } }
+    },
+    {
+      "id": "sandbox.extract-artifacts",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/extract-artifacts.mjs"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--(workspace|project|assigned|run-id)$", "^--json$", "^[A-Za-z0-9_./:@\\ -]+$"] } }
+    },
+    {
+      "id": "sandbox.cleanup",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": { "bin": "node", "args": ["modules/pidex/sandbox-runtime/scripts/sandbox/cleanup.mjs"], "passthrough": true, "passthrough_policy": { "allowed_patterns": ["^--(pidex-root|run-id|older-than-hours)$", "^--(success|preserve-on-failure|remove-on-failure|json)$", "^[A-Za-z0-9_./:@\\ -]+$"] } }
+    }
+  ]
+}
