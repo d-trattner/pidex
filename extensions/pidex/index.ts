@@ -433,7 +433,8 @@ async function runSandboxedConfiguredAgent(params: {
 		`SANDBOX RUN: ${runId}`,
 		`HOST_PROJECT_ROOT: ${params.cwd}`,
 		`SANDBOX_WORKSPACE: ${workspace}`,
-		"Write/edit only inside SANDBOX_WORKSPACE. Keep normal ROUTING context_file paths project-relative, usually agents.output/....",
+		"Write/edit only inside SANDBOX_WORKSPACE. Keep normal ROUTING context_file paths project-relative under agents.output/....",
+		"Do not run raw host bash or host git commands. Do not attempt git commit/status as a completion gate. The PIDEX sandbox wrapper will generate/apply the source patch and extract your agents.output artifact after your final ROUTING response.",
 		params.task,
 	].join("\n\n");
 	try {
