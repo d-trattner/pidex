@@ -12,6 +12,19 @@ function git(args, cwd, opts = {}) {
   return proc.stdout;
 }
 
+function gitAddPathspecs(cwd, paths) {
+  if (!paths.length) return;
+  const input = `${paths.join('\0')}\0`;
+  git(['add', '--pathspec-from-file=-', '--pathspec-file-nul'], cwd, { input });
+}
+
+function isPatchChannelExcluded(rel) {
+  const normalized = String(rel || '').replaceAll('\\', '/').replace(/^\.\//, '');
+  return normalized.startsWith('agents.output/') || normalized === 'agents.output'
+    || normalized.startsWith('state/') || normalized === 'state'
+    || normalized.startsWith('logs/') || normalized === 'logs';
+}
+
 export function parseDiffArgs(argv) {
   const out = { workspace: '', patches: '', json: false };
   for (let i = 0; i < argv.length; i += 1) {
@@ -47,10 +60,14 @@ export function generateSandboxDiff(options = {}) {
   const workspace = path.resolve(options.workspace || '.');
   const patches = path.resolve(options.patches || path.join(workspace, '..', 'patches'));
   mkdirSync(patches, { recursive: true });
-  git(['add', '-A', '--', '.', ':(exclude)agents.output/**', ':(exclude)state/**', ':(exclude)logs/**'], workspace);
+  git(['add', '-u', '--'], workspace);
+  const untracked = git(['ls-files', '-o', '--exclude-standard', '-z'], workspace).split('\0').filter(Boolean);
+  const forbiddenUntracked = untracked.filter((rel) => isForbiddenPatchPath(rel) && !isPatchChannelExcluded(rel));
+  const untrackedSource = untracked.filter((rel) => !isForbiddenPatchPath(rel));
+  gitAddPathspecs(workspace, untrackedSource);
   const nameStatus = git(['diff', '--cached', '--name-status', 'HEAD'], workspace);
   const entries = parseNameStatus(nameStatus);
-  const findings = validateChangedFiles(entries);
+  const findings = [...forbiddenUntracked.map((path) => ({ path, reason: 'forbidden-secret-runtime-or-artifact-path' })), ...validateChangedFiles(entries)];
   if (findings.length) {
     const statusPath = path.join(patches, 'status.txt');
     writeFileSync(statusPath, git(['status', '--porcelain=v1'], workspace));

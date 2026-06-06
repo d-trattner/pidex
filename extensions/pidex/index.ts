@@ -406,6 +406,11 @@ function normalizeContextRel(value: string | undefined): string | undefined {
 	return value.replaceAll("\\", "/").replace(/^\.\//, "");
 }
 
+export function validateSandboxRoutingContext(agent: string, contextRel: string | undefined): { ok: boolean; reason?: string } {
+	if (contextRel?.startsWith("agents.output/")) return { ok: true };
+	return { ok: false, reason: `PIDEX sandbox requires ${agent} to return ROUTING context_file under agents.output/** so reports use the artifact channel, not source files. got=${contextRel || "(missing)"}` };
+}
+
 async function runSandboxedConfiguredAgent(params: {
 	agent: string;
 	task: string;
@@ -441,21 +446,19 @@ async function runSandboxedConfiguredAgent(params: {
 		};
 		const result = await runConfiguredAgent({ ...params, task, cwd: workspace, sandboxContext });
 		const contextRel = normalizeContextRel(routingContextFile(result.finalText));
-		if (contextRel?.startsWith("agents.output/")) {
-			runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel, "--run-id", runId, "--check", "--json"]);
-		}
+		const routingValidation = validateSandboxRoutingContext(params.agent, contextRel);
+		if (!routingValidation.ok) throw new Error(routingValidation.reason);
+		runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel!, "--run-id", runId, "--check", "--json"]);
 		const patches = path.join(PACKAGE_ROOT, "state", "sandbox", "runs", runId, "patches");
 		const diff = runSandboxJson("diff.mjs", ["--workspace", workspace, "--patches", patches, "--json"]);
 		if (!diff.empty) {
 			runSandboxJson("apply.mjs", ["--project", params.cwd, "--patch", diff.patch_path, "--changed-files", diff.changed_files_path, "--baseline-head", baselineHead, "--json"]);
 		}
-		if (contextRel?.startsWith("agents.output/")) {
-			runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel, "--run-id", runId, "--json"]);
-		}
+		runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel!, "--run-id", runId, "--json"]);
 		runSandboxJson("cleanup.mjs", ["--pidex-root", PACKAGE_ROOT, "--run-id", runId, "--success", "--json"], 120_000);
 		return {
 			...result,
-			warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; source_patch=${diff.empty ? "empty" : "applied"}; artifact=${contextRel?.startsWith("agents.output/") ? "extracted" : "none"}`],
+			warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; source_patch=${diff.empty ? "empty" : "applied"}; artifact=extracted:${contextRel}`],
 		};
 	} catch (error: any) {
 		let cleanupNote = "";

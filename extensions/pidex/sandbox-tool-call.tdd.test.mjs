@@ -50,3 +50,10 @@ test('active sandbox bash guard denies missing bash command', () => {
   assert.equal(result?.block, true);
   assert.match(result.reason, /without an explicit command/);
 });
+
+test('sandbox routing context must use agents.output artifact channel', () => {
+  assert.deepEqual(mod.validateSandboxRoutingContext('pidex-qa', 'agents.output/qa/report.md'), { ok: true });
+  const bad = mod.validateSandboxRoutingContext('pidex-qa', 'README.md');
+  assert.equal(bad.ok, false);
+  assert.match(bad.reason, /artifact channel/);
+});
