@@ -6,8 +6,10 @@ PIDEX includes an optional Docker-backed sandbox runtime for selected source-cha
 
 - Public default: off.
 - MVP mode: `hardened-pipeline`.
-- Runtime requirement: canonical PIDEX checkout at `~/pidex` or `PIDEX_ROOT` pointing at an equivalent full checkout.
+- Runtime requirement: canonical PIDEX checkout at `~/pidex` / `$HOME\pidex`, or `PIDEX_ROOT` pointing at an equivalent full checkout.
 - npm package role: lightweight Pi bootstrap only; sandbox runtime is a canonical-checkout feature.
+- Linux/direct-mode validation: real `/pd` small pipeline passed end-to-end with sandbox enabled.
+- Native Windows validation: Docker helper runtime smoke passed from PowerShell with Docker Desktop Linux containers; full native `/pd` pipeline is still pending extended testing.
 - Dashboard settings integration: deferred.
 
 ## What the sandbox protects
@@ -60,11 +62,23 @@ Do not commit local sandbox overrides.
 
 Probe Docker support through the sandbox runtime helper in a canonical checkout, or just run the full project check, which includes sandbox runtime contract tests.
 
-Run the full project check:
+Run the full project check on Linux/WSL/Git Bash-capable environments:
 
 ```bash
 pnpm run check
 ```
+
+Native PowerShell can run the Docker probe and targeted Node-based sandbox checks directly, but the full `pnpm run check` command is Bash-backed and currently needs Git Bash/WSL or a future Windows-owned check wrapper.
+
+Docker probe through the module capability runner:
+
+```powershell
+node scripts/modules/run-check.mjs --capability sandbox.probe --agent orchestrator --phase preflight --project $PWD -- --json
+```
+
+For development checkouts, targeted Node-based sandbox and extension TDD scripts can also be run directly from native PowerShell. Keep those direct script paths as developer-local commands rather than package-facing documentation.
+
+A focused native Windows helper smoke has passed with Docker Desktop Linux containers: sandbox command execution edited a copied workspace, diff generation produced a source-only patch while excluding gitignored `agents.output/**`, patch apply updated the host fixture, assigned artifact extraction copied `agents.output/implementation/test.md`, cleanup removed the workspace, and no labeled sandbox containers remained.
 
 ## Security boundary notes
 

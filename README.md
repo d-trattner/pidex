@@ -43,7 +43,7 @@ Project/process docs:
 
 ## Prerequisites
 
-PIDEX currently supports Linux/direct mode and includes experimental Windows bootstrap support.
+PIDEX currently supports Linux/direct mode and includes experimental Windows bootstrap plus focused native Windows Docker sandbox helper validation.
 
 Linux / WSL2 recommended prerequisites:
 
@@ -59,7 +59,7 @@ Linux / WSL2 recommended prerequisites:
 
 Windows prerequisites for the experimental PowerShell bootstrap:
 
-- Git for Windows, including Git Bash
+- Git for Windows, including Git Bash for Bash-backed validation commands
 - Node.js `>=22.12.0`
 - npm (for Pi/npm bootstrap)
 - pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
@@ -67,6 +67,7 @@ Windows prerequisites for the experimental PowerShell bootstrap:
   ```powershell
   npm install -g @earendil-works/pi-coding-agent
   ```
+- Optional Docker sandbox validation: Docker Desktop running Linux containers. Native PowerShell Docker helper smoke has passed, but full native `/pidex`/`/pd` pipeline execution remains experimental.
 
 See [Windows status](readme/windows.md) for support boundaries and the PowerShell bootstrap.
 

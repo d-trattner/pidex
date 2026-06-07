@@ -2,16 +2,16 @@
 
 PIDEX is currently developed and validated on Linux. The supported runtime path is the existing Linux/direct-mode workflow documented in the main README.
 
-Windows compatibility is under analysis. This page is intentionally conservative: Milestone A adds clarity and a read-only audit only. It does **not** claim that PIDEX is supported on native Windows, and it does not change Linux runtime behavior.
+Windows compatibility is under active validation. This page is intentionally conservative: PIDEX still does **not** claim full native Windows runtime support, and Linux/direct mode remains the primary supported path. Native Windows now has focused evidence for the PowerShell bootstrap and Docker sandbox helper runtime, but full `/pidex`/`/pd` pipeline execution on native Windows still needs extended evidence.
 
 ## Current support statement
 
 | Environment | Status | Notes |
 |---|---|---|
 | Linux | Supported/currently tested | Canonical PIDEX path. Use the existing `install.sh`, `dashboard/start.sh`, and validation commands. |
-| WSL2 | Safest Windows recommendation for now | Expected to be closest to the Linux path, but still needs explicit PIDEX smoke evidence before being called fully supported. |
-| Windows + Git Bash | Experimental / under analysis | Pi documents a Git Bash-based Windows path. PIDEX still needs validation of delegated pipeline behavior, hooks, and broader path handling before support is claimed. |
-| Native PowerShell / CMD | Experimental bootstrap only | `install.windows.ps1` has passed an initial Windows 11 smoke for clone/install/Pi resource loading and dashboard typecheck/build. Native PowerShell runtime support beyond the bootstrap is not claimed. |
+| WSL2 | Safest Windows recommendation for full pipelines for now | Expected to be closest to the Linux path, but still needs explicit PIDEX smoke evidence before being called fully supported. |
+| Windows + Git Bash | Experimental / under analysis | Pi documents a Git Bash-based Windows path. PIDEX still needs validation of delegated pipeline behavior, hooks, and broader path handling before support is claimed. Git Bash can satisfy Bash-backed validation commands such as `pnpm run check`. |
+| Native PowerShell / CMD | Experimental, partially validated | `install.windows.ps1` has passed an initial Windows 11 smoke for clone/install/Pi resource loading and dashboard typecheck/build. Docker sandbox helper smoke now passes from native PowerShell with Docker Desktop Linux containers. Full `/pidex`/`/pd` native pipeline support is not claimed yet. |
 
 ## Platform separation rule
 
@@ -55,13 +55,14 @@ The audit is informational. Missing tools or risky entrypoints are reported as f
 
 ## Known risky or unsupported areas on Windows
 
-These areas need evidence before PIDEX can make a stronger Windows support claim:
+These areas need more evidence before PIDEX can make a stronger Windows support claim:
 
 - `install.sh` and `uninstall.sh` are Linux-owned Bash entrypoints.
 - `dashboard/start.sh` is a Linux-owned dashboard launcher.
+- `pnpm run check` is Bash-backed and is not a pure native PowerShell validation path; use Git Bash/WSL or a future Windows-owned check wrapper.
 - global Git hook install/uninstall scripts are Linux-owned and may not map cleanly to Windows Git configuration.
-- provider/delegate and pipeline scripts assume the current direct-mode Linux workflow until separate Windows validation exists.
-- native PowerShell support requires Windows-owned wrappers and smoke tests.
+- provider/delegate and full pipeline scripts still need native Windows validation of delegated agent behavior, auth handling, and path quoting.
+- native PowerShell support requires more Windows-owned wrappers and smoke tests before support can be promoted.
 
 ## Experimental PowerShell bootstrap
 
@@ -115,7 +116,15 @@ $env:Path = "C:\Program Files\Git\bin;$env:Path"
 pnpm run public:check
 ```
 
-Initial Windows 11 evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `pnpm run public:check` passed via PowerShell after adding Git Bash to PATH, and `pnpm -C dashboard run typecheck` plus `pnpm -C dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
+Initial Windows 11 bootstrap evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `pnpm run public:check` passed via PowerShell after adding Git Bash to PATH, and `pnpm -C dashboard run typecheck` plus `pnpm -C dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
+
+Additional native Windows Docker sandbox evidence, refreshed on 2026-06-07 from `$HOME\pidex` with Docker Desktop Linux containers and standalone `pnpm@10.33.0`:
+
+- `docker run --rm node:22-slim node --version` succeeded with Node `v22.22.3` inside Docker.
+- The `sandbox.probe` runtime check returned `ok: true` with `os: "windows-git-bash"` and confirmed Docker daemon, Linux container, Node container, temp mount write, and host-observed write.
+- Targeted sandbox runtime tests passed from native PowerShell: `probe`, `lifecycle`, `run-command`, `diff`, `apply`, `extract-artifacts`, and `cleanup`.
+- Extension sandbox tests passed after Windows file-URL and test command-shape fixes: `sandbox-host-bash`, `child-extensions`, and `sandbox-tool-call`.
+- A real helper smoke passed from native PowerShell: `run-command` edited a copied workspace through Docker, `extract-artifacts --check` found the assigned artifact, `diff` produced a source patch excluding gitignored `agents.output/**`, `apply` updated the host fixture, artifact extraction copied `agents.output/implementation/test.md`, cleanup removed the workspace, and no `pidex.sandbox=true` containers remained.
 
 ## Experimental dashboard launcher
 
@@ -146,4 +155,14 @@ The launcher is experimental and runs in the foreground.
 
 ## Recommended Windows approach today
 
-If you are on Windows and want to experiment with PIDEX today, prefer WSL2 and follow the Linux README inside the WSL environment. If you use native Windows, start with the experimental PowerShell bootstrap above or run the audit script first. Treat Windows support as experimental until the smoke plan has real laptop evidence.
+If you are on Windows and want to experiment with PIDEX today, prefer WSL2 and follow the Linux README inside the WSL environment for full pipelines. If you use native Windows, start with the experimental PowerShell bootstrap above or run the audit script first. Docker sandbox helper validation can be run from native PowerShell with Docker Desktop Linux containers, but full `/pidex`/`/pd` native Windows pipelines remain experimental until extended pipeline evidence is collected.
+
+## Next native Windows extended testing
+
+Recommended next evidence before promoting Windows status:
+
+1. Run a small real `/pd` pipeline from native Windows/Pi with sandbox enabled and a tiny fixture project.
+2. Confirm planner → critic → implementer → code review → security/QA routing works without WSL.
+3. Confirm source patch apply, assigned artifact extraction, and cleanup happen through the wrapper rather than ad hoc host edits.
+4. Confirm provider auth is not copied into Docker workspaces and is cleaned up after any disposable test setup.
+5. Record whether Git Bash is required for any Bash-backed validation step, and keep that separate from Docker sandbox helper success.
