@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const mod = await import(path.resolve('extensions/pidex/index.ts'));
+const mod = await import(pathToFileURL(path.resolve('extensions/pidex/index.ts')).href);
 const projectRoot = path.resolve('.');
 
 const sandboxContext = {
