@@ -11,7 +11,7 @@ const helperAbs = path.resolve(helperRel);
 const projectRoot = path.resolve('.');
 
 test('sandboxHostBashAllowed permits one exact canonical node helper invocation', () => {
-  assert.equal(mod.sandboxHostBashAllowed(`${process.execPath} ${helperAbs} --pidex-root ${projectRoot} --run-id sandbox-test01 --json`), true);
+  assert.equal(mod.sandboxHostBashAllowed(`node ${helperAbs} --pidex-root ${projectRoot} --run-id sandbox-test01 --json`), true);
   assert.equal(mod.sandboxHostBashAllowed(`node ${helperAbs} --json`), true);
 });
 
