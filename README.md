@@ -51,9 +51,10 @@ Linux / WSL2 recommended prerequisites:
 - Node.js `>=22.19.0`
 - npm (for Pi/npm bootstrap)
 - pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
-- Pi CLI installed globally:
+- Pi CLI `>=0.78.0` installed globally:
   ```bash
-  npm install -g @earendil-works/pi-coding-agent
+  npm install -g @earendil-works/pi-coding-agent@0.78.0
+  pi --version
   ```
 - local Pi/Codex/provider authentication configured outside PIDEX
 
@@ -63,9 +64,10 @@ Windows prerequisites for the experimental PowerShell bootstrap:
 - Node.js `>=22.12.0`
 - npm (for Pi/npm bootstrap)
 - pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)
-- Pi CLI installed globally:
+- Pi CLI `>=0.78.0` installed globally:
   ```powershell
-  npm install -g @earendil-works/pi-coding-agent
+  npm install -g @earendil-works/pi-coding-agent@0.78.0
+  pi --version
   ```
 - Optional Docker sandbox validation: Docker Desktop running Linux containers. Native PowerShell Docker helper smoke has passed, but full native `/pidex`/`/pd` pipeline execution remains experimental.
 

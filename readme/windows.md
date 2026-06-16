@@ -86,7 +86,7 @@ notepad .\install.windows.ps1
 powershell -ExecutionPolicy Bypass -File .\install.windows.ps1
 ```
 
-The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/pinned pnpm/Pi/Git Bash, requires Node >=22.12.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs PIDEX workspace dependencies when missing with `pnpm install --frozen-lockfile --ignore-scripts` when `pnpm-lock.yaml` is present, and runs `pi install`. Corepack may provide pnpm, but standalone `pnpm@10.33.0` is also supported. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
+The bootstrap is experimental. It clones/verifies `$HOME\pidex`, checks Git/Node/npm/pinned pnpm/Pi/Git Bash, requires Node >=22.12.0 and Pi CLI >=0.78.0, adds Git Bash to PATH for the installer session, runs the Node read-only audit, installs PIDEX workspace dependencies when missing with `pnpm install --frozen-lockfile --ignore-scripts` when `pnpm-lock.yaml` is present, and runs `pi install`. Corepack may provide pnpm, but standalone `pnpm@10.33.0` is also supported. It does not require Python for bootstrap, does not call `install.sh`, and does not install global Git hooks.
 
 ## Experimental uninstall helper
 
@@ -118,7 +118,7 @@ pnpm run public:check
 
 Initial Windows 11 bootstrap evidence: the bootstrap installed PIDEX into Pi, `/reload` loaded PIDEX skills/prompts/extension, `/pidex` pre-flight started without edits, `pnpm run public:check` passed via PowerShell after adding Git Bash to PATH, and `pnpm -C dashboard run typecheck` plus `pnpm -C dashboard run build` passed with Node 26. This is still not a full Windows runtime support claim.
 
-Additional native Windows Docker sandbox evidence, refreshed on 2026-06-07 from `$HOME\pidex` with Docker Desktop Linux containers and standalone `pnpm@10.33.0`:
+Additional native Windows Docker sandbox evidence, refreshed on 2026-06-07 from `$HOME\pidex` with Docker Desktop Linux containers, standalone `pnpm@10.33.0`, and Pi CLI `0.78.0` for current pipeline testing:
 
 - `docker run --rm node:22-slim node --version` succeeded with Node `v22.22.3` inside Docker.
 - The `sandbox.probe` runtime check returned `ok: true` with `os: "windows-git-bash"` and confirmed Docker daemon, Linux container, Node container, temp mount write, and host-observed write.
@@ -158,6 +158,16 @@ The launcher is experimental and runs in the foreground.
 If you are on Windows and want to experiment with PIDEX today, prefer WSL2 and follow the Linux README inside the WSL environment for full pipelines. If you use native Windows, start with the experimental PowerShell bootstrap above or run the audit script first. Docker sandbox helper validation can be run from native PowerShell with Docker Desktop Linux containers, but full `/pidex`/`/pd` native Windows pipelines remain experimental until extended pipeline evidence is collected.
 
 ## Next native Windows extended testing
+
+Before running real native Windows `/pidex` or `/pd` pipeline tests, verify the active Pi CLI is current enough:
+
+```powershell
+npm install -g @earendil-works/pi-coding-agent@0.78.0
+pi --version
+pi install C:\Users\Daniel\pidex
+```
+
+Pi `0.75.5` was observed to make child specialist spawns exit immediately with no stderr/stdout/tool turns, so it is not valid evidence for sandbox specialist routing.
 
 Recommended next evidence before promoting Windows status:
 
