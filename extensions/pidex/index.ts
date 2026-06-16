@@ -1108,6 +1108,37 @@ function gitValue(cwd: string, args: string[]): string {
 	}
 }
 
+function piCliFromShim(shimPath: string | undefined): string | undefined {
+	if (!shimPath) return undefined;
+	const candidate = path.join(path.dirname(shimPath), "node_modules", "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+	try { return fs.existsSync(candidate) ? candidate : undefined; } catch { return undefined; }
+}
+
+function discoverWindowsPiCli(): string | undefined {
+	const candidates: string[] = [];
+	try {
+		const found = spawnSync("where.exe", ["pi.cmd"], { encoding: "utf8", timeout: 5000 }).stdout ?? "";
+		for (const line of found.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean)) candidates.push(line);
+	} catch {}
+	for (const dir of (process.env.Path ?? process.env.PATH ?? "").split(path.delimiter).filter(Boolean)) {
+		candidates.push(path.join(dir, "pi.cmd"), path.join(dir, "pi"));
+	}
+	for (const candidate of candidates) {
+		const cli = piCliFromShim(candidate);
+		if (cli) return cli;
+	}
+	return undefined;
+}
+
+export function piChildSpawnSpec(args: string[], platform = process.platform): { command: string; args: string[] } {
+	if (platform === "win32") {
+		const cli = discoverWindowsPiCli();
+		if (cli) return { command: process.execPath, args: [cli, ...args] };
+		return { command: "cmd.exe", args: ["/d", "/s", "/c", "pi.cmd", ...args] };
+	}
+	return { command: "pi", args };
+}
+
 function resolveProjectRoot(cwd: string): string {
 	const gitRoot = gitValue(cwd, ["rev-parse", "--show-toplevel"]);
 	return gitRoot || cwd || process.cwd();
@@ -1629,7 +1660,8 @@ async function runRpAgent(params: {
 		};
 
 		const exitCode = await new Promise<number>((resolve) => {
-			proc = spawn("pi", args, {
+			const piSpec = piChildSpawnSpec(args);
+			proc = spawn(piSpec.command, piSpec.args, {
 				cwd: params.cwd,
 				stdio: ["ignore", "pipe", "pipe"],
 				env: {

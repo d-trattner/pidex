@@ -25,3 +25,9 @@ test('sandboxed child agents keep extensions loaded even with built-in-only tool
 test('custom-tool child agents keep extensions loaded', () => {
   assert.equal(mod.shouldDisableChildExtensions(['read', 'pidex_agent'], undefined), false);
 });
+
+test('Windows child Pi spawn avoids npm shim command resolution', () => {
+  const spec = mod.piChildSpawnSpec(['--version'], 'win32');
+  assert.notEqual(spec.command, 'pi');
+  assert.ok(spec.args.includes('--version'));
+});
