@@ -406,12 +406,34 @@ function gitignoreRuntimeOnlyChange(cwd: string): { ok: boolean; reason: string;
 	return { ok: added.length > 0, reason: added.length ? "allowed-runtime-gitignore-additions" : "no-gitignore-diff", added };
 }
 
+function gitPathTracked(cwd: string, relPath: string): boolean {
+	const proc = spawnSync("git", ["ls-files", "--error-unmatch", "--", relPath], { cwd, encoding: "utf8", timeout: 5000 });
+	return proc.status === 0;
+}
+
 function isSandboxCleanStatusPath(cwd: string, relPath: string | undefined): boolean {
 	const normalized = normalizeSandboxRel(relPath);
 	if (SANDBOX_RUNTIME_CLEAN_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true;
 	if (normalized.startsWith("wiki/")) return gitPathIgnored(cwd, normalized);
 	if (normalized === ".gitignore") return gitignoreRuntimeOnlyChange(cwd).ok;
 	return false;
+}
+
+function isValidationOnlyGeneratedPath(cwd: string, relPath: string | undefined): boolean {
+	const normalized = normalizeSandboxRel(relPath);
+	if (isSandboxCleanStatusPath(cwd, normalized)) return true;
+	return normalized.startsWith("wiki/") && !gitPathTracked(cwd, normalized);
+}
+
+export function validationSourceMutationFiles(cwd: string, changedFiles: any): string[] {
+	if (!Array.isArray(changedFiles)) return [];
+	const out: string[] = [];
+	for (const entry of changedFiles) {
+		for (const rel of Array.isArray(entry?.paths) ? entry.paths : []) {
+			if (!isValidationOnlyGeneratedPath(cwd, rel)) out.push(normalizeSandboxRel(rel));
+		}
+	}
+	return [...new Set(out)].sort();
 }
 
 export function gitSourceStatusPorcelain(cwd: string): string {
@@ -486,14 +508,14 @@ async function runSandboxedConfiguredAgent(params: {
 		const diff = runSandboxJson("diff.mjs", ["--workspace", workspace, "--patches", patches, "--json"]);
 		if (sandboxPurpose === "validation") {
 			runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel!, "--run-id", runId, "--json"]);
-			if (!diff.empty) {
-				const changed = Array.isArray(diff.changed_files) ? JSON.stringify(diff.changed_files) : String(diff.changed_files_path || "");
-				throw new Error(`validation-agent-source-mutation: ${params.agent} changed source files in validation mode; changed=${changed}`);
+			const validationMutations = validationSourceMutationFiles(params.cwd, diff.changed_files);
+			if (validationMutations.length) {
+				throw new Error(`validation-agent-source-mutation: ${params.agent} changed source files in validation mode; changed=${JSON.stringify(validationMutations)}`);
 			}
 			runSandboxJson("cleanup.mjs", ["--pidex-root", PACKAGE_ROOT, "--run-id", runId, "--success", "--json"], 120_000);
 			return {
 				...result,
-				warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; validation_source_diff=empty; artifact=extracted:${contextRel}`],
+				warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; validation_source_diff=${diff.empty ? "empty" : "runtime-only"}; artifact=extracted:${contextRel}`],
 			};
 		}
 		if (!diff.empty) {

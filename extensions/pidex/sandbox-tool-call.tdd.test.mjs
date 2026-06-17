@@ -85,3 +85,13 @@ test('sandbox source status ignores PIDEX runtime paths and allowed gitignore ad
   writeFileSync(path.join(repo, 'README.md'), 'dirty\n');
   assert.match(mod.gitSourceStatusPorcelain(repo), /README\.md/);
 });
+
+test('validation source mutation ignores untracked local wiki but rejects tracked wiki', () => {
+  const repo = tmpRepo();
+  assert.deepEqual(mod.validationSourceMutationFiles(repo, [{ status: 'M', paths: ['wiki/log.md'] }]), []);
+  mkdirSync(path.join(repo, 'wiki'), { recursive: true });
+  writeFileSync(path.join(repo, 'wiki/product.md'), 'tracked\n');
+  git(repo, ['add', 'wiki/product.md']);
+  git(repo, ['commit', '-m', 'track wiki product doc']);
+  assert.deepEqual(mod.validationSourceMutationFiles(repo, [{ status: 'M', paths: ['wiki/product.md'] }]), ['wiki/product.md']);
+});
