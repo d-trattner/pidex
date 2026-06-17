@@ -174,6 +174,7 @@ const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "lat
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
+const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
 
 const MAX_STDERR_CHARS = 64 * 1024;
 const MAX_STDERR_DETAILS_CHARS = 8 * 1024;
@@ -461,6 +462,15 @@ export function validateSandboxRoutingContext(agent: string, contextRel: string 
 	return { ok: false, reason: `PIDEX sandbox requires ${agent} to return ROUTING context_file under agents.output/** so reports use the artifact channel, not source files. got=${contextRel || "(missing)"}` };
 }
 
+function copyValidationContextArtifacts(projectRoot: string, workspace: string): { copied: boolean; source?: string; destination?: string } {
+	const source = path.join(projectRoot, "agents.output");
+	if (!fs.existsSync(source)) return { copied: false };
+	const destination = path.join(workspace, "agents.output");
+	fs.mkdirSync(path.dirname(destination), { recursive: true });
+	fs.cpSync(source, destination, { recursive: true, force: true, errorOnExist: false });
+	return { copied: true, source, destination };
+}
+
 async function runSandboxedConfiguredAgent(params: {
 	agent: string;
 	task: string;
@@ -477,6 +487,7 @@ async function runSandboxedConfiguredAgent(params: {
 	if (sandboxPurpose === "mutation" && sourceStatus) throw new Error(`PIDEX sandbox requires a clean host source worktree before sandbox creation; runtime artifacts under agents.output/, pidex/state/, pidex/context/, .fallow/, and allowed .gitignore runtime entries are ignored. Dirty source status:\n${sourceStatus}`);
 	const create = runSandboxJson("lifecycle.mjs", ["--project", params.cwd, "--pidex-root", PACKAGE_ROOT, "--mode", "hardened-pipeline", "--json"]);
 	const workspace = String(create.workspace || "");
+	const validationContextCopy = sandboxPurpose === "validation" ? copyValidationContextArtifacts(params.cwd, workspace) : { copied: false };
 	const metadataPath = String(create.metadata_path || "");
 	const metadata = metadataPath && fs.existsSync(metadataPath) ? JSON.parse(fs.readFileSync(metadataPath, "utf8")) : create.metadata;
 	const baselineHead = metadata?.baseline_head;
@@ -515,7 +526,7 @@ async function runSandboxedConfiguredAgent(params: {
 			runSandboxJson("cleanup.mjs", ["--pidex-root", PACKAGE_ROOT, "--run-id", runId, "--success", "--json"], 120_000);
 			return {
 				...result,
-				warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; validation_source_diff=${diff.empty ? "empty" : "runtime-only"}; artifact=extracted:${contextRel}`],
+				warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; validation_source_diff=${diff.empty ? "empty" : "runtime-only"}; context_artifacts=${validationContextCopy.copied ? "copied" : "absent"}; artifact=extracted:${contextRel}`],
 			};
 		}
 		if (!diff.empty) {
@@ -1733,6 +1744,7 @@ async function runRpAgent(params: {
 				env: {
 					...process.env,
 					[PIDEX_CHILD_ENV]: "1",
+					[PIDEX_PROJECT_BOUNDARY_ENV]: JSON.stringify({ active: true, projectRoot: resolveProjectRoot(params.cwd), pidexRoot: PACKAGE_ROOT, startedCwd: params.cwd }),
 					...(params.sandboxContext ? { [PIDEX_SANDBOX_CONTEXT_ENV]: JSON.stringify(params.sandboxContext) } : {}),
 					PI_SKIP_VERSION_CHECK: "1",
 				},
@@ -2224,10 +2236,13 @@ function sensitiveSandboxPath(value: string | undefined): string | undefined {
 		/(^|\/)\.yarnrc(\.yml)?$/,
 		/(^|\/)\.git-credentials$/,
 		/(^|\/)\.netrc$/,
+		/(^|\/)auth\.json$/i,
 		/(^|\/)secrets?\//,
 		/\.(pem|key|crt|p12|pfx|kubeconfig)$/,
 		/(^|\/)\.ssh\//,
 		/(^|\/)\.aws\//,
+		/(^|\/)\.codex\//,
+		/(^|\/)AppData\/(Roaming|Local)\/.*(auth|token|credential)/i,
 	];
 	return patterns.some((pattern) => pattern.test(normalized)) ? normalized : undefined;
 }
@@ -2307,10 +2322,89 @@ function pathWithin(root: string, target: string): boolean {
 	return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+function normalizeHostPath(value: string, cwd: string): string {
+	let raw = String(value || "").trim();
+	if (/^\/[a-zA-Z]\//.test(raw)) raw = `${raw[1]}:/${raw.slice(3)}`;
+	if (/^\/mnt\/[a-zA-Z]\//.test(raw)) raw = `${raw[5]}:/${raw.slice(7)}`;
+	const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(cwd, raw);
+	try { return fs.existsSync(resolved) ? fs.realpathSync.native(resolved) : path.resolve(resolved); } catch { return path.resolve(resolved); }
+}
+
+function boundaryPathWithin(root: string, target: string): boolean {
+	const rootResolved = path.resolve(root);
+	const targetResolved = path.resolve(target);
+	if (process.platform === "win32") {
+		const rel = path.win32.relative(rootResolved.toLowerCase(), targetResolved.toLowerCase());
+		return rel === "" || (!rel.startsWith("..") && !path.win32.isAbsolute(rel));
+	}
+	return pathWithin(rootResolved, targetResolved);
+}
+
+function allowedPidexRuntimeWrite(pidexRoot: string, target: string): boolean {
+	const rel = path.relative(path.resolve(pidexRoot), path.resolve(target)).replaceAll("\\", "/");
+	return /^(state\/(runs|metrics|modules|pipeline-events|orchestrator-events|provider-limits|sandbox)(\/|$))/.test(rel);
+}
+
+type ProjectBoundaryContext = { active: true; projectRoot: string; pidexRoot: string; startedCwd: string };
+
+function readProjectBoundaryContext(ctx: any): ProjectBoundaryContext | undefined {
+	const raw = process.env[PIDEX_PROJECT_BOUNDARY_ENV];
+	if (raw) {
+		try {
+			const parsed = JSON.parse(raw);
+			if (parsed?.active && parsed.projectRoot) return { active: true, projectRoot: path.resolve(String(parsed.projectRoot)), pidexRoot: path.resolve(String(parsed.pidexRoot || PACKAGE_ROOT)), startedCwd: path.resolve(String(parsed.startedCwd || parsed.projectRoot)) };
+		} catch {}
+	}
+	const cwd = path.resolve(String(ctx?.cwd || process.cwd()));
+	return { active: true, projectRoot: resolveProjectRoot(cwd), pidexRoot: PACKAGE_ROOT, startedCwd: cwd };
+}
+
 function toolPathCandidate(input: any): string | undefined {
 	if (!input || typeof input !== "object") return undefined;
 	const keys = ["path", "file", "filepath", "filePath", "target", "targetPath"];
 	for (const key of keys) if (typeof input[key] === "string" && input[key].trim()) return input[key];
+	return undefined;
+}
+
+export function inspectProjectBoundaryToolCall(event: any, ctx: any): { block: boolean; reason: string } | undefined {
+	const boundary = readProjectBoundaryContext(ctx);
+	if (!boundary) return undefined;
+	const toolName = String(event?.toolName || "");
+	const cwd = path.resolve(String(ctx?.cwd || boundary.startedCwd || boundary.projectRoot));
+	if (toolName === "read") {
+		const raw = toolPathCandidate(event?.input);
+		const blocked = sensitiveSandboxPath(raw);
+		if (blocked) return { block: true, reason: `PIDEX project boundary blocks reads of env/secret/runtime paths: ${blocked}` };
+		if (!raw) return undefined;
+		const resolved = normalizeHostPath(raw, cwd);
+		if (boundaryPathWithin(boundary.projectRoot, resolved) || boundaryPathWithin(boundary.pidexRoot, resolved)) return undefined;
+		return { block: true, reason: `PIDEX project boundary blocks read outside project/PIDEX roots. target=${resolved}; project_root=${boundary.projectRoot}; pidex_root=${boundary.pidexRoot}` };
+	}
+	if (toolName === "write" || toolName === "edit") {
+		const raw = toolPathCandidate(event?.input);
+		if (!raw) return { block: true, reason: `PIDEX project boundary blocks ${toolName} without an explicit file path.` };
+		const resolved = normalizeHostPath(raw, cwd);
+		const blocked = sensitiveSandboxPath(resolved);
+		if (blocked) return { block: true, reason: `PIDEX project boundary blocks ${toolName} to env/secret/runtime path: ${blocked}` };
+		if (boundaryPathWithin(boundary.projectRoot, resolved)) return undefined;
+		if (boundaryPathWithin(boundary.pidexRoot, resolved) && allowedPidexRuntimeWrite(boundary.pidexRoot, resolved)) return undefined;
+		return { block: true, reason: `PIDEX project boundary blocks ${toolName} outside run project root. target=${resolved}; project_root=${boundary.projectRoot}` };
+	}
+	if (toolName === "bash") {
+		const command = String(event?.input?.command || "");
+		if (!command) return undefined;
+		const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
+		const highRisk = [
+			/\bgit\s+config\s+--global\b/i,
+			/\b(?:npm|pnpm|yarn)\s+config\s+set\b/i,
+			/\bpi\s+(?:install|remove)\b/i,
+			/\bdocker\s+run\b[\s\S]*-v\s+(?:\/|[A-Za-z]:\\|[A-Za-z]:\/):\/host/i,
+			/\brm\s+-rf\s+(?:\/|[A-Za-z]:[\\/])/i,
+			/\bdel\s+\/s\s+[A-Za-z]:[\\/]/i,
+			/\bRemove-Item\b[\s\S]*[A-Za-z]:[\\/]/i,
+		];
+		if (highRisk.some((pattern) => pattern.test(compact))) return { block: true, reason: "PIDEX project boundary blocks high-risk host/global mutation command." };
+	}
 	return undefined;
 }
 
@@ -2374,6 +2468,8 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.on("tool_call", async (event: any, ctx: any) => {
 		const sandboxBlock = inspectSandboxToolCall(event, ctx);
 		if (sandboxBlock) return sandboxBlock;
+		const boundaryBlock = inspectProjectBoundaryToolCall(event, ctx);
+		if (boundaryBlock) return boundaryBlock;
 		if (process.env[PIDEX_CHILD_ENV] === "1") return undefined;
 		const sandboxState = resolveSandboxState();
 		if (sandboxState.enabled && event?.toolName === "read") {

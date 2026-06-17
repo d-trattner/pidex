@@ -95,3 +95,24 @@ test('validation source mutation ignores untracked local wiki but rejects tracke
   git(repo, ['commit', '-m', 'track wiki product doc']);
   assert.deepEqual(mod.validationSourceMutationFiles(repo, [{ status: 'M', paths: ['wiki/product.md'] }]), ['wiki/product.md']);
 });
+
+test('project boundary blocks structured writes outside project but allows pidex reads', () => {
+  const repo = tmpRepo();
+  const outside = mkdtempSync(path.join(os.tmpdir(), 'pidex-boundary-outside-'));
+  const writeBlock = mod.inspectProjectBoundaryToolCall({ toolName: 'write', input: { path: path.join(outside, 'x.txt') } }, { cwd: repo });
+  assert.equal(writeBlock?.block, true);
+  const writeInside = mod.inspectProjectBoundaryToolCall({ toolName: 'write', input: { path: path.join(repo, 'x.txt') } }, { cwd: repo });
+  assert.equal(writeInside, undefined);
+  const readPidex = mod.inspectProjectBoundaryToolCall({ toolName: 'read', input: { path: path.resolve('README.md') } }, { cwd: repo });
+  assert.equal(readPidex, undefined);
+  const readSecret = mod.inspectProjectBoundaryToolCall({ toolName: 'read', input: { path: path.join(repo, '.env') } }, { cwd: repo });
+  assert.equal(readSecret?.block, true);
+});
+
+test('project boundary blocks high-risk bash host mutations', () => {
+  const repo = tmpRepo();
+  for (const command of ['git config --global core.hooksPath /tmp/x', 'npm config set //registry.npmjs.org/:_authToken x', 'docker run -v /:/host alpine true']) {
+    const result = mod.inspectProjectBoundaryToolCall({ toolName: 'bash', input: { command } }, { cwd: repo });
+    assert.equal(result?.block, true, command);
+  }
+});
