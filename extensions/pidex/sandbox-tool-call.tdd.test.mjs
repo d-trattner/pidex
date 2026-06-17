@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import os from 'node:os';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const mod = await import(pathToFileURL(path.resolve('extensions/pidex/index.ts')).href);
@@ -25,6 +28,16 @@ function withSandboxContext(fn) {
 
 function inspect(command) {
   return withSandboxContext(() => mod.inspectSandboxToolCall({ toolName: 'bash', input: { command } }, { cwd: context.sandboxWorkspace }));
+}
+
+function git(cwd, args) { const p = spawnSync('git', args, { cwd, encoding: 'utf8' }); assert.equal(p.status, 0, p.stderr); return p.stdout.trim(); }
+function tmpRepo() {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-extension-sandbox-test-'));
+  git(dir, ['init']); git(dir, ['config', 'user.email', 't@example.invalid']); git(dir, ['config', 'user.name', 'T']);
+  writeFileSync(path.join(dir, 'README.md'), 'base\n');
+  writeFileSync(path.join(dir, '.gitignore'), '');
+  git(dir, ['add', '-A']); git(dir, ['commit', '-m', 'base']);
+  return dir;
 }
 
 test('active sandbox bash guard allows only canonical helper bash', () => {
@@ -57,4 +70,18 @@ test('sandbox routing context must use agents.output artifact channel', () => {
   const bad = mod.validateSandboxRoutingContext('pidex-qa', 'README.md');
   assert.equal(bad.ok, false);
   assert.match(bad.reason, /artifact channel/);
+});
+
+test('sandbox source status ignores PIDEX runtime paths and allowed gitignore additions', () => {
+  const repo = tmpRepo();
+  mkdirSync(path.join(repo, 'agents.output'), { recursive: true });
+  writeFileSync(path.join(repo, 'agents.output/report.md'), 'artifact\n');
+  mkdirSync(path.join(repo, 'pidex/context'), { recursive: true });
+  writeFileSync(path.join(repo, 'pidex/context/CONTEXT.md'), 'context\n');
+  mkdirSync(path.join(repo, '.fallow'), { recursive: true });
+  writeFileSync(path.join(repo, '.fallow/cache.bin'), 'cache\n');
+  writeFileSync(path.join(repo, '.gitignore'), 'agents.output/\npidex/state/\n.fallow/\n');
+  assert.equal(mod.gitSourceStatusPorcelain(repo), '');
+  writeFileSync(path.join(repo, 'README.md'), 'dirty\n');
+  assert.match(mod.gitSourceStatusPorcelain(repo), /README\.md/);
 });

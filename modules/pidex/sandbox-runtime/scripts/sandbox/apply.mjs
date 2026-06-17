@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { isForbiddenPatchPath } from './policy.mjs';
+import { isForbiddenPatchPath, isSandboxCleanStatusPath } from './policy.mjs';
 import { parseNameStatus } from './diff.mjs';
 
 function git(args, cwd, opts = {}) {
@@ -55,19 +55,10 @@ export function validateChangedFilesForApply(changedFilesText) {
   return findings;
 }
 
-export function isRuntimeDirtyPath(relPath) {
-  const normalized = String(relPath || '').replace(/\\/g, '/').replace(/^\.\//, '');
-  return normalized.startsWith('agents.output/')
-    || normalized.startsWith('pidex/state/')
-    || normalized.startsWith('pidex/context/')
-    || normalized.startsWith('state/')
-    || normalized.startsWith('logs/');
-}
-
-export function sourceDirtyLines(statusText) {
+export function sourceDirtyLines(statusText, options = {}) {
   return String(statusText || '').split(/\r?\n/).filter(Boolean).filter((line) => {
-    const rel = line.slice(3).trim().split(' -> ').pop();
-    return !isRuntimeDirtyPath(rel);
+    const rel = line.slice(2).trim().split(' -> ').pop();
+    return !isSandboxCleanStatusPath(rel, { projectRoot: options.project });
   });
 }
 
@@ -77,8 +68,8 @@ export function applySandboxPatch(options = {}) {
   if (!existsSync(patch)) throw new Error(`patch not found: ${patch}`);
   const currentHead = mustGit(['rev-parse', 'HEAD'], project);
   if (options.baselineHead && currentHead !== options.baselineHead) return { ok: false, reason: 'host-head-changed', current_head: currentHead, baseline_head: options.baselineHead };
-  const status = mustGit(['status', '--porcelain'], project);
-  const sourceDirty = sourceDirtyLines(status);
+  const status = mustGit(['status', '--porcelain', '--untracked-files=all'], project);
+  const sourceDirty = sourceDirtyLines(status, { project });
   if (sourceDirty.length) return { ok: false, reason: 'host-worktree-dirty', status: sourceDirty.join('\n'), ignored_runtime_status: status.split(/\r?\n/).filter(Boolean).filter((line) => !sourceDirty.includes(line)) };
   const patchText = readFileSync(patch, 'utf8');
   let findings = validatePatchText(patchText);

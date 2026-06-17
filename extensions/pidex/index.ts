@@ -377,21 +377,49 @@ function runSandboxJson(scriptName: string, args: string[], timeoutMs = 300_000)
 	return parsed;
 }
 
-function isRuntimeDirtyPath(relPath: string | undefined): boolean {
-	const normalized = String(relPath || "").replaceAll("\\", "/").replace(/^\.\//, "");
-	return normalized.startsWith("agents.output/")
-		|| normalized.startsWith("pidex/state/")
-		|| normalized.startsWith("pidex/context/")
-		|| normalized.startsWith("state/")
-		|| normalized.startsWith("logs/");
+const SANDBOX_RUNTIME_CLEAN_PREFIXES = ["agents.output/", "pidex/state/", "pidex/context/", "state/", "logs/", ".fallow/"];
+const SANDBOX_ALLOWED_GITIGNORE_ADDITIONS = new Set(["agents.output/", "pidex/state/", ".fallow/", ".wiki-migration/"]);
+
+function normalizeSandboxRel(relPath: string | undefined): string {
+	return String(relPath || "").replaceAll("\\", "/").replace(/^\.\//, "");
 }
 
-function gitSourceStatusPorcelain(cwd: string): string {
-	const proc = spawnSync("git", ["status", "--porcelain"], { cwd, encoding: "utf8", timeout: 10_000 });
+function gitPathIgnored(cwd: string, relPath: string): boolean {
+	const proc = spawnSync("git", ["check-ignore", "-q", "--", relPath], { cwd, encoding: "utf8", timeout: 5000 });
+	return proc.status === 0;
+}
+
+function gitignoreRuntimeOnlyChange(cwd: string): { ok: boolean; reason: string; added?: string[]; entry?: string } {
+	const unstaged = spawnSync("git", ["diff", "--", ".gitignore"], { cwd, encoding: "utf8", timeout: 5000 });
+	const staged = spawnSync("git", ["diff", "--cached", "--", ".gitignore"], { cwd, encoding: "utf8", timeout: 5000 });
+	if (unstaged.status !== 0 || staged.status !== 0) return { ok: false, reason: "git-diff-failed" };
+	const added: string[] = [];
+	for (const line of `${unstaged.stdout || ""}\n${staged.stdout || ""}`.split(/\r?\n/)) {
+		if (!line || line.startsWith("diff --git ") || line.startsWith("index ") || line.startsWith("@@ ") || line.startsWith("--- ") || line.startsWith("+++ ")) continue;
+		if (line.startsWith("-")) return { ok: false, reason: "gitignore-deletion-or-rewrite" };
+		if (line.startsWith("+")) {
+			const entry = line.slice(1).trim();
+			if (!SANDBOX_ALLOWED_GITIGNORE_ADDITIONS.has(entry)) return { ok: false, reason: "gitignore-unapproved-addition", entry };
+			added.push(entry);
+		}
+	}
+	return { ok: added.length > 0, reason: added.length ? "allowed-runtime-gitignore-additions" : "no-gitignore-diff", added };
+}
+
+function isSandboxCleanStatusPath(cwd: string, relPath: string | undefined): boolean {
+	const normalized = normalizeSandboxRel(relPath);
+	if (SANDBOX_RUNTIME_CLEAN_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true;
+	if (normalized.startsWith("wiki/")) return gitPathIgnored(cwd, normalized);
+	if (normalized === ".gitignore") return gitignoreRuntimeOnlyChange(cwd).ok;
+	return false;
+}
+
+export function gitSourceStatusPorcelain(cwd: string): string {
+	const proc = spawnSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd, encoding: "utf8", timeout: 10_000 });
 	if (proc.status !== 0) return "";
 	return proc.stdout.trim().split(/\r?\n/).filter(Boolean).filter((line) => {
-		const rel = line.slice(3).trim().split(" -> ").pop();
-		return !isRuntimeDirtyPath(rel);
+		const rel = line.slice(2).trim().split(" -> ").pop();
+		return !isSandboxCleanStatusPath(cwd, rel);
 	}).join("\n");
 }
 
@@ -422,7 +450,9 @@ async function runSandboxedConfiguredAgent(params: {
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
 }): Promise<RpResult> {
-	if (gitSourceStatusPorcelain(params.cwd)) throw new Error("PIDEX sandbox requires a clean host source worktree before sandbox creation; runtime artifacts under agents.output/ and pidex/state/context are ignored.");
+	const sandboxPurpose = params.agent === "pidex-qa" || params.agent === "pidex-security" ? "validation" : "mutation";
+	const sourceStatus = gitSourceStatusPorcelain(params.cwd);
+	if (sandboxPurpose === "mutation" && sourceStatus) throw new Error(`PIDEX sandbox requires a clean host source worktree before sandbox creation; runtime artifacts under agents.output/, pidex/state/, pidex/context/, .fallow/, and allowed .gitignore runtime entries are ignored. Dirty source status:\n${sourceStatus}`);
 	const create = runSandboxJson("lifecycle.mjs", ["--project", params.cwd, "--pidex-root", PACKAGE_ROOT, "--mode", "hardened-pipeline", "--json"]);
 	const workspace = String(create.workspace || "");
 	const metadataPath = String(create.metadata_path || "");
@@ -433,8 +463,10 @@ async function runSandboxedConfiguredAgent(params: {
 		`SANDBOX RUN: ${runId}`,
 		`HOST_PROJECT_ROOT: ${params.cwd}`,
 		`SANDBOX_WORKSPACE: ${workspace}`,
+		`SANDBOX_PURPOSE: ${sandboxPurpose}`,
 		"Write/edit only inside SANDBOX_WORKSPACE. Keep normal ROUTING context_file paths project-relative under agents.output/....",
-		"Do not run raw host bash or host git commands. Do not attempt git commit/status as a completion gate. The PIDEX sandbox wrapper will generate/apply the source patch and extract your agents.output artifact after your final ROUTING response.",
+		"Do not run raw host bash or host git commands. Do not attempt git commit/status as a completion gate. The PIDEX sandbox wrapper will generate/apply the source patch for implementer runs and extract your agents.output artifact after your final ROUTING response.",
+		`Allowed validation helper shape: node ${path.join(PACKAGE_ROOT, "modules", "pidex", "sandbox-runtime", "scripts", "sandbox", "exec.mjs")} --project ${workspace} --pidex-root ${PACKAGE_ROOT} --mode hardened-pipeline --phase test --json -- npm test`,
 		params.task,
 	].join("\n\n");
 	try {
@@ -452,6 +484,18 @@ async function runSandboxedConfiguredAgent(params: {
 		runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel!, "--run-id", runId, "--check", "--json"]);
 		const patches = path.join(PACKAGE_ROOT, "state", "sandbox", "runs", runId, "patches");
 		const diff = runSandboxJson("diff.mjs", ["--workspace", workspace, "--patches", patches, "--json"]);
+		if (sandboxPurpose === "validation") {
+			runSandboxJson("extract-artifacts.mjs", ["--workspace", workspace, "--project", params.cwd, "--assigned", contextRel!, "--run-id", runId, "--json"]);
+			if (!diff.empty) {
+				const changed = Array.isArray(diff.changed_files) ? JSON.stringify(diff.changed_files) : String(diff.changed_files_path || "");
+				throw new Error(`validation-agent-source-mutation: ${params.agent} changed source files in validation mode; changed=${changed}`);
+			}
+			runSandboxJson("cleanup.mjs", ["--pidex-root", PACKAGE_ROOT, "--run-id", runId, "--success", "--json"], 120_000);
+			return {
+				...result,
+				warnings: [...(result.warnings ?? []), `SANDBOX: run_id=${runId}; workspace=${workspace}; validation_source_diff=empty; artifact=extracted:${contextRel}`],
+			};
+		}
 		if (!diff.empty) {
 			runSandboxJson("apply.mjs", ["--project", params.cwd, "--patch", diff.patch_path, "--changed-files", diff.changed_files_path, "--baseline-head", baselineHead, "--json"]);
 		}

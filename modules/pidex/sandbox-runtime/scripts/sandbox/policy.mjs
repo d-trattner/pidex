@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -53,6 +54,52 @@ export function isCopyExcluded(rel) {
   return blockedDirs.some((dir) => normalized === dir || normalized.startsWith(`${dir}/`));
 }
 export function isForbiddenPatchPath(rel) { return matchesAnyPattern(rel, forbiddenRegexes); }
+
+export const SANDBOX_RUNTIME_CLEAN_PREFIXES = ['agents.output/', 'pidex/state/', 'pidex/context/', 'state/', 'logs/', '.fallow/'];
+export const ALLOWED_GITIGNORE_RUNTIME_ENTRIES = new Set(['agents.output/', 'pidex/state/', '.fallow/', '.wiki-migration/']);
+
+export function normalizeRelPath(rel) {
+  return String(rel || '').replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+export function gitPathIgnored(projectRoot, relPath) {
+  if (!projectRoot) return false;
+  const proc = spawnSync('git', ['check-ignore', '-q', '--', relPath], { cwd: projectRoot, encoding: 'utf8' });
+  return proc.status === 0;
+}
+
+export function isRuntimeCleanPath(relPath, options = {}) {
+  const normalized = normalizeRelPath(relPath);
+  if (SANDBOX_RUNTIME_CLEAN_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true;
+  if (normalized.startsWith('wiki/')) return gitPathIgnored(options.projectRoot, normalized);
+  return false;
+}
+
+export function gitignoreRuntimeOnlyChange(projectRoot) {
+  if (!projectRoot) return { ok: false, reason: 'missing-project-root' };
+  const unstaged = spawnSync('git', ['diff', '--', '.gitignore'], { cwd: projectRoot, encoding: 'utf8' });
+  const staged = spawnSync('git', ['diff', '--cached', '--', '.gitignore'], { cwd: projectRoot, encoding: 'utf8' });
+  if (unstaged.status !== 0 || staged.status !== 0) return { ok: false, reason: 'git-diff-failed' };
+  const text = `${unstaged.stdout || ''}\n${staged.stdout || ''}`;
+  const added = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!line || line.startsWith('diff --git ') || line.startsWith('index ') || line.startsWith('@@ ') || line.startsWith('--- ') || line.startsWith('+++ ')) continue;
+    if (line.startsWith('-')) return { ok: false, reason: 'gitignore-deletion-or-rewrite' };
+    if (line.startsWith('+')) {
+      const entry = line.slice(1).trim();
+      if (!ALLOWED_GITIGNORE_RUNTIME_ENTRIES.has(entry)) return { ok: false, reason: 'gitignore-unapproved-addition', entry };
+      added.push(entry);
+    }
+  }
+  return { ok: added.length > 0, reason: added.length ? 'allowed-runtime-gitignore-additions' : 'no-gitignore-diff', added };
+}
+
+export function isSandboxCleanStatusPath(relPath, options = {}) {
+  const normalized = normalizeRelPath(relPath);
+  if (isRuntimeCleanPath(normalized, options)) return true;
+  if (normalized === '.gitignore') return gitignoreRuntimeOnlyChange(options.projectRoot).ok;
+  return false;
+}
 
 export function resolveContained(root, child) {
   const rootResolved = path.resolve(root);

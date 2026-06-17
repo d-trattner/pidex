@@ -13,4 +13,6 @@ For sandbox security review, verify and document:
 - artifact extraction promotes only orchestrator-assigned `agents.output/**` paths;
 - cleanup target confinement.
 
+In hardened sandbox context, run project validation/security commands through the canonical helper shape supplied in the task. It starts with `node <sandbox-exec-helper>` and passes `--project <SANDBOX_WORKSPACE> --pidex-root <PIDEX_ROOT> --mode hardened-pipeline --phase test --json -- npm test`. Do not mutate source in security validation mode; if a remediation is required, route back to implementer.
+
 Run the relevant JS/TS security/static gates. If Fallow is applicable, run it or document `FALLOW-SKIP` with rationale.

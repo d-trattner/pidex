@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { applySandboxPatch, sourceDirtyLines, validatePatchText } from './apply.mjs';
+import { gitignoreRuntimeOnlyChange, isRuntimeCleanPath } from './policy.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-sandbox-apply-test-')); }
 function git(cwd, args) { const p = spawnSync('git', args, { cwd, encoding: 'utf8' }); assert.equal(p.status, 0, p.stderr); return p.stdout.trim(); }
@@ -27,7 +28,26 @@ test('applySandboxPatch blocks dirty host before apply', () => {
 });
 
 test('sourceDirtyLines ignores orchestrator runtime artifacts but not source files', () => {
-  assert.deepEqual(sourceDirtyLines('?? agents.output/x.md\n?? pidex/state/x.jsonl\n?? pidex/context/CONTEXT.md\n M README.md\n'), [' M README.md']);
+  assert.equal(isRuntimeCleanPath('agents.output/x.md'), true);
+  assert.equal(isRuntimeCleanPath('pidex/state/x.jsonl'), true);
+  assert.equal(isRuntimeCleanPath('pidex/context/CONTEXT.md'), true);
+  assert.equal(isRuntimeCleanPath('.fallow/cache.bin'), true);
+  assert.equal(isRuntimeCleanPath('README.md'), false);
+  assert.deepEqual(sourceDirtyLines('?? agents.output/x.md\n?? pidex/state/x.jsonl\n?? pidex/context/CONTEXT.md\n?? .fallow/cache.bin\n M README.md\n'), [' M README.md']);
+});
+
+test('gitignoreRuntimeOnlyChange allows only exact PIDEX runtime additions', () => {
+  const repo = initRepo();
+  writeFileSync(path.join(repo, '.gitignore'), '');
+  git(repo, ['add', '.gitignore']);
+  git(repo, ['commit', '-m', 'track gitignore']);
+  writeFileSync(path.join(repo, '.gitignore'), 'agents.output/\npidex/state/\n.fallow/\n');
+  const allowed = gitignoreRuntimeOnlyChange(repo);
+  assert.equal(allowed.ok, true);
+  writeFileSync(path.join(repo, '.gitignore'), 'agents.output/\n*.secret\n');
+  const rejected = gitignoreRuntimeOnlyChange(repo);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.reason, 'gitignore-unapproved-addition');
 });
 
 test('applySandboxPatch rejects forbidden changed-files paths', () => {
