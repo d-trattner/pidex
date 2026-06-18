@@ -1,0 +1,28 @@
+{
+  "id": "pidex.project-pipeline",
+  "schema_version": 1,
+  "name": "PIDEX Project Pipeline",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "project-pipeline.status",
+      "kind": "check",
+      "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/status.mjs", "--json"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--json$", "^--project-id$", "^[A-Za-z0-9_.-]+$"]
+        }
+      }
+    }
+  ]
+}
