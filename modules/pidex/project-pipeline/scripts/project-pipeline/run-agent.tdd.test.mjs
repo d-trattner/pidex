@@ -72,6 +72,26 @@ test('runProjectPipelineAgent can sync archive and then expose archive_context_f
   assert.equal(loaded.runs[0].archive_sync_status, 'complete');
 });
 
+test('runProjectPipelineAgent fails closed when routed artifact is missing after archive sync', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-missing1');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root,
+    projectId: 'pp-run-missing1',
+    project_run_id: 'pprun-missing',
+    agent: 'pidex-implementer',
+    task: 'test',
+    archiveWorkspace: workspace,
+    runner: () => ({ status: 0, stdout: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\ncontext_file: agents.output/implementation/missing.md\n-->', stderr: '' })
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'archive-context-missing');
+  const loaded = loadProjectRecord(root, 'pp-run-missing1');
+  assert.equal(loaded.status, 'sync-failed');
+  assert.equal(loaded.runs[0].archive_sync_status, 'failed');
+});
+
 test('runProjectPipelineAgent fails closed on child failure or invalid routing without fallback', () => {
   const root = tmp();
   setup(root, 'pp-run-fail1');

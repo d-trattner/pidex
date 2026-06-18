@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials, resetCredentials } from './credentials.mjs';
@@ -52,6 +53,16 @@ test('copyGitCredentials updates registry and invokes docker ops', () => {
   const loaded = loadProjectRecord(pidexRoot, 'pp-creds-copy1');
   assert.equal(loaded.credentials.git, 'configured');
   assert.equal(loaded.credentials.inventory.length, 1);
+});
+
+test('credentials CLI status non-json prints without crashing', () => {
+  const pidexRoot = tmp();
+  const record = createProjectRecord({ project_id: 'pp-creds-cli01', name: 'demo' });
+  record.status = 'ready';
+  saveProjectRecord(pidexRoot, record);
+  const proc = spawnSync(process.execPath, ['modules/pidex/project-pipeline/scripts/project-pipeline/credentials.mjs', 'status', '--pidex-root', pidexRoot, '--project-id', 'pp-creds-cli01'], { cwd: path.resolve('.'), encoding: 'utf8' });
+  assert.equal(proc.status, 0, proc.stderr);
+  assert.match(proc.stdout, /pp-creds-cli01: git=missing/);
 });
 
 test('resetCredentials clears secrets volume and registry credential inventory', () => {

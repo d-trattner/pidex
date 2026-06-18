@@ -124,7 +124,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (args.help) { console.log(usage()); process.exit(0); }
     if (!args.projectId) throw new Error('--project-id is required');
     const result = args.command === 'status' ? credentialStatus(args) : args.command === 'reset' ? resetCredentials(args) : copyGitCredentials(args);
-    console.log(args.json ? JSON.stringify(result, null, 2) : `${result.inventory.length} credential file(s) copied`);
+    const text = args.command === 'status'
+      ? `${result.project_id}: git=${result.credentials?.git || 'unknown'} pi=${result.credentials?.pi || 'unknown'}`
+      : args.command === 'reset'
+        ? `${result.project_id}: credentials reset`
+        : `${result.inventory.length} credential file(s) copied`;
+    console.log(args.json ? JSON.stringify(result, null, 2) : text);
   } catch (error) {
     console.error(error.message || String(error));
     console.error(usage());

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -96,6 +96,14 @@ export function runProjectPipelineAgent(options = {}) {
     saveProjectRecord(pidexRoot, afterSync);
     if (!archiveSyncReport.ok) return { ok: false, exitCode: 1, error: 'archive-sync-failed', finalText, routing, archiveSyncReport };
     archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, routingCheck.context_file);
+    if (!existsSync(archiveContextFile)) {
+      const missingRecord = loadProjectRecord(pidexRoot, record.project_id);
+      const missingRun = missingRecord.runs.find((run) => run.project_run_id === project_run_id) || missingRecord.runs.at(-1);
+      if (missingRun) missingRun.archive_sync_status = 'failed';
+      missingRecord.status = 'sync-failed';
+      saveProjectRecord(pidexRoot, missingRecord);
+      return { ok: false, exitCode: 1, error: 'archive-context-missing', reason: `routed context file not found in archive: ${routingCheck.context_file}`, finalText, routing, archiveSyncReport };
+    }
   }
   return { ok: true, exitCode: 0, finalText, routing, context_file: routingCheck.context_file, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
 }
