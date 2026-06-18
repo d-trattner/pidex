@@ -7,6 +7,24 @@
   "dependencies": ["pidex.core"],
   "capabilities": [
     {
+      "id": "project-pipeline.image",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "implementation", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/image.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^(status|build)$", "^--tag$", "^--json$", "^[A-Za-z0-9_.:/@-]+$"]
+        }
+      }
+    },
+    {
       "id": "project-pipeline.lifecycle",
       "kind": "tool",
       "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
@@ -39,6 +57,24 @@
         "passthrough": true,
         "passthrough_policy": {
           "allowed_patterns": ["^--(pidex-root|project-id|source)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
+      "id": "project-pipeline.clone",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "implementation", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/clone.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--(pidex-root|project-id|url|branch)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
         }
       }
     },
