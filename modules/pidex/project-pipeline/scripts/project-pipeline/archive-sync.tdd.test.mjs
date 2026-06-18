@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { classifyArchivePath, syncProjectArchive } from './archive-sync.mjs';
+import { classifyArchivePath, resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-archive-')); }
 function write(file, text) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); }
@@ -15,12 +15,19 @@ test('classifyArchivePath blocks executable and secret-like paths case-insensiti
   }
 });
 
+test('resolveArchiveRoot derives contained PIDEX state path unless explicit unsafe test override', () => {
+  const root = tmp();
+  const resolved = resolveArchiveRoot({ pidexRoot: root, projectId: 'pp-archive-abc123' });
+  assert.equal(resolved, path.join(root, 'state', 'project-archives', 'pp-archive-abc123'));
+  assert.throws(() => resolveArchiveRoot({ pidexRoot: root, projectId: '../bad' }), /invalid project id/);
+});
+
 test('syncProjectArchive mirrors allowed agents.output and wiki files', () => {
   const workspace = tmp();
   const archive = tmp();
   write(path.join(workspace, 'agents.output/qa/report.md'), '# QA\n');
   write(path.join(workspace, 'wiki/index.md'), '# Wiki\n');
-  const result = syncProjectArchive({ workspace, archiveRoot: archive });
+  const result = syncProjectArchive({ workspace, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true });
   assert.equal(result.ok, true);
   assert.equal(existsSync(path.join(archive, 'agents.output/qa/report.md')), true);
   assert.equal(existsSync(path.join(archive, 'wiki/index.md')), true);
@@ -34,12 +41,12 @@ test('syncProjectArchive uses exact latest mirror and removes stale archive file
   const archive = tmp();
   write(path.join(workspace, 'wiki/keep.md'), 'keep\n');
   write(path.join(workspace, 'wiki/remove.md'), 'remove\n');
-  assert.equal(syncProjectArchive({ workspace, archiveRoot: archive }).ok, true);
+  assert.equal(syncProjectArchive({ workspace, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true }).ok, true);
   assert.equal(existsSync(path.join(archive, 'wiki/remove.md')), true);
   // Rebuild workspace without remove.md
   const workspace2 = tmp();
   write(path.join(workspace2, 'wiki/keep.md'), 'keep\n');
-  assert.equal(syncProjectArchive({ workspace: workspace2, archiveRoot: archive }).ok, true);
+  assert.equal(syncProjectArchive({ workspace: workspace2, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true }).ok, true);
   assert.equal(existsSync(path.join(archive, 'wiki/keep.md')), true);
   assert.equal(existsSync(path.join(archive, 'wiki/remove.md')), false);
 });
@@ -51,7 +58,7 @@ test('syncProjectArchive skips blocked files, symlinks and secret patterns with 
   write(path.join(workspace, 'agents.output/qa/helper.js'), 'console.log(1)\n');
   write(path.join(workspace, 'wiki/leak.md'), 'token = abcdefghijklmnopqrstuvwxyz123456\n');
   symlinkSync(path.join(workspace, 'agents.output/qa/report.md'), path.join(workspace, 'wiki/link.md'));
-  const result = syncProjectArchive({ workspace, archiveRoot: archive });
+  const result = syncProjectArchive({ workspace, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true });
   assert.equal(result.ok, true);
   assert.equal(existsSync(path.join(archive, 'agents.output/qa/report.md')), true);
   assert.equal(existsSync(path.join(archive, 'agents.output/qa/helper.js')), false);
@@ -68,7 +75,7 @@ test('syncProjectArchive enforces file size limits without failing entire sync',
   const archive = tmp();
   write(path.join(workspace, 'wiki/small.md'), 'small\n');
   write(path.join(workspace, 'wiki/large.md'), '0123456789\n');
-  const result = syncProjectArchive({ workspace, archiveRoot: archive, limits: { maxFileBytes: 5 } });
+  const result = syncProjectArchive({ workspace, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true, limits: { maxFileBytes: 5 } });
   assert.equal(result.ok, true);
   assert.equal(existsSync(path.join(archive, 'wiki/small.md')), false);
   assert.equal(result.skipped.some((item) => item.reason === 'max-file-bytes-exceeded'), true);

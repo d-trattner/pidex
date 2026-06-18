@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials } from './credentials.mjs';
+import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials, resetCredentials } from './credentials.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-creds-')); }
@@ -45,10 +45,26 @@ test('copyGitCredentials updates registry and invokes docker ops', () => {
   record.status = 'ready';
   saveProjectRecord(pidexRoot, record);
   const calls = [];
-  const result = copyGitCredentials({ pidexRoot, projectId: 'pp-creds-copy1', entries: [{ kind: 'ssh-key', source: key }], runner: (args) => { calls.push(args); return 'ok'; } });
+  assert.throws(() => copyGitCredentials({ pidexRoot, projectId: 'pp-creds-copy1', entries: [{ kind: 'ssh-key', source: key }], runner: (args) => { calls.push(args); return 'ok'; } }), /acknowledge/);
+  const result = copyGitCredentials({ pidexRoot, projectId: 'pp-creds-copy1', acknowledgeTrustedPersistentContainer: true, entries: [{ kind: 'ssh-key', source: key }], runner: (args) => { calls.push(args); return 'ok'; } });
   assert.equal(result.ok, true);
   assert.equal(calls.some((op) => op[0] === 'cp'), true);
   const loaded = loadProjectRecord(pidexRoot, 'pp-creds-copy1');
   assert.equal(loaded.credentials.git, 'configured');
   assert.equal(loaded.credentials.inventory.length, 1);
+});
+
+test('resetCredentials clears secrets volume and registry credential inventory', () => {
+  const pidexRoot = tmp();
+  const record = createProjectRecord({ project_id: 'pp-creds-reset1', name: 'demo' });
+  record.status = 'ready';
+  record.credentials = { git: 'configured', pi: 'configured', providers: ['x'], inventory: [{ kind: 'ssh-key' }] };
+  saveProjectRecord(pidexRoot, record);
+  const calls = [];
+  const result = resetCredentials({ pidexRoot, projectId: 'pp-creds-reset1', runner: (args) => { calls.push(args); return 'ok'; } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls[0], ['exec', 'pidex-project-pp-creds-reset1', 'rm', '-rf', '/pidex-secrets/git', '/pidex-secrets/pi', '/pidex-secrets/providers']);
+  const loaded = loadProjectRecord(pidexRoot, 'pp-creds-reset1');
+  assert.equal(loaded.credentials.git, 'missing');
+  assert.equal(loaded.credentials.inventory.length, 0);
 });

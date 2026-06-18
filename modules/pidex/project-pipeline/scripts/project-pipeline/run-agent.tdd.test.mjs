@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildDockerExecArgs, extractRouting, runProjectPipelineAgent, validateRouting } from './run-agent.mjs';
@@ -8,6 +8,7 @@ import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './reg
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-run-agent-')); }
 function setup(root, id = 'pp-run-abc123') { const r = createProjectRecord({ project_id: id, name: 'demo' }); r.status = 'ready'; saveProjectRecord(root, r); return r; }
+function write(file, text) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); }
 
 test('extractRouting and validateRouting accept agents.output context only', () => {
   const routing = extractRouting('done\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\ncontext_file: agents.output/implementation/x.md\n-->');
@@ -41,11 +42,34 @@ test('runProjectPipelineAgent returns typed output and records run metadata', ()
   });
   assert.equal(result.ok, true);
   assert.equal(result.context_file, 'agents.output/implementation/x.md');
-  assert.equal(result.archive_context_file.endsWith(path.join('state', 'project-archives', 'pp-run-abc123', 'agents.output', 'implementation', 'x.md')), true);
+  assert.equal(result.archive_context_file, undefined);
+  assert.equal(result.archive_sync_status, 'pending');
   const loaded = loadProjectRecord(root, 'pp-run-abc123');
   assert.equal(loaded.status, 'sync-pending');
   assert.equal(loaded.runs[0].project_run_id, 'pprun-fixed');
   assert.equal(loaded.runs[0].exit_code, 0);
+});
+
+test('runProjectPipelineAgent can sync archive and then expose archive_context_file', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-sync1');
+  write(path.join(workspace, 'agents.output/implementation/x.md'), '# impl\n');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root,
+    projectId: 'pp-run-sync1',
+    project_run_id: 'pprun-sync',
+    agent: 'pidex-implementer',
+    task: 'test',
+    archiveWorkspace: workspace,
+    runner: () => ({ status: 0, stdout: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\ncontext_file: agents.output/implementation/x.md\n-->', stderr: '' })
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.archive_sync_status, 'complete');
+  assert.equal(existsSync(result.archive_context_file), true);
+  const loaded = loadProjectRecord(root, 'pp-run-sync1');
+  assert.equal(loaded.status, 'ready');
+  assert.equal(loaded.runs[0].archive_sync_status, 'complete');
 });
 
 test('runProjectPipelineAgent fails closed on child failure or invalid routing without fallback', () => {

@@ -4,7 +4,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { loadProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
+import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
+import { syncProjectArchive } from './archive-sync.mjs';
 
 const CHILD_ENV = 'PIDEX_PROJECT_PIPELINE_CHILD';
 
@@ -84,7 +85,19 @@ export function runProjectPipelineAgent(options = {}) {
   saveProjectRecord(pidexRoot, loaded);
   if (proc.status !== 0) return { ok: false, exitCode: proc.status, error: 'child-pi-failed', finalText, routing };
   if (!routingCheck.ok) return { ok: false, exitCode: 1, error: 'routing-invalid', reason: routingCheck.reason, finalText, routing };
-  return { ok: true, exitCode: 0, finalText, routing, context_file: routingCheck.context_file, archive_context_file: path.join(pidexRoot, 'state', 'project-archives', record.project_id, routingCheck.context_file), containerExecId: project_run_id, project_run_id, warnings: [] };
+  let archiveSyncReport;
+  let archiveContextFile;
+  if (options.archiveWorkspace) {
+    archiveSyncReport = syncProjectArchive({ workspace: options.archiveWorkspace, pidexRoot, projectId: record.project_id });
+    const afterSync = loadProjectRecord(pidexRoot, record.project_id);
+    const afterRun = afterSync.runs.find((run) => run.project_run_id === project_run_id) || afterSync.runs.at(-1);
+    if (afterRun) afterRun.archive_sync_status = archiveSyncReport.ok ? 'complete' : 'failed';
+    afterSync.status = archiveSyncReport.ok ? 'ready' : 'sync-failed';
+    saveProjectRecord(pidexRoot, afterSync);
+    if (!archiveSyncReport.ok) return { ok: false, exitCode: 1, error: 'archive-sync-failed', finalText, routing, archiveSyncReport };
+    archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, routingCheck.context_file);
+  }
+  return { ok: true, exitCode: 0, finalText, routing, context_file: routingCheck.context_file, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
 }
 
 export function parseArgs(argv) {

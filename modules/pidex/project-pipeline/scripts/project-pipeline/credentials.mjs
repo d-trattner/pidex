@@ -70,6 +70,7 @@ export function buildCredentialCopyOps(record, entries) {
 }
 
 export function copyGitCredentials(options = {}) {
+  if (options.acknowledgeTrustedPersistentContainer !== true) throw new Error('credential copy requires --acknowledge-trusted-persistent-container');
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
   const entries = options.entries || [];
@@ -82,15 +83,32 @@ export function copyGitCredentials(options = {}) {
   return { ok: true, registry_file: file, inventory };
 }
 
+export function credentialStatus(options = {}) {
+  const record = loadProjectRecord(path.resolve(options.pidexRoot || process.cwd()), options.projectId);
+  return { ok: true, project_id: record.project_id, credentials: record.credentials };
+}
+
+export function resetCredentials(options = {}) {
+  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+  const record = loadProjectRecord(pidexRoot, options.projectId);
+  const runner = options.runner || ((args) => docker(args));
+  runner(['exec', record.docker.container_name, 'rm', '-rf', '/pidex-secrets/git', '/pidex-secrets/pi', '/pidex-secrets/providers']);
+  record.credentials = { git: 'missing', pi: 'missing', providers: [], inventory: [] };
+  const file = saveProjectRecord(pidexRoot, record);
+  return { ok: true, registry_file: file, project_id: record.project_id };
+}
+
 export function parseArgs(argv) {
-  const out = { json: false, entries: [] };
+  const out = { command: 'copy-git', json: false, entries: [], acknowledgeTrustedPersistentContainer: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === '--pidex-root') out.pidexRoot = argv[++i];
+    if (arg === 'copy-git' || arg === 'status' || arg === 'reset') out.command = arg;
+    else if (arg === '--pidex-root') out.pidexRoot = argv[++i];
     else if (arg === '--project-id') out.projectId = argv[++i];
     else if (arg === '--ssh-key') out.entries.push({ kind: 'ssh-key', source: argv[++i] });
     else if (arg === '--known-hosts') out.entries.push({ kind: 'known-hosts', source: argv[++i] });
     else if (arg === '--gitconfig') out.entries.push({ kind: 'gitconfig', source: argv[++i] });
+    else if (arg === '--acknowledge-trusted-persistent-container') out.acknowledgeTrustedPersistentContainer = true;
     else if (arg === '--json') out.json = true;
     else if (arg === '--help' || arg === '-h') out.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -98,14 +116,14 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: credentials.mjs --pidex-root PATH --project-id ID [--ssh-key FILE] [--known-hosts FILE] [--gitconfig FILE] --json'; }
+function usage() { return 'Usage: credentials.mjs <copy-git|status|reset> --pidex-root PATH --project-id ID [--acknowledge-trusted-persistent-container --ssh-key FILE] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) { console.log(usage()); process.exit(0); }
     if (!args.projectId) throw new Error('--project-id is required');
-    const result = copyGitCredentials(args);
+    const result = args.command === 'status' ? credentialStatus(args) : args.command === 'reset' ? resetCredentials(args) : copyGitCredentials(args);
     console.log(args.json ? JSON.stringify(result, null, 2) : `${result.inventory.length} credential file(s) copied`);
   } catch (error) {
     console.error(error.message || String(error));

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { safeProjectId } from './registry.mjs';
 
 const DEFAULT_LIMITS = { maxFiles: 5000, maxBytes: 50 * 1024 * 1024, maxFileBytes: 2 * 1024 * 1024, maxDepth: 16 };
 const BLOCKED_EXT = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd', '.exe', '.dll', '.so', '.dylib', '.jar', '.py', '.rb', '.pl', '.php', '.wasm', '.pem', '.key', '.p12', '.pfx', '.env']);
@@ -93,9 +94,19 @@ function walkSource(root, base, rel, state) {
   return undefined;
 }
 
+export function resolveArchiveRoot(options = {}) {
+  if (options.unsafeAllowCustomArchiveRoot) return path.resolve(options.archiveRoot || 'project-archive');
+  if (!options.pidexRoot) throw new Error('pidexRoot is required for archive sync');
+  if (!options.projectId) throw new Error('projectId is required for archive sync');
+  const root = path.resolve(options.pidexRoot, 'state', 'project-archives');
+  const target = path.join(root, safeProjectId(options.projectId));
+  if (!pathWithin(root, target)) throw new Error('archive root escapes PIDEX project archive root');
+  return target;
+}
+
 export function syncProjectArchive(options = {}) {
   const workspace = path.resolve(options.workspace || '.');
-  const archiveRoot = path.resolve(options.archiveRoot || 'project-archive');
+  const archiveRoot = resolveArchiveRoot(options);
   const limits = { ...DEFAULT_LIMITS, ...(options.limits || {}) };
   const sources = ['agents.output', 'wiki'];
   const stageRoot = path.join(path.dirname(archiveRoot), `.${path.basename(archiveRoot)}.staging-${process.pid}-${Date.now()}`);
@@ -118,11 +129,19 @@ export function syncProjectArchive(options = {}) {
     renameSync(path.join(nextRoot, 'archive-sync-report.json.tmp'), path.join(nextRoot, 'archive-sync-report.json'));
     mkdirSync(path.dirname(archiveRoot), { recursive: true });
     const previous = `${archiveRoot}.previous-${process.pid}-${Date.now()}`;
-    if (existsSync(archiveRoot)) renameSync(archiveRoot, previous);
-    renameSync(nextRoot, archiveRoot);
-    rmSync(stageRoot, { recursive: true, force: true });
-    rmSync(previous, { recursive: true, force: true });
-    return report;
+    let previousMoved = false;
+    try {
+      if (existsSync(archiveRoot)) { renameSync(archiveRoot, previous); previousMoved = true; }
+      renameSync(nextRoot, archiveRoot);
+      rmSync(stageRoot, { recursive: true, force: true });
+      if (previousMoved) rmSync(previous, { recursive: true, force: true });
+      return report;
+    } catch (publishError) {
+      if (previousMoved && !existsSync(archiveRoot) && existsSync(previous)) {
+        try { renameSync(previous, archiveRoot); } catch {}
+      }
+      throw publishError;
+    }
   } catch (error) {
     report.ok = false;
     report.error = error.message || String(error);
@@ -136,7 +155,8 @@ export function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--workspace') out.workspace = argv[++i];
-    else if (arg === '--archive-root') out.archiveRoot = argv[++i];
+    else if (arg === '--pidex-root') out.pidexRoot = argv[++i];
+    else if (arg === '--project-id') out.projectId = argv[++i];
     else if (arg === '--json') out.json = true;
     else if (arg === '--help' || arg === '-h') out.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -144,14 +164,15 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: archive-sync.mjs --workspace PATH --archive-root PATH --json'; }
+function usage() { return 'Usage: archive-sync.mjs --workspace PATH --pidex-root PATH --project-id ID --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) { console.log(usage()); process.exit(0); }
     if (!args.workspace) throw new Error('--workspace is required');
-    if (!args.archiveRoot) throw new Error('--archive-root is required');
+    if (!args.pidexRoot) throw new Error('--pidex-root is required');
+    if (!args.projectId) throw new Error('--project-id is required');
     const result = syncProjectArchive(args);
     console.log(args.json ? JSON.stringify(result, null, 2) : `${result.files_copied || 0} copied, ${result.files_skipped || 0} skipped`);
     process.exit(result.ok ? 0 : 1);

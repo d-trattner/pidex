@@ -71,6 +71,7 @@ export function createProjectSandbox(options = {}) {
   const record = createProjectRecord({ name: options.name, project_id: options.projectId, image: options.image || DEFAULT_IMAGE, source_kind: options.sourceKind || 'empty', source_ref: options.sourceRef || '' });
   const d = record.docker;
   const created = [];
+  let file = saveProjectRecord(pidexRoot, record);
   try {
     runDocker(volumeCreateArgs(d.workspace_volume, record.project_id, 'workspace'), options.runner); created.push(d.workspace_volume);
     runDocker(volumeCreateArgs(d.secrets_volume, record.project_id, 'secrets'), options.runner); created.push(d.secrets_volume);
@@ -79,12 +80,11 @@ export function createProjectSandbox(options = {}) {
     runDocker(containerStartArgs(record), options.runner);
     record.status = 'ready';
     record.archive.path = path.join(pidexRoot, 'state', 'project-archives', record.project_id);
-    const file = saveProjectRecord(pidexRoot, record);
+    file = saveProjectRecord(pidexRoot, record);
     return { ok: true, record, file, created };
   } catch (error) {
     record.status = 'needs-repair';
     record.repair = { reason: error.message || String(error), created };
-    let file;
     try { file = saveProjectRecord(pidexRoot, record); } catch {}
     return { ok: false, reason: error.message || String(error), record, file, created };
   }
