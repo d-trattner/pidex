@@ -25,6 +25,60 @@
       }
     },
     {
+      "id": "project-pipeline.import-local",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "implementation", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/import-local.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--(pidex-root|project-id|source)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
+      "id": "project-pipeline.credentials",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "implementation", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/credentials.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--(pidex-root|project-id|ssh-key|known-hosts|gitconfig)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
+      "id": "project-pipeline.run-agent",
+      "kind": "tool",
+      "phases": ["implementation", "qa", "security", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/run-agent.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--(pidex-root|project-id|agent|task)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
       "id": "project-pipeline.status",
       "kind": "check",
       "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
