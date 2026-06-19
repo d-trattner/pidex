@@ -693,7 +693,7 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 			return { ok: false, summary: `project-pipeline credentials ${parsed.action} failed exit=${proc.status}; helper output omitted to avoid credential metadata exposure` };
 		}
 	}
-	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: `project-pipeline lifecycle helper missing at ${PROJECT_PIPELINE_LIFECYCLE_SCRIPT}` };
+	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: "project-pipeline lifecycle helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
 	const lifecycleArgs = parsed.command === "open"
 		? [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "open", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--json"]
 		: parsed.command === "repair"
@@ -712,7 +712,7 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 		}
 		return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox removed: ${json.project_id}` : "Project Pipeline remove failed; helper details omitted" };
 	} catch {
-		return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+		return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}; helper output omitted to avoid metadata exposure` };
 	}
 }
 

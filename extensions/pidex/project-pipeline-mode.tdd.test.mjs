@@ -215,8 +215,31 @@ test('runPdProjectCommand summarizes repair without raw helper details', () => {
   }
 });
 
+test('runPdProjectCommand omits raw lifecycle helper output on repair parse failure', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-life-bad-helper-'));
+  const helper = path.join(dir, 'lifecycle.mjs');
+  writeFileSync(helper, "console.log('SECRET-LIKE /home/user/project /pidex-secrets/pi/auth.json sha256:secret'); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'repair', projectId: 'pp-demo', confirm: 'pp-demo' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.summary, /helper output omitted/);
+    assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
+    assert.doesNotMatch(parsed.summary, /\/home\/user/);
+    assert.doesNotMatch(parsed.summary, /pidex-secrets/);
+    assert.doesNotMatch(parsed.summary, /sha256:secret/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('runPdProjectCommand fails closed when lifecycle helper is missing', () => {
-  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'open', projectId: 'pp-demo' })));"], {
+  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'repair', projectId: 'pp-demo', confirm: 'pp-demo' })));"], {
     cwd: process.cwd(),
     env: { ...process.env, PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: '/tmp/pidex-missing-project-lifecycle.mjs' },
     encoding: 'utf8'
@@ -225,6 +248,7 @@ test('runPdProjectCommand fails closed when lifecycle helper is missing', () => 
   const parsed = JSON.parse(proc.stdout);
   assert.equal(parsed.ok, false);
   assert.match(parsed.summary, /lifecycle helper missing/);
+  assert.doesNotMatch(parsed.summary, /\/tmp\/pidex-missing-project-lifecycle/);
 });
 
 test('runProjectPipelineRunFlow fails closed on missing initial task', () => {
