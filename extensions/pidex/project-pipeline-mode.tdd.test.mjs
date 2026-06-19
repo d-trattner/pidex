@@ -67,6 +67,25 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
   assert.doesNotMatch(summary, /^\{/);
 });
 
+test('parsePdProjectArgs supports status and exact-confirm remove', () => {
+  assert.deepEqual(mod.parsePdProjectArgs('status'), { command: 'status', projectId: undefined });
+  assert.deepEqual(mod.parsePdProjectArgs('status pp-demo'), { command: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('remove pp-demo --confirm pp-demo'), { command: 'remove', projectId: 'pp-demo', confirm: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('remove pp-demo --confirm wrong'), /requires --confirm pp-demo/);
+});
+
+test('runPdProjectCommand fails closed when status helper is missing', () => {
+  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'status' })));"], {
+    cwd: process.cwd(),
+    env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: '/tmp/pidex-missing-project-status.mjs' },
+    encoding: 'utf8'
+  });
+  assert.equal(proc.status, 0, proc.stderr);
+  const parsed = JSON.parse(proc.stdout);
+  assert.equal(parsed.ok, false);
+  assert.match(parsed.summary, /status helper missing/);
+});
+
 test('runProjectPipelineRunFlow fails closed on missing initial task', () => {
   const result = mod.runProjectPipelineRunFlow({ projectRoot: process.cwd(), task: '   ' });
   assert.equal(result.ok, false);

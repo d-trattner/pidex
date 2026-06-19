@@ -174,6 +174,8 @@ const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "lat
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
 const PROJECT_PIPELINE_MODE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_MODE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "mode-resolver.mjs");
 const PROJECT_PIPELINE_RUN_FLOW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_RUN_FLOW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "run-flow.mjs");
+const PROJECT_PIPELINE_STATUS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "status.mjs");
+const PROJECT_PIPELINE_LIFECYCLE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "lifecycle.mjs");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
@@ -459,6 +461,82 @@ export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRun
 		].filter(Boolean).join(" ");
 	} catch {
 		return fallback;
+	}
+}
+
+type PdProjectCommand =
+	| { command: "help" }
+	| { command: "status"; projectId?: string }
+	| { command: "remove"; projectId: string; confirm: string };
+
+export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
+	const parts = String(argsLine || "").trim().split(/\s+/).filter(Boolean);
+	if (parts.length === 0 || parts[0] === "help" || parts[0] === "--help" || parts[0] === "-h") return { command: "help" };
+	const command = parts.shift();
+	if (command === "status") {
+		let projectId: string | undefined;
+		for (let i = 0; i < parts.length; i += 1) {
+			if (parts[i] === "--project-id") projectId = parts[++i];
+			else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			else throw new Error(`unknown pdproject status argument: ${parts[i]}`);
+		}
+		return { command: "status", projectId };
+	}
+	if (command === "remove") {
+		let projectId = "";
+		let confirm = "";
+		for (let i = 0; i < parts.length; i += 1) {
+			if (parts[i] === "--project-id") projectId = parts[++i] || "";
+			else if (parts[i] === "--confirm") confirm = parts[++i] || "";
+			else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			else throw new Error(`unknown pdproject remove argument: ${parts[i]}`);
+		}
+		if (!projectId) throw new Error("pdproject remove requires a project id");
+		if (confirm !== projectId) throw new Error(`pdproject remove requires --confirm ${projectId}`);
+		return { command: "remove", projectId, confirm };
+	}
+	throw new Error(`unknown pdproject command: ${command}`);
+}
+
+export function pdProjectUsage(): string {
+	return [
+		"Usage: /pdproject status [project-id|--project-id ID]",
+		"       /pdproject remove <project-id> --confirm <project-id>",
+		"",
+		"Project Pipeline sandboxes are persistent. Removal is explicit and irreversible for the Docker container/volumes.",
+	].join("\n");
+}
+
+function summarizeProjectRecords(projects: any[]): string {
+	if (!projects.length) return "Project Pipeline: no registered local Project Sandboxes.";
+	return projects.map((project: any) => {
+		const runs = Array.isArray(project.runs) ? project.runs.length : 0;
+		const archive = project.archive?.path ? ` archive=${project.archive.path}` : "";
+		return `${project.project_id}: status=${project.status ?? "unknown"} source=${project.source?.kind ?? "unknown"} credentials(pi=${project.credentials?.pi ?? "unknown"}, git=${project.credentials?.git ?? "unknown"}) runs=${runs}${archive}`;
+	}).join("\n");
+}
+
+export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; summary: string; no_fallback?: true } {
+	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
+	if (parsed.command === "status") {
+		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: `project-pipeline status helper missing at ${PROJECT_PIPELINE_STATUS_SCRIPT}` };
+		const args = [PROJECT_PIPELINE_STATUS_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--json"];
+		if (parsed.projectId) args.push("--project-id", parsed.projectId);
+		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 5 * 1024 * 1024 });
+		try {
+			const json = JSON.parse(proc.stdout || "{}");
+			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
+		} catch {
+			return { ok: false, summary: `project-pipeline status failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+		}
+	}
+	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: `project-pipeline lifecycle helper missing at ${PROJECT_PIPELINE_LIFECYCLE_SCRIPT}` };
+	const proc = spawnSync(process.execPath, [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "remove", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000, maxBuffer: 5 * 1024 * 1024 });
+	try {
+		const json = JSON.parse(proc.stdout || "{}");
+		return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox removed: ${json.project_id}` : `Project Pipeline remove failed: ${JSON.stringify(json)}` };
+	} catch {
+		return { ok: false, summary: `project-pipeline remove failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
 	}
 }
 
@@ -2744,6 +2822,24 @@ export default function runningPi(pi: ExtensionAPI) {
 	pi.registerCommand("pd", {
 		description: "Start the pidex pidex-* software-delivery pipeline (direct-mode MVP).",
 		handler: startRunningPi,
+	});
+
+	pi.registerCommand("pdproject", {
+		description: "Manage local Project Pipeline Docker sandboxes (status/remove).",
+		handler: async (argLine, ctx) => {
+			const homeStatus = canonicalHomeStatus();
+			if (!homeStatus.ok) {
+				await ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before running pdproject.` : canonicalHomeMissingMessage(), "warning");
+				return;
+			}
+			try {
+				const parsed = parsePdProjectArgs(argLine);
+				const result = runPdProjectCommand(parsed);
+				await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
+			} catch (error: any) {
+				await ctx.ui.notify(`${error?.message ?? error}\n\n${pdProjectUsage()}`, "warning");
+			}
+		},
 	});
 
 	pi.registerCommand("pdq", {
