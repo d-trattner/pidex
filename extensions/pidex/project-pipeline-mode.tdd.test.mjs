@@ -78,6 +78,7 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('show-run pp-demo pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
   assert.deepEqual(mod.parsePdProjectArgs('show-run --project-id pp-demo --run-id pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
   assert.throws(() => mod.parsePdProjectArgs('show-run pp-demo pprun-1 --run-id other'), /duplicate run id/);
+  assert.throws(() => mod.parsePdProjectArgs('runs pp-demo --run-id pprun-1'), /unknown pdproject runs argument: --run-id/);
   assert.throws(() => mod.parsePdProjectArgs('runs --project-id'), /--project-id requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('runs pp-demo --project-id other'), /duplicate project id/);
   assert.throws(() => mod.parsePdProjectArgs('runs --project-id pp-demo other'), /duplicate project id/);

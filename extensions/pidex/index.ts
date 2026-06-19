@@ -536,6 +536,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 				projectId = read.value;
 				i = read.nextIndex;
 			} else if (parts[i] === "--run-id") {
+				if (command !== "show-run") throw new Error(`unknown pdproject ${command} argument: ${parts[i]}`);
 				if (runId) throw new Error("pdproject show-run received duplicate run id");
 				const read = readPdProjectFlagValue(parts, i, "--run-id");
 				runId = read.value;
