@@ -2862,7 +2862,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("pdproject", {
-		description: "Manage local Project Pipeline Docker sandboxes (status/remove).",
+		description: "Manage local Project Pipeline Docker sandboxes (status/open/remove).",
 		handler: async (argLine, ctx) => {
 			const homeStatus = canonicalHomeStatus();
 			if (!homeStatus.ok) {
