@@ -38,12 +38,34 @@ test('runProjectPipelineFlow creates sandbox and imports local source without fa
   assert.equal(result.source.copied.length, 1);
 });
 
-test('runProjectPipelineFlow fails closed on credential copy without acknowledgement', () => {
+test('runProjectPipelineFlow returns no_fallback envelope on credential copy without acknowledgement', () => {
   const root = tmp();
   const auth = path.join(tmp(), 'auth.json');
   write(auth, '{"token":"x"}');
   const runner = fakeRunner();
-  assert.throws(() => runProjectPipelineFlow({ pidexRoot: root, projectId: 'pp-flow-creds1', entries: [{ kind: 'pi-auth', source: auth }], runner }), /acknowledge/);
+  const result = runProjectPipelineFlow({ pidexRoot: root, projectId: 'pp-flow-creds1', entries: [{ kind: 'pi-auth', source: auth }], runner });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'credential-bootstrap-failed');
+  assert.equal(result.no_fallback, true);
+  assert.match(result.reason, /acknowledge/);
+});
+
+test('runProjectPipelineFlow returns no_fallback envelope on missing source', () => {
+  const root = tmp();
+  const runner = fakeRunner();
+  const result = runProjectPipelineFlow({ pidexRoot: root, projectId: 'pp-flow-source1', source: path.join(tmp(), 'missing'), runner });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'source-init-failed');
+  assert.equal(result.no_fallback, true);
+});
+
+test('runProjectPipelineFlow returns no_fallback envelope when agent runner throws', () => {
+  const root = tmp();
+  const result = runProjectPipelineFlow({ pidexRoot: root, projectId: 'pp-flow-agent1', agent: 'pidex-implementer', task: 'x', runner: (args) => { if (args[0] === 'exec' && args.includes('pi')) throw new Error('agent boom'); return 'ok'; } });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'agent-run-failed');
+  assert.equal(result.no_fallback, true);
+  assert.match(result.reason, /agent boom/);
 });
 
 test('runProjectPipelineFlow fails closed when lifecycle fails', () => {

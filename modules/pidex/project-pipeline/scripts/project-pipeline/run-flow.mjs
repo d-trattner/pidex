@@ -32,20 +32,33 @@ export function runProjectPipelineFlow(options = {}) {
   if (!lifecycle.ok) return { ok: false, error: 'lifecycle-failed', lifecycle, no_fallback: true };
 
   let source;
-  if (options.source) source = importLocalProject({ pidexRoot, projectId, source: options.source, runner: options.runner });
-  else if (options.url) source = cloneProject({ pidexRoot, projectId, url: options.url, branch: options.branch, runner: options.runner });
-  else source = { ok: true, kind: 'empty' };
+  try {
+    if (options.source) source = importLocalProject({ pidexRoot, projectId, source: options.source, runner: options.runner });
+    else if (options.url) source = cloneProject({ pidexRoot, projectId, url: options.url, branch: options.branch, runner: options.runner });
+    else source = { ok: true, kind: 'empty' };
+  } catch (error) {
+    return { ok: false, error: 'source-init-failed', reason: error.message || String(error), lifecycle, no_fallback: true };
+  }
   if (!source.ok) return { ok: false, error: 'source-init-failed', source, no_fallback: true };
 
   const entries = options.entries || parseCredentialEntries(options);
   let credentials = { ok: true, inventory: [] };
-  if (entries.length) {
-    credentials = copySelectedCredentials({ pidexRoot, projectId, command: 'copy', acknowledgeTrustedPersistentContainer: options.acknowledgeTrustedPersistentContainer === true, entries, runner: options.runner });
-    if (!credentials.ok) return { ok: false, error: 'credential-bootstrap-failed', credentials, no_fallback: true };
+  try {
+    if (entries.length) {
+      credentials = copySelectedCredentials({ pidexRoot, projectId, command: 'copy', acknowledgeTrustedPersistentContainer: options.acknowledgeTrustedPersistentContainer === true, entries, runner: options.runner });
+      if (!credentials.ok) return { ok: false, error: 'credential-bootstrap-failed', credentials, no_fallback: true };
+    }
+  } catch (error) {
+    return { ok: false, error: 'credential-bootstrap-failed', reason: error.message || String(error), lifecycle, source, no_fallback: true };
   }
 
   if (!options.agent) return { ok: true, lifecycle, source, credentials, run: undefined, no_fallback: true };
-  const run = runProjectPipelineAgent({ pidexRoot, projectId, agent: options.agent, task: options.task || '', archiveFromContainer: true, runner: options.runner, archiveCopyRunner: options.runner });
+  let run;
+  try {
+    run = runProjectPipelineAgent({ pidexRoot, projectId, agent: options.agent, task: options.task || '', archiveFromContainer: true, runner: options.runner, archiveCopyRunner: options.runner });
+  } catch (error) {
+    return { ok: false, error: 'agent-run-failed', reason: error.message || String(error), lifecycle, source, credentials, no_fallback: true };
+  }
   if (!run.ok) return { ok: false, error: 'agent-run-failed', lifecycle, source, credentials, run, no_fallback: true };
   return { ok: true, lifecycle, source, credentials, run, archive_context_file: run.archive_context_file, no_fallback: true };
 }
