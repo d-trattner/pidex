@@ -103,7 +103,7 @@ test('runPdProjectCommand fails closed when status helper is missing', () => {
 test('runPdProjectCommand omits raw credential helper output on reset failure', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-creds-helper-'));
   const helper = path.join(dir, 'credentials.mjs');
-  writeFileSync(helper, "console.log(JSON.stringify({ ok: false, credentials: { inventory: [{ fingerprint: 'sha256:secret', source_label: '~/.pi/auth.json', destination: '/pidex-secrets/pi/agent/auth.json' }] } })); process.exit(1);\n");
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: false, reason: 'failed for ~/.pi/auth.json sha256:secret /pidex-secrets/pi/agent/auth.json', credentials: { inventory: [{ fingerprint: 'sha256:secret', source_label: '~/.pi/auth.json', destination: '/pidex-secrets/pi/agent/auth.json' }] } })); process.exit(1);\n");
   try {
     const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'credentials', action: 'reset', projectId: 'pp-demo', confirm: 'pp-demo' })));"], {
       cwd: process.cwd(),

@@ -601,10 +601,10 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 		try {
 			const json = JSON.parse(proc.stdout || "{}");
 			if (parsed.action === "status") {
-				if (proc.status !== 0 || json.ok === false) return { ok: false, summary: `Project Pipeline credentials status failed: ${json.reason ?? "helper returned ok=false"}` };
+				if (proc.status !== 0 || json.ok === false) return { ok: false, summary: "Project Pipeline credentials status failed; helper details omitted to avoid credential metadata exposure" };
 				return { ok: true, summary: summarizeProjectCredentials(json.project_id ?? parsed.projectId, json.credentials ?? {}) };
 			}
-			return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline credentials reset: ${json.project_id ?? parsed.projectId}` : `Project Pipeline credentials reset failed: ${json.reason ?? "helper returned ok=false"}` };
+			return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline credentials reset: ${json.project_id ?? parsed.projectId}` : "Project Pipeline credentials reset failed; helper details omitted to avoid credential metadata exposure" };
 		} catch {
 			return { ok: false, summary: `project-pipeline credentials ${parsed.action} failed exit=${proc.status}; helper output omitted to avoid credential metadata exposure` };
 		}
