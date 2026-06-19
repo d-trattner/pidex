@@ -22,6 +22,8 @@ test('Dockerfile installs Pi CLI without lifecycle scripts or secrets', () => {
   const dockerfile = readFileSync(path.resolve('modules/pidex/project-pipeline/Dockerfile'), 'utf8');
   assert.match(dockerfile, /npm install -g --ignore-scripts "@earendil-works\/pi-coding-agent@\$\{PI_CODING_AGENT_VERSION\}"/);
   assert.match(dockerfile, /pi --version/);
+  assert.match(dockerfile, /chown -R node:node \/workspace \/pidex-home \/pidex-secrets \/cache/);
+  assert.match(dockerfile, /chmod 700 \/pidex-secrets/);
   assert.doesNotMatch(dockerfile, /API_KEY|TOKEN|SECRET/);
 });
 

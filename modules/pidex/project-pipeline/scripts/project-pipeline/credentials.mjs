@@ -80,19 +80,17 @@ export function buildCredentialCopyOps(record, entries) {
     if (!classification.ok) throw new Error(`credential source rejected (${classification.reason}): ${entry.source}`);
     const dest = credentialDest(entry.kind, source);
     const dir = path.posix.dirname(dest);
-    ops.push(['exec', record.docker.container_name, 'mkdir', '-p', dir]);
-    ops.push(['exec', record.docker.container_name, 'chmod', '711', '/pidex-secrets']);
-    if (dest.startsWith('/pidex-secrets/pi/')) ops.push(['exec', record.docker.container_name, 'chmod', '777', '/pidex-secrets/pi', '/pidex-secrets/pi/agent']);
-    if (dest.startsWith('/pidex-secrets/providers/')) ops.push(['exec', record.docker.container_name, 'chmod', '777', '/pidex-secrets/providers', path.posix.dirname(dir), dir]);
-    if (dest.startsWith('/pidex-secrets/git/.ssh/')) ops.push(['exec', record.docker.container_name, 'chmod', '755', '/pidex-secrets/git', '/pidex-secrets/git/.ssh']);
+    const sourceStat = lstatSync(source);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', dir]);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir]);
     ops.push(['cp', source, `${record.docker.container_name}:${dest}`]);
+    ops.push(['exec', '--user', `${sourceStat.uid}:${sourceStat.gid}`, record.docker.container_name, 'chmod', credentialMode(entry.kind), dest]);
     inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
   }
   if (entries.some((entry) => entry.kind.startsWith('pi-'))) {
-    ops.push(['exec', record.docker.container_name, 'mkdir', '-p', '/pidex-home/.pi']);
-    ops.push(['exec', record.docker.container_name, 'ln', '-sfn', '/pidex-secrets/pi/agent', '/pidex-home/.pi/agent']);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', '/pidex-home/.pi']);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'ln', '-sfn', '/pidex-secrets/pi/agent', '/pidex-home/.pi/agent']);
   }
-  if (entries.some((entry) => entry.kind === 'ssh-key' || entry.kind === 'known-hosts')) ops.push(['exec', record.docker.container_name, 'chmod', '755', '/pidex-secrets/git/.ssh']);
   return { ops, inventory };
 }
 

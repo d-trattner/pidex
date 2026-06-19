@@ -24,6 +24,7 @@ RUN apt-get update \
   && pi --version
 
 RUN mkdir -p /workspace /pidex-home /pidex-secrets /cache \
+  && chown -R node:node /workspace /pidex-home /pidex-secrets /cache \
   && chmod 700 /pidex-secrets
 
 WORKDIR /workspace

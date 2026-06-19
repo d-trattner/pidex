@@ -48,7 +48,10 @@ test('buildCredentialCopyOps supports Pi and provider allowlisted destinations',
   const result = buildCredentialCopyOps(record, [{ kind: 'pi-auth', source: piAuth }, { kind: 'codex-auth', source: codexAuth }]);
   assert.equal(result.ops.some((op) => op[0] === 'cp' && String(op[2]).endsWith(':/pidex-secrets/pi/agent/auth.json')), true);
   assert.equal(result.ops.some((op) => op[0] === 'cp' && String(op[2]).endsWith(':/pidex-secrets/providers/codex/auth.json')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec' && op[2] === 'ln' && op.includes('/pidex-home/.pi/agent')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('ln') && op.includes('/pidex-home/.pi/agent')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('chmod') && op.includes('600') && op.includes('/pidex-secrets/pi/agent/auth.json')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('chmod') && op.includes('600') && op.includes('/pidex-secrets/providers/codex/auth.json')), true);
+  assert.equal(result.ops.some((op) => op.includes('777')), false);
   assert.deepEqual(result.inventory.map((item) => item.group), ['pi', 'providers']);
   assert.equal(JSON.stringify(result.inventory).includes('redacted'), false);
 });
