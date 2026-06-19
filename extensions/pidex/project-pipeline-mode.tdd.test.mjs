@@ -70,6 +70,9 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
 test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('status'), { command: 'status', projectId: undefined });
   assert.deepEqual(mod.parsePdProjectArgs('status pp-demo'), { command: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('open pp-demo'), { command: 'open', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('open --project-id pp-demo'), { command: 'open', projectId: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('open --project-id'), /--project-id requires a value/);
   assert.deepEqual(mod.parsePdProjectArgs('remove pp-demo --confirm pp-demo'), { command: 'remove', projectId: 'pp-demo', confirm: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('status --project-id'), /--project-id requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('remove --project-id --confirm pp-demo'), /--project-id requires a value/);
@@ -90,7 +93,7 @@ test('runPdProjectCommand fails closed when status helper is missing', () => {
 });
 
 test('runPdProjectCommand fails closed when lifecycle helper is missing', () => {
-  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'remove', projectId: 'pp-demo', confirm: 'pp-demo' })));"], {
+  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'open', projectId: 'pp-demo' })));"], {
     cwd: process.cwd(),
     env: { ...process.env, PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: '/tmp/pidex-missing-project-lifecycle.mjs' },
     encoding: 'utf8'

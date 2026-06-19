@@ -104,6 +104,12 @@ Show one sandbox:
 /pdproject status <project-id>
 ```
 
+Start/open an existing sandbox container:
+
+```text
+/pdproject open <project-id>
+```
+
 Remove a persistent sandbox explicitly:
 
 ```text

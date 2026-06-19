@@ -467,6 +467,7 @@ export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRun
 type PdProjectCommand =
 	| { command: "help" }
 	| { command: "status"; projectId?: string }
+	| { command: "open"; projectId: string }
 	| { command: "remove"; projectId: string; confirm: string };
 
 function readPdProjectFlagValue(parts: string[], index: number, flag: string): { value: string; nextIndex: number } {
@@ -490,6 +491,19 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 			else throw new Error(`unknown pdproject status argument: ${parts[i]}`);
 		}
 		return { command: "status", projectId };
+	}
+	if (command === "open") {
+		let projectId = "";
+		for (let i = 0; i < parts.length; i += 1) {
+			if (parts[i] === "--project-id") {
+				const read = readPdProjectFlagValue(parts, i, "--project-id");
+				projectId = read.value;
+				i = read.nextIndex;
+			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			else throw new Error(`unknown pdproject open argument: ${parts[i]}`);
+		}
+		if (!projectId) throw new Error("pdproject open requires a project id");
+		return { command: "open", projectId };
 	}
 	if (command === "remove") {
 		let projectId = "";
@@ -516,6 +530,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 export function pdProjectUsage(): string {
 	return [
 		"Usage: /pdproject status [project-id|--project-id ID]",
+		"       /pdproject open <project-id>",
 		"       /pdproject remove <project-id> --confirm <project-id>",
 		"",
 		"Project Pipeline sandboxes are persistent. Removal is explicit and irreversible for the Docker container/volumes.",
@@ -549,12 +564,16 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 		}
 	}
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: `project-pipeline lifecycle helper missing at ${PROJECT_PIPELINE_LIFECYCLE_SCRIPT}` };
-	const proc = spawnSync(process.execPath, [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "remove", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000, maxBuffer: 5 * 1024 * 1024 });
+	const lifecycleArgs = parsed.command === "open"
+		? [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "open", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--json"]
+		: [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "remove", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"];
+	const proc = spawnSync(process.execPath, lifecycleArgs, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000, maxBuffer: 5 * 1024 * 1024 });
 	try {
 		const json = JSON.parse(proc.stdout || "{}");
+		if (parsed.command === "open") return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox opened: ${json.record?.project_id ?? parsed.projectId}` : `Project Pipeline open failed: ${json.reason ?? JSON.stringify(json)}` };
 		return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox removed: ${json.project_id}` : `Project Pipeline remove failed: ${JSON.stringify(json)}` };
 	} catch {
-		return { ok: false, summary: `project-pipeline remove failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+		return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
 	}
 }
 
