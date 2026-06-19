@@ -12,4 +12,5 @@ MVP status: scaffolding plus local helper slices for registry, lifecycle, image 
 - Do not mirror source to host.
 - Host archive sync is limited to `agents.output/**` and `wiki/**` with safe-copy filters.
 - Project-agent execution copies only archive-eligible paths out of the persistent container; source remains container-canonical.
+- Pi/provider credentials are copied only from explicit allowlisted files after trusted-container acknowledgement and live in the per-project secrets volume.
 - Persistent Project Sandbox Docker resources are removed only by explicit project removal.

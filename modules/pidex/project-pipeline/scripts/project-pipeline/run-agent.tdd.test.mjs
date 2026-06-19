@@ -22,11 +22,14 @@ test('buildDockerExecArgs sets recursion guard env and workspace', () => {
   const record = createProjectRecord({ project_id: 'pp-run-def456', name: 'demo' });
   const built = buildDockerExecArgs(record, { project_run_id: 'pprun-test', agent: 'pidex-implementer', task: 'do it' });
   assert.equal(built.project_run_id, 'pprun-test');
+  assert.equal(built.args.includes('--user'), true);
+  assert.equal(built.args.includes('node'), true);
   assert.equal(built.args.includes('--workdir'), true);
   assert.equal(built.args.includes('/workspace'), true);
   assert.equal(built.args.includes('PIDEX_PROJECT_PIPELINE_CHILD=1'), true);
   assert.equal(built.args.includes('PIDEX_PROJECT_ID=pp-run-def456'), true);
   assert.equal(built.args.includes('pidex-project-pp-run-def456'), true);
+  assert.match(built.args.at(-1), /Task:\ndo it/);
 });
 
 test('runProjectPipelineAgent returns typed output and records run metadata', () => {

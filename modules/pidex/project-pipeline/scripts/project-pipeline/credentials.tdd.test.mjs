@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials, resetCredentials } from './credentials.mjs';
+import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials, copySelectedCredentials, resetCredentials } from './credentials.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-creds-')); }
@@ -36,6 +36,39 @@ test('buildCredentialCopyOps copies selected files into /pidex-secrets and recor
   assert.equal(result.inventory.length, 2);
   assert.equal(result.inventory[0].fingerprint.startsWith('sha256:'), true);
   assert.equal(JSON.stringify(result.inventory).includes('PRIVATE KEY'), false);
+});
+
+test('buildCredentialCopyOps supports Pi and provider allowlisted destinations', () => {
+  const root = tmp();
+  const piAuth = path.join(root, 'auth.json');
+  const codexAuth = path.join(root, 'codex-auth.json');
+  write(piAuth, '{"openai":"redacted"}');
+  write(codexAuth, '{"tokens":"redacted"}');
+  const record = createProjectRecord({ project_id: 'pp-creds-pi123', name: 'demo' });
+  const result = buildCredentialCopyOps(record, [{ kind: 'pi-auth', source: piAuth }, { kind: 'codex-auth', source: codexAuth }]);
+  assert.equal(result.ops.some((op) => op[0] === 'cp' && String(op[2]).endsWith(':/pidex-secrets/pi/agent/auth.json')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'cp' && String(op[2]).endsWith(':/pidex-secrets/providers/codex/auth.json')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op[2] === 'ln' && op.includes('/pidex-home/.pi/agent')), true);
+  assert.deepEqual(result.inventory.map((item) => item.group), ['pi', 'providers']);
+  assert.equal(JSON.stringify(result.inventory).includes('redacted'), false);
+});
+
+test('copySelectedCredentials updates pi and provider credential state', () => {
+  const pidexRoot = tmp();
+  const piAuth = path.join(tmp(), 'auth.json');
+  const codexAuth = path.join(tmp(), 'auth.json');
+  write(piAuth, '{"pi":"auth"}');
+  write(codexAuth, '{"codex":"auth"}');
+  const record = createProjectRecord({ project_id: 'pp-creds-picopy1', name: 'demo' });
+  record.status = 'ready';
+  saveProjectRecord(pidexRoot, record);
+  const calls = [];
+  const result = copySelectedCredentials({ pidexRoot, projectId: 'pp-creds-picopy1', acknowledgeTrustedPersistentContainer: true, entries: [{ kind: 'pi-auth', source: piAuth }, { kind: 'codex-auth', source: codexAuth }], runner: (args) => { calls.push(args); return 'ok'; } });
+  assert.equal(result.ok, true);
+  assert.equal(calls.some((op) => op[0] === 'cp'), true);
+  const loaded = loadProjectRecord(pidexRoot, 'pp-creds-picopy1');
+  assert.equal(loaded.credentials.pi, 'configured');
+  assert.deepEqual(loaded.credentials.providers, ['codex']);
 });
 
 test('copyGitCredentials updates registry and invokes docker ops', () => {

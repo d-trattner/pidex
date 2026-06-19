@@ -44,6 +44,7 @@ export function containerCreateArgs(record) {
     '--mount', `type=volume,source=${d.cache_volume},target=/cache`,
     '--workdir', '/workspace',
     '--env', 'HOME=/pidex-home',
+    '--env', 'PI_CODING_AGENT_DIR=/pidex-secrets/pi/agent',
     '--env', 'PIDEX_PROJECT_PIPELINE_CONTAINER=1',
     d.image || DEFAULT_IMAGE,
     'sleep', 'infinity',
@@ -78,6 +79,7 @@ export function createProjectSandbox(options = {}) {
     runDocker(volumeCreateArgs(d.cache_volume, record.project_id, 'cache'), options.runner); created.push(d.cache_volume);
     runDocker(containerCreateArgs(record), options.runner);
     runDocker(containerStartArgs(record), options.runner);
+    runDocker(['exec', d.container_name, 'chmod', '777', '/workspace', '/cache', '/pidex-home'], options.runner);
     record.status = 'ready';
     record.archive.path = path.join(pidexRoot, 'state', 'project-archives', record.project_id);
     file = saveProjectRecord(pidexRoot, record);
@@ -95,6 +97,7 @@ export function openProjectSandbox(options = {}) {
   const record = loadProjectRecord(pidexRoot, options.projectId);
   try {
     runDocker(containerStartArgs(record), options.runner);
+    runDocker(['exec', record.docker.container_name, 'chmod', '777', '/workspace', '/cache', '/pidex-home'], options.runner);
     record.status = 'ready';
     const file = saveProjectRecord(pidexRoot, record);
     return { ok: true, record, file };

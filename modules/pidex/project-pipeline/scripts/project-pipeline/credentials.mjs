@@ -44,12 +44,31 @@ export function fingerprintFile(file) {
   return crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
 }
 
-export function gitCredentialDest(kind, source) {
+export function credentialDest(kind, source) {
   const base = path.basename(source);
   if (kind === 'ssh-key') return `/pidex-secrets/git/.ssh/${base}`;
   if (kind === 'known-hosts') return '/pidex-secrets/git/.ssh/known_hosts';
   if (kind === 'gitconfig') return '/pidex-secrets/git/.gitconfig';
+  if (kind === 'pi-auth') return '/pidex-secrets/pi/agent/auth.json';
+  if (kind === 'pi-settings') return '/pidex-secrets/pi/agent/settings.json';
+  if (kind === 'pi-models') return '/pidex-secrets/pi/agent/models.json';
+  if (kind === 'codex-auth') return '/pidex-secrets/providers/codex/auth.json';
+  if (kind === 'codex-config') return '/pidex-secrets/providers/codex/config.toml';
+  if (kind === 'gemini-oauth') return '/pidex-secrets/providers/gemini/oauth_creds.json';
+  if (kind === 'gemini-settings') return `/pidex-secrets/providers/gemini/${base}`;
   throw new Error(`unsupported credential kind: ${kind}`);
+}
+
+export const gitCredentialDest = credentialDest;
+
+function credentialMode(kind) {
+  return kind.endsWith('-auth') || kind === 'gemini-oauth' || kind === 'ssh-key' ? '600' : '644';
+}
+
+function credentialGroup(kind) {
+  if (kind.startsWith('pi-')) return 'pi';
+  if (kind.startsWith('codex-') || kind.startsWith('gemini-')) return 'providers';
+  return 'git';
 }
 
 export function buildCredentialCopyOps(record, entries) {
@@ -59,17 +78,25 @@ export function buildCredentialCopyOps(record, entries) {
     const source = path.resolve(entry.source || '');
     const classification = classifyCredentialSource(source);
     if (!classification.ok) throw new Error(`credential source rejected (${classification.reason}): ${entry.source}`);
-    const dest = gitCredentialDest(entry.kind, source);
-    ops.push(['exec', record.docker.container_name, 'mkdir', '-p', path.posix.dirname(dest)]);
+    const dest = credentialDest(entry.kind, source);
+    const dir = path.posix.dirname(dest);
+    ops.push(['exec', record.docker.container_name, 'mkdir', '-p', dir]);
+    ops.push(['exec', record.docker.container_name, 'chmod', '711', '/pidex-secrets']);
+    if (dest.startsWith('/pidex-secrets/pi/')) ops.push(['exec', record.docker.container_name, 'chmod', '777', '/pidex-secrets/pi', '/pidex-secrets/pi/agent']);
+    if (dest.startsWith('/pidex-secrets/providers/')) ops.push(['exec', record.docker.container_name, 'chmod', '777', '/pidex-secrets/providers', path.posix.dirname(dir), dir]);
+    if (dest.startsWith('/pidex-secrets/git/.ssh/')) ops.push(['exec', record.docker.container_name, 'chmod', '755', '/pidex-secrets/git', '/pidex-secrets/git/.ssh']);
     ops.push(['cp', source, `${record.docker.container_name}:${dest}`]);
-    ops.push(['exec', record.docker.container_name, 'chmod', entry.kind === 'ssh-key' ? '600' : '644', dest]);
-    inventory.push({ kind: entry.kind, source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
+    inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
   }
-  ops.push(['exec', record.docker.container_name, 'chmod', '700', '/pidex-secrets/git/.ssh']);
+  if (entries.some((entry) => entry.kind.startsWith('pi-'))) {
+    ops.push(['exec', record.docker.container_name, 'mkdir', '-p', '/pidex-home/.pi']);
+    ops.push(['exec', record.docker.container_name, 'ln', '-sfn', '/pidex-secrets/pi/agent', '/pidex-home/.pi/agent']);
+  }
+  if (entries.some((entry) => entry.kind === 'ssh-key' || entry.kind === 'known-hosts')) ops.push(['exec', record.docker.container_name, 'chmod', '755', '/pidex-secrets/git/.ssh']);
   return { ops, inventory };
 }
 
-export function copyGitCredentials(options = {}) {
+export function copySelectedCredentials(options = {}) {
   if (options.acknowledgeTrustedPersistentContainer !== true) throw new Error('credential copy requires --acknowledge-trusted-persistent-container');
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
@@ -77,11 +104,20 @@ export function copyGitCredentials(options = {}) {
   const runner = options.runner || ((args) => docker(args));
   const { ops, inventory } = buildCredentialCopyOps(record, entries);
   for (const op of ops) runner(op);
-  record.credentials.git = inventory.length ? 'configured' : 'skipped';
+  if (inventory.some((item) => item.group === 'git')) record.credentials.git = 'configured';
+  if (inventory.some((item) => item.group === 'pi')) record.credentials.pi = 'configured';
+  const providerNames = new Set(record.credentials.providers || []);
+  for (const item of inventory) {
+    if (item.kind.startsWith('codex-')) providerNames.add('codex');
+    if (item.kind.startsWith('gemini-')) providerNames.add('gemini');
+  }
+  record.credentials.providers = [...providerNames].sort();
   record.credentials.inventory = [...(record.credentials.inventory || []), ...inventory];
   const file = saveProjectRecord(pidexRoot, record);
   return { ok: true, registry_file: file, inventory };
 }
+
+export const copyGitCredentials = copySelectedCredentials;
 
 export function credentialStatus(options = {}) {
   const record = loadProjectRecord(path.resolve(options.pidexRoot || process.cwd()), options.projectId);
@@ -102,12 +138,19 @@ export function parseArgs(argv) {
   const out = { command: 'copy-git', json: false, entries: [], acknowledgeTrustedPersistentContainer: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === 'copy-git' || arg === 'status' || arg === 'reset') out.command = arg;
+    if (arg === 'copy-git' || arg === 'copy-pi' || arg === 'copy-provider' || arg === 'status' || arg === 'reset') out.command = arg;
     else if (arg === '--pidex-root') out.pidexRoot = argv[++i];
     else if (arg === '--project-id') out.projectId = argv[++i];
     else if (arg === '--ssh-key') out.entries.push({ kind: 'ssh-key', source: argv[++i] });
     else if (arg === '--known-hosts') out.entries.push({ kind: 'known-hosts', source: argv[++i] });
     else if (arg === '--gitconfig') out.entries.push({ kind: 'gitconfig', source: argv[++i] });
+    else if (arg === '--pi-auth') out.entries.push({ kind: 'pi-auth', source: argv[++i] });
+    else if (arg === '--pi-settings') out.entries.push({ kind: 'pi-settings', source: argv[++i] });
+    else if (arg === '--pi-models') out.entries.push({ kind: 'pi-models', source: argv[++i] });
+    else if (arg === '--codex-auth') out.entries.push({ kind: 'codex-auth', source: argv[++i] });
+    else if (arg === '--codex-config') out.entries.push({ kind: 'codex-config', source: argv[++i] });
+    else if (arg === '--gemini-oauth') out.entries.push({ kind: 'gemini-oauth', source: argv[++i] });
+    else if (arg === '--gemini-settings') out.entries.push({ kind: 'gemini-settings', source: argv[++i] });
     else if (arg === '--acknowledge-trusted-persistent-container') out.acknowledgeTrustedPersistentContainer = true;
     else if (arg === '--json') out.json = true;
     else if (arg === '--help' || arg === '-h') out.help = true;
@@ -116,14 +159,14 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: credentials.mjs <copy-git|status|reset> --pidex-root PATH --project-id ID [--acknowledge-trusted-persistent-container --ssh-key FILE] --json'; }
+function usage() { return 'Usage: credentials.mjs <copy-git|copy-pi|copy-provider|status|reset> --pidex-root PATH --project-id ID [--acknowledge-trusted-persistent-container --ssh-key FILE --pi-auth FILE --codex-auth FILE] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) { console.log(usage()); process.exit(0); }
     if (!args.projectId) throw new Error('--project-id is required');
-    const result = args.command === 'status' ? credentialStatus(args) : args.command === 'reset' ? resetCredentials(args) : copyGitCredentials(args);
+    const result = args.command === 'status' ? credentialStatus(args) : args.command === 'reset' ? resetCredentials(args) : copySelectedCredentials(args);
     const text = args.command === 'status'
       ? `${result.project_id}: git=${result.credentials?.git || 'unknown'} pi=${result.credentials?.pi || 'unknown'}`
       : args.command === 'reset'

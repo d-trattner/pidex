@@ -59,6 +59,7 @@ export function buildDockerExecArgs(record, params = {}) {
     project_run_id: projectRun,
     args: [
       'exec',
+      '--user', 'node',
       '--workdir', '/workspace',
       '--env', `${CHILD_ENV}=1`,
       '--env', `PIDEX_PROJECT_ID=${record.project_id}`,
@@ -67,7 +68,7 @@ export function buildDockerExecArgs(record, params = {}) {
       record.docker.container_name,
       'pi',
       '--print',
-      `Run PIDEX project-pipeline child agent from PIDEX_PROJECT_AGENT_PAYLOAD. Agent: ${params.agent}. Write required artifact under agents.output/** and finish with ROUTING block.`
+      `Run PIDEX project-pipeline child agent. Agent: ${params.agent}. Working directory is /workspace. Task:\n${params.task || ''}\n\nWrite the required artifact under /workspace/agents.output/**. Finish with an HTML comment ROUTING block exactly like:\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\nreason: short reason\ncontext_file: agents.output/path/to/artifact.md\n-->\nThe context_file value must be a relative agents.output/** path, never an absolute path.`
     ]
   };
 }
