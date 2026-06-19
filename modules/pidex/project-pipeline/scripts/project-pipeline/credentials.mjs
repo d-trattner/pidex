@@ -136,7 +136,7 @@ export function resetCredentials(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
   const runner = options.runner || ((args) => docker(args));
-  runner(['exec', record.docker.container_name, 'rm', '-rf', '/pidex-secrets/git', '/pidex-secrets/pi', '/pidex-secrets/providers']);
+  runner(['exec', '--user', 'node', record.docker.container_name, 'rm', '-rf', '/pidex-secrets/git', '/pidex-secrets/pi', '/pidex-secrets/providers']);
   record.credentials = { git: 'missing', pi: 'missing', providers: [], inventory: [] };
   const file = saveProjectRecord(pidexRoot, record);
   return { ok: true, registry_file: file, project_id: record.project_id };

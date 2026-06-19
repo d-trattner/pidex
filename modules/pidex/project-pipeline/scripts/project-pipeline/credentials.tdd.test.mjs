@@ -117,7 +117,7 @@ test('resetCredentials clears secrets volume and registry credential inventory',
   const calls = [];
   const result = resetCredentials({ pidexRoot, projectId: 'pp-creds-reset1', runner: (args) => { calls.push(args); return 'ok'; } });
   assert.equal(result.ok, true);
-  assert.deepEqual(calls[0], ['exec', 'pidex-project-pp-creds-reset1', 'rm', '-rf', '/pidex-secrets/git', '/pidex-secrets/pi', '/pidex-secrets/providers']);
+  assert.deepEqual(calls[0], ['exec', '--user', 'node', 'pidex-project-pp-creds-reset1', 'rm', '-rf', '/pidex-secrets/git', '/pidex-secrets/pi', '/pidex-secrets/providers']);
   const loaded = loadProjectRecord(pidexRoot, 'pp-creds-reset1');
   assert.equal(loaded.credentials.git, 'missing');
   assert.equal(loaded.credentials.inventory.length, 0);
