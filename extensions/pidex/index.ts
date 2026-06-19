@@ -371,6 +371,12 @@ export function projectPipelineModeEvidenceLine(result: ProjectPipelineModeResul
 	return `project_pipeline_mode: ${result.mode ?? "host-direct"}; source: ${result.source ?? "unknown"}; no_fallback: ${result.no_fallback === true}`;
 }
 
+export function projectPipelineModeInstructionLine(result: ProjectPipelineModeResult): string {
+	return result.mode === "project-pipeline"
+		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Prefer the project-pipeline.run-flow facade for end-to-end create/open, source import/clone, selected credential bootstrap, child Pi execution in the container, and archive sync. Host archive sync is limited to agents.output/** and wiki/**; do not mirror source back to the host."
+		: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.";
+}
+
 function sandboxEvidenceLine(): string {
 	const state = resolveSandboxState();
 	return state.enabled
@@ -2591,9 +2597,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
 			`PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,
-			projectPipelineMode.mode === "project-pipeline"
-				? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use project-pipeline helpers to create/open the persistent Project Sandbox, import/clone source, bootstrap selected credentials, run child Pi in the container, and sync only agents.output/** and wiki/** back to the host archive."
-				: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.",
+			projectPipelineModeInstructionLine(projectPipelineMode),
 			`PIDEX sandbox preflight: ${sandboxState.enabled ? "hardened-pipeline enabled" : "off"}; ${sandboxProbe.summary}.`,
 			sandboxState.enabled
 				? "Sandbox is internal hardening, not a user workflow change. Continue normal /pidex orchestration and dynamic routing. For source-mutating/risky phases, use the sandbox runtime helpers and include sandbox evidence or SANDBOX-SKIP in artifacts. Do not ask the user mid-run for sandbox configuration."

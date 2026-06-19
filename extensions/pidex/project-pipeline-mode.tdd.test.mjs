@@ -16,6 +16,13 @@ test('projectPipelineModeEvidenceLine reports decision-required without fallback
   assert.match(line, /missing saved mode/);
 });
 
+test('projectPipelineModeInstructionLine points project-pipeline to run-flow facade', () => {
+  const line = mod.projectPipelineModeInstructionLine({ ok: true, mode: 'project-pipeline', no_fallback: true });
+  assert.match(line, /project-pipeline\.run-flow/);
+  assert.match(line, /do not fall back/);
+  assert.match(line, /do not mirror source/);
+});
+
 test('runProjectPipelineModeResolver fails closed when helper is missing', () => {
   const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runProjectPipelineModeResolver(process.cwd())));"], {
     cwd: process.cwd(),
