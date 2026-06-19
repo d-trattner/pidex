@@ -172,6 +172,7 @@ const METRICS_DIR = path.join(STATE_DIR, "metrics");
 const PRICING_PATH = path.join(PACKAGE_ROOT, "config", "pricing.json");
 const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "latest.json");
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
+const PROJECT_PIPELINE_MODE_SCRIPT = path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "mode-resolver.mjs");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
@@ -330,6 +331,44 @@ function resolveSandboxState(): SandboxState {
 		localConfigPath: SANDBOX_LOCAL_CONFIG_PATH,
 		profile,
 	};
+}
+
+type ProjectPipelineModeResult = {
+	ok: boolean;
+	mode?: "host-direct" | "hardened-pipeline" | "project-pipeline";
+	source?: string;
+	decision_required?: boolean;
+	reason?: string;
+	choices?: string[];
+	no_fallback?: boolean;
+};
+
+export function runProjectPipelineModeResolver(projectRoot: string, mode?: string): ProjectPipelineModeResult {
+	if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: true, mode: "host-direct", source: "helper-missing" };
+	const args = [PROJECT_PIPELINE_MODE_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-root", projectRoot, "--json"];
+	if (mode) args.push("--mode", mode, "--source", "interactive");
+	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 10_000 });
+	try {
+		const parsed = JSON.parse(proc.stdout || "{}");
+		return parsed;
+	} catch {
+		return { ok: false, decision_required: true, reason: `project-pipeline mode resolver failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1000)}` };
+	}
+}
+
+async function resolveProjectPipelineModeForCommand(ctx: any): Promise<ProjectPipelineModeResult> {
+	const projectRoot = path.resolve(ctx.cwd ?? process.cwd());
+	const current = runProjectPipelineModeResolver(projectRoot);
+	if (!current.decision_required) return current;
+	if (!ctx.hasUI) return current;
+	const choice = await ctx.ui.select("PIDEX pipeline mode for this project? This is saved per project. Project Pipeline uses a persistent Docker Project Sandbox and does not fall back automatically to host-direct.", ["host-direct", "hardened-pipeline", "project-pipeline", "Cancel"]);
+	if (choice === "Cancel") return { ok: false, decision_required: true, reason: "user cancelled pipeline mode selection" };
+	return runProjectPipelineModeResolver(projectRoot, choice);
+}
+
+export function projectPipelineModeEvidenceLine(result: ProjectPipelineModeResult): string {
+	if (!result.ok && result.decision_required) return `project_pipeline_mode: decision-required; reason: ${result.reason ?? "missing saved mode"}`;
+	return `project_pipeline_mode: ${result.mode ?? "host-direct"}; source: ${result.source ?? "unknown"}; no_fallback: ${result.no_fallback === true}`;
 }
 
 function sandboxEvidenceLine(): string {
@@ -2525,6 +2564,11 @@ export default function runningPi(pi: ExtensionAPI) {
 			ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before starting PIDEX.` : canonicalHomeMissingMessage(), "warning");
 			return;
 		}
+		const projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx);
+		if (!projectPipelineMode.ok && projectPipelineMode.decision_required) {
+			ctx.ui.notify(`PIDEX project mode is required before starting: ${projectPipelineMode.reason ?? "missing saved mode"}`, "warning");
+			return;
+		}
 		const authPreflight = await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
 		const sandboxState = resolveSandboxState();
@@ -2546,6 +2590,10 @@ export default function runningPi(pi: ExtensionAPI) {
 			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
+			`PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,
+			projectPipelineMode.mode === "project-pipeline"
+				? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use project-pipeline helpers to create/open the persistent Project Sandbox, import/clone source, bootstrap selected credentials, run child Pi in the container, and sync only agents.output/** and wiki/** back to the host archive."
+				: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.",
 			`PIDEX sandbox preflight: ${sandboxState.enabled ? "hardened-pipeline enabled" : "off"}; ${sandboxProbe.summary}.`,
 			sandboxState.enabled
 				? "Sandbox is internal hardening, not a user workflow change. Continue normal /pidex orchestration and dynamic routing. For source-mutating/risky phases, use the sandbox runtime helpers and include sandbox evidence or SANDBOX-SKIP in artifacts. Do not ask the user mid-run for sandbox configuration."
