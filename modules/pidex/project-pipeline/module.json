@@ -115,6 +115,24 @@
       }
     },
     {
+      "id": "project-pipeline.mode-resolver",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "implementation", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/mode-resolver.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--(pidex-root|project-root|mode|source)$", "^--json$", "^(host-direct|hardened-pipeline|project-pipeline)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
       "id": "project-pipeline.status",
       "kind": "check",
       "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
