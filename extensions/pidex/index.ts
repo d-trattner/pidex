@@ -174,6 +174,7 @@ const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "lat
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
 const PROJECT_PIPELINE_MODE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_MODE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "mode-resolver.mjs");
 const PROJECT_PIPELINE_RUN_FLOW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_RUN_FLOW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "run-flow.mjs");
+const PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "orchestrator.mjs");
 const PROJECT_PIPELINE_STATUS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "status.mjs");
 const PROJECT_PIPELINE_LIFECYCLE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "lifecycle.mjs");
 const PROJECT_PIPELINE_CREDENTIALS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_CREDENTIALS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "credentials.mjs");
@@ -377,7 +378,7 @@ export function projectPipelineModeEvidenceLine(result: ProjectPipelineModeResul
 
 export function projectPipelineModeInstructionLine(result: ProjectPipelineModeResult): string {
 	return result.mode === "project-pipeline"
-		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use the project-pipeline.run-flow facade for end-to-end create/open, source import/clone, selected credential bootstrap, child Pi execution in the container, and archive sync. Host archive sync is limited to agents.output/** and wiki/**; do not mirror source back to the host."
+		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use the project-pipeline.orchestrator facade for end-to-end create/open, source import/clone, selected credential bootstrap, sequential child Pi execution in the container, and archive sync. Host archive sync is limited to agents.output/** and wiki/**; do not mirror source back to the host."
 		: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.";
 }
 
@@ -408,18 +409,17 @@ export function buildProjectPipelineRunFlowArgs(request: ProjectPipelineRunFlowR
 	const projectRoot = path.resolve(request.projectRoot || process.cwd());
 	const task = String(request.task || "").trim();
 	if (!task) throw new Error("Project Pipeline run-flow requires an initial task; no host-direct fallback is allowed.");
-	if (!fs.existsSync(PROJECT_PIPELINE_RUN_FLOW_SCRIPT)) throw new Error(`project-pipeline run-flow helper missing at ${PROJECT_PIPELINE_RUN_FLOW_SCRIPT}; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd`);
+	if (!fs.existsSync(PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT)) throw new Error(`project-pipeline orchestrator helper missing at ${PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT}; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd`);
 	const projectId = slugForProjectPipelineId(projectRoot);
 	const args = [
-		PROJECT_PIPELINE_RUN_FLOW_SCRIPT,
+		PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT,
 		"--pidex-root", PACKAGE_ROOT,
 		"--project-id", projectId,
 		"--source", projectRoot,
-		"--agent", "pidex-planner",
 		"--task", [
 			"Project Pipeline /pd entrypoint. You are running inside the persistent Project Sandbox at /workspace.",
-			"Start the PIDEX planning/preflight workflow for the user's task. Do not run host-direct or hardened-pipeline fallback.",
-			"Write your full planning/preflight artifact under agents.output/plans/** and finish with a ROUTING block whose context_file points to that artifact.",
+			"Run the configured in-container PIDEX phase chain for the user's task. Do not run host-direct or hardened-pipeline fallback.",
+			"Each phase must write its full artifact under agents.output/** and finish with a ROUTING block whose context_file points to that artifact.",
 			`Initial user task: ${task}`,
 		].join("\n\n"),
 		"--json",
@@ -431,7 +431,7 @@ export function buildProjectPipelineRunFlowArgs(request: ProjectPipelineRunFlowR
 			"--pi-settings", path.join(os.homedir(), ".pi", "agent", "settings.json"),
 			"--acknowledge-trusted-persistent-container");
 	}
-	return { script: PROJECT_PIPELINE_RUN_FLOW_SCRIPT, projectId, args };
+	return { script: PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT, projectId, args };
 }
 
 export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest): ProjectPipelineRunFlowResult {
@@ -451,8 +451,9 @@ export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRun
 	try {
 		const parsed = JSON.parse(result.stdout);
 		const projectId = String(parsed?.lifecycle?.record?.project_id || result.projectId || "unknown-project");
-		const contextFile = parsed?.run?.context_file || parsed?.run?.routing?.context_file || parsed?.archive_context_file;
-		const archiveStatus = parsed?.run?.archive_sync_status || (parsed?.run?.archiveSyncReport?.ok === true ? "complete" : undefined);
+		const finalRun = Array.isArray(parsed?.runs) ? parsed.runs.at(-1) : undefined;
+		const contextFile = parsed?.final_context_file || finalRun?.context_file || parsed?.run?.context_file || parsed?.run?.routing?.context_file || parsed?.archive_context_file;
+		const archiveStatus = finalRun?.archive_sync_status || parsed?.run?.archive_sync_status || (parsed?.run?.archiveSyncReport?.ok === true ? "complete" : undefined);
 		const noFallback = parsed?.no_fallback === true || result.no_fallback === true;
 		return [
 			`Project Pipeline run-flow complete for ${projectId}.`,
@@ -637,18 +638,18 @@ export function shouldStartProjectPipelineRunFlow(result: ProjectPipelineModeRes
 async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): Promise<void> {
 	const initialTask = task?.trim();
 	if (!initialTask) {
-		await ctx.ui.notify("Project Pipeline mode is fail-closed and the direct run-flow bridge requires an initial task. Re-run /pd with a task description; no host-direct fallback was used.", "warning");
+		await ctx.ui.notify("Project Pipeline mode is fail-closed and the direct orchestrator bridge requires an initial task. Re-run /pd with a task description; no host-direct fallback was used.", "warning");
 		return;
 	}
 	const copyPiCredentials = await maybeCopyProjectPipelinePiCredentials(ctx);
 	if (copyPiCredentials === undefined) {
-		await ctx.ui.notify("Project Pipeline run-flow cancelled before credential decision; no fallback was used.", "warning");
+		await ctx.ui.notify("Project Pipeline orchestrator cancelled before credential decision; no fallback was used.", "warning");
 		return;
 	}
-	await ctx.ui.notify("Starting Project Pipeline run-flow in persistent Docker Project Sandbox", "info");
+	await ctx.ui.notify("Starting Project Pipeline orchestrator in persistent Docker Project Sandbox", "info");
 	const result = runProjectPipelineRunFlow({ projectRoot: ctx.cwd ?? process.cwd(), task: initialTask, copyPiCredentials, acknowledgeTrustedPersistentContainer: copyPiCredentials });
 	if (!result.ok) {
-		await ctx.ui.notify(`Project Pipeline run-flow failed closed (no fallback). ${result.error ?? `exit=${result.exitCode}`}`, "error");
+		await ctx.ui.notify(`Project Pipeline orchestrator failed closed (no fallback). ${result.error ?? `exit=${result.exitCode}`}`, "error");
 		return;
 	}
 	await ctx.ui.notify(summarizeProjectPipelineRunFlowResult(result), "info");

@@ -19,21 +19,21 @@ test('projectPipelineModeEvidenceLine reports decision-required without fallback
   assert.match(line, /missing saved mode/);
 });
 
-test('projectPipelineModeInstructionLine points project-pipeline to run-flow facade', () => {
+test('projectPipelineModeInstructionLine points project-pipeline to orchestrator facade', () => {
   const line = mod.projectPipelineModeInstructionLine({ ok: true, mode: 'project-pipeline', no_fallback: true });
-  assert.match(line, /project-pipeline\.run-flow/);
+  assert.match(line, /project-pipeline\.orchestrator/);
   assert.match(line, /do not fall back/);
   assert.match(line, /do not mirror source/);
 });
 
-test('buildProjectPipelineRunFlowArgs constructs fail-closed planner run-flow request', () => {
+test('buildProjectPipelineRunFlowArgs constructs fail-closed orchestrator request', () => {
   const built = mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'ship the thing', copyPiCredentials: true, acknowledgeTrustedPersistentContainer: true });
   assert.match(built.projectId, /^pp-/);
-  assert.equal(built.args[0].endsWith(['modules', 'pidex', 'project-pipeline', 'scripts', 'project-pipeline', 'run-flow.mjs'].join('/')), true);
+  assert.equal(built.args[0].endsWith(['modules', 'pidex', 'project-pipeline', 'scripts', 'project-pipeline', 'orchestrator.mjs'].join('/')), true);
   assert.equal(built.args.includes('--source'), true);
   assert.equal(built.args.includes(process.cwd()), true);
-  assert.equal(built.args.includes('--agent'), true);
-  assert.equal(built.args.includes('pidex-planner'), true);
+  assert.equal(built.args.includes('--agent'), false);
+  assert.equal(built.args.includes('pidex-planner'), false);
   assert.equal(built.args.includes('--acknowledge-trusted-persistent-container'), true);
   assert.match(built.args[built.args.indexOf('--task') + 1], /Do not run host-direct or hardened-pipeline fallback/);
 });
@@ -52,9 +52,9 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
     no_fallback: true,
     stdout: JSON.stringify({
       no_fallback: true,
+      final_context_file: 'agents.output/plans/demo.md',
+      runs: [{ archive_sync_status: 'complete' }],
       run: {
-        context_file: 'agents.output/plans/demo.md',
-        archive_sync_status: 'complete',
         finalText: 'SECRET-LIKE-LARGE-CHILD-OUTPUT-SHOULD-NOT-BE-IN-UI',
       },
       credentials: { inventory: [{ fingerprint: 'sha256:abc' }] },
@@ -157,17 +157,17 @@ test('buildProjectPipelineRunFlowArgs requires explicit credential acknowledgeme
   assert.throws(() => mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'x', copyPiCredentials: true }), /acknowledgement/);
 });
 
-test('runProjectPipelineRunFlow fails closed when helper is missing', () => {
+test('runProjectPipelineRunFlow fails closed when orchestrator helper is missing', () => {
   const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runProjectPipelineRunFlow({ projectRoot: process.cwd(), task: 'x' })));"], {
     cwd: process.cwd(),
-    env: { ...process.env, PIDEX_PROJECT_PIPELINE_RUN_FLOW_SCRIPT: '/tmp/pidex-missing-run-flow.mjs' },
+    env: { ...process.env, PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT: '/tmp/pidex-missing-orchestrator.mjs' },
     encoding: 'utf8'
   });
   assert.equal(proc.status, 0, proc.stderr);
   const parsed = JSON.parse(proc.stdout);
   assert.equal(parsed.ok, false);
   assert.equal(parsed.no_fallback, true);
-  assert.match(parsed.error, /run-flow helper missing/);
+  assert.match(parsed.error, /orchestrator helper missing/);
 });
 
 test('runProjectPipelineModeResolver fails closed when helper is missing', () => {
