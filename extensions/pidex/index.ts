@@ -527,7 +527,10 @@ function summarizeProjectRecords(projects: any[]): string {
 	return projects.map((project: any) => {
 		const runs = Array.isArray(project.runs) ? project.runs.length : 0;
 		const archive = project.archive?.path ? ` archive=${project.archive.path}` : "";
-		return `${project.project_id}: status=${project.status ?? "unknown"} source=${project.source?.kind ?? "unknown"} credentials(pi=${project.credentials?.pi ?? "unknown"}, git=${project.credentials?.git ?? "unknown"}) runs=${runs}${archive}`;
+		const dockerHealth = project.docker_health?.container
+			? ` docker=${project.docker_health.container.exists ? project.docker_health.container.status : "missing"}`
+			: "";
+		return `${project.project_id}: status=${project.status ?? "unknown"}${dockerHealth} source=${project.source?.kind ?? "unknown"} credentials(pi=${project.credentials?.pi ?? "unknown"}, git=${project.credentials?.git ?? "unknown"}) runs=${runs}${archive}`;
 	}).join("\n");
 }
 
