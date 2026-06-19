@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -173,6 +173,7 @@ const PRICING_PATH = path.join(PACKAGE_ROOT, "config", "pricing.json");
 const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "latest.json");
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
 const PROJECT_PIPELINE_MODE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_MODE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "mode-resolver.mjs");
+const PROJECT_PIPELINE_RUN_FLOW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_RUN_FLOW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "run-flow.mjs");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
@@ -373,8 +374,99 @@ export function projectPipelineModeEvidenceLine(result: ProjectPipelineModeResul
 
 export function projectPipelineModeInstructionLine(result: ProjectPipelineModeResult): string {
 	return result.mode === "project-pipeline"
-		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Prefer the project-pipeline.run-flow facade for end-to-end create/open, source import/clone, selected credential bootstrap, child Pi execution in the container, and archive sync. Host archive sync is limited to agents.output/** and wiki/**; do not mirror source back to the host."
+		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use the project-pipeline.run-flow facade for end-to-end create/open, source import/clone, selected credential bootstrap, child Pi execution in the container, and archive sync. Host archive sync is limited to agents.output/** and wiki/**; do not mirror source back to the host."
 		: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.";
+}
+
+type ProjectPipelineRunFlowRequest = {
+	projectRoot: string;
+	task: string;
+	copyPiCredentials?: boolean;
+	acknowledgeTrustedPersistentContainer?: boolean;
+};
+
+type ProjectPipelineRunFlowResult = {
+	ok: boolean;
+	exitCode?: number | null;
+	projectId?: string;
+	stdout?: string;
+	stderr?: string;
+	error?: string;
+	no_fallback: true;
+};
+
+function slugForProjectPipelineId(projectRoot: string): string {
+	const base = path.basename(path.resolve(projectRoot)).toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "project";
+	const hash = createHash("sha256").update(path.resolve(projectRoot)).digest("hex").slice(0, 12);
+	return `pp-${base}-${hash}`.slice(0, 80);
+}
+
+export function buildProjectPipelineRunFlowArgs(request: ProjectPipelineRunFlowRequest): { script: string; projectId: string; args: string[] } {
+	const projectRoot = path.resolve(request.projectRoot || process.cwd());
+	const task = String(request.task || "").trim();
+	if (!task) throw new Error("Project Pipeline run-flow requires an initial task; no host-direct fallback is allowed.");
+	if (!fs.existsSync(PROJECT_PIPELINE_RUN_FLOW_SCRIPT)) throw new Error(`project-pipeline run-flow helper missing at ${PROJECT_PIPELINE_RUN_FLOW_SCRIPT}; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd`);
+	const projectId = slugForProjectPipelineId(projectRoot);
+	const args = [
+		PROJECT_PIPELINE_RUN_FLOW_SCRIPT,
+		"--pidex-root", PACKAGE_ROOT,
+		"--project-id", projectId,
+		"--source", projectRoot,
+		"--agent", "pidex-planner",
+		"--task", [
+			"Project Pipeline /pd entrypoint. You are running inside the persistent Project Sandbox at /workspace.",
+			"Start the PIDEX planning/preflight workflow for the user's task. Do not run host-direct or hardened-pipeline fallback.",
+			"Write your full planning/preflight artifact under agents.output/plans/** and finish with a ROUTING block whose context_file points to that artifact.",
+			`Initial user task: ${task}`,
+		].join("\n\n"),
+		"--json",
+	];
+	if (request.copyPiCredentials) {
+		if (!request.acknowledgeTrustedPersistentContainer) throw new Error("copying Pi credentials into Project Pipeline requires trusted persistent container acknowledgement");
+		args.splice(args.length - 1, 0,
+			"--pi-auth", path.join(os.homedir(), ".pi", "agent", "auth.json"),
+			"--pi-settings", path.join(os.homedir(), ".pi", "agent", "settings.json"),
+			"--acknowledge-trusted-persistent-container");
+	}
+	return { script: PROJECT_PIPELINE_RUN_FLOW_SCRIPT, projectId, args };
+}
+
+export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest): ProjectPipelineRunFlowResult {
+	let built: { projectId: string; args: string[] };
+	try {
+		built = buildProjectPipelineRunFlowArgs(request);
+	} catch (error: any) {
+		return { ok: false, error: error?.message ?? String(error), no_fallback: true };
+	}
+	const proc = spawnSync(process.execPath, built.args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 20 * 1024 * 1024 });
+	return { ok: proc.status === 0, exitCode: proc.status, projectId: built.projectId, stdout: proc.stdout || "", stderr: proc.stderr || "", error: proc.status === 0 ? undefined : clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 4000), no_fallback: true };
+}
+
+async function maybeCopyProjectPipelinePiCredentials(ctx: any): Promise<boolean | undefined> {
+	if (!ctx.hasUI) return process.env.PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS === "1" ? true : undefined;
+	const choice = await ctx.ui.select("Project Pipeline runs Pi inside the persistent Project Sandbox. Copy host Pi auth/settings into this trusted per-project secrets volume?", ["Copy Pi credentials", "Skip credentials", "Cancel"]);
+	if (choice === "Cancel") return undefined;
+	return choice === "Copy Pi credentials";
+}
+
+async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): Promise<void> {
+	const initialTask = task?.trim();
+	if (!initialTask) {
+		await ctx.ui.notify("Project Pipeline mode is fail-closed and the direct run-flow bridge requires an initial task. Re-run /pd with a task description; no host-direct fallback was used.", "warning");
+		return;
+	}
+	const copyPiCredentials = await maybeCopyProjectPipelinePiCredentials(ctx);
+	if (copyPiCredentials === undefined) {
+		await ctx.ui.notify("Project Pipeline run-flow cancelled before credential decision; no fallback was used.", "warning");
+		return;
+	}
+	await ctx.ui.notify("Starting Project Pipeline run-flow in persistent Docker Project Sandbox", "info");
+	const result = runProjectPipelineRunFlow({ projectRoot: ctx.cwd ?? process.cwd(), task: initialTask, copyPiCredentials, acknowledgeTrustedPersistentContainer: copyPiCredentials });
+	if (!result.ok) {
+		await ctx.ui.notify(`Project Pipeline run-flow failed closed (no fallback). ${result.error ?? `exit=${result.exitCode}`}`, "error");
+		return;
+	}
+	await ctx.ui.notify(`Project Pipeline run-flow complete for ${result.projectId}. ${clipEnd(result.stdout || "", 1200)}`, "info");
 }
 
 function sandboxEvidenceLine(): string {
@@ -2573,6 +2665,10 @@ export default function runningPi(pi: ExtensionAPI) {
 		const projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx);
 		if (!projectPipelineMode.ok && projectPipelineMode.decision_required) {
 			ctx.ui.notify(`PIDEX project mode is required before starting: ${projectPipelineMode.reason ?? "missing saved mode"}`, "warning");
+			return;
+		}
+		if (projectPipelineMode.mode === "project-pipeline") {
+			await startProjectPipelineRunFlow(ctx, task);
 			return;
 		}
 		const authPreflight = await runDelegateAuthPreflight();
