@@ -16,7 +16,7 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 PIDEX is an experimental direct-mode MVP. Direct mode is the supported path today.
 
-The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes an optional Docker-backed sandbox MVP for selected source-changing pipeline work; it is disabled by default and requires the canonical `~/pidex` runtime checkout.
+The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes Docker-backed sandboxing in two forms: the optional hardened agent sandbox for selected source-changing pipeline work, and the validated local Project Pipeline MVP where project work runs inside a persistent Docker Project Sandbox. Both require the canonical `~/pidex` runtime checkout.
 
 ## Detailed feature docs
 
@@ -28,6 +28,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Wiki hygiene](readme/wiki-hygiene.md)
 - [Optional parallel agents](readme/parallel-agents.md)
 - [Docker sandbox](readme/sandbox.md)
+- [Project Pipeline](readme/project-pipeline.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
 - [PIDEX modules](readme/modules.md)
@@ -175,7 +176,7 @@ In Pi:
 /pidex Work on ~/my-project
 ```
 
-`/pd` is available as a short alias. The orchestrator routes work through Codex-oriented `pidex-*` specialist agents.
+`/pd` is available as a short alias. The orchestrator routes work through Codex-oriented `pidex-*` specialist agents. For projects saved in `project-pipeline` mode, `/pd` runs through the persistent Docker Project Sandbox path instead of host-direct kickoff.
 
 Project session memory:
 

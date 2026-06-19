@@ -1,11 +1,17 @@
 # Docker sandbox
 
-PIDEX includes an optional Docker-backed sandbox runtime for selected source-changing pipeline steps. It is internal execution hardening, not a separate user workflow: `/pidex` and `/pd` stay the normal entrypoints.
+PIDEX includes Docker-backed sandboxing in two related but separate tracks:
+
+- **hardened agent sandbox** (`hardened-pipeline`): optional internal execution hardening for selected source-changing pipeline steps, with host source remaining canonical.
+- **Project Pipeline** (`project-pipeline`): persistent Docker Project Sandbox where project source and Pi run inside the container, with only safe artifacts/wiki synced back to host archive.
+
+This page focuses on the hardened agent sandbox. See [Project Pipeline](project-pipeline.md) for the persistent project workflow.
 
 ## Status
 
 - Public default: off.
-- MVP mode: `hardened-pipeline`.
+- Agent-sandbox MVP mode: `hardened-pipeline`.
+- Project Pipeline local MVP: validated separately; see [Project Pipeline](project-pipeline.md).
 - Runtime requirement: canonical PIDEX checkout at `~/pidex` / `$HOME\pidex`, or `PIDEX_ROOT` pointing at an equivalent full checkout.
 - npm package role: lightweight Pi bootstrap only; sandbox runtime is a canonical-checkout feature.
 - Linux/direct-mode validation: real `/pd` small pipeline passed end-to-end with sandbox enabled.
