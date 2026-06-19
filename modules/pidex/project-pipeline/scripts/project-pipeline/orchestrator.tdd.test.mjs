@@ -19,6 +19,7 @@ function seedRecord(pidexRoot, projectId = 'pp-orch-test') {
 test('parsePhaseList defaults and validates pidex phases', () => {
   assert.deepEqual(parsePhaseList('pidex-planner,pidex-qa'), ['pidex-planner', 'pidex-qa']);
   assert.throws(() => parsePhaseList('pidex-planner,bash -c nope'), /invalid project-pipeline phase/);
+  assert.throws(() => parsePhaseList(['pidex-qa\nINJECT']), /invalid project-pipeline phase/);
   assert.throws(() => parsePhaseList(' , '), /at least one/);
   assert.equal(parsePhaseList().includes('pidex-implementer'), true);
 });
@@ -61,6 +62,15 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
+test('runProjectPipelineOrchestration validates array phases before runner execution', () => {
+  const pidexRoot = tmp();
+  seedRecord(pidexRoot, 'pp-orch-invalid');
+  let runnerCalled = false;
+  assert.throws(() => runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-invalid', task: 'x', phases: ['pidex-qa\nINJECT'], runner: () => { runnerCalled = true; return 'ok'; } }), /invalid project-pipeline phase/);
+  assert.equal(runnerCalled, false);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
 test('runProjectPipelineOrchestration stops fail-closed on failed phase', () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
@@ -83,5 +93,24 @@ test('runProjectPipelineOrchestration stops fail-closed on failed phase', () => 
   assert.equal(result.no_fallback, true);
   assert.equal(result.failed_agent, 'pidex-critic');
   assert.equal(result.runs.length, 2);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration omits failed child raw output from public result', () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-secret-fail');
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) return { status: 1, stdout: 'token=SECRET_DEMO_VALUE_1234567890', stderr: 'stderr secret' };
+    return 'ok';
+  };
+  const result = runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secret-fail', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
+  const serialized = JSON.stringify(result);
+  assert.equal(result.ok, false);
+  assert.equal(result.run.error, 'child-pi-failed');
+  assert.equal(Object.hasOwn(result.run, 'finalText'), false);
+  assert.doesNotMatch(serialized, /SECRET_DEMO_VALUE/);
+  assert.doesNotMatch(serialized, /stderr secret/);
   rmSync(pidexRoot, { recursive: true, force: true });
 });

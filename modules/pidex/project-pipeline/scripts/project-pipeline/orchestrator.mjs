@@ -21,12 +21,26 @@ export const DEFAULT_PROJECT_PIPELINE_PHASES = Object.freeze([
 
 export function parsePhaseList(value) {
   if (!value) return [...DEFAULT_PROJECT_PIPELINE_PHASES];
-  const phases = String(value).split(',').map((part) => part.trim()).filter(Boolean);
+  const phases = (Array.isArray(value) ? value : String(value).split(',')).map((part) => String(part).trim()).filter(Boolean);
   if (!phases.length) throw new Error('--phases must include at least one pidex-* agent');
   for (const phase of phases) {
     if (!/^pidex-[a-z0-9-]+$/.test(phase)) throw new Error(`invalid project-pipeline phase: ${phase}`);
   }
   return phases;
+}
+
+function summarizeRunForPublicResult(run = {}) {
+  return {
+    ok: run.ok === true,
+    exitCode: run.exitCode,
+    error: run.error,
+    reason: run.reason,
+    routing: run.routing,
+    context_file: run.context_file,
+    archive_context_file: run.archive_context_file,
+    archive_sync_status: run.archive_sync_status,
+    project_run_id: run.project_run_id,
+  };
 }
 
 export function buildPhaseTask({ phase, initialTask, previous, phaseIndex, phaseCount }) {
@@ -72,7 +86,7 @@ export function runProjectPipelineOrchestration(options = {}) {
   const projectId = options.projectId;
   if (!projectId) throw new Error('--project-id is required');
   if (process.env.PIDEX_PROJECT_PIPELINE_CHILD === '1') return { ok: false, error: 'project-pipeline-recursion-guard', no_fallback: true };
-  const phases = Array.isArray(options.phases) ? options.phases : parsePhaseList(options.phases);
+  const phases = parsePhaseList(options.phases);
   const setup = ensureSandboxAndSource(options, pidexRoot, projectId);
   if (!setup.ok) return setup;
   if (setup.source?.ok === false) return { ok: false, error: 'source-init-failed', lifecycle: setup.lifecycle, source: setup.source, no_fallback: true };
@@ -109,7 +123,7 @@ export function runProjectPipelineOrchestration(options = {}) {
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
     }
     runs.push({ agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, error: run.error, reason: run.reason });
-    if (!run.ok) return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run, no_fallback: true };
+    if (!run.ok) return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
   }
   return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, no_fallback: true };
