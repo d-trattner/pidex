@@ -151,6 +151,24 @@
       }
     },
     {
+      "id": "project-pipeline.orchestrator",
+      "kind": "tool",
+      "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|task|phases|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ ,-]+$"]
+        }
+      }
+    },
+    {
       "id": "project-pipeline.status",
       "kind": "check",
       "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
