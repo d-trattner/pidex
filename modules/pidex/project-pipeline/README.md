@@ -4,7 +4,7 @@ Experimental local-first Project Sandbox runtime for Initiative 021.
 
 This module is separate from `pidex.sandbox-runtime` / agent-pipeline. Project Pipeline manages persistent Docker-backed project environments where source is canonical inside the Project Sandbox.
 
-MVP status: validated local-first helper/runtime path for registry, lifecycle, conservative repair, image build/status, mode resolution, local import, Git clone, credentials, project-agent execution, host archive sync, a fail-closed run-flow facade, and a sequential in-container orchestrator facade. `/pd` with explicit saved `project-pipeline` mode now invokes the typed orchestrator bridge directly instead of host-direct kickoff.
+MVP status: validated local-first helper/runtime path for registry, lifecycle, conservative repair, image build/status, mode resolution, local import, Git clone, credentials, project-agent execution, host archive sync, a fail-closed run-flow facade, and a sequential in-container orchestrator facade with phase-specific role prompts. `/pd` with explicit saved `project-pipeline` mode now invokes the typed orchestrator bridge directly instead of host-direct kickoff.
 
 ## Safety invariants
 
@@ -25,8 +25,8 @@ MVP status: validated local-first helper/runtime path for registry, lifecycle, c
 → create/open persistent Docker Project Sandbox
 → import local source or clone Git source into /workspace
 → optionally copy selected Pi/provider credentials after trusted-container acknowledgement
-→ run the configured child Pi phase chain in the container
+→ run the configured child Pi phase chain in the container with phase-specific role guidance
 → sync only agents.output/** and wiki/** back to <pidex-root>/state/project-archives/<project-id>/
 ```
 
-The local MVP has been validated with live Docker UAT for direct run-flow execution, `/pd` orchestration, local management commands, credential reset/status, run metadata summaries, and conservative repair behavior. Deferred work includes external Docker hosts, PR automation, dashboard/archive browsing UX, and deeper specialist prompt/role hardening.
+The local MVP has been validated with live Docker UAT for direct run-flow execution, `/pd` orchestration, local management commands, credential reset/status, run metadata summaries, conservative repair behavior, and role-guided sequential orchestration. Deferred work includes external Docker hosts, PR automation, and dashboard/archive browsing UX.
