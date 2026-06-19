@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -77,6 +77,8 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('runs --project-id pp-demo'), { command: 'runs', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('show-run pp-demo pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
   assert.deepEqual(mod.parsePdProjectArgs('show-run --project-id pp-demo --run-id pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
+  assert.deepEqual(mod.parsePdProjectArgs('artifacts pp-demo'), { command: 'artifacts', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('artifacts --project-id pp-demo'), { command: 'artifacts', projectId: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('show-run pp-demo pprun-1 --run-id other'), /duplicate run id/);
   assert.throws(() => mod.parsePdProjectArgs('runs pp-demo --run-id pprun-1'), /unknown pdproject runs argument: --run-id/);
   assert.throws(() => mod.parsePdProjectArgs('runs --project-id'), /--project-id requires a value/);
@@ -98,6 +100,24 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.throws(() => mod.parsePdProjectArgs('remove --project-id --confirm pp-demo'), /--project-id requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('remove pp-demo --confirm'), /--confirm requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('remove pp-demo --confirm wrong'), /requires --confirm pp-demo/);
+});
+
+test('runPdProjectCommand lists archive artifacts without file contents or unsafe paths', () => {
+  const archive = path.join(process.cwd(), 'state', 'project-archives', 'pp-artifacts-test');
+  mkdirSync(path.join(archive, 'agents.output', 'qa'), { recursive: true });
+  mkdirSync(path.join(archive, 'wiki'), { recursive: true });
+  writeFileSync(path.join(archive, 'agents.output', 'qa', 'report.md'), 'SECRET-LIKE-CONTENT');
+  writeFileSync(path.join(archive, 'wiki', 'note.md'), 'wiki content');
+  try {
+    const result = mod.runPdProjectCommand({ command: 'artifacts', projectId: 'pp-artifacts-test' });
+    assert.equal(result.ok, true);
+    assert.match(result.summary, /agents\.output\/qa\/report\.md size=19/);
+    assert.match(result.summary, /wiki\/note\.md size=12/);
+    assert.doesNotMatch(result.summary, /SECRET-LIKE-CONTENT/);
+    assert.doesNotMatch(result.summary, /state\/project-archives/);
+  } finally {
+    rmSync(archive, { recursive: true, force: true });
+  }
 });
 
 test('runPdProjectCommand summarizes project runs without raw metadata', () => {

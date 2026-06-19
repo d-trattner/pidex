@@ -118,6 +118,14 @@ Show one run with allowlisted metadata only:
 
 `show-run` may report `archive_context=available`, but it does not print the host archive path, raw child output, fingerprints, or helper JSON.
 
+List archived artifact filenames and sizes without reading file contents:
+
+```text
+/pdproject artifacts <project-id>
+```
+
+`artifacts` lists only archive files under `agents.output/**` and `wiki/**`. It does not print file contents or host archive paths.
+
 Start/open an existing sandbox container:
 
 ```text

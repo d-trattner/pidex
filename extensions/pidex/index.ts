@@ -499,6 +499,7 @@ type PdProjectCommand =
 	| { command: "status"; projectId?: string }
 	| { command: "runs"; projectId: string }
 	| { command: "show-run"; projectId: string; runId: string }
+	| { command: "artifacts"; projectId: string }
 	| { command: "open"; projectId: string }
 	| { command: "repair"; projectId: string; confirm: string }
 	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
@@ -526,7 +527,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		}
 		return { command: "status", projectId };
 	}
-	if (command === "runs" || command === "show-run") {
+	if (command === "runs" || command === "show-run" || command === "artifacts") {
 		let projectId = "";
 		let runId = "";
 		for (let i = 0; i < parts.length; i += 1) {
@@ -545,7 +546,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 				if (!projectId) projectId = parts[i];
 				else if (command === "show-run" && !runId) runId = parts[i];
 				else if (command === "show-run") throw new Error("pdproject show-run received duplicate run id");
-				else throw new Error("pdproject runs received duplicate project id");
+				else throw new Error(`pdproject ${command} received duplicate project id`);
 			} else throw new Error(`unknown pdproject ${command} argument: ${parts[i]}`);
 		}
 		if (!projectId) throw new Error(`pdproject ${command} requires a project id`);
@@ -553,6 +554,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 			if (!runId) throw new Error("pdproject show-run requires a run id");
 			return { command, projectId, runId };
 		}
+		if (runId) throw new Error(`unknown pdproject ${command} argument: --run-id`);
 		return { command, projectId };
 	}
 	if (command === "open" || command === "repair") {
@@ -626,6 +628,7 @@ export function pdProjectUsage(): string {
 		"Usage: /pdproject status [project-id|--project-id ID]",
 		"       /pdproject runs <project-id>",
 		"       /pdproject show-run <project-id> <run-id>",
+		"       /pdproject artifacts <project-id>",
 		"       /pdproject open <project-id>",
 		"       /pdproject repair <project-id> --confirm <project-id>",
 		"       /pdproject credentials status <project-id>",
@@ -668,6 +671,43 @@ function summarizeProjectRun(project: any, runId: string): string {
 	return summarizeProjectRunLine(project?.project_id ?? "unknown-project", run, true);
 }
 
+function safePdProjectId(value: string): string {
+	const projectId = String(value || "");
+	if (!/^[A-Za-z0-9_.-]+$/.test(projectId) || projectId.includes("..")) throw new Error("invalid project id");
+	return projectId;
+}
+
+function collectProjectArchiveArtifacts(projectId: string): string[] {
+	const safeId = safePdProjectId(projectId);
+	const archiveRoot = path.join(PACKAGE_ROOT, "state", "project-archives", safeId);
+	if (!fs.existsSync(archiveRoot)) return [];
+	const out: string[] = [];
+	const roots = ["agents.output", "wiki"];
+	const walk = (relativeDir: string) => {
+		if (out.length >= 50) return;
+		const absoluteDir = path.join(archiveRoot, relativeDir);
+		if (!absoluteDir.startsWith(archiveRoot) || !fs.existsSync(absoluteDir)) return;
+		for (const name of fs.readdirSync(absoluteDir).sort()) {
+			if (out.length >= 50) break;
+			const rel = path.posix.join(relativeDir.replaceAll("\\", "/"), name);
+			if (rel.includes("..") || (!rel.startsWith("agents.output/") && rel !== "agents.output" && !rel.startsWith("wiki/") && rel !== "wiki")) continue;
+			const abs = path.join(archiveRoot, rel);
+			const stat = fs.lstatSync(abs);
+			if (stat.isSymbolicLink()) continue;
+			if (stat.isDirectory()) walk(rel);
+			else if (stat.isFile()) out.push(`${rel} size=${stat.size}`);
+		}
+	};
+	for (const root of roots) walk(root);
+	return out;
+}
+
+function summarizeProjectArtifacts(projectId: string): string {
+	const artifacts = collectProjectArchiveArtifacts(projectId);
+	if (!artifacts.length) return `${projectId}: no archived Project Pipeline artifacts found.`;
+	return artifacts.map((artifact) => `${projectId}: artifact=${artifact}`).join("\n");
+}
+
 function summarizeProjectCredentials(projectId: string, credentials: any): string {
 	const providers = Array.isArray(credentials?.providers) && credentials.providers.length ? credentials.providers.join(",") : "none";
 	const inventoryCount = Array.isArray(credentials?.inventory) ? credentials.inventory.length : 0;
@@ -688,6 +728,10 @@ function summarizeProjectRecords(projects: any[]): string {
 
 export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
+	if (parsed.command === "artifacts") {
+		try { return { ok: true, summary: summarizeProjectArtifacts(parsed.projectId) }; }
+		catch { return { ok: false, summary: "Project Pipeline artifacts failed: invalid project id" }; }
+	}
 	if (parsed.command === "status" || parsed.command === "runs" || parsed.command === "show-run") {
 		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: "project-pipeline status helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
 		const args = [PROJECT_PIPELINE_STATUS_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--json"];
