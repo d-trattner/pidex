@@ -12,7 +12,7 @@ In Project Pipeline mode, the project source lives and runs inside a persistent 
 - External Docker hosts: deferred.
 - PR automation/review branches: deferred.
 - Dashboard/archive browsing: deferred.
-- Full in-container multi-agent orchestration beyond the current planner/run-flow entrypoint: deferred.
+- In-container multi-agent orchestration: local facade and `/pd` bridge wired.
 
 ## Mental model
 
@@ -62,7 +62,7 @@ host-direct / hardened-pipeline / project-pipeline
 
 Choose `project-pipeline` for the persistent Docker Project Sandbox workflow.
 
-When Project Pipeline mode is active, `/pd` invokes the typed `project-pipeline.run-flow` bridge directly. It does not start the host-direct orchestrator.
+When Project Pipeline mode is active, `/pd` invokes the typed `project-pipeline.orchestrator` bridge. It does not start the host-direct orchestrator and does not fall back automatically.
 
 ## Credential prompt
 
@@ -166,7 +166,7 @@ or update `~/pidex` from Git.
 
 ## Current limitations
 
-- `/pd project-pipeline` currently enters the container through a planner/run-flow entrypoint. Full multi-agent in-container orchestration is the next major local-completion milestone.
+- The local orchestrator runs the default in-container phase chain through child Pi prompts. Further hardening can improve specialist role prompts, dashboard run browsing, and PR automation.
 - Project source is not exported back to host by PIDEX.
 - External Docker hosts are intentionally deferred until local Docker is fully polished.
 - PR creation/review automation is deferred.
