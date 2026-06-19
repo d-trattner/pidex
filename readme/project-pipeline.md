@@ -104,6 +104,12 @@ Show one sandbox:
 /pdproject status <project-id>
 ```
 
+Show recent Project Pipeline runs:
+
+```text
+/pdproject runs <project-id>
+```
+
 Start/open an existing sandbox container:
 
 ```text

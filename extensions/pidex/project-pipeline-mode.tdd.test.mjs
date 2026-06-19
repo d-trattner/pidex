@@ -73,6 +73,9 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
 test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('status'), { command: 'status', projectId: undefined });
   assert.deepEqual(mod.parsePdProjectArgs('status pp-demo'), { command: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('runs pp-demo'), { command: 'runs', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('runs --project-id pp-demo'), { command: 'runs', projectId: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('runs --project-id'), /--project-id requires a value/);
   assert.deepEqual(mod.parsePdProjectArgs('open pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('open --project-id pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('open --project-id'), /--project-id requires a value/);
@@ -86,6 +89,27 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.throws(() => mod.parsePdProjectArgs('remove --project-id --confirm pp-demo'), /--project-id requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('remove pp-demo --confirm'), /--confirm requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('remove pp-demo --confirm wrong'), /requires --confirm pp-demo/);
+});
+
+test('runPdProjectCommand summarizes project runs without raw metadata', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-runs-helper-'));
+  const helper = path.join(dir, 'status.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, projects: [{ project_id: 'pp-demo', runs: [{ project_run_id: 'pprun-1', archive_sync_status: 'complete', exit_code: 0, started_at: '2026-06-19T00:00:00.000Z', ended_at: '2026-06-19T00:00:01.000Z', finalText: 'SECRET-LIKE' }] }] }));\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'runs', projectId: 'pp-demo' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, true);
+    assert.match(parsed.summary, /run=pprun-1/);
+    assert.match(parsed.summary, /status=complete/);
+    assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('runPdProjectCommand fails closed when status helper is missing', () => {

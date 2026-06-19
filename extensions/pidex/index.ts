@@ -497,6 +497,7 @@ export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRun
 type PdProjectCommand =
 	| { command: "help" }
 	| { command: "status"; projectId?: string }
+	| { command: "runs"; projectId: string }
 	| { command: "open"; projectId: string }
 	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
 	| { command: "remove"; projectId: string; confirm: string };
@@ -522,6 +523,19 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 			else throw new Error(`unknown pdproject status argument: ${parts[i]}`);
 		}
 		return { command: "status", projectId };
+	}
+	if (command === "runs") {
+		let projectId = "";
+		for (let i = 0; i < parts.length; i += 1) {
+			if (parts[i] === "--project-id") {
+				const read = readPdProjectFlagValue(parts, i, "--project-id");
+				projectId = read.value;
+				i = read.nextIndex;
+			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			else throw new Error(`unknown pdproject runs argument: ${parts[i]}`);
+		}
+		if (!projectId) throw new Error("pdproject runs requires a project id");
+		return { command: "runs", projectId };
 	}
 	if (command === "open") {
 		let projectId = "";
@@ -582,6 +596,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 export function pdProjectUsage(): string {
 	return [
 		"Usage: /pdproject status [project-id|--project-id ID]",
+		"       /pdproject runs <project-id>",
 		"       /pdproject open <project-id>",
 		"       /pdproject credentials status <project-id>",
 		"       /pdproject credentials reset <project-id> --confirm <project-id>",
@@ -589,6 +604,18 @@ export function pdProjectUsage(): string {
 		"",
 		"Project Pipeline sandboxes are persistent. Removal is explicit and irreversible for the Docker container/volumes.",
 	].join("\n");
+}
+
+function summarizeProjectRuns(project: any): string {
+	const runs = Array.isArray(project?.runs) ? project.runs : [];
+	if (!runs.length) return `${project?.project_id ?? "unknown-project"}: no Project Pipeline runs recorded.`;
+	return runs.slice(-10).map((run: any) => [
+		`${project.project_id}: run=${run.project_run_id ?? "unknown"}`,
+		`status=${run.archive_sync_status ?? "unknown"}`,
+		run.exit_code === undefined ? undefined : `exit=${run.exit_code}`,
+		run.started_at ? `started=${run.started_at}` : undefined,
+		run.ended_at ? `ended=${run.ended_at}` : undefined,
+	].filter(Boolean).join(" ")).join("\n");
 }
 
 function summarizeProjectCredentials(projectId: string, credentials: any): string {
@@ -611,16 +638,17 @@ function summarizeProjectRecords(projects: any[]): string {
 
 export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
-	if (parsed.command === "status") {
+	if (parsed.command === "status" || parsed.command === "runs") {
 		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: `project-pipeline status helper missing at ${PROJECT_PIPELINE_STATUS_SCRIPT}` };
 		const args = [PROJECT_PIPELINE_STATUS_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--json"];
 		if (parsed.projectId) args.push("--project-id", parsed.projectId);
 		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 5 * 1024 * 1024 });
 		try {
 			const json = JSON.parse(proc.stdout || "{}");
+			if (parsed.command === "runs") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRuns((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }) };
 			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
 		} catch {
-			return { ok: false, summary: `project-pipeline status failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+			return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
 		}
 	}
 	if (parsed.command === "credentials") {
