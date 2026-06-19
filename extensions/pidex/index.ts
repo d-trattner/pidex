@@ -469,6 +469,12 @@ type PdProjectCommand =
 	| { command: "status"; projectId?: string }
 	| { command: "remove"; projectId: string; confirm: string };
 
+function readPdProjectFlagValue(parts: string[], index: number, flag: string): { value: string; nextIndex: number } {
+	const value = parts[index + 1];
+	if (!value || value.startsWith("--")) throw new Error(`pdproject ${flag} requires a value`);
+	return { value, nextIndex: index + 1 };
+}
+
 export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 	const parts = String(argsLine || "").trim().split(/\s+/).filter(Boolean);
 	if (parts.length === 0 || parts[0] === "help" || parts[0] === "--help" || parts[0] === "-h") return { command: "help" };
@@ -476,8 +482,11 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 	if (command === "status") {
 		let projectId: string | undefined;
 		for (let i = 0; i < parts.length; i += 1) {
-			if (parts[i] === "--project-id") projectId = parts[++i];
-			else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			if (parts[i] === "--project-id") {
+				const read = readPdProjectFlagValue(parts, i, "--project-id");
+				projectId = read.value;
+				i = read.nextIndex;
+			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
 			else throw new Error(`unknown pdproject status argument: ${parts[i]}`);
 		}
 		return { command: "status", projectId };
@@ -486,9 +495,15 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		let projectId = "";
 		let confirm = "";
 		for (let i = 0; i < parts.length; i += 1) {
-			if (parts[i] === "--project-id") projectId = parts[++i] || "";
-			else if (parts[i] === "--confirm") confirm = parts[++i] || "";
-			else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			if (parts[i] === "--project-id") {
+				const read = readPdProjectFlagValue(parts, i, "--project-id");
+				projectId = read.value;
+				i = read.nextIndex;
+			} else if (parts[i] === "--confirm") {
+				const read = readPdProjectFlagValue(parts, i, "--confirm");
+				confirm = read.value;
+				i = read.nextIndex;
+			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
 			else throw new Error(`unknown pdproject remove argument: ${parts[i]}`);
 		}
 		if (!projectId) throw new Error("pdproject remove requires a project id");
