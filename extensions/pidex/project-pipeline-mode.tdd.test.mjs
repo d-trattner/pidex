@@ -157,6 +157,31 @@ test('buildProjectPipelineRunFlowArgs requires explicit credential acknowledgeme
   assert.throws(() => mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'x', copyPiCredentials: true }), /acknowledgement/);
 });
 
+test('runProjectPipelineRunFlow redacts orchestrator failure output', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-orch-helper-'));
+  const helper = path.join(dir, 'orchestrator.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: false, no_fallback: true, error: 'agent-run-failed', failed_agent: 'pidex-qa', credentials: { inventory: [{ fingerprint: 'sha256:secret', source_label: '~/.pi/agent/auth.json', destination: '/pidex-secrets/pi/agent/auth.json' }] }, runs: [{ agent: 'pidex-qa', ok: false, reason: 'SECRET-LIKE-CHILD-OUTPUT', error: 'child-pi-failed' }] })); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runProjectPipelineRunFlow({ projectRoot: process.cwd(), task: 'x' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    const serialized = JSON.stringify(parsed);
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.error, /agent-run-failed/);
+    assert.match(parsed.error, /failed_agent=pidex-qa/);
+    assert.doesNotMatch(serialized, /sha256:secret/);
+    assert.doesNotMatch(serialized, /auth\.json/);
+    assert.doesNotMatch(serialized, /pidex-secrets/);
+    assert.doesNotMatch(serialized, /SECRET-LIKE-CHILD-OUTPUT/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('runProjectPipelineRunFlow fails closed when orchestrator helper is missing', () => {
   const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runProjectPipelineRunFlow({ projectRoot: process.cwd(), task: 'x' })));"], {
     cwd: process.cwd(),

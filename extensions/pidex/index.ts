@@ -434,6 +434,33 @@ export function buildProjectPipelineRunFlowArgs(request: ProjectPipelineRunFlowR
 	return { script: PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT, projectId, args };
 }
 
+function safeProjectPipelineHelperOutput(rawStdout: string, projectId: string, exitCode: number | null): { stdout: string; error?: string } {
+	try {
+		const parsed = JSON.parse(rawStdout || "{}");
+		const runs = Array.isArray(parsed?.runs) ? parsed.runs.map((run: any) => ({
+			agent: run?.agent,
+			ok: run?.ok === true,
+			context_file: run?.context_file,
+			archive_sync_status: run?.archive_sync_status,
+			error: run?.error,
+		})) : undefined;
+		const safe = {
+			ok: parsed?.ok === true,
+			no_fallback: parsed?.no_fallback === true,
+			error: parsed?.error,
+			failed_agent: parsed?.failed_agent,
+			lifecycle: { record: { project_id: parsed?.lifecycle?.record?.project_id ?? projectId } },
+			final_context_file: parsed?.final_context_file,
+			final_archive_context_file: parsed?.final_archive_context_file,
+			runs,
+		};
+		const error = safe.ok ? undefined : `Project Pipeline orchestrator failed closed (no fallback). error=${safe.error ?? "unknown"}${safe.failed_agent ? ` failed_agent=${safe.failed_agent}` : ""} exit=${exitCode}`;
+		return { stdout: JSON.stringify(safe), error };
+	} catch {
+		return { stdout: "", error: `Project Pipeline orchestrator failed closed (no fallback). exit=${exitCode}; helper output omitted` };
+	}
+}
+
 export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest): ProjectPipelineRunFlowResult {
 	let built: { projectId: string; args: string[] };
 	try {
@@ -442,7 +469,8 @@ export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest
 		return { ok: false, error: error?.message ?? String(error), no_fallback: true };
 	}
 	const proc = spawnSync(process.execPath, built.args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 20 * 1024 * 1024 });
-	return { ok: proc.status === 0, exitCode: proc.status, projectId: built.projectId, stdout: proc.stdout || "", stderr: proc.stderr || "", error: proc.status === 0 ? undefined : clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 4000), no_fallback: true };
+	const safe = safeProjectPipelineHelperOutput(proc.stdout || "", built.projectId, proc.status);
+	return { ok: proc.status === 0, exitCode: proc.status, projectId: built.projectId, stdout: safe.stdout, stderr: "", error: proc.status === 0 ? undefined : safe.error, no_fallback: true };
 }
 
 export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRunFlowResult): string {
