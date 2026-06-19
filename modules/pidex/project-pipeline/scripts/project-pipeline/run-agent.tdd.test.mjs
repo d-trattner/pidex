@@ -38,6 +38,7 @@ test('runProjectPipelineAgent returns typed output and records run metadata', ()
     project_run_id: 'pprun-fixed',
     agent: 'pidex-implementer',
     task: 'test',
+    archiveFromContainer: false,
     runner: () => ({ status: 0, stdout: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\ncontext_file: agents.output/implementation/x.md\n-->', stderr: '' })
   });
   assert.equal(result.ok, true);
@@ -70,6 +71,29 @@ test('runProjectPipelineAgent can sync archive and then expose archive_context_f
   const loaded = loadProjectRecord(root, 'pp-run-sync1');
   assert.equal(loaded.status, 'ready');
   assert.equal(loaded.runs[0].archive_sync_status, 'complete');
+});
+
+test('runProjectPipelineAgent syncs artifacts copied from container by default', () => {
+  const root = tmp();
+  setup(root, 'pp-run-container1');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root,
+    projectId: 'pp-run-container1',
+    project_run_id: 'pprun-container',
+    agent: 'pidex-implementer',
+    task: 'test',
+    runner: (args) => {
+      if (args[0] === 'exec') return { status: 0, stdout: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\ncontext_file: agents.output/implementation/x.md\n-->', stderr: '' };
+      if (args[0] === 'cp' && String(args[1]).endsWith('/agents.output')) {
+        write(path.join(args[2], 'implementation/x.md'), '# impl\n');
+        return { status: 0, stdout: '', stderr: '' };
+      }
+      return { status: 1, stdout: '', stderr: 'missing' };
+    }
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.archive_sync_status, 'complete');
+  assert.equal(existsSync(result.archive_context_file), true);
 });
 
 test('runProjectPipelineAgent fails closed when routed artifact is missing after archive sync', () => {

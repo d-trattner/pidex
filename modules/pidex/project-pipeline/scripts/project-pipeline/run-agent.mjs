@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,18 @@ const CHILD_ENV = 'PIDEX_PROJECT_PIPELINE_CHILD';
 function docker(args, opts = {}) {
   const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
   return { status: proc.status ?? 1, stdout: proc.stdout || '', stderr: proc.stderr || '' };
+}
+
+export function copyArchiveWorkspaceFromContainer(record, runner = docker) {
+  const temp = mkdtempSync(path.join(tmpdir(), 'pidex-project-archive-'));
+  const workspace = path.join(temp, 'workspace');
+  mkdirSync(workspace, { recursive: true });
+  const warnings = [];
+  for (const source of ['agents.output', 'wiki']) {
+    const proc = runner(['cp', `${record.docker.container_name}:/workspace/${source}`, path.join(workspace, source)]);
+    if (proc.status !== 0) warnings.push({ source, reason: 'container-source-missing-or-copy-failed', stderr: proc.stderr || proc.stdout || '' });
+  }
+  return { temp, workspace, warnings };
 }
 
 export function extractRouting(finalText) {
@@ -87,14 +100,21 @@ export function runProjectPipelineAgent(options = {}) {
   if (!routingCheck.ok) return { ok: false, exitCode: 1, error: 'routing-invalid', reason: routingCheck.reason, finalText, routing };
   let archiveSyncReport;
   let archiveContextFile;
-  if (options.archiveWorkspace) {
-    archiveSyncReport = syncProjectArchive({ workspace: options.archiveWorkspace, pidexRoot, projectId: record.project_id });
+  let copiedArchiveWorkspace;
+  if (options.archiveWorkspace || options.archiveFromContainer !== false) {
+    copiedArchiveWorkspace = options.archiveWorkspace ? undefined : copyArchiveWorkspaceFromContainer(record, options.archiveCopyRunner || runner);
+    const archiveWorkspace = options.archiveWorkspace || copiedArchiveWorkspace.workspace;
+    archiveSyncReport = syncProjectArchive({ workspace: archiveWorkspace, pidexRoot, projectId: record.project_id });
+    if (copiedArchiveWorkspace?.warnings?.length) archiveSyncReport.warnings.push(...copiedArchiveWorkspace.warnings);
     const afterSync = loadProjectRecord(pidexRoot, record.project_id);
     const afterRun = afterSync.runs.find((run) => run.project_run_id === project_run_id) || afterSync.runs.at(-1);
     if (afterRun) afterRun.archive_sync_status = archiveSyncReport.ok ? 'complete' : 'failed';
     afterSync.status = archiveSyncReport.ok ? 'ready' : 'sync-failed';
     saveProjectRecord(pidexRoot, afterSync);
-    if (!archiveSyncReport.ok) return { ok: false, exitCode: 1, error: 'archive-sync-failed', finalText, routing, archiveSyncReport };
+    if (!archiveSyncReport.ok) {
+      if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
+      return { ok: false, exitCode: 1, error: 'archive-sync-failed', finalText, routing, archiveSyncReport };
+    }
     archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, routingCheck.context_file);
     if (!existsSync(archiveContextFile)) {
       const missingRecord = loadProjectRecord(pidexRoot, record.project_id);
@@ -102,8 +122,10 @@ export function runProjectPipelineAgent(options = {}) {
       if (missingRun) missingRun.archive_sync_status = 'failed';
       missingRecord.status = 'sync-failed';
       saveProjectRecord(pidexRoot, missingRecord);
+      if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
       return { ok: false, exitCode: 1, error: 'archive-context-missing', reason: `routed context file not found in archive: ${routingCheck.context_file}`, finalText, routing, archiveSyncReport };
     }
+    if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
   }
   return { ok: true, exitCode: 0, finalText, routing, context_file: routingCheck.context_file, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
 }
