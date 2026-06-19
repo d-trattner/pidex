@@ -600,10 +600,13 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 60_000, maxBuffer: 5 * 1024 * 1024 });
 		try {
 			const json = JSON.parse(proc.stdout || "{}");
-			if (parsed.action === "status") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectCredentials(json.project_id ?? parsed.projectId, json.credentials ?? {}) };
-			return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline credentials reset: ${json.project_id ?? parsed.projectId}` : `Project Pipeline credentials reset failed: ${json.reason ?? JSON.stringify(json)}` };
+			if (parsed.action === "status") {
+				if (proc.status !== 0 || json.ok === false) return { ok: false, summary: `Project Pipeline credentials status failed: ${json.reason ?? "helper returned ok=false"}` };
+				return { ok: true, summary: summarizeProjectCredentials(json.project_id ?? parsed.projectId, json.credentials ?? {}) };
+			}
+			return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline credentials reset: ${json.project_id ?? parsed.projectId}` : `Project Pipeline credentials reset failed: ${json.reason ?? "helper returned ok=false"}` };
 		} catch {
-			return { ok: false, summary: `project-pipeline credentials ${parsed.action} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+			return { ok: false, summary: `project-pipeline credentials ${parsed.action} failed exit=${proc.status}; helper output omitted to avoid credential metadata exposure` };
 		}
 	}
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: `project-pipeline lifecycle helper missing at ${PROJECT_PIPELINE_LIFECYCLE_SCRIPT}` };

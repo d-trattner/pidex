@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const mod = await import('./index.ts');
 
@@ -95,6 +98,28 @@ test('runPdProjectCommand fails closed when status helper is missing', () => {
   const parsed = JSON.parse(proc.stdout);
   assert.equal(parsed.ok, false);
   assert.match(parsed.summary, /status helper missing/);
+});
+
+test('runPdProjectCommand omits raw credential helper output on reset failure', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-creds-helper-'));
+  const helper = path.join(dir, 'credentials.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: false, credentials: { inventory: [{ fingerprint: 'sha256:secret', source_label: '~/.pi/auth.json', destination: '/pidex-secrets/pi/agent/auth.json' }] } })); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'credentials', action: 'reset', projectId: 'pp-demo', confirm: 'pp-demo' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_CREDENTIALS_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.summary, /credentials reset failed/);
+    assert.doesNotMatch(parsed.summary, /sha256:secret/);
+    assert.doesNotMatch(parsed.summary, /auth\.json/);
+    assert.doesNotMatch(parsed.summary, /pidex-secrets/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('runPdProjectCommand fails closed when credentials helper is missing', () => {
