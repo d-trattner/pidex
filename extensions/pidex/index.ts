@@ -498,6 +498,7 @@ type PdProjectCommand =
 	| { command: "help" }
 	| { command: "status"; projectId?: string }
 	| { command: "runs"; projectId: string }
+	| { command: "show-run"; projectId: string; runId: string }
 	| { command: "open"; projectId: string }
 	| { command: "repair"; projectId: string; confirm: string }
 	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
@@ -525,25 +526,33 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		}
 		return { command: "status", projectId };
 	}
-	if (command === "runs") {
+	if (command === "runs" || command === "show-run") {
 		let projectId = "";
-		let projectIdSource = "";
+		let runId = "";
 		for (let i = 0; i < parts.length; i += 1) {
 			if (parts[i] === "--project-id") {
-				if (projectId) throw new Error("pdproject runs received duplicate project id");
+				if (projectId) throw new Error(`pdproject ${command} received duplicate project id`);
 				const read = readPdProjectFlagValue(parts, i, "--project-id");
 				projectId = read.value;
-				projectIdSource = "flag";
+				i = read.nextIndex;
+			} else if (parts[i] === "--run-id") {
+				if (runId) throw new Error("pdproject show-run received duplicate run id");
+				const read = readPdProjectFlagValue(parts, i, "--run-id");
+				runId = read.value;
 				i = read.nextIndex;
 			} else if (!parts[i].startsWith("--")) {
-				if (projectId) throw new Error("pdproject runs received duplicate project id");
-				projectId = parts[i];
-				projectIdSource = "positional";
-			} else throw new Error(`unknown pdproject runs argument: ${parts[i]}`);
+				if (!projectId) projectId = parts[i];
+				else if (command === "show-run" && !runId) runId = parts[i];
+				else if (command === "show-run") throw new Error("pdproject show-run received duplicate run id");
+				else throw new Error("pdproject runs received duplicate project id");
+			} else throw new Error(`unknown pdproject ${command} argument: ${parts[i]}`);
 		}
-		void projectIdSource;
-		if (!projectId) throw new Error("pdproject runs requires a project id");
-		return { command: "runs", projectId };
+		if (!projectId) throw new Error(`pdproject ${command} requires a project id`);
+		if (command === "show-run") {
+			if (!runId) throw new Error("pdproject show-run requires a run id");
+			return { command, projectId, runId };
+		}
+		return { command, projectId };
 	}
 	if (command === "open" || command === "repair") {
 		let projectId = "";
@@ -615,6 +624,7 @@ export function pdProjectUsage(): string {
 	return [
 		"Usage: /pdproject status [project-id|--project-id ID]",
 		"       /pdproject runs <project-id>",
+		"       /pdproject show-run <project-id> <run-id>",
 		"       /pdproject open <project-id>",
 		"       /pdproject repair <project-id> --confirm <project-id>",
 		"       /pdproject credentials status <project-id>",
@@ -631,18 +641,30 @@ function safeAgentsOutputPath(value: any): string | undefined {
 	return text;
 }
 
+function summarizeProjectRunLine(projectId: string, run: any, details = false): string {
+	return [
+		`${projectId}: run=${run?.project_run_id ?? "unknown"}`,
+		run?.agent ? `agent=${run.agent}` : undefined,
+		`status=${run?.archive_sync_status ?? "unknown"}`,
+		run?.exit_code === undefined ? undefined : `exit=${run.exit_code}`,
+		safeAgentsOutputPath(run?.context_file) ? `context=${safeAgentsOutputPath(run.context_file)}` : undefined,
+		details && run?.archive_context_file ? "archive_context=available" : undefined,
+		run?.started_at ? `started=${run.started_at}` : undefined,
+		run?.ended_at ? `ended=${run.ended_at}` : undefined,
+	].filter(Boolean).join(" ");
+}
+
 function summarizeProjectRuns(project: any): string {
 	const runs = Array.isArray(project?.runs) ? project.runs : [];
 	if (!runs.length) return `${project?.project_id ?? "unknown-project"}: no Project Pipeline runs recorded.`;
-	return runs.slice(-10).map((run: any) => [
-		`${project.project_id}: run=${run.project_run_id ?? "unknown"}`,
-		run.agent ? `agent=${run.agent}` : undefined,
-		`status=${run.archive_sync_status ?? "unknown"}`,
-		run.exit_code === undefined ? undefined : `exit=${run.exit_code}`,
-		safeAgentsOutputPath(run.context_file) ? `context=${safeAgentsOutputPath(run.context_file)}` : undefined,
-		run.started_at ? `started=${run.started_at}` : undefined,
-		run.ended_at ? `ended=${run.ended_at}` : undefined,
-	].filter(Boolean).join(" ")).join("\n");
+	return runs.slice(-10).map((run: any) => summarizeProjectRunLine(project.project_id, run)).join("\n");
+}
+
+function summarizeProjectRun(project: any, runId: string): string {
+	const runs = Array.isArray(project?.runs) ? project.runs : [];
+	const run = runs.find((candidate: any) => candidate?.project_run_id === runId);
+	if (!run) return `${project?.project_id ?? "unknown-project"}: run=${runId} not found.`;
+	return summarizeProjectRunLine(project?.project_id ?? "unknown-project", run, true);
 }
 
 function summarizeProjectCredentials(projectId: string, credentials: any): string {
@@ -665,7 +687,7 @@ function summarizeProjectRecords(projects: any[]): string {
 
 export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
-	if (parsed.command === "status" || parsed.command === "runs") {
+	if (parsed.command === "status" || parsed.command === "runs" || parsed.command === "show-run") {
 		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: "project-pipeline status helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
 		const args = [PROJECT_PIPELINE_STATUS_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--json"];
 		if (parsed.projectId) args.push("--project-id", parsed.projectId);
@@ -673,6 +695,7 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 		try {
 			const json = JSON.parse(proc.stdout || "{}");
 			if (parsed.command === "runs") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRuns((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }) };
+			if (parsed.command === "show-run") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRun((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }, parsed.runId) };
 			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
 		} catch {
 			return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}; helper output omitted to avoid metadata exposure` };

@@ -75,6 +75,9 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('status pp-demo'), { command: 'status', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('runs pp-demo'), { command: 'runs', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('runs --project-id pp-demo'), { command: 'runs', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('show-run pp-demo pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
+  assert.deepEqual(mod.parsePdProjectArgs('show-run --project-id pp-demo --run-id pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
+  assert.throws(() => mod.parsePdProjectArgs('show-run pp-demo pprun-1 --run-id other'), /duplicate run id/);
   assert.throws(() => mod.parsePdProjectArgs('runs --project-id'), /--project-id requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('runs pp-demo --project-id other'), /duplicate project id/);
   assert.throws(() => mod.parsePdProjectArgs('runs --project-id pp-demo other'), /duplicate project id/);
@@ -116,6 +119,31 @@ test('runPdProjectCommand summarizes project runs without raw metadata', () => {
     assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
     assert.doesNotMatch(parsed.summary, /\/tmp\/archive/);
     assert.doesNotMatch(parsed.summary, /\.\.\/secret/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runPdProjectCommand shows one run with allowlisted metadata only', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-show-run-helper-'));
+  const helper = path.join(dir, 'status.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, projects: [{ project_id: 'pp-demo', runs: [{ project_run_id: 'pprun-1', agent: 'pidex-qa', archive_sync_status: 'complete', exit_code: 0, context_file: 'agents.output/qa/report.md', archive_context_file: '/tmp/archive/agents.output/qa/report.md', started_at: '2026-06-19T00:00:00.000Z', ended_at: '2026-06-19T00:00:01.000Z', finalText: 'SECRET-LIKE', credential_inventory_hash: 'sha256:secret' }] }] }));\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, true);
+    assert.match(parsed.summary, /run=pprun-1/);
+    assert.match(parsed.summary, /agent=pidex-qa/);
+    assert.match(parsed.summary, /context=agents\.output\/qa\/report\.md/);
+    assert.match(parsed.summary, /archive_context=available/);
+    assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
+    assert.doesNotMatch(parsed.summary, /sha256:secret/);
+    assert.doesNotMatch(parsed.summary, /\/tmp\/archive/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

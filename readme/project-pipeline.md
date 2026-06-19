@@ -110,6 +110,14 @@ Show recent Project Pipeline runs:
 /pdproject runs <project-id>
 ```
 
+Show one run with allowlisted metadata only:
+
+```text
+/pdproject show-run <project-id> <run-id>
+```
+
+`show-run` may report `archive_context=available`, but it does not print the host archive path, raw child output, fingerprints, or helper JSON.
+
 Start/open an existing sandbox container:
 
 ```text
