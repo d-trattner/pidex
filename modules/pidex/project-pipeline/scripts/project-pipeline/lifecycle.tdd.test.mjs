@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { containerCreateArgs, createProjectSandbox, dockerLabels, openProjectSandbox, removeArgs, removeProjectSandbox, volumeCreateArgs } from './lifecycle.mjs';
+import { containerCreateArgs, createProjectSandbox, dockerLabels, openProjectSandbox, repairProjectSandbox, removeArgs, removeProjectSandbox, volumeCreateArgs } from './lifecycle.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmpRoot() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-life-')); }
@@ -73,6 +73,47 @@ test('openProjectSandbox starts existing container and records container-missing
   const failed = openProjectSandbox({ pidexRoot: root, projectId: 'pp-demo-open1', runner: callsRunner([], () => true) });
   assert.equal(failed.ok, false);
   assert.equal(failed.record.status, 'container-missing');
+});
+
+test('repairProjectSandbox restarts existing container after exact confirmation', () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-repair1', name: 'demo' });
+  record.status = 'container-missing';
+  saveProjectRecord(root, record);
+  const calls = [];
+  const result = repairProjectSandbox({ pidexRoot: root, projectId: 'pp-demo-repair1', confirm: 'pp-demo-repair1', runner: callsRunner(calls) });
+  assert.equal(result.ok, true);
+  assert.equal(result.action, 'started-container');
+  assert.deepEqual(calls.slice(0, 3).map((args) => args.slice(0, 2)), [['volume', 'inspect'], ['volume', 'inspect'], ['volume', 'inspect']]);
+  assert.deepEqual(calls[3], ['inspect', 'pidex-project-pp-demo-repair1']);
+  assert.deepEqual(calls[4], ['start', 'pidex-project-pp-demo-repair1']);
+  assert.equal(loadProjectRecord(root, 'pp-demo-repair1').status, 'ready');
+});
+
+test('repairProjectSandbox recreates missing container only when all volumes exist', () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-repair2', name: 'demo' });
+  record.status = 'needs-repair';
+  saveProjectRecord(root, record);
+  const calls = [];
+  const result = repairProjectSandbox({ pidexRoot: root, projectId: 'pp-demo-repair2', confirm: 'pp-demo-repair2', runner: callsRunner(calls, (args) => args[0] === 'inspect') });
+  assert.equal(result.ok, true);
+  assert.equal(result.action, 'recreated-container');
+  assert.equal(calls.some((args) => args[0] === 'create'), true);
+  assert.equal(calls.at(-1)[0], 'start');
+  assert.equal(loadProjectRecord(root, 'pp-demo-repair2').status, 'ready');
+});
+
+test('repairProjectSandbox blocks missing volumes and requires exact confirmation', () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-repair3', name: 'demo' });
+  saveProjectRecord(root, record);
+  assert.throws(() => repairProjectSandbox({ pidexRoot: root, projectId: 'pp-demo-repair3', confirm: 'wrong', runner: callsRunner([]) }), /refusing to repair/);
+  const result = repairProjectSandbox({ pidexRoot: root, projectId: 'pp-demo-repair3', confirm: 'pp-demo-repair3', runner: callsRunner([], (args) => args[0] === 'volume' && args[1] === 'inspect' && String(args[2]).endsWith('-workspace')) });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'missing-volumes');
+  assert.deepEqual(result.missing_volumes, ['workspace']);
+  assert.equal(loadProjectRecord(root, 'pp-demo-repair3').status, 'repair-blocked');
 });
 
 test('removeProjectSandbox requires exact confirmation and removes only project resources', () => {

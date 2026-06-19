@@ -107,6 +107,43 @@ export function openProjectSandbox(options = {}) {
   }
 }
 
+export function repairProjectSandbox(options = {}) {
+  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+  const projectId = safeProjectId(options.projectId);
+  if (options.confirm !== projectId) throw new Error(`refusing to repair project sandbox without --confirm ${projectId}`);
+  const record = loadProjectRecord(pidexRoot, projectId);
+  const volumeChecks = {
+    workspace: record.docker.workspace_volume,
+    secrets: record.docker.secrets_volume,
+    cache: record.docker.cache_volume,
+  };
+  const missingVolumes = [];
+  for (const [kind, name] of Object.entries(volumeChecks)) {
+    try { runDocker(['volume', 'inspect', name], options.runner); } catch { missingVolumes.push(kind); }
+  }
+  if (missingVolumes.length) {
+    record.status = 'repair-blocked';
+    record.repair = { reason: 'missing-volumes', missing_volumes: missingVolumes };
+    const file = saveProjectRecord(pidexRoot, record);
+    return { ok: false, reason: 'missing-volumes', missing_volumes: missingVolumes, record, file };
+  }
+  let containerExists = true;
+  try { runDocker(['inspect', record.docker.container_name], options.runner); } catch { containerExists = false; }
+  try {
+    if (!containerExists) runDocker(containerCreateArgs(record), options.runner);
+    runDocker(containerStartArgs(record), options.runner);
+    record.status = 'ready';
+    record.repair = { last_action: containerExists ? 'started-container' : 'recreated-container', repaired_at: new Date().toISOString() };
+    const file = saveProjectRecord(pidexRoot, record);
+    return { ok: true, action: record.repair.last_action, record, file };
+  } catch (error) {
+    record.status = 'needs-repair';
+    record.repair = { reason: error.message || String(error), last_action: containerExists ? 'start-failed' : 'recreate-failed' };
+    const file = saveProjectRecord(pidexRoot, record);
+    return { ok: false, reason: 'repair-failed', action: record.repair.last_action, record, file };
+  }
+}
+
 export function removeProjectSandbox(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = safeProjectId(options.projectId);
@@ -126,7 +163,7 @@ export function parseArgs(argv) {
   const out = { json: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === 'create' || arg === 'open' || arg === 'remove') out.command = arg;
+    if (arg === 'create' || arg === 'open' || arg === 'repair' || arg === 'remove') out.command = arg;
     else if (arg === '--pidex-root') out.pidexRoot = argv[++i];
     else if (arg === '--name') out.name = argv[++i];
     else if (arg === '--project-id') out.projectId = argv[++i];
@@ -139,7 +176,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: lifecycle.mjs <create|open|remove> --pidex-root PATH [--name NAME|--project-id ID] [--confirm ID] --json'; }
+function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove> --pidex-root PATH [--name NAME|--project-id ID] [--confirm ID] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
@@ -149,6 +186,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     let result;
     if (args.command === 'create') result = createProjectSandbox(args);
     else if (args.command === 'open') result = openProjectSandbox(args);
+    else if (args.command === 'repair') result = repairProjectSandbox(args);
     else if (args.command === 'remove') result = removeProjectSandbox(args);
     console.log(args.json ? JSON.stringify(result, null, 2) : (result.ok ? 'ok' : result.reason));
     process.exit(result.ok ? 0 : 1);

@@ -499,6 +499,7 @@ type PdProjectCommand =
 	| { command: "status"; projectId?: string }
 	| { command: "runs"; projectId: string }
 	| { command: "open"; projectId: string }
+	| { command: "repair"; projectId: string; confirm: string }
 	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
 	| { command: "remove"; projectId: string; confirm: string };
 
@@ -544,17 +545,27 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		if (!projectId) throw new Error("pdproject runs requires a project id");
 		return { command: "runs", projectId };
 	}
-	if (command === "open") {
+	if (command === "open" || command === "repair") {
 		let projectId = "";
+		let confirm = "";
 		for (let i = 0; i < parts.length; i += 1) {
 			if (parts[i] === "--project-id") {
 				const read = readPdProjectFlagValue(parts, i, "--project-id");
 				projectId = read.value;
 				i = read.nextIndex;
+			} else if (parts[i] === "--confirm") {
+				const read = readPdProjectFlagValue(parts, i, "--confirm");
+				confirm = read.value;
+				i = read.nextIndex;
 			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
-			else throw new Error(`unknown pdproject open argument: ${parts[i]}`);
+			else throw new Error(`unknown pdproject ${command} argument: ${parts[i]}`);
 		}
-		if (!projectId) throw new Error("pdproject open requires a project id");
+		if (!projectId) throw new Error(`pdproject ${command} requires a project id`);
+		if (command === "repair") {
+			if (confirm !== projectId) throw new Error(`pdproject repair requires --confirm ${projectId}`);
+			return { command: "repair", projectId, confirm };
+		}
+		if (confirm) throw new Error("unknown pdproject open argument: --confirm");
 		return { command: "open", projectId };
 	}
 	if (command === "credentials") {
@@ -605,6 +616,7 @@ export function pdProjectUsage(): string {
 		"Usage: /pdproject status [project-id|--project-id ID]",
 		"       /pdproject runs <project-id>",
 		"       /pdproject open <project-id>",
+		"       /pdproject repair <project-id> --confirm <project-id>",
 		"       /pdproject credentials status <project-id>",
 		"       /pdproject credentials reset <project-id> --confirm <project-id>",
 		"       /pdproject remove <project-id> --confirm <project-id>",
@@ -684,12 +696,21 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: `project-pipeline lifecycle helper missing at ${PROJECT_PIPELINE_LIFECYCLE_SCRIPT}` };
 	const lifecycleArgs = parsed.command === "open"
 		? [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "open", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--json"]
-		: [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "remove", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"];
+		: parsed.command === "repair"
+			? [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "repair", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"]
+			: [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "remove", "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"];
 	const proc = spawnSync(process.execPath, lifecycleArgs, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 120_000, maxBuffer: 5 * 1024 * 1024 });
 	try {
 		const json = JSON.parse(proc.stdout || "{}");
-		if (parsed.command === "open") return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox opened: ${json.record?.project_id ?? parsed.projectId}` : `Project Pipeline open failed: ${json.reason ?? JSON.stringify(json)}` };
-		return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox removed: ${json.project_id}` : `Project Pipeline remove failed: ${JSON.stringify(json)}` };
+		if (parsed.command === "open") return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox opened: ${json.record?.project_id ?? parsed.projectId}` : "Project Pipeline open failed; helper details omitted" };
+		if (parsed.command === "repair") {
+			const ok = proc.status === 0 && json.ok !== false;
+			const projectId = json.record?.project_id ?? parsed.projectId;
+			const action = json.action === "started-container" || json.action === "recreated-container" ? json.action : undefined;
+			const missing = Array.isArray(json.missing_volumes) ? json.missing_volumes.filter((v: any) => ["workspace", "secrets", "cache"].includes(String(v))).join(",") : "";
+			return { ok, summary: ok ? `Project Pipeline sandbox repaired: ${projectId} action=${action ?? "unknown"}` : `Project Pipeline repair failed: ${json.reason === "missing-volumes" ? `missing_volumes=${missing || "unknown"}` : "helper details omitted"}` };
+		}
+		return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline sandbox removed: ${json.project_id}` : "Project Pipeline remove failed; helper details omitted" };
 	} catch {
 		return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
 	}

@@ -81,6 +81,9 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('open pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('open --project-id pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('open --project-id'), /--project-id requires a value/);
+  assert.deepEqual(mod.parsePdProjectArgs('repair pp-demo --confirm pp-demo'), { command: 'repair', projectId: 'pp-demo', confirm: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('repair --project-id pp-demo --confirm pp-demo'), { command: 'repair', projectId: 'pp-demo', confirm: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('repair pp-demo --confirm wrong'), /repair requires --confirm pp-demo/);
   assert.deepEqual(mod.parsePdProjectArgs('credentials status pp-demo'), { command: 'credentials', action: 'status', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('credentials status --project-id pp-demo'), { command: 'credentials', action: 'status', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('credentials reset pp-demo --confirm pp-demo'), { command: 'credentials', action: 'reset', projectId: 'pp-demo', confirm: 'pp-demo' });
@@ -187,6 +190,29 @@ test('runPdProjectCommand fails closed when credentials helper is missing', () =
   const parsed = JSON.parse(proc.stdout);
   assert.equal(parsed.ok, false);
   assert.match(parsed.summary, /credentials helper missing/);
+});
+
+test('runPdProjectCommand summarizes repair without raw helper details', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-life-helper-'));
+  const helper = path.join(dir, 'lifecycle.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: false, reason: 'missing-volumes', missing_volumes: ['workspace'], record: { project_id: 'pp-demo', repair: { reason: 'SECRET-LIKE /home/user/project /pidex-secrets/pi/auth.json' } } })); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'repair', projectId: 'pp-demo', confirm: 'pp-demo' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.summary, /repair failed/);
+    assert.match(parsed.summary, /missing_volumes=workspace/);
+    assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
+    assert.doesNotMatch(parsed.summary, /\/home\/user/);
+    assert.doesNotMatch(parsed.summary, /pidex-secrets/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('runPdProjectCommand fails closed when lifecycle helper is missing', () => {

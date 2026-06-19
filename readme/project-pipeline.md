@@ -116,6 +116,14 @@ Start/open an existing sandbox container:
 /pdproject open <project-id>
 ```
 
+Repair a stopped or missing container when all three persistent volumes still exist:
+
+```text
+/pdproject repair <project-id> --confirm <project-id>
+```
+
+Repair is conservative. It may restart an existing container or recreate the container attached to the existing workspace/secrets/cache volumes. It will not recreate missing volumes or delete source; missing volumes are reported as a blocked repair and require an explicit remove/recreate decision.
+
 Show copied credential state without printing fingerprints or secret values:
 
 ```text
