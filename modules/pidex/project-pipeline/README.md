@@ -4,7 +4,7 @@ Experimental local-first Project Sandbox runtime for Initiative 021.
 
 This module is separate from `pidex.sandbox-runtime` / agent-pipeline. Project Pipeline manages persistent Docker-backed project environments where source is canonical inside the Project Sandbox.
 
-MVP status: scaffolding plus local helper slices for registry, lifecycle, image build/status, mode resolution, local import, Git clone, credentials, project-agent execution, and host archive sync.
+MVP status: scaffolding plus local helper slices for registry, lifecycle, image build/status, mode resolution, local import, Git clone, credentials, project-agent execution, host archive sync, and a fail-closed run-flow facade.
 
 ## Safety invariants
 
