@@ -442,6 +442,26 @@ export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest
 	return { ok: proc.status === 0, exitCode: proc.status, projectId: built.projectId, stdout: proc.stdout || "", stderr: proc.stderr || "", error: proc.status === 0 ? undefined : clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 4000), no_fallback: true };
 }
 
+export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRunFlowResult): string {
+	const fallback = `Project Pipeline run-flow complete for ${result.projectId ?? "unknown-project"}; no_fallback=${result.no_fallback === true}.`;
+	if (!result.stdout) return fallback;
+	try {
+		const parsed = JSON.parse(result.stdout);
+		const projectId = String(parsed?.lifecycle?.record?.project_id || result.projectId || "unknown-project");
+		const contextFile = parsed?.run?.context_file || parsed?.run?.routing?.context_file || parsed?.archive_context_file;
+		const archiveStatus = parsed?.run?.archive_sync_status || (parsed?.run?.archiveSyncReport?.ok === true ? "complete" : undefined);
+		const noFallback = parsed?.no_fallback === true || result.no_fallback === true;
+		return [
+			`Project Pipeline run-flow complete for ${projectId}.`,
+			contextFile ? `context_file: ${contextFile}` : undefined,
+			archiveStatus ? `archive_sync: ${archiveStatus}` : undefined,
+			`no_fallback: ${noFallback}`,
+		].filter(Boolean).join(" ");
+	} catch {
+		return fallback;
+	}
+}
+
 async function maybeCopyProjectPipelinePiCredentials(ctx: any): Promise<boolean | undefined> {
 	if (!ctx.hasUI) return process.env.PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS === "1" ? true : undefined;
 	const choice = await ctx.ui.select("Project Pipeline runs Pi inside the persistent Project Sandbox. Copy host Pi auth/settings into this trusted per-project secrets volume?", ["Copy Pi credentials", "Skip credentials", "Cancel"]);
@@ -470,7 +490,7 @@ async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): 
 		await ctx.ui.notify(`Project Pipeline run-flow failed closed (no fallback). ${result.error ?? `exit=${result.exitCode}`}`, "error");
 		return;
 	}
-	await ctx.ui.notify(`Project Pipeline run-flow complete for ${result.projectId}. ${clipEnd(result.stdout || "", 1200)}`, "info");
+	await ctx.ui.notify(summarizeProjectPipelineRunFlowResult(result), "info");
 }
 
 function sandboxEvidenceLine(): string {

@@ -42,6 +42,31 @@ test('shouldStartProjectPipelineRunFlow selects only explicit project-pipeline m
   assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: false, decision_required: true }), false);
 });
 
+test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', () => {
+  const result = {
+    ok: true,
+    projectId: 'pp-demo',
+    no_fallback: true,
+    stdout: JSON.stringify({
+      no_fallback: true,
+      run: {
+        context_file: 'agents.output/plans/demo.md',
+        archive_sync_status: 'complete',
+        finalText: 'SECRET-LIKE-LARGE-CHILD-OUTPUT-SHOULD-NOT-BE-IN-UI',
+      },
+      credentials: { inventory: [{ fingerprint: 'sha256:abc' }] },
+    }),
+  };
+  const summary = mod.summarizeProjectPipelineRunFlowResult(result);
+  assert.match(summary, /Project Pipeline run-flow complete/);
+  assert.match(summary, /agents\.output\/plans\/demo\.md/);
+  assert.match(summary, /archive_sync: complete/);
+  assert.match(summary, /no_fallback: true/);
+  assert.doesNotMatch(summary, /SECRET-LIKE/);
+  assert.doesNotMatch(summary, /sha256:abc/);
+  assert.doesNotMatch(summary, /^\{/);
+});
+
 test('runProjectPipelineRunFlow fails closed on missing initial task', () => {
   const result = mod.runProjectPipelineRunFlow({ projectRoot: process.cwd(), task: '   ' });
   assert.equal(result.ok, false);
