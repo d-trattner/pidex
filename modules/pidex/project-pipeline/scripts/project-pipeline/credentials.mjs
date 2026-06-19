@@ -94,7 +94,17 @@ export function buildCredentialCopyOps(record, entries) {
   return { ops, inventory };
 }
 
+export function validateCredentialCommand(options = {}) {
+  const entries = options.entries || [];
+  const command = options.command || 'copy';
+  if (command === 'copy-git' && entries.some((entry) => credentialGroup(entry.kind) !== 'git')) throw new Error('copy-git accepts only git credential flags');
+  if (command === 'copy-pi' && entries.some((entry) => credentialGroup(entry.kind) !== 'pi')) throw new Error('copy-pi accepts only pi credential flags');
+  if (command === 'copy-provider' && entries.some((entry) => credentialGroup(entry.kind) !== 'providers')) throw new Error('copy-provider accepts only provider credential flags');
+  return { ok: true };
+}
+
 export function copySelectedCredentials(options = {}) {
+  validateCredentialCommand(options);
   if (options.acknowledgeTrustedPersistentContainer !== true) throw new Error('credential copy requires --acknowledge-trusted-persistent-container');
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
