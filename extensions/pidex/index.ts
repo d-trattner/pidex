@@ -673,20 +673,26 @@ function summarizeProjectRun(project: any, runId: string): string {
 
 function safePdProjectId(value: string): string {
 	const projectId = String(value || "");
-	if (!/^[A-Za-z0-9_.-]+$/.test(projectId) || projectId.includes("..")) throw new Error("invalid project id");
+	if (!/^[A-Za-z0-9_.-]+$/.test(projectId) || projectId === "." || projectId === ".." || projectId.includes("..")) throw new Error("invalid project id");
 	return projectId;
 }
 
 function collectProjectArchiveArtifacts(projectId: string): string[] {
 	const safeId = safePdProjectId(projectId);
-	const archiveRoot = path.join(PACKAGE_ROOT, "state", "project-archives", safeId);
+	const archiveBase = path.join(PACKAGE_ROOT, "state", "project-archives");
+	const archiveRoot = path.join(archiveBase, safeId);
 	if (!fs.existsSync(archiveRoot)) return [];
+	const rootStat = fs.lstatSync(archiveRoot);
+	if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return [];
 	const out: string[] = [];
 	const roots = ["agents.output", "wiki"];
 	const walk = (relativeDir: string) => {
 		if (out.length >= 50) return;
 		const absoluteDir = path.join(archiveRoot, relativeDir);
-		if (!absoluteDir.startsWith(archiveRoot) || !fs.existsSync(absoluteDir)) return;
+		if (!absoluteDir.startsWith(`${archiveRoot}${path.sep}`) && absoluteDir !== archiveRoot) return;
+		if (!fs.existsSync(absoluteDir)) return;
+		const dirStat = fs.lstatSync(absoluteDir);
+		if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) return;
 		for (const name of fs.readdirSync(absoluteDir).sort()) {
 			if (out.length >= 50) break;
 			const rel = path.posix.join(relativeDir.replaceAll("\\", "/"), name);

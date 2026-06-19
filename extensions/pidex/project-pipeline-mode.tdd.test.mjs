@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -117,6 +117,25 @@ test('runPdProjectCommand lists archive artifacts without file contents or unsaf
     assert.doesNotMatch(result.summary, /state\/project-archives/);
   } finally {
     rmSync(archive, { recursive: true, force: true });
+  }
+});
+
+test('runPdProjectCommand artifacts blocks dot project id and archive symlink escapes', () => {
+  assert.equal(mod.runPdProjectCommand({ command: 'artifacts', projectId: '.' }).ok, false);
+  const archive = path.join(process.cwd(), 'state', 'project-archives', 'pp-artifacts-symlink');
+  const outside = mkdtempSync(path.join(os.tmpdir(), 'pidex-artifacts-outside-'));
+  mkdirSync(path.join(outside, 'agents.output'), { recursive: true });
+  writeFileSync(path.join(outside, 'agents.output', 'secret.md'), 'SECRET-LIKE-CONTENT');
+  try {
+    rmSync(archive, { recursive: true, force: true });
+    symlinkSync(outside, archive, 'dir');
+    const result = mod.runPdProjectCommand({ command: 'artifacts', projectId: 'pp-artifacts-symlink' });
+    assert.equal(result.ok, true);
+    assert.doesNotMatch(result.summary, /secret\.md/);
+    assert.doesNotMatch(result.summary, /SECRET-LIKE-CONTENT/);
+  } finally {
+    rmSync(archive, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 
