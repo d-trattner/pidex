@@ -526,14 +526,21 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 	}
 	if (command === "runs") {
 		let projectId = "";
+		let projectIdSource = "";
 		for (let i = 0; i < parts.length; i += 1) {
 			if (parts[i] === "--project-id") {
+				if (projectId) throw new Error("pdproject runs received duplicate project id");
 				const read = readPdProjectFlagValue(parts, i, "--project-id");
 				projectId = read.value;
+				projectIdSource = "flag";
 				i = read.nextIndex;
-			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
-			else throw new Error(`unknown pdproject runs argument: ${parts[i]}`);
+			} else if (!parts[i].startsWith("--")) {
+				if (projectId) throw new Error("pdproject runs received duplicate project id");
+				projectId = parts[i];
+				projectIdSource = "positional";
+			} else throw new Error(`unknown pdproject runs argument: ${parts[i]}`);
 		}
+		void projectIdSource;
 		if (!projectId) throw new Error("pdproject runs requires a project id");
 		return { command: "runs", projectId };
 	}
@@ -639,7 +646,7 @@ function summarizeProjectRecords(projects: any[]): string {
 export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
 	if (parsed.command === "status" || parsed.command === "runs") {
-		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: `project-pipeline status helper missing at ${PROJECT_PIPELINE_STATUS_SCRIPT}` };
+		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: "project-pipeline status helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
 		const args = [PROJECT_PIPELINE_STATUS_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--json"];
 		if (parsed.projectId) args.push("--project-id", parsed.projectId);
 		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 5 * 1024 * 1024 });
@@ -648,7 +655,7 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 			if (parsed.command === "runs") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRuns((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }) };
 			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
 		} catch {
-			return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+			return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}; helper output omitted to avoid metadata exposure` };
 		}
 	}
 	if (parsed.command === "credentials") {

@@ -76,6 +76,8 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('runs pp-demo'), { command: 'runs', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('runs --project-id pp-demo'), { command: 'runs', projectId: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('runs --project-id'), /--project-id requires a value/);
+  assert.throws(() => mod.parsePdProjectArgs('runs pp-demo --project-id other'), /duplicate project id/);
+  assert.throws(() => mod.parsePdProjectArgs('runs --project-id pp-demo other'), /duplicate project id/);
   assert.deepEqual(mod.parsePdProjectArgs('open pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('open --project-id pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('open --project-id'), /--project-id requires a value/);
@@ -112,6 +114,30 @@ test('runPdProjectCommand summarizes project runs without raw metadata', () => {
   }
 });
 
+test('runPdProjectCommand omits raw status helper output on runs parse failure', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-runs-bad-helper-'));
+  const helper = path.join(dir, 'status.mjs');
+  writeFileSync(helper, "console.log('finalText=SECRET-LIKE sha256:secret /pidex-secrets/pi/agent/auth.json ~/.pi/agent/auth.json /home/user/project'); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'runs', projectId: 'pp-demo' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.summary, /helper output omitted/);
+    assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
+    assert.doesNotMatch(parsed.summary, /sha256:secret/);
+    assert.doesNotMatch(parsed.summary, /auth\.json/);
+    assert.doesNotMatch(parsed.summary, /pidex-secrets/);
+    assert.doesNotMatch(parsed.summary, /\/home\/user/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('runPdProjectCommand fails closed when status helper is missing', () => {
   const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'status' })));"], {
     cwd: process.cwd(),
@@ -122,6 +148,7 @@ test('runPdProjectCommand fails closed when status helper is missing', () => {
   const parsed = JSON.parse(proc.stdout);
   assert.equal(parsed.ok, false);
   assert.match(parsed.summary, /status helper missing/);
+  assert.doesNotMatch(parsed.summary, /\/tmp\/pidex-missing-project-status/);
 });
 
 test('runPdProjectCommand omits raw credential helper output on reset failure', () => {
