@@ -35,6 +35,20 @@ test('buildProjectPipelineRunFlowArgs constructs fail-closed planner run-flow re
   assert.match(built.args[built.args.indexOf('--task') + 1], /Do not run host-direct or hardened-pipeline fallback/);
 });
 
+test('shouldStartProjectPipelineRunFlow selects only explicit project-pipeline mode', () => {
+  assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: true, mode: 'project-pipeline' }), true);
+  assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: true, mode: 'host-direct' }), false);
+  assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: true, mode: 'hardened-pipeline' }), false);
+  assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: false, decision_required: true }), false);
+});
+
+test('runProjectPipelineRunFlow fails closed on missing initial task', () => {
+  const result = mod.runProjectPipelineRunFlow({ projectRoot: process.cwd(), task: '   ' });
+  assert.equal(result.ok, false);
+  assert.equal(result.no_fallback, true);
+  assert.match(result.error, /requires an initial task/);
+});
+
 test('buildProjectPipelineRunFlowArgs requires explicit credential acknowledgement', () => {
   assert.throws(() => mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'x', copyPiCredentials: true }), /acknowledgement/);
 });

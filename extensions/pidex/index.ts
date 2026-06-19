@@ -449,6 +449,10 @@ async function maybeCopyProjectPipelinePiCredentials(ctx: any): Promise<boolean 
 	return choice === "Copy Pi credentials";
 }
 
+export function shouldStartProjectPipelineRunFlow(result: ProjectPipelineModeResult): boolean {
+	return result.ok === true && result.mode === "project-pipeline";
+}
+
 async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): Promise<void> {
 	const initialTask = task?.trim();
 	if (!initialTask) {
@@ -2667,7 +2671,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			ctx.ui.notify(`PIDEX project mode is required before starting: ${projectPipelineMode.reason ?? "missing saved mode"}`, "warning");
 			return;
 		}
-		if (projectPipelineMode.mode === "project-pipeline") {
+		if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {
 			await startProjectPipelineRunFlow(ctx, task);
 			return;
 		}
