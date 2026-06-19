@@ -172,7 +172,7 @@ const METRICS_DIR = path.join(STATE_DIR, "metrics");
 const PRICING_PATH = path.join(PACKAGE_ROOT, "config", "pricing.json");
 const PROVIDER_LIMITS_LATEST_PATH = path.join(STATE_DIR, "provider-limits", "latest.json");
 const CHECK_AUTH_SCRIPT = path.join(DELEGATE_DIR, "check-auth.sh");
-const PROJECT_PIPELINE_MODE_SCRIPT = path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "mode-resolver.mjs");
+const PROJECT_PIPELINE_MODE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_MODE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "mode-resolver.mjs");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
@@ -344,7 +344,7 @@ type ProjectPipelineModeResult = {
 };
 
 export function runProjectPipelineModeResolver(projectRoot: string, mode?: string): ProjectPipelineModeResult {
-	if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: true, mode: "host-direct", source: "helper-missing" };
+	if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: false, decision_required: true, reason: `project-pipeline mode resolver missing at ${PROJECT_PIPELINE_MODE_SCRIPT}; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd` };
 	const args = [PROJECT_PIPELINE_MODE_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-root", projectRoot, "--json"];
 	if (mode) args.push("--mode", mode, "--source", "interactive");
 	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 10_000 });
