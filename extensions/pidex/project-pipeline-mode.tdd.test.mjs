@@ -73,6 +73,11 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.deepEqual(mod.parsePdProjectArgs('open pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('open --project-id pp-demo'), { command: 'open', projectId: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('open --project-id'), /--project-id requires a value/);
+  assert.deepEqual(mod.parsePdProjectArgs('credentials status pp-demo'), { command: 'credentials', action: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('credentials status --project-id pp-demo'), { command: 'credentials', action: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('credentials reset pp-demo --confirm pp-demo'), { command: 'credentials', action: 'reset', projectId: 'pp-demo', confirm: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('credentials copy pp-demo'), /requires status or reset/);
+  assert.throws(() => mod.parsePdProjectArgs('credentials reset pp-demo --confirm wrong'), /credentials reset requires --confirm pp-demo/);
   assert.deepEqual(mod.parsePdProjectArgs('remove pp-demo --confirm pp-demo'), { command: 'remove', projectId: 'pp-demo', confirm: 'pp-demo' });
   assert.throws(() => mod.parsePdProjectArgs('status --project-id'), /--project-id requires a value/);
   assert.throws(() => mod.parsePdProjectArgs('remove --project-id --confirm pp-demo'), /--project-id requires a value/);
@@ -90,6 +95,18 @@ test('runPdProjectCommand fails closed when status helper is missing', () => {
   const parsed = JSON.parse(proc.stdout);
   assert.equal(parsed.ok, false);
   assert.match(parsed.summary, /status helper missing/);
+});
+
+test('runPdProjectCommand fails closed when credentials helper is missing', () => {
+  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'credentials', action: 'status', projectId: 'pp-demo' })));"], {
+    cwd: process.cwd(),
+    env: { ...process.env, PIDEX_PROJECT_PIPELINE_CREDENTIALS_SCRIPT: '/tmp/pidex-missing-project-credentials.mjs' },
+    encoding: 'utf8'
+  });
+  assert.equal(proc.status, 0, proc.stderr);
+  const parsed = JSON.parse(proc.stdout);
+  assert.equal(parsed.ok, false);
+  assert.match(parsed.summary, /credentials helper missing/);
 });
 
 test('runPdProjectCommand fails closed when lifecycle helper is missing', () => {

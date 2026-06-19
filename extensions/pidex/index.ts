@@ -176,6 +176,7 @@ const PROJECT_PIPELINE_MODE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_MODE_SCR
 const PROJECT_PIPELINE_RUN_FLOW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_RUN_FLOW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "run-flow.mjs");
 const PROJECT_PIPELINE_STATUS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "status.mjs");
 const PROJECT_PIPELINE_LIFECYCLE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "lifecycle.mjs");
+const PROJECT_PIPELINE_CREDENTIALS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_CREDENTIALS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "credentials.mjs");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
@@ -468,6 +469,7 @@ type PdProjectCommand =
 	| { command: "help" }
 	| { command: "status"; projectId?: string }
 	| { command: "open"; projectId: string }
+	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
 	| { command: "remove"; projectId: string; confirm: string };
 
 function readPdProjectFlagValue(parts: string[], index: number, flag: string): { value: string; nextIndex: number } {
@@ -505,6 +507,27 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		if (!projectId) throw new Error("pdproject open requires a project id");
 		return { command: "open", projectId };
 	}
+	if (command === "credentials") {
+		const action = parts.shift();
+		if (action !== "status" && action !== "reset") throw new Error("pdproject credentials requires status or reset");
+		let projectId = "";
+		let confirm = "";
+		for (let i = 0; i < parts.length; i += 1) {
+			if (parts[i] === "--project-id") {
+				const read = readPdProjectFlagValue(parts, i, "--project-id");
+				projectId = read.value;
+				i = read.nextIndex;
+			} else if (parts[i] === "--confirm") {
+				const read = readPdProjectFlagValue(parts, i, "--confirm");
+				confirm = read.value;
+				i = read.nextIndex;
+			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
+			else throw new Error(`unknown pdproject credentials argument: ${parts[i]}`);
+		}
+		if (!projectId) throw new Error(`pdproject credentials ${action} requires a project id`);
+		if (action === "reset" && confirm !== projectId) throw new Error(`pdproject credentials reset requires --confirm ${projectId}`);
+		return action === "reset" ? { command: "credentials", action, projectId, confirm } : { command: "credentials", action, projectId };
+	}
 	if (command === "remove") {
 		let projectId = "";
 		let confirm = "";
@@ -531,10 +554,18 @@ export function pdProjectUsage(): string {
 	return [
 		"Usage: /pdproject status [project-id|--project-id ID]",
 		"       /pdproject open <project-id>",
+		"       /pdproject credentials status <project-id>",
+		"       /pdproject credentials reset <project-id> --confirm <project-id>",
 		"       /pdproject remove <project-id> --confirm <project-id>",
 		"",
 		"Project Pipeline sandboxes are persistent. Removal is explicit and irreversible for the Docker container/volumes.",
 	].join("\n");
+}
+
+function summarizeProjectCredentials(projectId: string, credentials: any): string {
+	const providers = Array.isArray(credentials?.providers) && credentials.providers.length ? credentials.providers.join(",") : "none";
+	const inventoryCount = Array.isArray(credentials?.inventory) ? credentials.inventory.length : 0;
+	return `${projectId}: credentials(pi=${credentials?.pi ?? "unknown"}, git=${credentials?.git ?? "unknown"}, providers=${providers}, files=${inventoryCount})`;
 }
 
 function summarizeProjectRecords(projects: any[]): string {
@@ -561,6 +592,18 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
 		} catch {
 			return { ok: false, summary: `project-pipeline status failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
+		}
+	}
+	if (parsed.command === "credentials") {
+		if (!fs.existsSync(PROJECT_PIPELINE_CREDENTIALS_SCRIPT)) return { ok: false, summary: `project-pipeline credentials helper missing at ${PROJECT_PIPELINE_CREDENTIALS_SCRIPT}` };
+		const args = [PROJECT_PIPELINE_CREDENTIALS_SCRIPT, parsed.action, "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--json"];
+		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 60_000, maxBuffer: 5 * 1024 * 1024 });
+		try {
+			const json = JSON.parse(proc.stdout || "{}");
+			if (parsed.action === "status") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectCredentials(json.project_id ?? parsed.projectId, json.credentials ?? {}) };
+			return { ok: proc.status === 0 && json.ok !== false, summary: json.ok === true ? `Project Pipeline credentials reset: ${json.project_id ?? parsed.projectId}` : `Project Pipeline credentials reset failed: ${json.reason ?? JSON.stringify(json)}` };
+		} catch {
+			return { ok: false, summary: `project-pipeline credentials ${parsed.action} failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1200)}` };
 		}
 	}
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: `project-pipeline lifecycle helper missing at ${PROJECT_PIPELINE_LIFECYCLE_SCRIPT}` };

@@ -110,6 +110,18 @@ Start/open an existing sandbox container:
 /pdproject open <project-id>
 ```
 
+Show copied credential state without printing fingerprints or secret values:
+
+```text
+/pdproject credentials status <project-id>
+```
+
+Reset copied credentials from the sandbox secrets volume and registry metadata:
+
+```text
+/pdproject credentials reset <project-id> --confirm <project-id>
+```
+
 Remove a persistent sandbox explicitly:
 
 ```text
