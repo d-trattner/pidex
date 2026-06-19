@@ -82,7 +82,7 @@ export function runProjectPipelineAgent(options = {}) {
   const built = buildDockerExecArgs(record, { ...options, project_run_id });
   const started = new Date().toISOString();
   record.status = 'running';
-  record.runs = [...(record.runs || []), { project_run_id, container_exec_id: '', started_at: started, archive_sync_status: 'pending', image_digest: record.docker.image || '', config_bundle_hash: options.configBundleHash || '', credential_inventory_hash: options.credentialInventoryHash || '' }];
+  record.runs = [...(record.runs || []), { project_run_id, agent: options.agent || '', container_exec_id: '', started_at: started, archive_sync_status: 'pending', image_digest: record.docker.image || '', config_bundle_hash: options.configBundleHash || '', credential_inventory_hash: options.credentialInventoryHash || '' }];
   saveProjectRecord(pidexRoot, record);
   const proc = runner(built.args);
   const finalText = `${proc.stdout || ''}${proc.stderr ? `\nSTDERR:\n${proc.stderr}` : ''}`;
@@ -94,6 +94,7 @@ export function runProjectPipelineAgent(options = {}) {
     runEntry.ended_at = new Date().toISOString();
     runEntry.exit_code = proc.status;
     runEntry.container_exec_id = options.containerExecId || project_run_id;
+    if (routingCheck.ok) runEntry.context_file = routingCheck.context_file;
   }
   loaded.status = proc.status === 0 && routingCheck.ok ? 'sync-pending' : 'ready';
   saveProjectRecord(pidexRoot, loaded);
@@ -109,14 +110,17 @@ export function runProjectPipelineAgent(options = {}) {
     if (copiedArchiveWorkspace?.warnings?.length) archiveSyncReport.warnings.push(...copiedArchiveWorkspace.warnings);
     const afterSync = loadProjectRecord(pidexRoot, record.project_id);
     const afterRun = afterSync.runs.find((run) => run.project_run_id === project_run_id) || afterSync.runs.at(-1);
-    if (afterRun) afterRun.archive_sync_status = archiveSyncReport.ok ? 'complete' : 'failed';
+    archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, routingCheck.context_file);
+    if (afterRun) {
+      afterRun.archive_sync_status = archiveSyncReport.ok ? 'complete' : 'failed';
+      if (archiveSyncReport.ok) afterRun.archive_context_file = archiveContextFile;
+    }
     afterSync.status = archiveSyncReport.ok ? 'ready' : 'sync-failed';
     saveProjectRecord(pidexRoot, afterSync);
     if (!archiveSyncReport.ok) {
       if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
       return { ok: false, exitCode: 1, error: 'archive-sync-failed', finalText, routing, archiveSyncReport };
     }
-    archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, routingCheck.context_file);
     if (!existsSync(archiveContextFile)) {
       const missingRecord = loadProjectRecord(pidexRoot, record.project_id);
       const missingRun = missingRecord.runs.find((run) => run.project_run_id === project_run_id) || missingRecord.runs.at(-1);

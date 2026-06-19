@@ -51,6 +51,8 @@ test('runProjectPipelineAgent returns typed output and records run metadata', ()
   const loaded = loadProjectRecord(root, 'pp-run-abc123');
   assert.equal(loaded.status, 'sync-pending');
   assert.equal(loaded.runs[0].project_run_id, 'pprun-fixed');
+  assert.equal(loaded.runs[0].agent, 'pidex-implementer');
+  assert.equal(loaded.runs[0].context_file, 'agents.output/implementation/x.md');
   assert.equal(loaded.runs[0].exit_code, 0);
 });
 
@@ -74,6 +76,7 @@ test('runProjectPipelineAgent can sync archive and then expose archive_context_f
   const loaded = loadProjectRecord(root, 'pp-run-sync1');
   assert.equal(loaded.status, 'ready');
   assert.equal(loaded.runs[0].archive_sync_status, 'complete');
+  assert.equal(loaded.runs[0].archive_context_file, result.archive_context_file);
 });
 
 test('runProjectPipelineAgent syncs artifacts copied from container by default', () => {

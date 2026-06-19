@@ -613,13 +613,21 @@ export function pdProjectUsage(): string {
 	].join("\n");
 }
 
+function safeAgentsOutputPath(value: any): string | undefined {
+	const text = String(value || "").replaceAll("\\", "/");
+	if (!text.startsWith("agents.output/") || text.includes("..")) return undefined;
+	return text;
+}
+
 function summarizeProjectRuns(project: any): string {
 	const runs = Array.isArray(project?.runs) ? project.runs : [];
 	if (!runs.length) return `${project?.project_id ?? "unknown-project"}: no Project Pipeline runs recorded.`;
 	return runs.slice(-10).map((run: any) => [
 		`${project.project_id}: run=${run.project_run_id ?? "unknown"}`,
+		run.agent ? `agent=${run.agent}` : undefined,
 		`status=${run.archive_sync_status ?? "unknown"}`,
 		run.exit_code === undefined ? undefined : `exit=${run.exit_code}`,
+		safeAgentsOutputPath(run.context_file) ? `context=${safeAgentsOutputPath(run.context_file)}` : undefined,
 		run.started_at ? `started=${run.started_at}` : undefined,
 		run.ended_at ? `ended=${run.ended_at}` : undefined,
 	].filter(Boolean).join(" ")).join("\n");

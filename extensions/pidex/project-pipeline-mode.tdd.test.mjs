@@ -96,7 +96,7 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
 test('runPdProjectCommand summarizes project runs without raw metadata', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-runs-helper-'));
   const helper = path.join(dir, 'status.mjs');
-  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, projects: [{ project_id: 'pp-demo', runs: [{ project_run_id: 'pprun-1', archive_sync_status: 'complete', exit_code: 0, started_at: '2026-06-19T00:00:00.000Z', ended_at: '2026-06-19T00:00:01.000Z', finalText: 'SECRET-LIKE' }] }] }));\n");
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, projects: [{ project_id: 'pp-demo', runs: [{ project_run_id: 'pprun-1', agent: 'pidex-qa', archive_sync_status: 'complete', exit_code: 0, context_file: 'agents.output/qa/report.md', archive_context_file: '/tmp/archive/agents.output/qa/report.md', started_at: '2026-06-19T00:00:00.000Z', ended_at: '2026-06-19T00:00:01.000Z', finalText: 'SECRET-LIKE' }, { project_run_id: 'pprun-2', context_file: '../secret', archive_sync_status: 'failed' }] }] }));\n");
   try {
     const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'runs', projectId: 'pp-demo' })));"], {
       cwd: process.cwd(),
@@ -107,8 +107,12 @@ test('runPdProjectCommand summarizes project runs without raw metadata', () => {
     const parsed = JSON.parse(proc.stdout);
     assert.equal(parsed.ok, true);
     assert.match(parsed.summary, /run=pprun-1/);
+    assert.match(parsed.summary, /agent=pidex-qa/);
+    assert.match(parsed.summary, /context=agents\.output\/qa\/report\.md/);
     assert.match(parsed.summary, /status=complete/);
     assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
+    assert.doesNotMatch(parsed.summary, /\/tmp\/archive/);
+    assert.doesNotMatch(parsed.summary, /\.\.\/secret/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
