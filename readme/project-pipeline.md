@@ -6,13 +6,14 @@ In Project Pipeline mode, the project source lives and runs inside a persistent 
 
 ## Status
 
-- Local Docker MVP: validated.
+- Local Docker workflow: complete for the current MVP.
 - Entry point: `/pd` with saved `project-pipeline` mode.
 - Management command: `/pdproject`.
+- In-container multi-agent orchestration: local facade and `/pd` bridge wired with phase-specific role prompts.
+- Safe run/archive browsing: `runs`, `show-run`, and `artifacts` are available.
 - External Docker hosts: deferred.
 - PR automation/review branches: deferred.
-- Dashboard/archive browsing: deferred.
-- In-container multi-agent orchestration: local facade and `/pd` bridge wired.
+- Dashboard/archive browsing UI: deferred.
 
 ## Mental model
 
@@ -190,8 +191,7 @@ or update `~/pidex` from Git.
 
 ## Current limitations
 
-- The local orchestrator runs the default in-container phase chain through child Pi prompts. Further hardening can improve specialist role prompts, dashboard run browsing, and PR automation.
 - Project source is not exported back to host by PIDEX.
-- External Docker hosts are intentionally deferred until local Docker is fully polished.
+- External Docker hosts are intentionally deferred and require user/admin preparation for a dedicated non-root `pidex@host` Docker-capable account.
 - PR creation/review automation is deferred.
-- Dashboard views for Project Pipeline archives/runs are deferred.
+- Dashboard views for Project Pipeline archives/runs are deferred; use `/pdproject runs`, `/pdproject show-run`, and `/pdproject artifacts` locally.

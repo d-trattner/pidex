@@ -4,7 +4,7 @@ Experimental local-first Project Sandbox runtime for Initiative 021.
 
 This module is separate from `pidex.sandbox-runtime` / agent-pipeline. Project Pipeline manages persistent Docker-backed project environments where source is canonical inside the Project Sandbox.
 
-MVP status: validated local-first helper/runtime path for registry, lifecycle, conservative repair, image build/status, mode resolution, local import, Git clone, credentials, project-agent execution, host archive sync, a fail-closed run-flow facade, and a sequential in-container orchestrator facade with phase-specific role prompts. `/pd` with explicit saved `project-pipeline` mode now invokes the typed orchestrator bridge directly instead of host-direct kickoff.
+MVP status: local Docker workflow complete for the current scope. The validated local-first helper/runtime path covers registry, lifecycle, conservative repair, image build/status, mode resolution, local import, Git clone, credentials, project-agent execution, host archive sync, safe run/archive browsing, a fail-closed run-flow facade, and a sequential in-container orchestrator facade with phase-specific role prompts. `/pd` with explicit saved `project-pipeline` mode invokes the typed orchestrator bridge directly instead of host-direct kickoff.
 
 ## Safety invariants
 
@@ -29,4 +29,4 @@ MVP status: validated local-first helper/runtime path for registry, lifecycle, c
 → sync only agents.output/** and wiki/** back to <pidex-root>/state/project-archives/<project-id>/
 ```
 
-The local MVP has been validated with live Docker UAT for direct run-flow execution, `/pd` orchestration, local management commands, credential reset/status, run metadata summaries, conservative repair behavior, and role-guided sequential orchestration. Deferred work includes external Docker hosts, PR automation, and dashboard/archive browsing UX.
+The local MVP has been validated with live Docker UAT for direct run-flow execution, `/pd` orchestration, local management commands, credential reset/status, run metadata summaries, safe artifact listing, conservative repair behavior, and role-guided sequential orchestration. Deferred work includes external Docker hosts, PR automation, and dashboard/archive browsing UX.
