@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.7 - Unreleased
+## 0.1.7 - 2026-06-20
 
 Initial public-prep release of PIDEX, a Codex-oriented Pi package with `pidex-*` agents, project context, quality reporting, quality governance, optional parallel review lanes, dashboard, project memory, wiki hygiene, and public-readiness guardrails.
 
@@ -32,3 +32,4 @@ Public-readiness changes include:
 - Windows validation refreshed with standalone `pnpm@10.33.0`: install/check/typecheck/build/dashboard-start dry-run paths passed on Node.js 26.2.0.
 - npm bootstrap readiness refreshed after pnpm migration: `/pidex-init-home` now uses `install.windows.ps1` on native Windows, package docs under `readme/` are included in the npm package, public-readiness validates npm's publish packlist, and docs clarify npm as a lightweight Pi-bootstrap path only. Windows docs now call out Pi CLI `>=0.78.0` for current pipeline testing.
 - Optional Docker sandbox MVP added for selected source-changing PIDEX work: public default remains `off`; local `hardened-pipeline` mode uses canonical-checkout runtime helpers, copy-in/copy-out workspaces, Docker hardening flags, env/secret guards, source patch validation, assigned artifact extraction, cleanup/status helpers, and sandbox child tool-call hardening. Linux real `/pd` small-pipeline evidence and native Windows Docker helper smoke evidence were collected; full native Windows `/pd` pipeline evidence is still pending. Dashboard integration remains deferred.
+- Local Project Pipeline MVP completed for Docker-backed Project Sandboxes: explicit `project-pipeline` mode routes `/pd` through the in-container orchestrator; persistent project containers support create/open/repair/remove, local import/clone, credential bootstrap, in-container Pi execution, artifact-only archive sync, run metadata, and safe `/pdproject` management commands (`status`, `runs`, `show-run`, `artifacts`, `open`, `repair`, `credentials status/reset`, `remove`). External Docker hosts, PR automation, and dashboard browsing remain deferred.
