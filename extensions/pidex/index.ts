@@ -496,6 +496,7 @@ export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRun
 
 type PdProjectCommand =
 	| { command: "help" }
+	| { command: "use"; mode: "host-direct" | "hardened-pipeline" | "project-pipeline" }
 	| { command: "status"; projectId?: string }
 	| { command: "runs"; projectId: string }
 	| { command: "show-run"; projectId: string; runId: string }
@@ -515,6 +516,12 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 	const parts = String(argsLine || "").trim().split(/\s+/).filter(Boolean);
 	if (parts.length === 0 || parts[0] === "help" || parts[0] === "--help" || parts[0] === "-h") return { command: "help" };
 	const command = parts.shift();
+	if (command === "use") {
+		const mode = parts.shift();
+		if (mode !== "host-direct" && mode !== "hardened-pipeline" && mode !== "project-pipeline") throw new Error("pdproject use requires host-direct, hardened-pipeline, or project-pipeline");
+		if (parts.length) throw new Error(`unknown pdproject use argument: ${parts[0]}`);
+		return { command: "use", mode };
+	}
 	if (command === "status") {
 		let projectId: string | undefined;
 		for (let i = 0; i < parts.length; i += 1) {
@@ -625,7 +632,8 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 
 export function pdProjectUsage(): string {
 	return [
-		"Usage: /pdproject status [project-id|--project-id ID]",
+		"Usage: /pdproject use project-pipeline|hardened-pipeline|host-direct",
+		"       /pdproject status [project-id|--project-id ID]",
 		"       /pdproject runs <project-id>",
 		"       /pdproject show-run <project-id> <run-id>",
 		"       /pdproject artifacts <project-id>",
@@ -732,8 +740,21 @@ function summarizeProjectRecords(projects: any[]): string {
 	}).join("\n");
 }
 
-export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; summary: string; no_fallback?: true } {
+export function runPdProjectCommand(parsed: PdProjectCommand, options: { projectRoot?: string } = {}): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
+	if (parsed.command === "use") {
+		if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: false, summary: "project-pipeline mode helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
+		const projectRoot = options.projectRoot ?? process.cwd();
+		const args = [PROJECT_PIPELINE_MODE_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-root", projectRoot, "--mode", parsed.mode, "--source", "pdproject-use", "--json"];
+		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024 });
+		try {
+			const json = JSON.parse(proc.stdout || "{}");
+			const ok = proc.status === 0 && json.ok === true && json.mode === parsed.mode;
+			return { ok, no_fallback: parsed.mode === "project-pipeline" ? true : undefined, summary: ok ? `Project Pipeline mode saved for current project: ${parsed.mode}${json.no_fallback === true ? " no_fallback=true" : ""}` : "Project Pipeline mode save failed; helper details omitted" };
+		} catch {
+			return { ok: false, summary: `project-pipeline use failed exit=${proc.status}; helper output omitted to avoid local path exposure` };
+		}
+	}
 	if (parsed.command === "artifacts") {
 		try { return { ok: true, summary: summarizeProjectArtifacts(parsed.projectId) }; }
 		catch { return { ok: false, summary: "Project Pipeline artifacts failed: invalid project id" }; }
@@ -3087,7 +3108,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			}
 			try {
 				const parsed = parsePdProjectArgs(argLine);
-				const result = runPdProjectCommand(parsed);
+				const result = runPdProjectCommand(parsed, { projectRoot: ctx.cwd ?? process.cwd() });
 				await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
 			} catch (error: any) {
 				await ctx.ui.notify(`${error?.message ?? error}\n\n${pdProjectUsage()}`, "warning");

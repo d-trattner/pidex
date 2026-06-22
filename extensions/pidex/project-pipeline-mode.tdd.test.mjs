@@ -71,6 +71,9 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
 });
 
 test('parsePdProjectArgs supports status and exact-confirm remove', () => {
+  assert.deepEqual(mod.parsePdProjectArgs('use project-pipeline'), { command: 'use', mode: 'project-pipeline' });
+  assert.deepEqual(mod.parsePdProjectArgs('use hardened-pipeline'), { command: 'use', mode: 'hardened-pipeline' });
+  assert.throws(() => mod.parsePdProjectArgs('use magic'), /pdproject use requires/);
   assert.deepEqual(mod.parsePdProjectArgs('status'), { command: 'status', projectId: undefined });
   assert.deepEqual(mod.parsePdProjectArgs('status pp-demo'), { command: 'status', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('runs pp-demo'), { command: 'runs', projectId: 'pp-demo' });
