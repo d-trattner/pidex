@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildPhaseTask, parsePhaseList, runProjectPipelineOrchestration } from './orchestrator.mjs';
+import { buildPhaseTask, ensureProjectImage, parsePhaseList, runProjectPipelineOrchestration } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 
@@ -15,6 +15,11 @@ function seedRecord(pidexRoot, projectId = 'pp-orch-test') {
   saveProjectRecord(pidexRoot, record);
   return record;
 }
+
+test('ensureProjectImage skips Docker preflight for deterministic fake runners', () => {
+  assert.deepEqual(ensureProjectImage({ runner: () => 'ok' }), { ok: true, skipped: true });
+  assert.deepEqual(ensureProjectImage({ ensureImage: false }), { ok: true, skipped: true });
+});
 
 test('parsePhaseList defaults and validates pidex phases', () => {
   assert.deepEqual(parsePhaseList('pidex-planner,pidex-qa'), ['pidex-planner', 'pidex-qa']);

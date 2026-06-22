@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createProjectSandbox, openProjectSandbox } from './lifecycle.mjs';
+import { buildImage, DEFAULT_TAG, imageStatus } from './image.mjs';
 import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
@@ -114,7 +115,19 @@ function retryRoutingTask(task) {
   return `${task}\n\nMANDATORY RETRY INSTRUCTION:\nPrevious attempt did not produce a valid ROUTING block. You must finish this retry with exactly one ROUTING HTML comment containing context_file under agents.output/**. Do not omit ROUTING.`;
 }
 
+export function ensureProjectImage(options = {}) {
+  if (options.ensureImage === false || options.runner) return { ok: true, skipped: true };
+  const tag = options.image || DEFAULT_TAG;
+  const status = imageStatus({ tag });
+  if (status.ok) return { ok: true, status };
+  const built = buildImage({ tag });
+  if (!built.ok) return { ok: false, error: 'image-build-failed', image: { tag, reason: built.reason }, no_fallback: true };
+  return { ok: true, built };
+}
+
 function ensureSandboxAndSource(options, pidexRoot, projectId) {
+  const imageReady = ensureProjectImage(options);
+  if (!imageReady.ok) return imageReady;
   let lifecycle;
   try {
     loadProjectRecord(pidexRoot, projectId);
