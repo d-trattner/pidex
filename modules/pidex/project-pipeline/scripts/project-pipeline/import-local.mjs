@@ -85,7 +85,7 @@ export function importLocalProject(options = {}) {
   for (const file of collected.files) {
     const source = path.join(collected.project, file.path);
     const targetDir = path.posix.dirname(`/workspace/${file.path}`);
-    runner(['exec', record.docker.container_name, 'mkdir', '-p', targetDir]);
+    runner(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', targetDir]);
     runner(['cp', source, `${record.docker.container_name}:/workspace/${file.path}`]);
     copied.push(file);
   }

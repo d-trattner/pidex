@@ -48,6 +48,7 @@ test('importLocalProject copies accepted files to container workspace and update
   const result = importLocalProject({ pidexRoot: root, projectId: 'pp-import-abc123', source, runner: (args) => { calls.push(args); return 'ok'; } });
   assert.equal(result.ok, true);
   assert.deepEqual(result.copied.map((item) => item.path), ['README.md', 'src/app.js']);
+  assert.equal(calls.some((args) => args[0] === 'exec' && args[1] === '--user' && args[2] === 'node' && args.includes('mkdir')), true);
   assert.equal(calls.some((args) => args[0] === 'cp' && String(args[2]).endsWith(':/workspace/README.md')), true);
   assert.equal(calls.some((args) => String(args).includes('.env')), false);
   const loaded = loadProjectRecord(root, 'pp-import-abc123');
