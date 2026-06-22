@@ -791,7 +791,10 @@ export function runPdProjectCommand(parsed: PdProjectCommand): { ok: boolean; su
 }
 
 async function maybeCopyProjectPipelinePiCredentials(ctx: any): Promise<boolean | undefined> {
-	if (!ctx.hasUI) return process.env.PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS === "1" ? true : undefined;
+	const unattendedCredentialChoice = process.env.PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS;
+	if (unattendedCredentialChoice === "1") return true;
+	if (unattendedCredentialChoice === "0") return false;
+	if (!ctx.hasUI) return undefined;
 	const choice = await ctx.ui.select("Project Pipeline runs Pi inside the persistent Project Sandbox. Copy host Pi auth/settings into this trusted per-project secrets volume?", ["Copy Pi credentials", "Skip credentials", "Cancel"]);
 	if (choice === "Cancel") return undefined;
 	return choice === "Copy Pi credentials";
