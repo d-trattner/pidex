@@ -8,6 +8,13 @@ import { spawnSync } from 'node:child_process';
 const repoRoot = process.cwd();
 const scanner = path.join(repoRoot, 'modules/pidex/git-security-hooks/scripts/lib/security-scan.sh');
 
+function bashPath(file) {
+  if (process.platform !== 'win32') return file;
+  const proc = spawnSync('cygpath', ['-u', file], { encoding: 'utf8' });
+  if (proc.status === 0 && proc.stdout.trim()) return proc.stdout.trim();
+  return file.replace(/^([A-Za-z]):[\\/]/, (_, drive) => `/${drive.toLowerCase()}/`).replaceAll('\\', '/');
+}
+
 function run(command, args, cwd) {
   return spawnSync(command, args, { cwd, encoding: 'utf8' });
 }
@@ -30,7 +37,7 @@ function cleanup(dir) {
     writeFileSync(path.join(dir, '.gitignore'), 'agents.output/\n');
     writeFileSync(path.join(dir, 'README.md'), '# ok\n');
     assert.equal(run('git', ['add', '.gitignore', 'README.md'], dir).status, 0);
-    const result = run('bash', [scanner, '--staged'], dir);
+    const result = run('bash', [bashPath(scanner), '--staged'], dir);
     assert.equal(result.status, 0, result.stderr);
   } finally {
     cleanup(dir);
@@ -45,7 +52,7 @@ function cleanup(dir) {
     writeFileSync(path.join(dir, 'agents.output', 'qa', 'leak.md'), 'runtime evidence\n');
     assert.equal(run('git', ['add', '.gitignore'], dir).status, 0);
     assert.equal(run('git', ['add', '-f', 'agents.output/qa/leak.md'], dir).status, 0);
-    const result = run('bash', [scanner, '--staged'], dir);
+    const result = run('bash', [bashPath(scanner), '--staged'], dir);
     assert.equal(result.status, 1);
     assert.match(result.stdout, /COMMIT BLOCKED: Ignored files are staged/);
     assert.match(result.stdout, /agents\.output\/qa\/leak\.md/);
