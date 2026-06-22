@@ -70,7 +70,7 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   assert.deepEqual(execAgents, ['pidex-planner', 'pidex-critic', 'pidex-qa']);
   assert.equal(result.runs.length, 3);
   assert.equal(result.final_context_file, 'agents.output/pidex-qa/artifact.md');
-  assert.match(result.final_archive_context_file, /state\/project-archives\/pp-orch-test\/agents\.output\/pidex-qa\/artifact\.md$/);
+  assert.match(result.final_archive_context_file.replace(/\\/g, '/'), /state\/project-archives\/pp-orch-test\/agents\.output\/pidex-qa\/artifact\.md$/);
   const loaded = loadProjectRecord(pidexRoot, 'pp-orch-test');
   assert.equal(loaded.runs.length, 3);
   assert.equal(loaded.runs.every((run) => run.archive_sync_status === 'complete'), true);
