@@ -86,6 +86,36 @@ test('runProjectPipelineOrchestration validates array phases before runner execu
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
+test('runProjectPipelineOrchestration retries once when a phase omits routing', () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-retry');
+  let qaAttempts = 0;
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = args.at(-1);
+      const agent = String(prompt).match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-unknown';
+      if (agent === 'pidex-qa') {
+        qaAttempts += 1;
+        if (qaAttempts === 1) return { status: 0, stdout: 'forgot routing', stderr: '' };
+        assert.match(String(prompt), /Previous attempt did not produce a valid ROUTING block/);
+      }
+      const context = `agents.output/${agent}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, 'agents.output', agent), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), `# ${agent}\n`);
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-retry', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
+  assert.equal(result.ok, true);
+  assert.equal(qaAttempts, 2);
+  assert.equal(result.runs.length, 1);
+  assert.equal(result.runs[0].retry_count, 1);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
 test('runProjectPipelineOrchestration stops fail-closed on failed phase', () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');

@@ -106,6 +106,14 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
   return lines.join('\n\n');
 }
 
+function shouldRetryRoutingFailure(run) {
+  return run?.ok === false && run?.error === 'routing-invalid' && (run?.reason === 'routing-missing' || run?.reason === 'context-file-missing');
+}
+
+function retryRoutingTask(task) {
+  return `${task}\n\nMANDATORY RETRY INSTRUCTION:\nPrevious attempt did not produce a valid ROUTING block. You must finish this retry with exactly one ROUTING HTML comment containing context_file under agents.output/**. Do not omit ROUTING.`;
+}
+
 function ensureSandboxAndSource(options, pidexRoot, projectId) {
   let lifecycle;
   try {
@@ -152,21 +160,27 @@ export function runProjectPipelineOrchestration(options = {}) {
     const agent = phases[i];
     const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length });
     let run;
+    let retryCount = 0;
+    const runAgentOnce = (phaseTask) => runProjectPipelineAgent({
+      pidexRoot,
+      projectId,
+      agent,
+      task: phaseTask,
+      archiveFromContainer: options.archiveFromContainer !== false,
+      archiveWorkspace: options.archiveWorkspace,
+      runner: options.runner,
+      archiveCopyRunner: options.runner,
+    });
     try {
-      run = runProjectPipelineAgent({
-        pidexRoot,
-        projectId,
-        agent,
-        task,
-        archiveFromContainer: options.archiveFromContainer !== false,
-        archiveWorkspace: options.archiveWorkspace,
-        runner: options.runner,
-        archiveCopyRunner: options.runner,
-      });
+      run = runAgentOnce(task);
+      if (shouldRetryRoutingFailure(run) && options.retryRouting !== false) {
+        retryCount = 1;
+        run = runAgentOnce(retryRoutingTask(task));
+      }
     } catch (error) {
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
     }
-    runs.push({ agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, error: run.error, reason: run.reason });
+    runs.push({ agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, retry_count: retryCount, error: run.error, reason: run.reason });
     if (!run.ok) return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
   }
