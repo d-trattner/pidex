@@ -29,7 +29,7 @@ test('projectPipelineModeInstructionLine points project-pipeline to orchestrator
 test('buildProjectPipelineRunFlowArgs constructs fail-closed orchestrator request', () => {
   const built = mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'ship the thing', copyPiCredentials: true, acknowledgeTrustedPersistentContainer: true });
   assert.match(built.projectId, /^pp-/);
-  assert.equal(built.args[0].endsWith(['modules', 'pidex', 'project-pipeline', 'scripts', 'project-pipeline', 'orchestrator.mjs'].join('/')), true);
+  assert.equal(built.args[0].replace(/\\/g, '/').endsWith(['modules', 'pidex', 'project-pipeline', 'scripts', 'project-pipeline', 'orchestrator.mjs'].join('/')), true);
   assert.equal(built.args.includes('--source'), true);
   assert.equal(built.args.includes(process.cwd()), true);
   assert.equal(built.args.includes('--agent'), false);
