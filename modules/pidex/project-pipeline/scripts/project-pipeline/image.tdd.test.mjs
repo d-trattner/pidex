@@ -5,8 +5,9 @@ import path from 'node:path';
 import { buildImage, buildImageArgs, imageStatus, inspectImageArgs } from './image.mjs';
 
 test('buildImageArgs points at project-pipeline Dockerfile and default tag', () => {
-  const args = buildImageArgs({ moduleRoot: '/tmp/project-pipeline', tag: 'pidex/test:local' });
-  assert.deepEqual(args, ['build', '-t', 'pidex/test:local', '-f', path.join('/tmp/project-pipeline', 'Dockerfile'), '/tmp/project-pipeline']);
+  const moduleRoot = path.resolve('/tmp/project-pipeline');
+  const args = buildImageArgs({ moduleRoot, tag: 'pidex/test:local' });
+  assert.deepEqual(args, ['build', '-t', 'pidex/test:local', '-f', path.join(moduleRoot, 'Dockerfile'), moduleRoot]);
 });
 
 test('imageStatus reports missing or present from docker inspect', () => {
