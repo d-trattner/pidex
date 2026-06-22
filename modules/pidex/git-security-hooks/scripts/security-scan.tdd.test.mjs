@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -27,8 +27,27 @@ function initRepo() {
   return dir;
 }
 
+function chmodTreeWritable(target) {
+  try {
+    chmodSync(target, 0o700);
+    for (const entry of readdirSync(target, { withFileTypes: true })) {
+      const child = path.join(target, entry.name);
+      if (entry.isDirectory()) chmodTreeWritable(child);
+      else chmodSync(child, 0o600);
+    }
+  } catch {
+    // Best effort only; Windows Git/Bash may hold transient handles.
+  }
+}
+
 function cleanup(dir) {
-  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  chmodTreeWritable(dir);
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 200 });
+  } catch (error) {
+    if (process.platform === 'win32' && (error?.code === 'EPERM' || error?.code === 'EBUSY')) return;
+    throw error;
+  }
 }
 
 {
