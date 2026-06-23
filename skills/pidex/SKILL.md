@@ -195,13 +195,42 @@ The user might say any of these:
 
 ### Step 2 — Execution mode
 
-Use the saved per-project PIDEX mode. If no mode is saved, the extension asks once before this orchestrator flow proceeds:
+Use the saved per-project PIDEX mode. For existing projects, the extension usually asks once before this orchestrator flow proceeds:
 
 - `host-direct` — run PIDEX directly in this checkout.
 - `hardened-pipeline` — use temporary Docker hardening for selected source-changing agent work while host source remains canonical.
 - `project-pipeline` — import/open this project in a persistent Docker Project Sandbox, run Pi inside the container, and sync only `agents.output/**` and `wiki/**` back to the host archive.
 
-If `project-pipeline` is selected, the extension continues the same `/pd` task through the Project Pipeline orchestrator before normal host-direct preflight begins. Do not re-route it back to host-direct.
+For fresh/new projects, the extension may intentionally defer project and mode selection to this orchestrator because the project path does not exist yet. After the user confirms the new project path and epic, ask for the per-project mode before spawning agents.
+
+Recommendation rule:
+- If the user is doing Project Pipeline, Docker Project Sandbox, first-run `/pd`, or Windows/Linux Project Pipeline UAT validation, recommend `project-pipeline`.
+- Otherwise prefer `hardened-pipeline` for normal source-changing work and `host-direct` only when the user wants the classic direct flow.
+
+If `project-pipeline` is selected for an existing project, the extension continues the same `/pd` task through the Project Pipeline orchestrator before normal host-direct preflight begins. Do not re-route it back to host-direct.
+
+If `project-pipeline` is selected during the new-project interview, do not research or inspect Project Pipeline docs/helpers. Treat Project Pipeline behavior as known:
+1. create/initialize the host project directory metadata as usual;
+2. save/use `project-pipeline` as the per-project mode for that project;
+3. before the first child agent, ask explicit consent to copy Pi/provider credentials into the trusted persistent Docker Project Sandbox if credentials are not already configured;
+4. start the Project Pipeline orchestrator for the confirmed task and project path;
+5. fail closed with no host-direct or hardened-pipeline fallback.
+
+Project Pipeline command contract for deterministic handoff when the extension has not already intercepted the run:
+
+```bash
+node <pidex-root>/modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.mjs \
+  --pidex-root <pidex-root> \
+  --project-id <safe-project-id> \
+  --name <project-name> \
+  --source <absolute project path> \
+  --task <confirmed epic/task text> \
+  --json
+```
+
+When the user approves copying Pi credentials into the trusted persistent sandbox, include the explicit credential args supported by the helper and `--acknowledge-trusted-persistent-container`; otherwise do not copy credentials. If a credential-missing failure occurs, ask once for explicit consent and retry with credential copy; do not let an avoidable missing-credential planner failure happen when status already shows credentials missing.
+
+Project Pipeline source policy: generated source files remain inside the Docker Project Sandbox. Only `agents.output/**` and `wiki/**` sync back to the host archive. If the user asks for source files on the host after completion, phrase it as an optional **manual export/copy from sandbox to host project path**, outside normal archive sync; never imply automatic source mirroring.
 
 If the user asks for background mode, explain that background/Telegram scripts are scaffolded but not parity-complete yet, and ask whether to continue in the selected direct/session mode instead.
 
