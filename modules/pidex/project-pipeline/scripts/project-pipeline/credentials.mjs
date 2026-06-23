@@ -80,10 +80,11 @@ export function buildCredentialCopyOps(record, entries) {
     if (!classification.ok) throw new Error(`credential source rejected (${classification.reason}): ${entry.source}`);
     const dest = credentialDest(entry.kind, source);
     const dir = path.posix.dirname(dest);
+    const tempDest = `/tmp/pidex-credential-${crypto.createHash('sha256').update(`${entry.kind}:${source}`).digest('hex').slice(0, 16)}`;
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', dir]);
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir]);
-    ops.push(['cp', source, `${record.docker.container_name}:${dest}`]);
-    ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', credentialMode(entry.kind), dest]);
+    ops.push(['cp', source, `${record.docker.container_name}:${tempDest}`]);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'sh', '-c', `cat ${JSON.stringify(tempDest)} > ${JSON.stringify(dest)} && chmod ${credentialMode(entry.kind)} ${JSON.stringify(dest)} && rm -f ${JSON.stringify(tempDest)}`]);
     inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
   }
   if (entries.some((entry) => entry.kind.startsWith('pi-'))) {
