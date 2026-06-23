@@ -414,13 +414,13 @@ export async function choosePidexProjectRoot(ctx: any): Promise<string | undefin
 	if (recent.length === 0) return isLikelyPidexProjectDirectory(current) ? current : PIDEX_DEFER_PROJECT_SELECTION;
 	const optionMap = new Map<string, string>();
 	for (const [index, item] of recent.entries()) {
-		const label = `${String.fromCharCode(65 + index)}) ${item.cwd}${item.last_ts ? ` — last touched ${item.last_ts}` : ""}`;
+		const label = `${String.fromCharCode(65 + index)}) Use recent project: ${item.cwd}${item.last_ts ? ` — last touched ${item.last_ts}` : ""}`;
 		optionMap.set(label, item.cwd);
 	}
-	const currentLabel = `Current directory: ${current}`;
+	const currentLabel = `Use current directory as project: ${current}`;
 	optionMap.set(currentLabel, current);
-	const cancelLabel = "Cancel";
-	const choice = await ctx.ui.select("Choose PIDEX project for this run. Mode is resolved after project selection.", [...optionMap.keys(), cancelLabel]);
+	const cancelLabel = "Cancel — do not start PIDEX";
+	const choice = await ctx.ui.select("Choose which existing project this /pd run is for. PIDEX resolves the saved mode only after this choice. For a new project, cancel and run /pd from a non-project directory so the orchestrator can ask for name/path/new.", [...optionMap.keys(), cancelLabel]);
 	if (choice === cancelLabel) return undefined;
 	return optionMap.get(choice) ?? current;
 }
@@ -428,11 +428,18 @@ export async function choosePidexProjectRoot(ctx: any): Promise<string | undefin
 const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox for the selected project, import/clone source into /workspace, run Pi inside the container, and sync only agents.output/** and wiki/** back to the host archive. No source is mirrored back automatically. Failures do not fall back.";
 
 export async function chooseProjectPipelineMode(ctx: any, projectRoot: string, options: { saveMode?: typeof saveProjectPipelineMode } = {}): Promise<ProjectPipelineModeResult | undefined> {
-	const choice = await ctx.ui.select("Choose PIDEX mode for this project. This is saved per project.", ["host-direct", "hardened-pipeline", "project-pipeline", "Cancel"]);
-	if (choice === "Cancel") return undefined;
-	if (choice === "project-pipeline") await ctx.ui.notify(PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION, "info");
+	const optionMap = new Map<string, ProjectPipelineMode>([
+		["host-direct — run normal PIDEX on the host for this project", "host-direct"],
+		["hardened-pipeline — run normal PIDEX with extra sandbox/runtime hardening", "hardened-pipeline"],
+		["project-pipeline — run inside a persistent Docker Project Sandbox; sync artifacts/wiki only", "project-pipeline"],
+	]);
+	const cancelLabel = "Cancel — do not save a mode";
+	const choice = await ctx.ui.select("Choose PIDEX mode for this existing project. This is saved per project and controls future /pd routing.", [...optionMap.keys(), cancelLabel]);
+	if (choice === cancelLabel) return undefined;
+	const mode = optionMap.get(choice) ?? (choice as ProjectPipelineMode);
+	if (mode === "project-pipeline") await ctx.ui.notify(PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION, "info");
 	const saveMode = options.saveMode || saveProjectPipelineMode;
-	return saveMode(projectRoot, choice, "pd-first-run");
+	return saveMode(projectRoot, mode, "pd-first-run");
 }
 
 async function resolveProjectPipelineModeForCommand(ctx: any, projectRoot: string): Promise<ProjectPipelineModeResult | undefined> {

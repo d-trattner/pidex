@@ -65,7 +65,7 @@ test('chooseProjectPipelineMode saves selected project-pipeline mode and preserv
   const notifications = [];
   const ctx = {
     ui: {
-      select: async () => 'project-pipeline',
+      select: async (_message, options) => options.find((option) => option.startsWith('project-pipeline')),
       notify: async (message, level) => notifications.push({ message, level }),
     },
   };
@@ -86,7 +86,7 @@ test('chooseProjectPipelineMode saves selected project-pipeline mode and preserv
 
 test('chooseProjectPipelineMode cancel stops without saving or credential prompt', async () => {
   let saveCalled = false;
-  const result = await mod.chooseProjectPipelineMode({ ui: { select: async () => 'Cancel', notify: async () => { throw new Error('notify should not run'); } } }, process.cwd(), {
+  const result = await mod.chooseProjectPipelineMode({ ui: { select: async (_message, options) => options.find((option) => option.startsWith('Cancel')), notify: async () => { throw new Error('notify should not run'); } } }, process.cwd(), {
     saveMode: () => { saveCalled = true; return { ok: true, mode: 'project-pipeline' }; },
   });
   assert.equal(result, undefined);
@@ -154,7 +154,7 @@ await commands.get('pd').handler('ship same task', {
   cwd: process.env.PIDEX_TEST_PROJECT_ROOT,
   hasUI: true,
   ui: {
-    select: async (message) => message.includes('Choose PIDEX mode') ? 'project-pipeline' : 'Current directory: ' + process.env.PIDEX_TEST_PROJECT_ROOT,
+    select: async (message, options) => message.includes('Choose PIDEX mode') ? options.find((option) => option.startsWith('project-pipeline')) : options.find((option) => option.startsWith('Use current directory')),
     notify: async (message, level) => notifications.push({ message, level }),
   },
 });
@@ -272,7 +272,7 @@ await commands.get('pd').handler('do selected project work', {
   cwd: process.env.PIDEX_TEST_START_ROOT,
   hasUI: true,
   ui: {
-    select: async (message, options) => message.includes('Choose PIDEX project') ? options[0] : 'project-pipeline',
+    select: async (message, options) => message.includes('Choose which existing project') ? options[0] : options.find((option) => option.startsWith('project-pipeline')),
     notify: async () => {},
   },
 });
