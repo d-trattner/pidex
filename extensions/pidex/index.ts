@@ -403,8 +403,12 @@ export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_
 export const PIDEX_DEFER_PROJECT_SELECTION = "__PIDEX_DEFER_PROJECT_SELECTION__";
 
 export function isLikelyPidexProjectDirectory(projectRoot: string): boolean {
-	const markers = [".git", "package.json", "pyproject.toml", "go.mod", "Cargo.toml", "pidex", "wiki", "agents.output"];
-	return markers.some((marker) => fs.existsSync(path.join(projectRoot, marker)));
+	const fileOrDirMarkers = [".git", "package.json", "pyproject.toml", "go.mod", "Cargo.toml", "agents.output"];
+	if (fileOrDirMarkers.some((marker) => fs.existsSync(path.join(projectRoot, marker)))) return true;
+	const pidexContext = path.join(projectRoot, "pidex", "context", "CONTEXT.md");
+	if (fs.existsSync(pidexContext)) return true;
+	const wikiIndex = path.join(projectRoot, "wiki", "index.md");
+	return fs.existsSync(wikiIndex);
 }
 
 export async function choosePidexProjectRoot(ctx: any): Promise<string | undefined> {

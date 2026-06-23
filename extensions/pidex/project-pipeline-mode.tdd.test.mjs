@@ -188,6 +188,19 @@ console.log(JSON.stringify({ notifications, sent, recorded: JSON.parse(readFileS
   }
 });
 
+test('isLikelyPidexProjectDirectory does not treat a child pidex checkout as project marker', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-home-with-checkout-'));
+  try {
+    mkdirSync(path.join(dir, 'pidex'));
+    assert.equal(mod.isLikelyPidexProjectDirectory(dir), false);
+    mkdirSync(path.join(dir, 'pidex', 'context'), { recursive: true });
+    writeFileSync(path.join(dir, 'pidex', 'context', 'CONTEXT.md'), '# Context\n');
+    assert.equal(mod.isLikelyPidexProjectDirectory(dir), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('/pd with no recent project in non-project cwd defers to orchestrator new-project interview', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-fresh-home-'));
   const state = path.join(dir, 'state');
