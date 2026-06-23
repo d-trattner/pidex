@@ -400,11 +400,18 @@ export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_
 	return [...byCwd.values()].sort((a, b) => String(b.last_ts || "").localeCompare(String(a.last_ts || ""))).slice(0, limit);
 }
 
+export const PIDEX_DEFER_PROJECT_SELECTION = "__PIDEX_DEFER_PROJECT_SELECTION__";
+
+export function isLikelyPidexProjectDirectory(projectRoot: string): boolean {
+	const markers = [".git", "package.json", "pyproject.toml", "go.mod", "Cargo.toml", "pidex", "wiki", "agents.output"];
+	return markers.some((marker) => fs.existsSync(path.join(projectRoot, marker)));
+}
+
 export async function choosePidexProjectRoot(ctx: any): Promise<string | undefined> {
 	const current = path.resolve(ctx.cwd ?? process.cwd());
 	if (!ctx.hasUI) return current;
 	const recent = listRecentPidexProjects(5).filter((item) => path.resolve(item.cwd) !== current);
-	if (recent.length === 0) return current;
+	if (recent.length === 0) return isLikelyPidexProjectDirectory(current) ? current : PIDEX_DEFER_PROJECT_SELECTION;
 	const optionMap = new Map<string, string>();
 	for (const [index, item] of recent.entries()) {
 		const label = `${String.fromCharCode(65 + index)}) ${item.cwd}${item.last_ts ? ` — last touched ${item.last_ts}` : ""}`;
@@ -3103,23 +3110,27 @@ export default function runningPi(pi: ExtensionAPI) {
 			return;
 		}
 		const selectedProjectRoot = await choosePidexProjectRoot(ctx);
+		const deferProjectSelection = selectedProjectRoot === PIDEX_DEFER_PROJECT_SELECTION;
+		let projectPipelineMode: ProjectPipelineModeResult | undefined;
 		if (!selectedProjectRoot) {
 			ctx.ui.notify("PIDEX project selection cancelled; no fallback was used.", "warning");
 			return;
 		}
-		const projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx, selectedProjectRoot);
-		if (!projectPipelineMode) {
-			ctx.ui.notify("PIDEX project mode selection cancelled; no fallback was used.", "warning");
-			return;
-		}
-		if (!projectPipelineMode.ok && projectPipelineMode.decision_required) {
-			const reason = projectPipelineMode.reason ? `${projectPipelineMode.reason}. ${projectPipelineModeMissingGuidance()}` : projectPipelineModeMissingGuidance();
-			ctx.ui.notify(`PIDEX project mode is required before starting: ${reason}`, "warning");
-			return;
-		}
-		if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {
-			await startProjectPipelineRunFlow({ ...ctx, cwd: selectedProjectRoot }, task);
-			return;
+		if (!deferProjectSelection) {
+			projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx, selectedProjectRoot);
+			if (!projectPipelineMode) {
+				ctx.ui.notify("PIDEX project mode selection cancelled; no fallback was used.", "warning");
+				return;
+			}
+			if (!projectPipelineMode.ok && projectPipelineMode.decision_required) {
+				const reason = projectPipelineMode.reason ? `${projectPipelineMode.reason}. ${projectPipelineModeMissingGuidance()}` : projectPipelineModeMissingGuidance();
+				ctx.ui.notify(`PIDEX project mode is required before starting: ${reason}`, "warning");
+				return;
+			}
+			if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {
+				await startProjectPipelineRunFlow({ ...ctx, cwd: selectedProjectRoot }, task);
+				return;
+			}
 		}
 		const authPreflight = await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
@@ -3134,17 +3145,18 @@ export default function runningPi(pi: ExtensionAPI) {
 		} else if (authPreflight.output) {
 			ctx.ui.notify("pidex delegate auth preflight OK", "info");
 		}
-		recordPreflightSkeleton(selectedProjectRoot, task, authPreflight.ok, gitHookStatus);
+		if (!deferProjectSelection) recordPreflightSkeleton(selectedProjectRoot, task, authPreflight.ok, gitHookStatus);
 		const kickoff = [
 			"You are the pidex orchestrator.",
 			`First read the orchestration skill at ${SKILL_PATH}.`,
 			"Use the saved per-project PIDEX mode reported below. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
 			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
+			deferProjectSelection ? "No project root was preselected by the extension because no recent PIDEX project was found and the current directory does not look like a project. Run the skill Step 0/Step 1 project interview now, including the New project flow when the user chooses new." : "",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
-			`Selected project root: ${selectedProjectRoot}`,
-			`PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,
-			projectPipelineModeInstructionLine(projectPipelineMode),
+			deferProjectSelection ? "PIDEX project root: not selected yet; ask which project/name/path/new before any specialist handoff." : `Selected project root: ${selectedProjectRoot}`,
+			deferProjectSelection ? "PIDEX pipeline mode: not resolved yet because no project root is selected. After the project path exists, use the normal per-project mode rules for later runs; do not select a mode for the user's home directory." : `PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,
+			deferProjectSelection ? "PIDEX mode instruction: project selection/new-project interview comes before mode selection on fresh starts." : projectPipelineModeInstructionLine(projectPipelineMode),
 			`PIDEX sandbox preflight: ${sandboxState.enabled ? "hardened-pipeline enabled" : "off"}; ${sandboxProbe.summary}.`,
 			sandboxState.enabled
 				? "Sandbox is internal hardening, not a user workflow change. Continue normal /pidex orchestration and dynamic routing. For source-mutating/risky phases, use the sandbox runtime helpers and include sandbox evidence or SANDBOX-SKIP in artifacts. Do not ask the user mid-run for sandbox configuration."
@@ -3154,7 +3166,7 @@ export default function runningPi(pi: ExtensionAPI) {
 				: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
 			task ? `Initial user task: ${task}` : "Initial user task: not provided; begin by asking which project and what deliverable.",
 		].join("\n\n");
-		ctx.ui.notify(`Starting pidex orchestrator (${projectPipelineMode.mode ?? "host-direct"})`, "info");
+		ctx.ui.notify(deferProjectSelection ? "Starting pidex orchestrator (project selection required)" : `Starting pidex orchestrator (${projectPipelineMode?.mode ?? "host-direct"})`, "info");
 		pi.sendUserMessage(kickoff);
 	};
 

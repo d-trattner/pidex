@@ -121,6 +121,7 @@ test('/pd first-run project-pipeline selection continues same task into run-flow
   const modeHelper = path.join(dir, 'mode.mjs');
   const orchestratorHelper = path.join(dir, 'orchestrator.mjs');
   const recorder = path.join(dir, 'orchestrator-argv.json');
+  writeFileSync(path.join(dir, 'package.json'), '{"name":"seam-project"}\n');
   writeFileSync(modeHelper, `
 const argv = process.argv.slice(2);
 const modeIndex = argv.indexOf('--mode');
@@ -182,6 +183,56 @@ console.log(JSON.stringify({ notifications, sent, recorded: JSON.parse(readFileS
     assert.match(argv[argv.indexOf('--task') + 1], /Initial user task: ship same task/);
     assert.equal(argv.includes('--pi-auth'), false);
     assert.equal(argv.includes('--acknowledge-trusted-persistent-container'), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('/pd with no recent project in non-project cwd defers to orchestrator new-project interview', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-fresh-home-'));
+  const state = path.join(dir, 'state');
+  mkdirSync(state);
+  try {
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+const mod = await import('./extensions/pidex/index.ts');
+const commands = new Map();
+const notifications = [];
+const sent = [];
+let selectCalls = 0;
+mod.default({
+  on: () => {},
+  registerTool: () => {},
+  registerCommand: (name, spec) => commands.set(name, spec),
+  sendUserMessage: (message) => sent.push(message),
+});
+await commands.get('pd').handler('', {
+  cwd: process.env.PIDEX_TEST_PROJECT_ROOT,
+  hasUI: true,
+  ui: {
+    select: async () => { selectCalls += 1; return 'host-direct'; },
+    notify: async (message, level) => notifications.push({ message, level }),
+  },
+});
+console.log(JSON.stringify({ notifications, sent, selectCalls }));
+`], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PIDEX_CHILD: '0',
+        PIDEX_STATE_DIR: state,
+        PIDEX_TEST_PROJECT_ROOT: dir,
+      },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const parsed = JSON.parse(child.stdout.trim().split(/\n/).at(-1));
+    assert.equal(parsed.selectCalls, 0, 'fresh non-project /pd should not show mode selector before project interview');
+    assert.equal(parsed.sent.length, 1);
+    assert.doesNotMatch(parsed.sent[0], /Selected project root:/);
+    assert.match(parsed.sent[0], /No project root was preselected/);
+    assert.match(parsed.sent[0], /New project flow/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /project selection required/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
