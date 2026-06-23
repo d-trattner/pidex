@@ -7,6 +7,8 @@ In Project Pipeline mode, the project source lives and runs inside a persistent 
 ## Status
 
 - Local Docker workflow: complete for the current MVP.
+- Linux validation: highest real `/pd` scenario passed with two Project Pipeline runs in one Project Sandbox.
+- Native Windows validation: focused `/pd` Project Pipeline low smoke passed with Docker Desktop Linux containers.
 - Entry point: `/pd` with saved `project-pipeline` mode.
 - Management command: `/pdproject`.
 - In-container multi-agent orchestration: local facade and `/pd` bridge wired with phase-specific role prompts.
@@ -40,26 +42,29 @@ Project source is not mirrored back to the host by PIDEX. If you want source cha
 
 ## Requirements
 
-- Canonical PIDEX runtime checkout at `~/pidex`.
+- Canonical PIDEX runtime checkout at `~/pidex` on Linux/WSL2 or `$HOME\pidex` for the experimental Windows bootstrap.
 - Docker Engine/Desktop with Linux containers.
-- Built local Project Pipeline image: PIDEX namespace `pidex`, image tag `project-node22:local`.
 - Pi credentials configured on the host if you choose to copy them into the Project Sandbox.
+
+The local Project Pipeline image (`pidex/project-node22:local`) is auto-built by the orchestrator when missing. It can also be built manually through the image helper for troubleshooting.
 
 On Linux, if the current shell has not picked up Docker group membership yet, use a fresh login shell or `newgrp docker`.
 
 ## Choosing Project Pipeline mode
 
-From a project directory, run:
+From a project directory, save Project Pipeline mode explicitly:
+
+```text
+/pdproject use project-pipeline
+```
+
+Then run:
 
 ```text
 /pd Describe the work you want done
 ```
 
-If no mode is saved for the project, PIDEX asks once:
-
-```text
-host-direct / hardened-pipeline / project-pipeline
-```
+The mode can also be set to `host-direct` or `hardened-pipeline` with `/pdproject use ...`. If no mode is saved for the project, PIDEX asks once and does not silently fall back.
 
 Choose `project-pipeline` for the persistent Docker Project Sandbox workflow.
 
@@ -171,9 +176,9 @@ If Docker works in your user shell but not in a tool/subprocess shell, start a f
 newgrp docker -c '...'
 ```
 
-### Image missing
+### Image missing or image build fails
 
-Build the local image through the module helper:
+The orchestrator auto-builds the local image when missing. If that fails or you want to preflight manually, build the local image through the module helper:
 
 ```bash
 node scripts/modules/run-check.mjs --capability project-pipeline.image --agent orchestrator --phase preflight --project . -- build --json

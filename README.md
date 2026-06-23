@@ -14,9 +14,9 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 ## Current status
 
-PIDEX is an experimental direct-mode MVP. Direct mode is the supported path today.
+PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary supported path today. Local Docker Project Pipeline is validated for the current MVP on Linux and has a focused native Windows smoke pass with Docker Desktop Linux containers.
 
-The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes Docker-backed sandboxing in two forms: the optional hardened agent sandbox for selected source-changing pipeline work, and the validated local Project Pipeline MVP where project work runs inside a persistent Docker Project Sandbox. Both require the canonical `~/pidex` runtime checkout.
+The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes Docker-backed sandboxing in two forms: the optional hardened agent sandbox for selected source-changing pipeline work, and the validated local Project Pipeline MVP where project work runs inside a persistent Docker Project Sandbox. Both require the canonical `~/pidex` runtime checkout on Linux/WSL2 or `$HOME\pidex` for the experimental Windows bootstrap.
 
 ## Detailed feature docs
 
@@ -44,7 +44,7 @@ Project/process docs:
 
 ## Prerequisites
 
-PIDEX currently supports Linux/direct mode and includes experimental Windows bootstrap plus focused native Windows Docker sandbox helper validation.
+PIDEX currently supports Linux/direct mode and includes experimental Windows bootstrap plus focused native Windows Docker Project Pipeline validation.
 
 Linux / WSL2 recommended prerequisites:
 
@@ -70,7 +70,7 @@ Windows prerequisites for the experimental PowerShell bootstrap:
   npm install -g @earendil-works/pi-coding-agent@0.78.0
   pi --version
   ```
-- Optional Docker sandbox validation: Docker Desktop running Linux containers. Native PowerShell Docker helper smoke has passed, but full native `/pidex`/`/pd` pipeline execution remains experimental.
+- Optional Docker Project Pipeline validation: Docker Desktop running Linux containers. Native PowerShell Project Pipeline `/pd` low smoke has passed; broader native Windows pipeline support remains experimental.
 
 See [Windows status](readme/windows.md) for support boundaries and the PowerShell bootstrap.
 

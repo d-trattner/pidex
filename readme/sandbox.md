@@ -15,7 +15,7 @@ This page focuses on the hardened agent sandbox. See [Project Pipeline](project-
 - Runtime requirement: canonical PIDEX checkout at `~/pidex` / `$HOME\pidex`, or `PIDEX_ROOT` pointing at an equivalent full checkout.
 - npm package role: lightweight Pi bootstrap only; sandbox runtime is a canonical-checkout feature.
 - Linux/direct-mode validation: real `/pd` small pipeline passed end-to-end with sandbox enabled.
-- Native Windows validation: Docker helper runtime smoke passed from PowerShell with Docker Desktop Linux containers; full native `/pd` pipeline is still pending extended testing.
+- Native Windows validation: Docker helper runtime smoke passed from PowerShell with Docker Desktop Linux containers; Project Pipeline has a separate native Windows low `/pd` smoke pass. Broader native Windows pipeline evidence is still pending.
 - Dashboard settings integration: deferred.
 
 ## What the sandbox protects
@@ -74,7 +74,7 @@ Run the full project check on Linux/WSL/Git Bash-capable environments:
 pnpm run check
 ```
 
-Native PowerShell can run the Docker probe and targeted Node-based sandbox checks directly, but the full `pnpm run check` command is Bash-backed and currently needs Git Bash/WSL or a future Windows-owned check wrapper.
+Native PowerShell can run the Docker probe and targeted Node-based sandbox checks directly. The full `pnpm run check` command is Bash-backed and has passed on native Windows with Git Bash available, but it is still not a pure PowerShell validation path.
 
 Docker probe through the module capability runner:
 
