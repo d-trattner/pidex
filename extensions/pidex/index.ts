@@ -357,10 +357,9 @@ export function runProjectPipelineModeResolver(projectRoot: string, mode?: strin
 	const args = [PROJECT_PIPELINE_MODE_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-root", projectRoot, "--json"];
 	if (mode) args.push("--mode", mode, "--source", source);
 	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 10_000 });
+	if (proc.status !== 0) return redactedProjectPipelineModeFailure(proc.status);
 	try {
-		const parsed = JSON.parse(proc.stdout || "{}");
-		if (proc.status !== 0 && parsed?.ok !== true) return redactedProjectPipelineModeFailure(proc.status);
-		return parsed;
+		return JSON.parse(proc.stdout || "{}");
 	} catch {
 		return redactedProjectPipelineModeFailure(proc.status);
 	}
@@ -3114,7 +3113,8 @@ export default function runningPi(pi: ExtensionAPI) {
 			return;
 		}
 		if (!projectPipelineMode.ok && projectPipelineMode.decision_required) {
-			ctx.ui.notify(`PIDEX project mode is required before starting: ${projectPipelineMode.reason ?? projectPipelineModeMissingGuidance()}`, "warning");
+			const reason = projectPipelineMode.reason ? `${projectPipelineMode.reason}. ${projectPipelineModeMissingGuidance()}` : projectPipelineModeMissingGuidance();
+			ctx.ui.notify(`PIDEX project mode is required before starting: ${reason}`, "warning");
 			return;
 		}
 		if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {

@@ -160,6 +160,7 @@ console.log(JSON.stringify({ notifications, sent, recorded: JSON.parse(readFileS
       cwd: process.cwd(),
       env: {
         ...process.env,
+        PIDEX_CHILD: '0',
         PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: modeHelper,
         PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT: orchestratorHelper,
         PIDEX_STATE_DIR: path.join(dir, 'state'),
@@ -226,6 +227,7 @@ await commands.get('pd').handler('do selected project work', {
       cwd: process.cwd(),
       env: {
         ...process.env,
+        PIDEX_CHILD: '0',
         PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: modeHelper,
         PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT: orchestratorHelper,
         PIDEX_STATE_DIR: state,
@@ -589,6 +591,27 @@ test('runProjectPipelineModeResolver redacts helper parse failures', () => {
     assert.equal(parsed.decision_required, true);
     assert.match(parsed.reason, /helper output omitted/);
     assert.doesNotMatch(parsed.reason, /Daniel|auth\.json|pidex-secrets|SECRET-LIKE|docker create/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runProjectPipelineModeResolver fails closed even when nonzero helper prints ok true', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-mode-nonzero-'));
+  const helper = path.join(dir, 'mode.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, mode: 'project-pipeline', no_fallback: true })); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runProjectPipelineModeResolver(process.cwd())));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.decision_required, true);
+    assert.match(parsed.reason, /mode resolver failed exit=1/);
+    assert.notEqual(parsed.mode, 'project-pipeline');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
