@@ -92,7 +92,7 @@ export function buildCredentialCopyOps(record, entries) {
     const dir = path.posix.dirname(dest);
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', dir]);
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir]);
-    ops.push(['exec-input', source, 'exec', '-i', '--user', 'node', record.docker.container_name, 'sh', '-c', `cat > ${JSON.stringify(dest)} && chmod ${credentialMode(entry.kind)} ${JSON.stringify(dest)}`]);
+    ops.push(['exec-input', source, 'exec', '-i', '--user', 'node', record.docker.container_name, 'sh', '-c', 'cat > "$1" && chmod "$2" "$1"', 'sh', dest, credentialMode(entry.kind)]);
     inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
   }
   if (entries.some((entry) => entry.kind.startsWith('pi-'))) {

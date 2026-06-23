@@ -33,8 +33,8 @@ test('buildCredentialCopyOps copies selected files into /pidex-secrets and recor
   const result = buildCredentialCopyOps(record, [{ kind: 'ssh-key', source: key }, { kind: 'known-hosts', source: known }]);
   assert.equal(result.ops.some((op) => op[0] === 'cp'), false);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('chmod') && op.includes('700') && op.includes('/pidex-secrets/git/.ssh')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === key && op.includes('-i') && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/git/.ssh/id_ed25519')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === known && op.includes('-i') && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/git/.ssh/known_hosts')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === key && op.includes('-i') && op.includes('--user') && op.includes('node') && op.includes('/pidex-secrets/git/.ssh/id_ed25519') && op.includes('600')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === known && op.includes('-i') && op.includes('--user') && op.includes('node') && op.includes('/pidex-secrets/git/.ssh/known_hosts') && op.includes('644')), true);
   assert.equal(result.inventory.length, 2);
   assert.equal(result.inventory[0].fingerprint.startsWith('sha256:'), true);
   assert.equal(JSON.stringify(result.inventory).includes('PRIVATE KEY'), false);
@@ -50,14 +50,30 @@ test('buildCredentialCopyOps supports Pi and provider allowlisted destinations',
   const result = buildCredentialCopyOps(record, [{ kind: 'pi-auth', source: piAuth }, { kind: 'codex-auth', source: codexAuth }]);
   assert.equal(result.ops.some((op) => op[0] === 'cp'), false);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('chmod') && op.includes('700') && op.includes('/pidex-secrets/pi/agent')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === piAuth && op.includes('-i') && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/pi/agent/auth.json')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === codexAuth && op.includes('-i') && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/providers/codex/auth.json')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === piAuth && op.includes('-i') && op.includes('--user') && op.includes('node') && op.includes('/pidex-secrets/pi/agent/auth.json') && op.includes('600')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === codexAuth && op.includes('-i') && op.includes('--user') && op.includes('node') && op.includes('/pidex-secrets/providers/codex/auth.json') && op.includes('600')), true);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('ln') && op.includes('/pidex-home/.pi/agent')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && String(op.at(-1)).includes('chmod 600') && String(op.at(-1)).includes('/pidex-secrets/pi/agent/auth.json')), true);
-  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && String(op.at(-1)).includes('chmod 600') && String(op.at(-1)).includes('/pidex-secrets/providers/codex/auth.json')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op.includes('/pidex-secrets/pi/agent/auth.json') && op.includes('600')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op.includes('/pidex-secrets/providers/codex/auth.json') && op.includes('600')), true);
   assert.equal(result.ops.some((op) => op.includes('777')), false);
   assert.deepEqual(result.inventory.map((item) => item.group), ['pi', 'providers']);
   assert.equal(JSON.stringify(result.inventory).includes('redacted'), false);
+});
+
+test('buildCredentialCopyOps passes hostile destination filenames as positional shell args', () => {
+  const root = tmp();
+  const hostile = path.join(root, 'id_$(touch pwn)`echo bad` "quoted" key');
+  write(hostile, 'PRIVATE KEY');
+  const record = createProjectRecord({ project_id: 'pp-creds-hostile1', name: 'demo' });
+  const result = buildCredentialCopyOps(record, [{ kind: 'ssh-key', source: hostile }]);
+  const op = result.ops.find((item) => item[0] === 'exec-input');
+  assert.ok(op, 'expected exec-input operation');
+  assert.equal(op[1], hostile);
+  assert.equal(op.includes('cat > "$1" && chmod "$2" "$1"'), true);
+  assert.equal(op.at(-2), '/pidex-secrets/git/.ssh/id_$(touch pwn)`echo bad` "quoted" key');
+  assert.equal(op.at(-1), '600');
+  assert.equal(JSON.stringify(op).includes('cat > "/pidex-secrets/git/.ssh/id_'), false);
+  assert.equal(JSON.stringify(op).includes('$(touch pwn)`echo bad`'), true, 'hostile filename is data argument only');
 });
 
 test('validateCredentialCommand constrains named copy commands to matching credential groups', () => {
