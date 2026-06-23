@@ -10,9 +10,19 @@ import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 const BROAD_ROOTS = new Set(['.ssh', '.config', '.pi', '.codex']);
 
 function docker(args, opts = {}) {
-  const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, ...opts });
-  if (proc.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${(proc.stderr || proc.stdout || '').trim()}`);
-  return proc.stdout;
+  const proc = spawnSync('docker', args, { encoding: opts.input ? undefined : 'utf8', maxBuffer: 10 * 1024 * 1024, ...opts });
+  const stdout = Buffer.isBuffer(proc.stdout) ? proc.stdout.toString('utf8') : proc.stdout;
+  const stderr = Buffer.isBuffer(proc.stderr) ? proc.stderr.toString('utf8') : proc.stderr;
+  if (proc.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${(stderr || stdout || '').trim()}`);
+  return stdout;
+}
+
+function runCredentialDockerOp(op) {
+  if (op[0] === 'exec-input') {
+    const [, source, ...args] = op;
+    return docker(args, { input: readFileSync(source) });
+  }
+  return docker(op);
 }
 
 export function redactPath(file) {
@@ -80,13 +90,9 @@ export function buildCredentialCopyOps(record, entries) {
     if (!classification.ok) throw new Error(`credential source rejected (${classification.reason}): ${entry.source}`);
     const dest = credentialDest(entry.kind, source);
     const dir = path.posix.dirname(dest);
-    const tempDir = `/cache/pidex-credentials-${crypto.createHash('sha256').update(`${entry.kind}:${source}`).digest('hex').slice(0, 16)}`;
-    const tempFile = `${tempDir}/${path.basename(source)}`;
-    ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', dir, tempDir]);
-    ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir, tempDir]);
-    ops.push(['cp', source, `${record.docker.container_name}:${tempDir}/`]);
-    ops.push(['exec', '--user', 'root', record.docker.container_name, 'chown', 'node:node', tempFile]);
-    ops.push(['exec', '--user', 'node', record.docker.container_name, 'sh', '-c', `cat ${JSON.stringify(tempFile)} > ${JSON.stringify(dest)} && chmod ${credentialMode(entry.kind)} ${JSON.stringify(dest)} && rm -rf ${JSON.stringify(tempDir)}`]);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', dir]);
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir]);
+    ops.push(['exec-input', source, 'exec', '-i', '--user', 'node', record.docker.container_name, 'sh', '-c', `cat > ${JSON.stringify(dest)} && chmod ${credentialMode(entry.kind)} ${JSON.stringify(dest)}`]);
     inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
   }
   if (entries.some((entry) => entry.kind.startsWith('pi-'))) {
@@ -111,7 +117,7 @@ export function copySelectedCredentials(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
   const entries = options.entries || [];
-  const runner = options.runner || ((args) => docker(args));
+  const runner = options.runner || runCredentialDockerOp;
   const { ops, inventory } = buildCredentialCopyOps(record, entries);
   for (const op of ops) runner(op);
   if (inventory.some((item) => item.group === 'git')) record.credentials.git = 'configured';
