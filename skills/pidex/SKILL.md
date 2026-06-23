@@ -1,6 +1,6 @@
 ---
 name: pidex
-description: Start a pidex pipeline run. Primary invocation is /pidex; /pd is a shortcut alias. Runs a structured pre-flight interview to define the task precisely, then starts the pidex-* pipeline in Pi direct mode using the pidex_agent tool.
+description: Start a pidex pipeline run. Primary invocation is /pidex; /pd is a shortcut alias. Runs a structured pre-flight interview to define the task precisely, then starts the pidex-* pipeline using the saved per-project PIDEX mode: host-direct, hardened-pipeline, or project-pipeline.
 ---
 
 # PIDEX Orchestrator (`/pidex`)
@@ -39,9 +39,17 @@ Rules for grilling inside pidex:
 
 Do not auto-trigger pidex from natural-language phrases such as "pipeline starten", "build this", or "implement this"; those may belong to Running Pi or normal chat.
 
-## Direct-mode operation (current supported mode)
+## Per-project execution modes
 
-pidex currently supports direct mode as the working MVP:
+PIDEX resolves and saves an explicit mode per project:
+
+- `host-direct`: the host Pi session is the orchestrator and specialist handoffs use the `pidex_agent` tool registered by the package extension.
+- `hardened-pipeline`: selected source-changing work may use temporary Docker hardening while host source remains canonical.
+- `project-pipeline`: `/pd` runs through a persistent Docker Project Sandbox where project source and Pi run inside the container; only `agents.output/**` and `wiki/**` sync back to the host archive.
+
+If no mode is saved and UI is available, `/pd` asks once, saves the choice, and continues the same task. Project Pipeline is explicit and fail-closed: failures do not fall back to `host-direct` or `hardened-pipeline`.
+
+In `host-direct` mode:
 
 - The host Pi session is the orchestrator.
 - Specialist handoffs use the `pidex_agent` tool registered by the package extension.
@@ -185,11 +193,17 @@ The user might say any of these:
 
 ### Step 2 — Execution mode
 
-Use **Direct mode** by default. It is the only parity-supported mode in the MVP.
+Use the saved per-project PIDEX mode. If no mode is saved, the extension asks once before this orchestrator flow proceeds:
 
-If the user asks for background mode, explain that background/Telegram scripts are scaffolded but not parity-complete yet, and ask whether to continue in direct mode instead.
+- `host-direct` — run PIDEX directly in this checkout.
+- `hardened-pipeline` — use temporary Docker hardening for selected source-changing agent work while host source remains canonical.
+- `project-pipeline` — import/open this project in a persistent Docker Project Sandbox, run Pi inside the container, and sync only `agents.output/**` and `wiki/**` back to the host archive.
 
-Store the choice as `direct` unless the user explicitly accepts experimental background work.
+If `project-pipeline` is selected, the extension continues the same `/pd` task through the Project Pipeline orchestrator before normal host-direct preflight begins. Do not re-route it back to host-direct.
+
+If the user asks for background mode, explain that background/Telegram scripts are scaffolded but not parity-complete yet, and ask whether to continue in the selected direct/session mode instead.
+
+Store the choice as the saved per-project mode unless the user explicitly accepts experimental background work.
 
 ### Step 3 — Interview
 

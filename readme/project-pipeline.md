@@ -52,21 +52,27 @@ On Linux, if the current shell has not picked up Docker group membership yet, us
 
 ## Choosing Project Pipeline mode
 
-From a project directory, save Project Pipeline mode explicitly:
-
-```text
-/pdproject use project-pipeline
-```
-
-Then run:
+From a project directory, run normal `/pd`:
 
 ```text
 /pd Describe the work you want done
 ```
 
-The mode can also be set to `host-direct` or `hardened-pipeline` with `/pdproject use ...`. If no mode is saved for the project, PIDEX asks once and does not silently fall back.
+If no mode is saved for the project, PIDEX asks once and saves the choice:
 
-Choose `project-pipeline` for the persistent Docker Project Sandbox workflow.
+```text
+host-direct / hardened-pipeline / project-pipeline / Cancel
+```
+
+Choose `project-pipeline` for the persistent Docker Project Sandbox workflow. PIDEX then continues the same `/pd` task through the Project Pipeline orchestrator.
+
+For deterministic setup, tests, or explicit switching, you can also save mode before running `/pd`:
+
+```text
+/pdproject use project-pipeline
+```
+
+The mode can also be set to `host-direct` or `hardened-pipeline` with `/pdproject use ...`.
 
 When Project Pipeline mode is active, `/pd` invokes the typed `project-pipeline.orchestrator` bridge. It does not start the host-direct orchestrator and does not fall back automatically.
 

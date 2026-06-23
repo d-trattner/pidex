@@ -348,27 +348,48 @@ type ProjectPipelineModeResult = {
 	no_fallback?: boolean;
 };
 
-export function runProjectPipelineModeResolver(projectRoot: string, mode?: string): ProjectPipelineModeResult {
-	if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: false, decision_required: true, reason: `project-pipeline mode resolver missing at ${PROJECT_PIPELINE_MODE_SCRIPT}; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd` };
+function redactedProjectPipelineModeFailure(exitCode: number | null): ProjectPipelineModeResult {
+	return { ok: false, decision_required: true, reason: `project-pipeline mode resolver failed exit=${exitCode}; helper output omitted to avoid local path or credential metadata exposure` };
+}
+
+export function runProjectPipelineModeResolver(projectRoot: string, mode?: string, source = "interactive"): ProjectPipelineModeResult {
+	if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: false, decision_required: true, reason: `project-pipeline mode resolver missing; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd` };
 	const args = [PROJECT_PIPELINE_MODE_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-root", projectRoot, "--json"];
-	if (mode) args.push("--mode", mode, "--source", "interactive");
+	if (mode) args.push("--mode", mode, "--source", source);
 	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 10_000 });
 	try {
 		const parsed = JSON.parse(proc.stdout || "{}");
+		if (proc.status !== 0 && parsed?.ok !== true) return redactedProjectPipelineModeFailure(proc.status);
 		return parsed;
 	} catch {
-		return { ok: false, decision_required: true, reason: `project-pipeline mode resolver failed exit=${proc.status}: ${clipEnd(`${proc.stdout || ""}\n${proc.stderr || ""}`.trim(), 1000)}` };
+		return redactedProjectPipelineModeFailure(proc.status);
 	}
 }
 
-async function resolveProjectPipelineModeForCommand(ctx: any): Promise<ProjectPipelineModeResult> {
+export function saveProjectPipelineMode(projectRoot: string, mode: "host-direct" | "hardened-pipeline" | "project-pipeline", source = "pd-first-run"): ProjectPipelineModeResult {
+	return runProjectPipelineModeResolver(projectRoot, mode, source);
+}
+
+export function projectPipelineModeMissingGuidance(): string {
+	return "Project has no saved PIDEX mode. Run /pdproject use project-pipeline|hardened-pipeline|host-direct or start /pd in an interactive Pi UI.";
+}
+
+const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox, import/clone source into /workspace, run Pi inside the container, and sync only agents.output/** and wiki/** back to the host archive. No source is mirrored back automatically. Failures do not fall back.";
+
+export async function chooseProjectPipelineMode(ctx: any, projectRoot: string, options: { saveMode?: typeof saveProjectPipelineMode } = {}): Promise<ProjectPipelineModeResult | undefined> {
+	const choice = await ctx.ui.select("Choose PIDEX mode for this project. This is saved per project.", ["host-direct", "hardened-pipeline", "project-pipeline", "Cancel"]);
+	if (choice === "Cancel") return undefined;
+	if (choice === "project-pipeline") await ctx.ui.notify(PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION, "info");
+	const saveMode = options.saveMode || saveProjectPipelineMode;
+	return saveMode(projectRoot, choice, "pd-first-run");
+}
+
+async function resolveProjectPipelineModeForCommand(ctx: any): Promise<ProjectPipelineModeResult | undefined> {
 	const projectRoot = path.resolve(ctx.cwd ?? process.cwd());
 	const current = runProjectPipelineModeResolver(projectRoot);
 	if (!current.decision_required) return current;
 	if (!ctx.hasUI) return current;
-	const choice = await ctx.ui.select("PIDEX pipeline mode for this project? This is saved per project. Project Pipeline uses a persistent Docker Project Sandbox and does not fall back automatically to host-direct.", ["host-direct", "hardened-pipeline", "project-pipeline", "Cancel"]);
-	if (choice === "Cancel") return { ok: false, decision_required: true, reason: "user cancelled pipeline mode selection" };
-	return runProjectPipelineModeResolver(projectRoot, choice);
+	return chooseProjectPipelineMode(ctx, projectRoot);
 }
 
 export function projectPipelineModeEvidenceLine(result: ProjectPipelineModeResult): string {
@@ -3039,8 +3060,12 @@ export default function runningPi(pi: ExtensionAPI) {
 			return;
 		}
 		const projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx);
+		if (!projectPipelineMode) {
+			ctx.ui.notify("PIDEX project mode selection cancelled; no fallback was used.", "warning");
+			return;
+		}
 		if (!projectPipelineMode.ok && projectPipelineMode.decision_required) {
-			ctx.ui.notify(`PIDEX project mode is required before starting: ${projectPipelineMode.reason ?? "missing saved mode"}`, "warning");
+			ctx.ui.notify(`PIDEX project mode is required before starting: ${projectPipelineMode.reason ?? projectPipelineModeMissingGuidance()}`, "warning");
 			return;
 		}
 		if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {
@@ -3064,7 +3089,7 @@ export default function runningPi(pi: ExtensionAPI) {
 		const kickoff = [
 			"You are the pidex orchestrator.",
 			`First read the orchestration skill at ${SKILL_PATH}.`,
-			"Use direct mode. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
+			"Use the saved per-project PIDEX mode reported below. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
 			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
@@ -3079,7 +3104,7 @@ export default function runningPi(pi: ExtensionAPI) {
 				: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
 			task ? `Initial user task: ${task}` : "Initial user task: not provided; begin by asking which project and what deliverable.",
 		].join("\n\n");
-		ctx.ui.notify("Starting pidex direct-mode orchestrator", "info");
+		ctx.ui.notify(`Starting pidex orchestrator (${projectPipelineMode.mode ?? "host-direct"})`, "info");
 		pi.sendUserMessage(kickoff);
 	};
 
@@ -3089,12 +3114,12 @@ export default function runningPi(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("pidex", {
-		description: "Start the pidex pidex-* software-delivery pipeline (direct-mode MVP).",
+		description: "Start the pidex pidex-* software-delivery pipeline using the saved per-project mode.",
 		handler: startRunningPi,
 	});
 
 	pi.registerCommand("pd", {
-		description: "Start the pidex pidex-* software-delivery pipeline (direct-mode MVP).",
+		description: "Start the pidex pidex-* software-delivery pipeline using the saved per-project mode.",
 		handler: startRunningPi,
 	});
 

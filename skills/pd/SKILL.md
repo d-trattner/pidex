@@ -1,11 +1,11 @@
 ---
 name: pd
-description: Shortcut alias for /pidex. Starts the same PIDEX pipeline pre-flight and pidex-* direct-mode pipeline.
+description: Shortcut alias for /pidex. Starts the same PIDEX pipeline pre-flight and saved per-project mode flow: host-direct, hardened-pipeline, or project-pipeline.
 ---
 
 # PIDEX shortcut (`/pd`)
 
-`/pd` is a short alias for `/pidex`.
+`/pd` is a short alias for `/pidex`. It uses the same per-project PIDEX mode resolution: `host-direct`, `hardened-pipeline`, or `project-pipeline`.
 
 Load and follow the canonical PIDEX orchestrator skill at:
 

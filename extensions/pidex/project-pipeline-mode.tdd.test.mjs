@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,19 @@ test('projectPipelineModeInstructionLine points project-pipeline to orchestrator
   assert.match(line, /do not mirror source/);
 });
 
+test('orchestrator instructions describe per-project modes without direct-only claims', () => {
+  const pidexSkill = readFileSync(path.join(process.cwd(), 'skills/pidex/SKILL.md'), 'utf8');
+  const pdSkill = readFileSync(path.join(process.cwd(), 'skills/pd/SKILL.md'), 'utf8');
+  const sandboxRule = readFileSync(path.join(process.cwd(), 'rules/orchestrator/sandbox-preflight.md'), 'utf8');
+  for (const mode of ['host-direct', 'hardened-pipeline', 'project-pipeline']) assert.match(pidexSkill, new RegExp(mode));
+  assert.match(pidexSkill, /If no mode is saved/);
+  assert.doesNotMatch(pidexSkill, /only parity-supported mode/);
+  assert.match(pdSkill, /per-project PIDEX mode/);
+  assert.doesNotMatch(pdSkill, /direct-mode pipeline/);
+  assert.match(sandboxRule, /separate from Project Pipeline/);
+  assert.match(sandboxRule, /do not reinterpret it as the temporary hardened agent sandbox/);
+});
+
 test('buildProjectPipelineRunFlowArgs constructs fail-closed orchestrator request', () => {
   const built = mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'ship the thing', copyPiCredentials: true, acknowledgeTrustedPersistentContainer: true });
   assert.match(built.projectId, /^pp-/);
@@ -43,6 +56,108 @@ test('shouldStartProjectPipelineRunFlow selects only explicit project-pipeline m
   assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: true, mode: 'host-direct' }), false);
   assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: true, mode: 'hardened-pipeline' }), false);
   assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: false, decision_required: true }), false);
+});
+
+test('chooseProjectPipelineMode saves selected project-pipeline mode and preserves credential boundary', async () => {
+  const calls = [];
+  const notifications = [];
+  const ctx = {
+    ui: {
+      select: async () => 'project-pipeline',
+      notify: async (message, level) => notifications.push({ message, level }),
+    },
+  };
+  const result = await mod.chooseProjectPipelineMode(ctx, process.cwd(), {
+    saveMode: (projectRoot, mode, source) => {
+      calls.push({ projectRoot, mode, source });
+      return { ok: true, mode, source, no_fallback: mode === 'project-pipeline' };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'project-pipeline');
+  assert.equal(result.no_fallback, true);
+  assert.deepEqual(calls.map((call) => ({ mode: call.mode, source: call.source })), [{ mode: 'project-pipeline', source: 'pd-first-run' }]);
+  assert.equal(notifications.length, 1);
+  assert.match(notifications[0].message, /persistent Docker Project Sandbox/);
+  assert.doesNotMatch(JSON.stringify({ calls, notifications }), /fingerprint|pidex-secrets|auth\.json|copySelectedCredentials/);
+});
+
+test('chooseProjectPipelineMode cancel stops without saving or credential prompt', async () => {
+  let saveCalled = false;
+  const result = await mod.chooseProjectPipelineMode({ ui: { select: async () => 'Cancel', notify: async () => { throw new Error('notify should not run'); } } }, process.cwd(), {
+    saveMode: () => { saveCalled = true; return { ok: true, mode: 'project-pipeline' }; },
+  });
+  assert.equal(result, undefined);
+  assert.equal(saveCalled, false);
+});
+
+test('/pd first-run project-pipeline selection continues same task into run-flow seam', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-seam-'));
+  const modeHelper = path.join(dir, 'mode.mjs');
+  const orchestratorHelper = path.join(dir, 'orchestrator.mjs');
+  const recorder = path.join(dir, 'orchestrator-argv.json');
+  writeFileSync(modeHelper, `
+const argv = process.argv.slice(2);
+const modeIndex = argv.indexOf('--mode');
+if (modeIndex === -1) {
+  console.log(JSON.stringify({ ok: false, decision_required: true, reason: 'missing saved mode', no_fallback: true }));
+} else {
+  const mode = argv[modeIndex + 1];
+  console.log(JSON.stringify({ ok: true, mode, source: argv[argv.indexOf('--source') + 1], no_fallback: mode === 'project-pipeline' }));
+}
+`);
+  writeFileSync(orchestratorHelper, `
+import { writeFileSync } from 'node:fs';
+writeFileSync(process.env.PIDEX_TEST_RECORDER, JSON.stringify({ argv: process.argv.slice(2) }));
+console.log(JSON.stringify({ ok: true, no_fallback: true, lifecycle: { record: { project_id: 'pp-seam' } }, final_context_file: 'agents.output/qa/seam.md', runs: [{ agent: 'pidex-qa', ok: true, context_file: 'agents.output/qa/seam.md', archive_sync_status: 'complete' }] }));
+`);
+  try {
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+import { readFileSync } from 'node:fs';
+const mod = await import('./extensions/pidex/index.ts');
+const commands = new Map();
+const notifications = [];
+const sent = [];
+mod.default({
+  on: () => {},
+  registerTool: () => {},
+  registerCommand: (name, spec) => commands.set(name, spec),
+  sendUserMessage: (message) => sent.push(message),
+});
+await commands.get('pd').handler('ship same task', {
+  cwd: process.env.PIDEX_TEST_PROJECT_ROOT,
+  hasUI: true,
+  ui: {
+    select: async () => 'project-pipeline',
+    notify: async (message, level) => notifications.push({ message, level }),
+  },
+});
+console.log(JSON.stringify({ notifications, sent, recorded: JSON.parse(readFileSync(process.env.PIDEX_TEST_RECORDER, 'utf8')) }));
+`], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: modeHelper,
+        PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT: orchestratorHelper,
+        PIDEX_TEST_PROJECT_ROOT: dir,
+        PIDEX_TEST_RECORDER: recorder,
+        PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS: '0',
+      },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const parsed = JSON.parse(child.stdout.trim().split(/\n/).at(-1));
+    assert.equal(parsed.sent.length, 0, 'project-pipeline mode should not fall through to host kickoff');
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /persistent Docker Project Sandbox/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /Project Pipeline run-flow complete for pp-seam/);
+    const argv = parsed.recorded.argv;
+    assert.match(argv[argv.indexOf('--task') + 1], /Initial user task: ship same task/);
+    assert.equal(argv.includes('--pi-auth'), false);
+    assert.equal(argv.includes('--acknowledge-trusted-persistent-container'), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', () => {
@@ -369,6 +484,27 @@ test('runProjectPipelineRunFlow fails closed when orchestrator helper is missing
   assert.equal(parsed.ok, false);
   assert.equal(parsed.no_fallback, true);
   assert.match(parsed.error, /orchestrator helper missing/);
+});
+
+test('runProjectPipelineModeResolver redacts helper parse failures', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-mode-helper-'));
+  const helper = path.join(dir, 'mode.mjs');
+  writeFileSync(helper, "console.log('not-json C:/Users/Daniel/.pi/agent/auth.json docker create /pidex-secrets SECRET-LIKE-TOKEN'); process.exit(1);\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runProjectPipelineModeResolver(process.cwd())));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.decision_required, true);
+    assert.match(parsed.reason, /helper output omitted/);
+    assert.doesNotMatch(parsed.reason, /Daniel|auth\.json|pidex-secrets|SECRET-LIKE|docker create/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('runProjectPipelineModeResolver fails closed when helper is missing', () => {
