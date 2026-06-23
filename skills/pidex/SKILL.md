@@ -1,6 +1,6 @@
 ---
 name: pidex
-description: Start a pidex pipeline run. Primary invocation is /pidex; /pd is a shortcut alias. Runs a structured pre-flight interview to define the task precisely, then starts the pidex-* pipeline using the saved per-project PIDEX mode: host-direct, hardened-pipeline, or project-pipeline.
+description: "Start a pidex pipeline run. Primary invocation is /pidex; /pd is a shortcut alias. Runs a structured pre-flight interview to define the task precisely, then starts the pidex-* pipeline using the saved per-project PIDEX mode: host-direct, hardened-pipeline, or project-pipeline."
 ---
 
 # PIDEX Orchestrator (`/pidex`)

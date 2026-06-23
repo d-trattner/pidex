@@ -35,6 +35,8 @@ test('orchestrator instructions describe per-project modes without direct-only c
   assert.doesNotMatch(pidexSkill, /only parity-supported mode/);
   assert.match(pdSkill, /per-project PIDEX mode/);
   assert.doesNotMatch(pdSkill, /direct-mode pipeline/);
+  assert.match(pidexSkill, /^description: "/m);
+  assert.match(pdSkill, /^description: "/m);
   assert.match(sandboxRule, /separate from Project Pipeline/);
   assert.match(sandboxRule, /do not reinterpret it as the temporary hardened agent sandbox/);
 });

@@ -32,6 +32,7 @@ test('buildCredentialCopyOps copies selected files into /pidex-secrets and recor
   const record = createProjectRecord({ project_id: 'pp-creds-abc123', name: 'demo' });
   const result = buildCredentialCopyOps(record, [{ kind: 'ssh-key', source: key }, { kind: 'known-hosts', source: known }]);
   assert.equal(result.ops.some((op) => op[0] === 'cp' && String(op[2]).includes(':/cache/pidex-credentials-') && String(op[2]).endsWith('/')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('--user') && op.includes('root') && op.includes('chown') && op.includes('node:node') && String(op.at(-1)).includes('/cache/pidex-credentials-')), true);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/git/.ssh/id_ed25519')), true);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/git/.ssh/known_hosts')), true);
   assert.equal(result.inventory.length, 2);
@@ -48,6 +49,7 @@ test('buildCredentialCopyOps supports Pi and provider allowlisted destinations',
   const record = createProjectRecord({ project_id: 'pp-creds-pi123', name: 'demo' });
   const result = buildCredentialCopyOps(record, [{ kind: 'pi-auth', source: piAuth }, { kind: 'codex-auth', source: codexAuth }]);
   assert.equal(result.ops.some((op) => op[0] === 'cp' && String(op[2]).includes(':/cache/pidex-credentials-') && String(op[2]).endsWith('/')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('--user') && op.includes('root') && op.includes('chown') && op.includes('node:node') && String(op.at(-1)).includes('/cache/pidex-credentials-')), true);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/pi/agent/auth.json')), true);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('--user') && op.includes('node') && String(op.at(-1)).includes('/pidex-secrets/providers/codex/auth.json')), true);
   assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('ln') && op.includes('/pidex-home/.pi/agent')), true);
