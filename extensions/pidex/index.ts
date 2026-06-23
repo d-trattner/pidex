@@ -371,10 +371,55 @@ export function saveProjectPipelineMode(projectRoot: string, mode: "host-direct"
 }
 
 export function projectPipelineModeMissingGuidance(): string {
-	return "Project has no saved PIDEX mode. Run /pdproject use project-pipeline|hardened-pipeline|host-direct or start /pd in an interactive Pi UI.";
+	return "Project has no saved PIDEX mode. Run /pdproject use project-pipeline|hardened-pipeline|host-direct from the target project, or start /pd in an interactive Pi UI.";
 }
 
-const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox, import/clone source into /workspace, run Pi inside the container, and sync only agents.output/** and wiki/** back to the host archive. No source is mirrored back automatically. Failures do not fall back.";
+type RecentPidexProject = {
+	cwd: string;
+	last_ts?: string;
+	last_event?: string;
+	last_mode?: string;
+};
+
+export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state")): RecentPidexProject[] {
+	const historyFile = path.join(stateDir, "history.jsonl");
+	if (!fs.existsSync(historyFile)) return [];
+	const byCwd = new Map<string, RecentPidexProject>();
+	for (const line of fs.readFileSync(historyFile, "utf8").split(/\r?\n/)) {
+		if (!line.trim()) continue;
+		try {
+			const row = JSON.parse(line);
+			const cwd = path.resolve(String(row?.cwd || ""));
+			if (!cwd || !fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) continue;
+			const previous = byCwd.get(cwd);
+			const lastTs = String(row?.ts || "");
+			if (!previous || lastTs > String(previous.last_ts || "")) byCwd.set(cwd, { cwd, last_ts: lastTs, last_event: row?.event ? String(row.event) : undefined, last_mode: row?.mode ? String(row.mode) : undefined });
+		} catch {
+			// Ignore malformed history rows; project selection is a convenience, not authority.
+		}
+	}
+	return [...byCwd.values()].sort((a, b) => String(b.last_ts || "").localeCompare(String(a.last_ts || ""))).slice(0, limit);
+}
+
+export async function choosePidexProjectRoot(ctx: any): Promise<string | undefined> {
+	const current = path.resolve(ctx.cwd ?? process.cwd());
+	if (!ctx.hasUI) return current;
+	const recent = listRecentPidexProjects(5).filter((item) => path.resolve(item.cwd) !== current);
+	if (recent.length === 0) return current;
+	const optionMap = new Map<string, string>();
+	for (const [index, item] of recent.entries()) {
+		const label = `${String.fromCharCode(65 + index)}) ${item.cwd}${item.last_ts ? ` — last touched ${item.last_ts}` : ""}`;
+		optionMap.set(label, item.cwd);
+	}
+	const currentLabel = `Current directory: ${current}`;
+	optionMap.set(currentLabel, current);
+	const cancelLabel = "Cancel";
+	const choice = await ctx.ui.select("Choose PIDEX project for this run. Mode is resolved after project selection.", [...optionMap.keys(), cancelLabel]);
+	if (choice === cancelLabel) return undefined;
+	return optionMap.get(choice) ?? current;
+}
+
+const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox for the selected project, import/clone source into /workspace, run Pi inside the container, and sync only agents.output/** and wiki/** back to the host archive. No source is mirrored back automatically. Failures do not fall back.";
 
 export async function chooseProjectPipelineMode(ctx: any, projectRoot: string, options: { saveMode?: typeof saveProjectPipelineMode } = {}): Promise<ProjectPipelineModeResult | undefined> {
 	const choice = await ctx.ui.select("Choose PIDEX mode for this project. This is saved per project.", ["host-direct", "hardened-pipeline", "project-pipeline", "Cancel"]);
@@ -384,8 +429,7 @@ export async function chooseProjectPipelineMode(ctx: any, projectRoot: string, o
 	return saveMode(projectRoot, choice, "pd-first-run");
 }
 
-async function resolveProjectPipelineModeForCommand(ctx: any): Promise<ProjectPipelineModeResult | undefined> {
-	const projectRoot = path.resolve(ctx.cwd ?? process.cwd());
+async function resolveProjectPipelineModeForCommand(ctx: any, projectRoot: string): Promise<ProjectPipelineModeResult | undefined> {
 	const current = runProjectPipelineModeResolver(projectRoot);
 	if (!current.decision_required) return current;
 	if (!ctx.hasUI) return current;
@@ -3059,7 +3103,12 @@ export default function runningPi(pi: ExtensionAPI) {
 			ctx.ui.notify(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before starting PIDEX.` : canonicalHomeMissingMessage(), "warning");
 			return;
 		}
-		const projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx);
+		const selectedProjectRoot = await choosePidexProjectRoot(ctx);
+		if (!selectedProjectRoot) {
+			ctx.ui.notify("PIDEX project selection cancelled; no fallback was used.", "warning");
+			return;
+		}
+		const projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx, selectedProjectRoot);
 		if (!projectPipelineMode) {
 			ctx.ui.notify("PIDEX project mode selection cancelled; no fallback was used.", "warning");
 			return;
@@ -3069,7 +3118,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			return;
 		}
 		if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {
-			await startProjectPipelineRunFlow(ctx, task);
+			await startProjectPipelineRunFlow({ ...ctx, cwd: selectedProjectRoot }, task);
 			return;
 		}
 		const authPreflight = await runDelegateAuthPreflight();
@@ -3085,7 +3134,7 @@ export default function runningPi(pi: ExtensionAPI) {
 		} else if (authPreflight.output) {
 			ctx.ui.notify("pidex delegate auth preflight OK", "info");
 		}
-		recordPreflightSkeleton(ctx.cwd ?? PACKAGE_ROOT, task, authPreflight.ok, gitHookStatus);
+		recordPreflightSkeleton(selectedProjectRoot, task, authPreflight.ok, gitHookStatus);
 		const kickoff = [
 			"You are the pidex orchestrator.",
 			`First read the orchestration skill at ${SKILL_PATH}.`,
@@ -3093,6 +3142,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
+			`Selected project root: ${selectedProjectRoot}`,
 			`PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,
 			projectPipelineModeInstructionLine(projectPipelineMode),
 			`PIDEX sandbox preflight: ${sandboxState.enabled ? "hardened-pipeline enabled" : "off"}; ${sandboxProbe.summary}.`,

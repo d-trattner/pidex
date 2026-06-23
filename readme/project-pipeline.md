@@ -58,13 +58,13 @@ From a project directory, run normal `/pd`:
 /pd Describe the work you want done
 ```
 
-If no mode is saved for the project, PIDEX asks once and saves the choice:
+If recent PIDEX projects exist, `/pd` first asks which project to run, so you can start Pi from another directory. After the project is selected, if no mode is saved for that project, PIDEX asks once and saves the choice:
 
 ```text
 host-direct / hardened-pipeline / project-pipeline / Cancel
 ```
 
-Choose `project-pipeline` for the persistent Docker Project Sandbox workflow. PIDEX then continues the same `/pd` task through the Project Pipeline orchestrator.
+Choose `project-pipeline` for the persistent Docker Project Sandbox workflow. PIDEX then continues the same `/pd` task through the Project Pipeline orchestrator for the selected project.
 
 For deterministic setup, tests, or explicit switching, you can also save mode before running `/pd`:
 

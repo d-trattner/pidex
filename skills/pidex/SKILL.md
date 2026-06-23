@@ -7,6 +7,8 @@ description: Start a pidex pipeline run. Primary invocation is /pidex; /pd is a 
 
 This skill is the entry point for every pidex pipeline run. The primary user-facing invocation is `/pidex`; `/pd` remains supported as a short alias.
 
+The `/pidex`/`/pd` extension preflight may already choose a project root from recent PIDEX projects before this skill is invoked. If the kickoff contains `Selected project root: <path>`, treat that path as authoritative for this run, skip the recent-project and project-directory selection questions below, and continue with roadmap/open-work selection plus task clarification for that project.
+
 It ensures the task is precisely defined before any code is written. A vague epic is the single biggest source of wasted pipeline runs.
 
 ## Supplemental questioning skills
@@ -112,7 +114,7 @@ Before every `pidex-*` spawn, use a compact context pack instead of pasting broa
 
 ### Step 0 — Recent projects shortlist
 
-Before asking "which project?", check the pidex history log and offer a shortlist of recently-touched **unique project directories**. This saves the user from typing paths they already used.
+Before asking "which project?", first check whether the extension kickoff already provided `Selected project root: <path>`. If yes, use that project and skip Step 0 and Step 1. Otherwise, check the pidex history log and offer a shortlist of recently-touched **unique project directories**. This saves the user from typing paths they already used.
 
 ```bash
 node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-list --agent orchestrator --phase planning --project <project-root> -- --limit 5
