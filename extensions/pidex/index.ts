@@ -423,9 +423,11 @@ export async function choosePidexProjectRoot(ctx: any): Promise<string | undefin
 	}
 	const currentLabel = `Use current directory as project: ${current}`;
 	optionMap.set(currentLabel, current);
+	const newProjectLabel = "New project / different path — ask name/path/new in orchestrator";
 	const cancelLabel = "Cancel — do not start PIDEX";
-	const choice = await ctx.ui.select("Choose which existing project this /pd run is for. PIDEX resolves the saved mode only after this choice. For a new project, cancel and run /pd from a non-project directory so the orchestrator can ask for name/path/new.", [...optionMap.keys(), cancelLabel]);
+	const choice = await ctx.ui.select("Choose which project this /pd run is for. PIDEX resolves saved mode only after an existing project is selected. Choose New project / different path to let the orchestrator ask for name/path/new.", [...optionMap.keys(), newProjectLabel, cancelLabel]);
 	if (choice === cancelLabel) return undefined;
+	if (choice === newProjectLabel) return PIDEX_DEFER_PROJECT_SELECTION;
 	return optionMap.get(choice) ?? current;
 }
 
@@ -3163,7 +3165,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			"Use the saved per-project PIDEX mode reported below. Do not use background/Telegram mode unless the user explicitly asks and accepts that it is scaffold-only.",
 			"Use the pidex_agent tool for specialist handoffs, including pidex-wiki-hygienist for wiki hygiene/project memory maintenance. Keep project artifacts under agents.output/ and wiki/ using pidex-* conventions. Treat the final ROUTING block as authoritative and require context_file to exist. ROUTING route_to may be an pidex-* agent, user, or orchestrator for deterministic internal work such as browser-evidence collection.",
 			"Run the pre-flight interview before invoking pidex-planner. If the fixed interview is insufficient, read ~/.pi/agent/skills/grill-me/SKILL.md and use it to ask one question at a time, with your recommended answer, until the epic is crisp.",
-			deferProjectSelection ? "No project root was preselected by the extension because no recent PIDEX project was found and the current directory does not look like a project. Run the skill Step 0/Step 1 project interview now, including the New project flow when the user chooses new." : "",
+			deferProjectSelection ? "No project root was preselected by the extension because the user chose new/different path or the current directory did not look like a project. Run the skill Step 0/Step 1 project interview now, including the New project flow when the user chooses new." : "",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
 			deferProjectSelection ? "PIDEX project root: not selected yet; ask which project/name/path/new before any specialist handoff." : `Selected project root: ${selectedProjectRoot}`,
 			deferProjectSelection ? "PIDEX pipeline mode: not resolved yet because no project root is selected. After the project path exists, use the normal per-project mode rules for later runs; do not select a mode for the user's home directory." : `PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,

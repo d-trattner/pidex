@@ -251,6 +251,64 @@ console.log(JSON.stringify({ notifications, sent, selectCalls }));
   }
 });
 
+test('/pd with recent history can still choose new project or different path', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-recent-new-'));
+  const state = path.join(dir, 'state');
+  const recentRoot = path.join(dir, 'recent-project');
+  const homeLike = path.join(dir, 'home');
+  mkdirSync(state, { recursive: true });
+  mkdirSync(recentRoot);
+  mkdirSync(homeLike);
+  writeFileSync(path.join(state, 'history.jsonl'), `${JSON.stringify({ cwd: recentRoot, ts: '2026-06-01T00:00:00Z', event: 'complete', mode: 'project-pipeline' })}\n`);
+  try {
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+const mod = await import('./extensions/pidex/index.ts');
+const commands = new Map();
+const notifications = [];
+const sent = [];
+let modeSelectCalls = 0;
+mod.default({
+  on: () => {},
+  registerTool: () => {},
+  registerCommand: (name, spec) => commands.set(name, spec),
+  sendUserMessage: (message) => sent.push(message),
+});
+await commands.get('pd').handler('', {
+  cwd: process.env.PIDEX_TEST_HOME_ROOT,
+  hasUI: true,
+  ui: {
+    select: async (message, options) => {
+      if (message.includes('Choose which project')) return options.find((option) => option.startsWith('New project / different path'));
+      if (message.includes('Choose PIDEX mode')) modeSelectCalls += 1;
+      return options[0];
+    },
+    notify: async (message, level) => notifications.push({ message, level }),
+  },
+});
+console.log(JSON.stringify({ notifications, sent, modeSelectCalls }));
+`], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PIDEX_CHILD: '0',
+        PIDEX_STATE_DIR: state,
+        PIDEX_TEST_HOME_ROOT: homeLike,
+      },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const parsed = JSON.parse(child.stdout.trim().split(/\n/).at(-1));
+    assert.equal(parsed.modeSelectCalls, 0, 'new/different choice must defer before mode selection');
+    assert.equal(parsed.sent.length, 1);
+    assert.match(parsed.sent[0], /No project root was preselected/);
+    assert.match(parsed.sent[0], /New project flow/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /project selection required/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('/pd chooses recent project before resolving mode and project-pipeline source', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-recent-'));
   const startRoot = path.join(dir, 'start-here');
@@ -285,7 +343,7 @@ await commands.get('pd').handler('do selected project work', {
   cwd: process.env.PIDEX_TEST_START_ROOT,
   hasUI: true,
   ui: {
-    select: async (message, options) => message.includes('Choose which existing project') ? options[0] : options.find((option) => option.startsWith('project-pipeline')),
+    select: async (message, options) => message.includes('Choose which project') ? options[0] : options.find((option) => option.startsWith('project-pipeline')),
     notify: async () => {},
   },
 });
