@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- QA passed for Project Pipeline first-run `/pd` release readiness after Linux + native Windows UAT fixes: focused suites 52/52 green, full `corepack pnpm run check` green, Fallow clean, and Windows release-prep evidence accepted.
+
 ## 0.1.8 - 2026-06-22
 
 Initial public-prep npm release of PIDEX, a Codex-oriented Pi package with `pidex-*` agents, project context, quality reporting, quality governance, optional parallel review lanes, dashboard, project memory, wiki hygiene, and public-readiness guardrails. This supersedes source tag `v0.1.7` for npm publication because `@d-trattner/pidex@0.1.7` was already occupied on npm by an older package build.
