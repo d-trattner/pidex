@@ -1,8 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.1.9 - 2026-06-24
 
-- QA passed for Project Pipeline first-run `/pd` release readiness after Linux + native Windows UAT fixes: focused suites 52/52 green, full `corepack pnpm run check` green, Fallow clean, and Windows release-prep evidence accepted.
+Project Pipeline first-run `/pd` release-readiness update:
+
+- Standard `/pd` can now enter Project Pipeline mode without requiring a prior `/pdproject use project-pipeline` setup step.
+- Fresh `/pd` starts from non-project directories correctly: if no existing project is selected, the orchestrator asks for project/name/path/new before any mode selection.
+- Recent-project selection now includes `New project / different path`, so operators with PIDEX history can still start a new project from home/non-project directories.
+- Existing-project mode routing remains per-project: project selection happens before mode resolution, and `project-pipeline` remains explicit and fail-closed with no host-direct/hardened fallback.
+- Project Pipeline selector wording now explains `host-direct`, `hardened-pipeline`, and `project-pipeline` choices, including artifact/wiki-only sync semantics.
+- Credential staging into trusted persistent Project Sandboxes was hardened: Pi/provider credentials stream into the sandbox without brittle `docker cp`/`chown`, destination filenames are passed as shell arguments, and credential copy still requires explicit consent or an explicit env override.
+- Project Pipeline child prompts now clarify that `/workspace` is the source root and that nested host-path/drive-letter/project-name directories are layout defects, not expected output locations.
+- Linux remote real Pi TUI/tmux UAT passed for first-run Project Pipeline `/pd`, including credential cleanup and artifact-only archive sync.
+- Native Windows real Pi TUI UAT passed from `C:\Users\Daniel>` through new-project onboarding, Project Pipeline mode selection, explicit credential consent, full agent chain, `/pdproject runs`, `/pdproject artifacts`, and remove/cleanup.
+- Release-readiness QA passed: focused suites 52/52 green, full `corepack pnpm run check` green, Fallow clean, and Linux + Windows UAT evidence accepted.
 
 ## 0.1.8 - 2026-06-22
 

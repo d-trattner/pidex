@@ -46,7 +46,7 @@ Project source is not mirrored back to the host by PIDEX. If you want source cha
 - Docker Engine/Desktop with Linux containers.
 - Pi credentials configured on the host if you choose to copy them into the Project Sandbox.
 
-The local Project Pipeline image (`pidex/project-node22:local`) is auto-built by the orchestrator when missing. It can also be built manually through the image helper for troubleshooting.
+The default local Project Pipeline Docker image is auto-built by the orchestrator when missing. It can also be built manually through the image helper for troubleshooting.
 
 On Linux, if the current shell has not picked up Docker group membership yet, use a fresh login shell or `newgrp docker`.
 

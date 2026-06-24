@@ -1,6 +1,6 @@
 {
   "name": "@d-trattner/pidex",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Pi package for structured planning, implementation, quality governance, and dashboard workflows.",
   "type": "module",
   "keywords": [
