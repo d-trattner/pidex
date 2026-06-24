@@ -14,6 +14,7 @@ At task start, read `<pidex-root>/rules/pidex-devops/index.md` to load active pr
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-devops/execution-profile-diff-guard.md` before Stage 1 commit.
 For UI-involved work or any `User Preview Requirement`, load `<pidex-root>/rules/pidex-devops/post-stage1-ui-preview-before-g4.md` before Stage 1 routing/G4.
 For any release/version/tag/changelog/roadmap epic lane, load `<pidex-root>/rules/pidex-devops/release-lane-semantics-preflight.md` before Stage 1 closure and before G4.
+For any public npm package release, npm publication, or GitHub Release object work, load `<pidex-root>/rules/pidex-devops/npm-github-release-workflow.md` before Stage 1 closure and before Stage 2 execution.
 If selective release staging leaves a dirty tree after tag/push/final artifact commit, load `<pidex-root>/rules/pidex-devops/post-release-artifact-hygiene.md` before declaring completion.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-devops.md`, read that too.
 
