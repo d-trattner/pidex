@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { parsePreviewArgs, previewLogs, previewStart, previewStatus, previewStop, summarizePreviewResult } from './preview.mjs';
+import { createDockerExecProcessManager, parsePreviewArgs, previewLogs, previewStart, previewStatus, previewStop, summarizePreviewResult } from './preview.mjs';
 import { createProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmpRoot() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-preview-helper-')); }
@@ -78,6 +78,46 @@ test('previewStart default process boundary uses Docker exec instead of host-loc
   assert.equal(result.ok, true);
   assert.equal(calls.some((args) => args[0] === 'exec' && args.includes('pidex-project-pp-demo-dockerexec1') && args.includes('start')), true);
   assert.equal(calls.some((args) => args[0] === 'exec' && args.includes('pnpm') && args.includes('dev')), true);
+});
+
+test('Docker exec process manager preserves helper JSON from non-zero helper exit', async () => {
+  const manager = createDockerExecProcessManager({ docker: { container_name: 'pidex-project-pp-demo-helperfail1' } }, {
+    runner: (args) => {
+      if (args[0] === 'exec' && args.includes('/cache/pidex-preview/manager/process.mjs') && args.includes('start')) {
+        const error = new Error('docker exec exited 1');
+        error.stdout = JSON.stringify({ ok: false, status: 'failed', error_category: 'preview_port_not_listening' });
+        error.status = 1;
+        throw error;
+      }
+      return 'ok\n';
+    },
+  });
+  const result = manager.start({ command: ['pnpm', 'dev'], containerPort: 42000 });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error_category, 'preview_port_not_listening');
+});
+
+test('previewStart reuses existing published ports without allocator churn before process start', async () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-existingports1', name: 'demo' });
+  record.preview = { ports: { base: 42100, size: 20, container_base: 42100, host_bind: '127.0.0.1', assigned_at: '2026-06-25T00:00:00.000Z', assigned_by: 'test', generation: 3 } };
+  saveProjectRecord(root, record);
+  const events = [];
+  const result = await previewStart({
+    pidexRoot: root,
+    projectId: 'pp-demo-existingports1',
+    command: ['pnpm', 'dev'],
+    env: { PIDEX_PROJECT_PIPELINE_PORT_BASE: '42000', PIDEX_PROJECT_PIPELINE_PORT_POOL_SIZE: '200', PIDEX_PROJECT_PIPELINE_PORT_RANGE_SIZE: '20' },
+    probePort: async () => { throw new Error('allocator must not probe when ports already exist'); },
+    lifecycleManager: { ensurePreviewContainerPublished: async ({ record: publishedRecord }) => { events.push(`published:${publishedRecord.preview.ports.base}`); return { ok: true, action: 'already-published', record: publishedRecord }; } },
+    processManager: { start: async ({ hostPort, containerPort }) => { events.push(`process-start:${hostPort}:${containerPort}`); return { ok: true, status: 'running' }; } },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(events, ['published:42100', 'process-start:42100:42100']);
+  assert.equal(result.host_port, 42100);
+  assert.equal(result.container_port, 42100);
+  assert.equal(result.operator_url, 'http://localhost:42100');
 });
 
 test('preview status logs and stop default process boundary use Docker exec', async () => {
