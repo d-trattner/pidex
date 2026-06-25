@@ -60,6 +60,10 @@ function phaseRoleGuidance(phase) {
   return PHASE_ROLE_GUIDANCE[phase] || 'Execute this Project Pipeline phase with least privilege, focused changes, and a complete agents.output artifact.';
 }
 
+function looksLikeUiTask(task = '') {
+  return /\b(ui|frontend|front-end|browser|page|dashboard|component|css|visual|vite|react|vue|svelte)\b/i.test(String(task));
+}
+
 function summarizeRunForPublicResult(run = {}) {
   return {
     ok: run.ok === true,
@@ -89,6 +93,16 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
     `Expected artifact path prefix: ${artifactPrefix}`,
     `Original user task:\n${initialTask || ''}`,
   ];
+  if (looksLikeUiTask(initialTask)) {
+    lines.push([
+      'UI preview gate instructions:',
+      'When implementation produces browser-visible UI, start sandbox preview with `/pdproject preview start <project-id> -- <command>` after tests pass. Preview URL/status may be included in gate context.',
+      'Ask user to approve, request changes, or stop preview; route correction feedback back to normal implementation/design/QA phase with preview context.',
+      'Do not ask user to choose ports or bind addresses. No source export implied; host archive sync remains agents.output/** and wiki/** only.',
+    ].join('\n'));
+  } else {
+    lines.push('Non-UI tasks do not require preview setup. Preview remains optional unless task becomes browser-visible UI.');
+  }
   if (previous?.context_file) {
     lines.push(`Previous phase: ${previous.agent}`);
     lines.push(`Previous context file in the container: ${previous.context_file}`);
