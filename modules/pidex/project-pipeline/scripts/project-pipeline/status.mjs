@@ -59,9 +59,23 @@ export function inspectDockerResources(record, runner = docker) {
   };
 }
 
+function safePreviewSummary(record) {
+  const process = record.preview?.processes?.preview;
+  const ports = record.preview?.ports;
+  if (!ports && !process) return undefined;
+  return {
+    enabled: Boolean(ports),
+    host_port: process?.host_port ?? ports?.base,
+    operator_url: process?.operator_url || '',
+    status: process?.status || 'stopped',
+    last_error_category: process?.last_error_category || '',
+  };
+}
+
 function withDockerHealth(record, options) {
-  if (options.checkDocker === false) return record;
-  return { ...record, docker_health: inspectDockerResources(record, options.runner) };
+  const safeRecord = { ...record, preview: safePreviewSummary(record) };
+  if (options.checkDocker === false) return safeRecord;
+  return { ...safeRecord, docker_health: inspectDockerResources(record, options.runner) };
 }
 
 export function projectPipelineStatus(options = {}) {

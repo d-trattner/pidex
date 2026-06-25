@@ -164,6 +164,22 @@ Reset copied credentials from the sandbox secrets volume and registry metadata:
 /pdproject credentials reset <project-id> --confirm <project-id>
 ```
 
+Start a browser preview from inside the sandbox with an explicit command:
+
+```text
+/pdproject preview start <project-id> -- pnpm dev -- --host 0.0.0.0 --port $PORT
+```
+
+Inspect or stop preview:
+
+```text
+/pdproject preview status <project-id>
+/pdproject preview logs <project-id>
+/pdproject preview stop <project-id>
+```
+
+Preview reserves a high host port range per Project Sandbox and publishes it on container create/recreate. Local Docker Desktop/native runs prefer `localhost`. Remote/headless Linux may bind all Docker-host interfaces and shows a browser URL using `PIDEX_PROJECT_PIPELINE_PREVIEW_HOST`, saved project host, or one detected LAN IPv4. PIDEX never shows `0.0.0.0` as browser URL, never opens cloud firewalls/tunnels, and does not copy credentials for preview setup. Summaries omit raw Docker commands, helper JSON, absolute secret paths, and unbounded logs.
+
 Remove a persistent sandbox explicitly:
 
 ```text

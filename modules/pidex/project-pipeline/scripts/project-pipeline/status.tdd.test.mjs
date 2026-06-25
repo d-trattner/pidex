@@ -34,6 +34,22 @@ test('inspectDockerResources records missing container or volumes without throwi
   assert.equal(health.warnings.length, 4);
 });
 
+test('projectPipelineStatus returns safe preview summary fields without internals', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'pidex-project-status-preview-'));
+  try {
+    const record = createProjectRecord({ project_id: 'status-preview-demo', name: 'demo' });
+    record.preview = { ports: { base: 42000, size: 20, container_base: 42000, host_bind: '127.0.0.1', assigned_at: '2026-06-25T00:00:00.000Z', assigned_by: 'create', generation: 1 }, processes: { preview: { status: 'running', operator_url: 'http://localhost:42000', host_port: 42000, container_port: 42000, command_label: 'pnpm dev --token=secret' } } };
+    saveProjectRecord(root, record);
+    const result = projectPipelineStatus({ pidexRoot: root, projectId: record.project_id, checkDocker: false });
+    assert.equal(result.projects[0].preview.enabled, true);
+    assert.equal(result.projects[0].preview.host_port, 42000);
+    assert.equal(result.projects[0].preview.operator_url, 'http://localhost:42000');
+    assert.doesNotMatch(JSON.stringify(result), /command_label|pnpm dev|--token/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('projectPipelineStatus includes docker health when requested and can disable Docker checks', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'pidex-project-status-'));
   try {
