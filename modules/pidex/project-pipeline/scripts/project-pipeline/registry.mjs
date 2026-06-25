@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const PROJECT_ID_PATTERN = /^[a-z0-9][a-z0-9_.-]{2,80}$/;
 
 export function safeProjectId(value) {
@@ -75,6 +75,7 @@ export function createProjectRecord(options = {}) {
     docker: { image: options.image || 'pidex/project-node22:local', ...docker },
     credentials: { git: 'missing', pi: 'missing', providers: [], inventory: [] },
     archive: { path: options.archive_path || '', last_sync_at: '' },
+    features: { preview_ports: false },
     status: 'creating',
     runs: [],
     lock: undefined,
@@ -86,7 +87,7 @@ export function createProjectRecord(options = {}) {
 export function validateProjectRecord(record) {
   const errors = [];
   if (!record || typeof record !== 'object') return ['record must be object'];
-  if (record.schema_version !== SCHEMA_VERSION) errors.push(`unsupported schema_version: ${record.schema_version}`);
+  if (record.schema_version !== 1 && record.schema_version !== SCHEMA_VERSION) errors.push(`unsupported schema_version: ${record.schema_version}`);
   try { safeProjectId(record.project_id); } catch (error) { errors.push(error.message); }
   if (record.mode !== 'project-pipeline') errors.push(`invalid mode: ${record.mode}`);
   if (!record.target || record.target.kind !== 'local') errors.push('local MVP requires target.kind=local');
@@ -95,25 +96,74 @@ export function validateProjectRecord(record) {
     if (!record.docker?.[key] || !String(record.docker[key]).startsWith(`pidex-project-${record.project_id}`)) errors.push(`invalid docker.${key}`);
   }
   if (!Array.isArray(record.runs)) errors.push('runs must be array');
+  const previewPorts = record.preview?.ports;
+  if (previewPorts) {
+    const validBind = previewPorts.host_bind === '127.0.0.1' || previewPorts.host_bind === '0.0.0.0';
+    if (!Number.isInteger(previewPorts.base) || !Number.isInteger(previewPorts.size) || previewPorts.base < 1 || previewPorts.size < 1 || previewPorts.base + previewPorts.size - 1 > 65535) errors.push('invalid preview.ports range');
+    if (previewPorts.container_base !== previewPorts.base) errors.push('invalid preview.ports container_base');
+    if (!validBind) errors.push('invalid preview.ports host_bind');
+  }
   return errors;
 }
 
+export function normalizeProjectRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+  if (record.schema_version === undefined) record.schema_version = 1;
+  return record;
+}
+
 export function saveProjectRecord(pidexRoot, record) {
-  const errors = validateProjectRecord(record);
+  const toSave = { ...record, schema_version: SCHEMA_VERSION };
+  const errors = validateProjectRecord(toSave);
   if (errors.length) throw new Error(`invalid project record: ${errors.join('; ')}`);
-  const file = projectFile(pidexRoot, record.project_id);
+  const file = projectFile(pidexRoot, toSave.project_id);
   if (!containedPath(registryRoot(pidexRoot), file)) throw new Error('project record path escapes registry root');
-  atomicWriteJson(file, { ...record, updated_at: new Date().toISOString() });
+  atomicWriteJson(file, { ...toSave, updated_at: new Date().toISOString() });
   return file;
 }
 
 export function loadProjectRecord(pidexRoot, projectId) {
   const file = projectFile(pidexRoot, projectId);
   if (!existsSync(file)) throw new Error(`project record not found: ${safeProjectId(projectId)}`);
-  const record = JSON.parse(readFileSync(file, 'utf8'));
+  const record = normalizeProjectRecord(JSON.parse(readFileSync(file, 'utf8')));
   const errors = validateProjectRecord(record);
   if (errors.length) throw new Error(`invalid project record ${file}: ${errors.join('; ')}`);
   return record;
+}
+
+export function listProjectRecords(pidexRoot) {
+  const root = registryRoot(pidexRoot);
+  if (!existsSync(root)) return [];
+  const records = [];
+  for (const entry of readdirSync(root).filter((name) => name.endsWith('.json')).sort()) {
+    records.push(loadProjectRecord(pidexRoot, entry.slice(0, -5)));
+  }
+  return records;
+}
+
+function lockRoot(pidexRoot) {
+  return path.join(registryRoot(pidexRoot), '.registry.lock');
+}
+
+export async function withRegistryLock(pidexRoot, _reason, fn) {
+  const lock = lockRoot(pidexRoot);
+  mkdirSync(path.dirname(lock), { recursive: true });
+  const started = Date.now();
+  while (true) {
+    try {
+      mkdirSync(lock);
+      writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() }));
+      break;
+    } catch (error) {
+      if (Date.now() - started > 5000) throw new Error('registry lock timeout');
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
 }
 
 export function removeProjectRecord(pidexRoot, projectId) {

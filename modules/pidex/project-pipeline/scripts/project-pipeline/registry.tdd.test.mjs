@@ -14,9 +14,9 @@ test('safeProjectId rejects traversal and unsafe names', () => {
   }
 });
 
-test('createProjectRecord produces schema v1 local project metadata and label-safe docker names', () => {
+test('createProjectRecord produces schema v2 local project metadata and label-safe docker names', () => {
   const record = createProjectRecord({ name: 'CLI Notes', suffix: 'abc12345', now: '2026-06-18T00:00:00.000Z' });
-  assert.equal(record.schema_version, 1);
+  assert.equal(record.schema_version, 2);
   assert.equal(record.project_id, 'pp-cli-notes-abc12345');
   assert.equal(record.mode, 'project-pipeline');
   assert.equal(record.target.kind, 'local');
@@ -37,9 +37,10 @@ test('registry save/load uses contained project file and atomic JSON shape', () 
   assert.equal(loaded.project_id, record.project_id);
 });
 
-test('validateProjectRecord rejects schema mismatch and wrong docker names', () => {
+test('validateProjectRecord accepts legacy v1 records and rejects wrong docker names', () => {
   const record = createProjectRecord({ project_id: 'pp-demo-def456', name: 'demo' });
-  assert.deepEqual(validateProjectRecord({ ...record, schema_version: 2 }), ['unsupported schema_version: 2']);
+  assert.deepEqual(validateProjectRecord({ ...record, schema_version: 1 }), []);
+  assert.deepEqual(validateProjectRecord({ ...record, schema_version: 99 }), ['unsupported schema_version: 99']);
   const bad = structuredClone(record);
   bad.docker.workspace_volume = 'other-volume';
   assert.match(validateProjectRecord(bad).join('\n'), /invalid docker.workspace_volume/);
