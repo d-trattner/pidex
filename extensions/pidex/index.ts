@@ -178,6 +178,7 @@ const PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_
 const PROJECT_PIPELINE_STATUS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "status.mjs");
 const PROJECT_PIPELINE_LIFECYCLE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "lifecycle.mjs");
 const PROJECT_PIPELINE_CREDENTIALS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_CREDENTIALS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "credentials.mjs");
+const PROJECT_PIPELINE_PREVIEW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_PREVIEW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "preview.mjs");
 const PIDEX_CHILD_ENV = "PIDEX_CHILD";
 const PIDEX_SANDBOX_CONTEXT_ENV = "PIDEX_SANDBOX_CONTEXT";
 const PIDEX_PROJECT_BOUNDARY_ENV = "PIDEX_PROJECT_BOUNDARY_CONTEXT";
@@ -588,6 +589,7 @@ type PdProjectCommand =
 	| { command: "open"; projectId: string }
 	| { command: "repair"; projectId: string; confirm: string }
 	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
+	| { command: "preview"; action: "start" | "status" | "logs" | "stop"; projectId: string; commandArgs?: string[] }
 	| { command: "remove"; projectId: string; confirm: string };
 
 function readPdProjectFlagValue(parts: string[], index: number, flag: string): { value: string; nextIndex: number } {
@@ -605,6 +607,31 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		if (mode !== "host-direct" && mode !== "hardened-pipeline" && mode !== "project-pipeline") throw new Error("pdproject use requires host-direct, hardened-pipeline, or project-pipeline");
 		if (parts.length) throw new Error(`unknown pdproject use argument: ${parts[0]}`);
 		return { command: "use", mode };
+	}
+	if (command === "preview") {
+		const raw = String(argsLine || "").trim();
+		const separator = raw.indexOf(" -- ");
+		const prefixRaw = separator === -1 ? raw : raw.slice(0, separator);
+		const tailRaw = separator === -1 ? "" : raw.slice(separator + 4);
+		const previewParts = prefixRaw.split(/\s+/).filter(Boolean).slice(1);
+		const action = previewParts.shift();
+		if (action !== "start" && action !== "status" && action !== "logs" && action !== "stop") throw new Error("pdproject preview requires start, status, logs, or stop");
+		let projectId = "";
+		for (let i = 0; i < previewParts.length; i += 1) {
+			if (previewParts[i] === "--project-id") {
+				const read = readPdProjectFlagValue(previewParts, i, "--project-id");
+				projectId = read.value;
+				i = read.nextIndex;
+			} else if (!projectId && !previewParts[i].startsWith("--")) projectId = previewParts[i];
+			else throw new Error(`unknown pdproject preview argument: ${previewParts[i]}`);
+		}
+		if (!projectId) throw new Error(`pdproject preview ${action} requires a project id`);
+		if (action === "start") {
+			if (!tailRaw.trim()) throw new Error("pdproject preview start requires -- command");
+			return { command: "preview", action, projectId, commandArgs: tailRaw.trim().split(/\s+/).filter(Boolean) };
+		}
+		if (tailRaw.trim()) throw new Error(`pdproject preview ${action} does not accept a command`);
+		return { command: "preview", action, projectId };
 	}
 	if (command === "status") {
 		let projectId: string | undefined;
@@ -725,6 +752,8 @@ export function pdProjectUsage(): string {
 		"       /pdproject repair <project-id> --confirm <project-id>",
 		"       /pdproject credentials status <project-id>",
 		"       /pdproject credentials reset <project-id> --confirm <project-id>",
+		"       /pdproject preview start <project-id> -- <command>",
+		"       /pdproject preview status|logs|stop <project-id>",
 		"       /pdproject remove <project-id> --confirm <project-id>",
 		"",
 		"Project Pipeline sandboxes are persistent. Removal is explicit and irreversible for the Docker container/volumes.",
@@ -824,6 +853,28 @@ function summarizeProjectRecords(projects: any[]): string {
 	}).join("\n");
 }
 
+export function summarizePreviewStart(result: any): string {
+	if (!result?.ok) {
+		if (result?.error_category === "preview_operator_host_unknown") return "Preview port is bound, but PIDEX could not determine the host/IP to show your browser. Set PIDEX_PROJECT_PIPELINE_PREVIEW_HOST and retry.";
+		if (result?.error_category === "preview_port_not_listening") return `Preview process started but did not become reachable on the assigned port before timeout. Check bounded logs with /pdproject preview logs ${result?.project_id ?? "<project-id>"}.`;
+		return "Preview could not safely reserve a local port range for this Project Pipeline sandbox. No fallback was used.";
+	}
+	return [
+		`Preview ready for ${result.project_id}:`,
+		result.operator_url,
+		result.host_bind === "0.0.0.0" ? (result.exposure_note || "Exposure: preview is bound to all interfaces on this Docker host. PIDEX did not open firewalls or tunnels.") : undefined,
+		"",
+		`Logs: /pdproject preview logs ${result.project_id}`,
+		`Stop: /pdproject preview stop ${result.project_id}`,
+	].filter((line) => line !== undefined).join("\n");
+}
+
+function summarizePreviewStatusLike(action: string, result: any, projectId: string): string {
+	if (!result?.ok) return `Project Pipeline preview ${action} failed; helper details omitted`;
+	if (action === "logs") return String(result.log_excerpt || `${result.project_id ?? projectId}: no bounded preview logs available.`).slice(0, 4000);
+	return `${result.project_id ?? projectId}: preview status=${result.status ?? "unknown"}${result.operator_url ? ` url=${result.operator_url}` : ""}`;
+}
+
 export function runPdProjectCommand(parsed: PdProjectCommand, options: { projectRoot?: string } = {}): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
 	if (parsed.command === "use") {
@@ -855,6 +906,19 @@ export function runPdProjectCommand(parsed: PdProjectCommand, options: { project
 			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
 		} catch {
 			return { ok: false, summary: `project-pipeline ${parsed.command} failed exit=${proc.status}; helper output omitted to avoid metadata exposure` };
+		}
+	}
+	if (parsed.command === "preview") {
+		if (!fs.existsSync(PROJECT_PIPELINE_PREVIEW_SCRIPT)) return { ok: false, summary: "project-pipeline preview helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
+		const args = [PROJECT_PIPELINE_PREVIEW_SCRIPT, parsed.action, "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--json"];
+		if (parsed.action === "start") args.push("--", ...(parsed.commandArgs || []));
+		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: parsed.action === "start" ? 120_000 : 30_000, maxBuffer: 5 * 1024 * 1024 });
+		try {
+			const json = JSON.parse(proc.stdout || "{}");
+			if (parsed.action === "start") return { ok: proc.status === 0 && json.ok === true, no_fallback: true, summary: summarizePreviewStart(json) };
+			return { ok: proc.status === 0 && json.ok !== false, no_fallback: true, summary: summarizePreviewStatusLike(parsed.action, json, parsed.projectId) };
+		} catch {
+			return { ok: false, no_fallback: true, summary: `project-pipeline preview ${parsed.action} failed exit=${proc.status}; helper output omitted to avoid metadata exposure` };
 		}
 	}
 	if (parsed.command === "credentials") {
@@ -3199,7 +3263,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("pdproject", {
-		description: "Manage local Project Pipeline Docker sandboxes (status/open/remove).",
+		description: "Manage local Project Pipeline Docker sandboxes (status/open/remove/preview).",
 		handler: async (argLine, ctx) => {
 			const homeStatus = canonicalHomeStatus();
 			if (!homeStatus.ok) {
