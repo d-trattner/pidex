@@ -250,8 +250,7 @@ export function createProcessManager(options = {}) {
     if (!state?.pid) return { ok: true, status: 'stopped' };
     if (state.owner_token !== ownerToken(stateRoot)) return { ok: false, status: 'unknown', error_category: 'preview_stale_pid_owner_mismatch' };
     const killed = await stopPid(state.pid, args.stopTimeoutMs || defaults.stopTimeoutMs);
-    const freed = state.port ? !(await isPortListening(state.port)) : true;
-    const ok = killed && freed;
+    const ok = killed;
     writeState(p.stateFile, { ...state, status: ok ? 'stopped' : 'stopping', stopped_at: new Date().toISOString(), last_error_category: ok ? '' : 'preview_stop_incomplete' });
     return ok ? { ok: true, status: 'stopped' } : { ok: false, status: 'stopping', error_category: 'preview_stop_incomplete' };
   }
