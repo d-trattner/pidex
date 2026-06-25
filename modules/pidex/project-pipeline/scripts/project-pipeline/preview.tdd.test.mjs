@@ -58,6 +58,50 @@ test('summarizePreviewResult omits helper JSON, Docker commands, secret paths, a
   assert.doesNotMatch(summary, /0\.0\.0\.0|docker run|pidex-secrets|auth\.json|stdout|stderr|\{/);
 });
 
+test('previewStart default process boundary uses Docker exec instead of host-local process manager', async () => {
+  const root = tmpRoot();
+  saveProjectRecord(root, createProjectRecord({ project_id: 'pp-demo-dockerexec1', name: 'demo' }));
+  const calls = [];
+  const result = await previewStart({
+    pidexRoot: root,
+    projectId: 'pp-demo-dockerexec1',
+    command: ['pnpm', 'dev'],
+    env: { PIDEX_PROJECT_PIPELINE_PORT_BASE: '42000', PIDEX_PROJECT_PIPELINE_PORT_POOL_SIZE: '20', PIDEX_PROJECT_PIPELINE_PORT_RANGE_SIZE: '20', PIDEX_PROJECT_PIPELINE_PREVIEW_HOST: '127.0.0.1' },
+    probePort: async () => true,
+    lifecycleManager: { ensurePreviewContainerPublished: async ({ record }) => ({ ok: true, record }) },
+    runner: (args) => {
+      calls.push(args);
+      if (args[0] === 'exec') return JSON.stringify({ ok: true, status: 'running' });
+      return 'ok\n';
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(calls.some((args) => args[0] === 'exec' && args.includes('pidex-project-pp-demo-dockerexec1') && args.includes('start')), true);
+  assert.equal(calls.some((args) => args[0] === 'exec' && args.includes('pnpm') && args.includes('dev')), true);
+});
+
+test('preview status logs and stop default process boundary use Docker exec', async () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-dockerexec2', name: 'demo' });
+  record.preview = { ports: { base: 42000, size: 20, container_base: 42000, host_bind: '127.0.0.1', assigned_at: '2026-06-25T00:00:00.000Z', assigned_by: 'test', generation: 1 }, processes: { preview: { status: 'running', host_port: 42000, container_port: 42000, operator_url: 'http://127.0.0.1:42000' } } };
+  saveProjectRecord(root, record);
+  const calls = [];
+  const common = {
+    pidexRoot: root,
+    projectId: 'pp-demo-dockerexec2',
+    runner: (args) => {
+      calls.push(args);
+      const action = args.find((arg) => ['status', 'logs', 'stop'].includes(arg));
+      if (action === 'logs') return JSON.stringify({ ok: true, status: 'ok', text: 'safe log' });
+      return JSON.stringify({ ok: true, status: action === 'stop' ? 'stopped' : 'running' });
+    },
+  };
+  assert.equal((await previewStatus(common)).status, 'running');
+  assert.equal((await previewLogs(common)).log_excerpt, 'safe log');
+  assert.equal((await previewStop(common)).status, 'stopped');
+  assert.equal(calls.filter((args) => args[0] === 'exec' && args.includes('pidex-project-pp-demo-dockerexec2')).length, 3);
+});
+
 test('preview facade uses real process manager for start/status/logs/stop', async () => {
   const root = tmpRoot();
   const workspace = path.join(root, 'workspace');
