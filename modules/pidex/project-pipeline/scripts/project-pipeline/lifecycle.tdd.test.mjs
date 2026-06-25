@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { containerCreateArgs, createProjectSandbox, dockerLabels, openProjectSandbox, repairProjectSandbox, removeArgs, removeProjectSandbox, volumeCreateArgs } from './lifecycle.mjs';
+import { containerCreateArgs, createProjectSandbox, dockerLabels, ensurePreviewContainerPublished, openProjectSandbox, repairProjectSandbox, removeArgs, removeProjectSandbox, volumeCreateArgs } from './lifecycle.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmpRoot() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-life-')); }
@@ -134,4 +134,51 @@ test('removeProjectSandbox requires exact confirmation and removes only project 
   assert.equal(result.ok, true);
   assert.deepEqual(calls[0], ['rm', '-f', 'pidex-project-pp-demo-rm123']);
   assert.equal(calls.filter((args) => args[0] === 'volume' && args[1] === 'rm').length, 3);
+});
+
+test('ensurePreviewContainerPublished recreates container with preview publishes without deleting volumes', async () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-prevsafe1', name: 'demo' });
+  record.preview = { ports: { base: 42000, size: 2, container_base: 42000, host_bind: '127.0.0.1', assigned_at: '2026-06-25T00:00:00.000Z', assigned_by: 'preview-enable', generation: 1 } };
+  saveProjectRecord(root, record);
+  const calls = [];
+  const result = await ensurePreviewContainerPublished({ pidexRoot: root, projectId: 'pp-demo-prevsafe1', record, runner: callsRunner(calls), verifyPublishedPorts: async () => false });
+  assert.equal(result.ok, true);
+  assert.equal(calls.filter((args) => args[0] === 'volume' && args[1] === 'inspect').length, 3);
+  assert.deepEqual(calls.find((args) => args[0] === 'rm'), ['rm', '-f', 'pidex-project-pp-demo-prevsafe1']);
+  assert.equal(calls.some((args) => args[0] === 'volume' && args[1] === 'rm'), false);
+  const create = calls.find((args) => args[0] === 'create');
+  assert.equal(create.includes('127.0.0.1:42000:42000'), true);
+  assert.equal(create.includes('127.0.0.1:42001:42001'), true);
+});
+
+test('ensurePreviewContainerPublished reassigns safely on Docker bind conflict', async () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-prevsafe2', name: 'demo' });
+  record.preview = { ports: { base: 42000, size: 1, container_base: 42000, host_bind: '127.0.0.1', assigned_at: '2026-06-25T00:00:00.000Z', assigned_by: 'preview-enable', generation: 1 } };
+  saveProjectRecord(root, record);
+  const reassigned = structuredClone(record);
+  reassigned.preview.ports = { ...record.preview.ports, base: 42020, container_base: 42020, assigned_by: 'reassign', generation: 2 };
+  let createAttempts = 0;
+  const calls = [];
+  const result = await ensurePreviewContainerPublished({
+    pidexRoot: root,
+    projectId: 'pp-demo-prevsafe2',
+    record,
+    verifyPublishedPorts: async () => false,
+    reassignPorts: async () => ({ ok: true, record: reassigned, ports: reassigned.preview.ports }),
+    runner: (args) => {
+      calls.push(args);
+      if (args[0] === 'create') {
+        createAttempts += 1;
+        if (createAttempts === 1) throw new Error('Bind for 127.0.0.1:42000 failed: port is already allocated');
+      }
+      return 'ok\n';
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.record.preview.ports.base, 42020);
+  assert.equal(calls.filter((args) => args[0] === 'create').length, 2);
+  assert.equal(calls.filter((args) => args[0] === 'volume' && args[1] === 'rm').length, 0);
+  assert.equal(calls.findLast((args) => args[0] === 'create').includes('127.0.0.1:42020:42020'), true);
 });

@@ -3,6 +3,7 @@ import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allocatePreviewPorts, resolveOperatorHost } from './ports.mjs';
+import { ensurePreviewContainerPublished } from './lifecycle.mjs';
 import { createProcessManager } from './process.mjs';
 import { loadProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
 
@@ -41,7 +42,18 @@ function processManagerFor(options = {}) {
 export async function previewStart(options) {
   const projectId = safeProjectId(options.projectId);
   const allocated = await allocatePreviewPorts(options.pidexRoot, projectId, options);
-  const record = allocated.record;
+  let record = allocated.record;
+  const lifecycleManager = options.lifecycleManager || { ensurePreviewContainerPublished };
+  const published = await lifecycleManager.ensurePreviewContainerPublished({
+    pidexRoot: options.pidexRoot,
+    projectId,
+    record,
+    runner: options.runner,
+    verifyPublishedPorts: options.verifyPublishedPorts,
+    reassignPorts: options.reassignPorts || ((reassignOptions) => allocatePreviewPorts(options.pidexRoot, projectId, { ...options, ...reassignOptions })),
+  });
+  if (!published.ok) return { ok: false, action: 'start', project_id: projectId, status: 'failed', error_category: published.error_category || 'preview_recreate_blocked' };
+  record = published.record;
   const ports = record.preview.ports;
   const operator = resolveOperatorHost({ hostBind: ports.host_bind, env: options.env || process.env, projectHost: record.preview?.host?.operator_host, networkInterfaces: options.networkInterfaces });
   const hostPort = ports.base;

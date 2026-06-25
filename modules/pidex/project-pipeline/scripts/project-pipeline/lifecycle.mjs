@@ -6,6 +6,14 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createProjectRecord, dockerResourceNames, loadProjectRecord, removeProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
 
+export class PreviewLifecycleError extends Error {
+  constructor(category, message = category) {
+    super(`${category}: ${message}`);
+    this.name = 'PreviewLifecycleError';
+    this.category = category;
+  }
+}
+
 export const DEFAULT_IMAGE = 'pidex/project-node22:local';
 
 export function dockerLabels(projectId, kind) {
@@ -73,6 +81,77 @@ export function removeArgs(record) {
     container: ['rm', '-f', record.docker.container_name],
     volumes: [record.docker.workspace_volume, record.docker.secrets_volume, record.docker.cache_volume].map((name) => ['volume', 'rm', '-f', name]),
   };
+}
+
+function expectedPublishedPorts(record) {
+  const ports = record.preview?.ports;
+  if (!ports) return [];
+  return Array.from({ length: ports.size }, (_, offset) => ({
+    hostBind: ports.host_bind,
+    hostPort: ports.base + offset,
+    containerPort: ports.container_base + offset,
+  }));
+}
+
+function parseDockerPortOutput(output = '') {
+  const published = new Set();
+  for (const line of String(output).split(/\r?\n/)) {
+    const match = line.match(/^(\d+)\/tcp\s+->\s+([^:]+):(\d+)$/);
+    if (match) published.add(`${match[2]}:${match[3]}:${match[1]}`);
+  }
+  return published;
+}
+
+async function defaultVerifyPublishedPorts(record, runner) {
+  const expected = expectedPublishedPorts(record);
+  if (!expected.length) return false;
+  const output = runDocker(['port', record.docker.container_name], runner);
+  const published = parseDockerPortOutput(output);
+  return expected.every((port) => published.has(`${port.hostBind}:${port.hostPort}:${port.containerPort}`));
+}
+
+function isDockerBindConflict(error) {
+  return /bind|port is already allocated|address already in use|port.*allocated/i.test(error?.message || String(error));
+}
+
+async function assertVolumesExist(record, runner) {
+  const missing = [];
+  for (const [kind, name] of Object.entries({ workspace: record.docker.workspace_volume, secrets: record.docker.secrets_volume, cache: record.docker.cache_volume })) {
+    try { runDocker(['volume', 'inspect', name], runner); } catch { missing.push(kind); }
+  }
+  if (missing.length) throw new PreviewLifecycleError('preview_recreate_blocked', `missing required volumes: ${missing.join(',')}`);
+}
+
+export async function ensurePreviewContainerPublished(options = {}) {
+  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+  const projectId = safeProjectId(options.projectId || options.record?.project_id);
+  let record = options.record || loadProjectRecord(pidexRoot, projectId);
+  const runner = options.runner;
+  if (!record.preview?.ports) return { ok: false, error_category: 'preview_ports_missing' };
+  const verify = options.verifyPublishedPorts || ((target) => defaultVerifyPublishedPorts(target, runner));
+  if (await verify(record)) return { ok: true, record, action: 'already-published' };
+
+  let attemptedReassign = false;
+  while (true) {
+    try {
+      await assertVolumesExist(record, runner);
+      runDocker(['rm', '-f', record.docker.container_name], runner);
+      runDocker(containerCreateArgs(record), runner);
+      runDocker(containerStartArgs(record), runner);
+      record.status = 'ready';
+      const file = saveProjectRecord(pidexRoot, record);
+      return { ok: true, record, file, action: attemptedReassign ? 'reassigned-recreated-container' : 'recreated-container' };
+    } catch (error) {
+      if (error instanceof PreviewLifecycleError) return { ok: false, error_category: error.category };
+      if (!isDockerBindConflict(error) || attemptedReassign || typeof options.reassignPorts !== 'function') {
+        return { ok: false, error_category: isDockerBindConflict(error) ? 'preview_container_bind_conflict' : 'preview_recreate_blocked' };
+      }
+      attemptedReassign = true;
+      const reassigned = await options.reassignPorts({ previousRecord: record, error });
+      if (!reassigned?.record?.preview?.ports) return { ok: false, error_category: 'preview_reassign_blocked' };
+      record = reassigned.record;
+    }
+  }
 }
 
 function runDocker(args, runner) {
