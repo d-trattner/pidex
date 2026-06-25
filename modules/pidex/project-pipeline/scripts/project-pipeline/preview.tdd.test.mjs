@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parsePreviewArgs, previewStart, summarizePreviewResult } from './preview.mjs';
+import process from 'node:process';
+import { parsePreviewArgs, previewLogs, previewStart, previewStatus, previewStop, summarizePreviewResult } from './preview.mjs';
 import { createProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmpRoot() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-preview-helper-')); }
@@ -27,4 +28,25 @@ test('summarizePreviewResult omits helper JSON, Docker commands, secret paths, a
   const summary = summarizePreviewResult({ ok: true, action: 'start', project_id: 'pp-demo-prev2', operator_url: 'http://localhost:42000', host_bind: '127.0.0.1', host_port: 42000 });
   assert.match(summary, /Preview ready for pp-demo-prev2/);
   assert.doesNotMatch(summary, /0\.0\.0\.0|docker run|pidex-secrets|auth\.json|stdout|stderr|\{/);
+});
+
+test('preview facade uses real process manager for start/status/logs/stop', async () => {
+  const root = tmpRoot();
+  const workspace = path.join(root, 'workspace');
+  const stateRoot = path.join(root, 'cache', 'pidex-preview');
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(stateRoot, { recursive: true });
+  saveProjectRecord(root, createProjectRecord({ project_id: 'pp-demo-real1', name: 'demo' }));
+  const port = 46123;
+  const common = { pidexRoot: root, projectId: 'pp-demo-real1', env: { PIDEX_PROJECT_PIPELINE_PORT_BASE: String(port), PIDEX_PROJECT_PIPELINE_PORT_POOL_SIZE: '20', PIDEX_PROJECT_PIPELINE_PORT_RANGE_SIZE: '20' }, probePort: async () => true, processStateRoot: stateRoot, workspace, readinessTimeoutMs: 2500, stopTimeoutMs: 1000 };
+  const command = [process.execPath, '-e', "const http=require('http');console.log('token=abc secret=/pidex-secrets/auth.json');http.createServer((req,res)=>res.end('ok')).listen(process.env.PORT,'0.0.0.0');setInterval(()=>{},1000);"];
+  const started = await previewStart({ ...common, command });
+  assert.equal(started.ok, true);
+  const status = await previewStatus(common);
+  assert.equal(status.status, 'running');
+  const logs = await previewLogs(common);
+  assert.match(logs.log_excerpt, /token=<redacted>/);
+  assert.doesNotMatch(logs.log_excerpt, /abc|pidex-secrets|auth\.json/);
+  const stopped = await previewStop(common);
+  assert.equal(stopped.status, 'stopped');
 });
