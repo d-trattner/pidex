@@ -36,6 +36,13 @@ test('containerCreateArgs use hardened baseline and named volumes only', () => {
   assert.equal(args.some((arg) => String(arg).includes('/home/')), false);
 });
 
+test('containerCreateArgs publishes assigned preview port range without raw command summaries', () => {
+  const record = createProjectRecord({ project_id: 'pp-demo-ports1', name: 'demo' });
+  record.preview = { ports: { base: 42000, size: 3, container_base: 42000, host_bind: '127.0.0.1', assigned_at: '2026-06-25T00:00:00.000Z', assigned_by: 'create', generation: 1 } };
+  const args = containerCreateArgs(record);
+  assert.deepEqual(args.filter((arg, index) => arg === '--publish' ? args[index + 1] : false).map((_, index) => args[args.indexOf('--publish') + 1 + (index * 2)]), ['127.0.0.1:42000:42000', '127.0.0.1:42001:42001', '127.0.0.1:42002:42002']);
+});
+
 test('createProjectSandbox creates volumes then container and saves ready record', () => {
   const root = tmpRoot();
   const calls = [];

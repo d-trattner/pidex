@@ -27,6 +27,18 @@ export function volumeCreateArgs(name, projectId, kind) {
   return ['volume', 'create', ...dockerLabels(projectId, kind).flatMap((label) => ['--label', label]), name];
 }
 
+export function previewPublishArgs(record) {
+  const ports = record.preview?.ports;
+  if (!ports) return [];
+  const out = [];
+  for (let offset = 0; offset < ports.size; offset += 1) {
+    const hostPort = ports.base + offset;
+    const containerPort = ports.container_base + offset;
+    out.push('--publish', `${ports.host_bind}:${hostPort}:${containerPort}`);
+  }
+  return out;
+}
+
 export function containerCreateArgs(record) {
   const d = record.docker;
   return [
@@ -46,6 +58,7 @@ export function containerCreateArgs(record) {
     '--env', 'HOME=/pidex-home',
     '--env', 'PI_CODING_AGENT_DIR=/pidex-secrets/pi/agent',
     '--env', 'PIDEX_PROJECT_PIPELINE_CONTAINER=1',
+    ...previewPublishArgs(record),
     d.image || DEFAULT_IMAGE,
     'sleep', 'infinity',
   ];
