@@ -42,7 +42,13 @@ const CONTAINER_WORKSPACE = '/workspace';
 
 function docker(args) {
   const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
-  if (proc.status !== 0) throw new Error('docker operation failed');
+  if (proc.status !== 0) {
+    const error = new Error('docker operation failed');
+    error.status = proc.status;
+    error.stdout = proc.stdout;
+    error.stderr = proc.stderr;
+    throw error;
+  }
   return proc.stdout;
 }
 
@@ -52,8 +58,17 @@ function dockerOutput(result) {
   return String(result || '');
 }
 
+function tryParseContainerJson(output) {
+  try {
+    const text = String(output || '').trim();
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseContainerJson(output) {
-  try { return JSON.parse(String(output || '').trim()); } catch { return { ok: false, status: 'failed', error_category: 'preview_container_exec_invalid_json' }; }
+  return tryParseContainerJson(output) || { ok: false, status: 'failed', error_category: 'preview_container_exec_invalid_json' };
 }
 
 export function createDockerExecProcessManager(record, options = {}) {
@@ -77,7 +92,9 @@ export function createDockerExecProcessManager(record, options = {}) {
       if (args.stopTimeoutMs) cli.push('--stop-timeout-ms', String(args.stopTimeoutMs));
       if (action === 'start') cli.push('--', ...(args.command || []));
       return parseContainerJson(dockerOutput(runner(cli)));
-    } catch {
+    } catch (error) {
+      const helperResult = tryParseContainerJson(error?.stdout);
+      if (helperResult) return helperResult;
       return { ok: false, status: 'failed', error_category: 'preview_container_exec_failed' };
     }
   }
@@ -103,8 +120,8 @@ function processManagerFor(options = {}, record = undefined) {
 
 export async function previewStart(options) {
   const projectId = safeProjectId(options.projectId);
-  const allocated = await allocatePreviewPorts(options.pidexRoot, projectId, options);
-  let record = allocated.record;
+  const existingRecord = loadProjectRecord(options.pidexRoot, projectId);
+  let record = existingRecord.preview?.ports ? existingRecord : (await allocatePreviewPorts(options.pidexRoot, projectId, options)).record;
   const lifecycleManager = options.lifecycleManager || { ensurePreviewContainerPublished };
   const published = await lifecycleManager.ensurePreviewContainerPublished({
     pidexRoot: options.pidexRoot,
