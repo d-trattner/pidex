@@ -4,6 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { once } from 'node:events';
+import { fileURLToPath } from 'node:url';
 
 const PROCESS_NAME = 'preview';
 const DEFAULT_STATE_ROOT = '/cache/pidex-preview';
@@ -114,6 +115,32 @@ async function stopPid(pid, timeoutMs) {
   killProcessGroup(pid, 'SIGKILL');
   await sleep(100);
   return !isProcessAlive(pid);
+}
+
+export function parseProcessManagerCliArgs(argv = []) {
+  const separator = argv.indexOf('--');
+  const prefix = separator === -1 ? argv : argv.slice(0, separator);
+  const tail = separator === -1 ? [] : argv.slice(separator + 1);
+  const out = { json: false, processName: PROCESS_NAME };
+  for (let i = 0; i < prefix.length; i += 1) {
+    const arg = prefix[i];
+    if (['start', 'status', 'logs', 'stop'].includes(arg) && !out.action) out.action = arg;
+    else if (arg === '--json') out.json = true;
+    else if (arg === '--state-root') out.stateRoot = prefix[++i];
+    else if (arg === '--workspace') out.workspace = prefix[++i];
+    else if (arg === '--process-name') out.processName = prefix[++i];
+    else if (arg === '--port') out.containerPort = Number(prefix[++i]);
+    else if (arg === '--max-bytes') out.maxBytes = Number(prefix[++i]);
+    else if (arg === '--readiness-timeout-ms') out.readinessTimeoutMs = Number(prefix[++i]);
+    else if (arg === '--stop-timeout-ms') out.stopTimeoutMs = Number(prefix[++i]);
+    else throw new Error(`unknown process argument: ${arg}`);
+  }
+  if (!out.action) throw new Error('process action is required');
+  if (out.action === 'start') {
+    if (!tail.length) throw new Error('preview command required');
+    out.command = tail;
+  } else if (tail.length) throw new Error(`preview ${out.action} does not accept command tail`);
+  return out;
 }
 
 export function createProcessManager(options = {}) {
@@ -230,4 +257,21 @@ export function createProcessManager(options = {}) {
   }
 
   return { start, status, logs, stop, stateRoot, workspace };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const args = parseProcessManagerCliArgs(process.argv.slice(2));
+    const manager = createProcessManager({ stateRoot: args.stateRoot, workspace: args.workspace, readinessTimeoutMs: args.readinessTimeoutMs, stopTimeoutMs: args.stopTimeoutMs });
+    let result;
+    if (args.action === 'start') result = await manager.start(args);
+    else if (args.action === 'status') result = await manager.status(args);
+    else if (args.action === 'logs') result = await manager.logs(args);
+    else if (args.action === 'stop') result = await manager.stop(args);
+    console.log(args.json ? JSON.stringify(result) : (result.status || 'ok'));
+    process.exit(result.ok === false ? 1 : 0);
+  } catch (error) {
+    console.log(JSON.stringify({ ok: false, status: 'failed', error_category: error.category || 'preview_process_manager_failed' }));
+    process.exit(2);
+  }
 }

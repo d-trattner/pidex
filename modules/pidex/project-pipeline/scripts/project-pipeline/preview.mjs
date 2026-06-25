@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,8 +36,69 @@ function commandLabel(command) {
   return command.join(' ').replace(/(token|secret|password)=[^\s]+/gi, '$1=<redacted>').slice(0, 160);
 }
 
-function processManagerFor(options = {}) {
-  return options.processManager || createProcessManager({ stateRoot: options.processStateRoot, workspace: options.workspace, readinessTimeoutMs: options.readinessTimeoutMs, stopTimeoutMs: options.stopTimeoutMs });
+const CONTAINER_PROCESS_MANAGER_PATH = '/cache/pidex-preview/manager/process.mjs';
+const CONTAINER_PROCESS_STATE_ROOT = '/cache/pidex-preview';
+const CONTAINER_WORKSPACE = '/workspace';
+
+function docker(args) {
+  const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+  if (proc.status !== 0) throw new Error('docker operation failed');
+  return proc.stdout;
+}
+
+function dockerOutput(result) {
+  if (typeof result === 'string') return result;
+  if (result && typeof result.stdout === 'string') return result.stdout;
+  return String(result || '');
+}
+
+function parseContainerJson(output) {
+  try { return JSON.parse(String(output || '').trim()); } catch { return { ok: false, status: 'failed', error_category: 'preview_container_exec_invalid_json' }; }
+}
+
+export function createDockerExecProcessManager(record, options = {}) {
+  const containerName = record?.docker?.container_name;
+  if (!containerName) return createFailClosedProcessManager('preview_container_boundary_unavailable');
+  const runner = options.runner || docker;
+  const localProcessManager = fileURLToPath(new URL('./process.mjs', import.meta.url));
+
+  function ensureManager() {
+    runner(['exec', '--user', 'node', containerName, 'mkdir', '-p', path.dirname(CONTAINER_PROCESS_MANAGER_PATH)]);
+    runner(['cp', localProcessManager, `${containerName}:${CONTAINER_PROCESS_MANAGER_PATH}`]);
+  }
+
+  function execManager(action, args = {}) {
+    try {
+      ensureManager();
+      const cli = ['exec', '--user', 'node', '--workdir', CONTAINER_WORKSPACE, containerName, 'node', CONTAINER_PROCESS_MANAGER_PATH, action, '--json', '--state-root', CONTAINER_PROCESS_STATE_ROOT, '--workspace', CONTAINER_WORKSPACE, '--process-name', args.processName || 'preview'];
+      if (args.containerPort) cli.push('--port', String(args.containerPort));
+      if (args.maxBytes) cli.push('--max-bytes', String(args.maxBytes));
+      if (args.readinessTimeoutMs) cli.push('--readiness-timeout-ms', String(args.readinessTimeoutMs));
+      if (args.stopTimeoutMs) cli.push('--stop-timeout-ms', String(args.stopTimeoutMs));
+      if (action === 'start') cli.push('--', ...(args.command || []));
+      return parseContainerJson(dockerOutput(runner(cli)));
+    } catch {
+      return { ok: false, status: 'failed', error_category: 'preview_container_exec_failed' };
+    }
+  }
+
+  return {
+    start: (args = {}) => execManager('start', args),
+    status: (args = {}) => execManager('status', args),
+    logs: (args = {}) => execManager('logs', args),
+    stop: (args = {}) => execManager('stop', args),
+  };
+}
+
+function createFailClosedProcessManager(errorCategory) {
+  const failed = async () => ({ ok: false, status: 'failed', error_category: errorCategory });
+  return { start: failed, status: failed, logs: failed, stop: failed };
+}
+
+function processManagerFor(options = {}, record = undefined) {
+  if (options.processManager) return options.processManager;
+  if (options.processStateRoot || options.workspace) return createProcessManager({ stateRoot: options.processStateRoot, workspace: options.workspace, readinessTimeoutMs: options.readinessTimeoutMs, stopTimeoutMs: options.stopTimeoutMs });
+  return createDockerExecProcessManager(record, options);
 }
 
 export async function previewStart(options) {
@@ -59,7 +121,7 @@ export async function previewStart(options) {
   const hostPort = ports.base;
   const containerPort = ports.container_base;
   const operatorUrl = `http://${operator.operatorHost}:${hostPort}`;
-  const manager = processManagerFor(options);
+  const manager = processManagerFor(options, record);
   const started = await manager.start({ projectId, processName: 'preview', command: options.command, hostPort, containerPort, hostBind: ports.host_bind, env: { ...(options.commandEnv || {}), HOST: '0.0.0.0', PORT: String(containerPort), PIDEX_PREVIEW_HOST: '0.0.0.0', PIDEX_PREVIEW_PORT: String(containerPort) }, readinessTimeoutMs: options.readinessTimeoutMs });
   const ok = started.ok === true;
   record.preview = {
@@ -110,7 +172,7 @@ export async function previewStatus(options) {
   const projectId = safeProjectId(options.projectId);
   const record = loadProjectRecord(options.pidexRoot, projectId);
   const ports = previewPortsFromRecord(record);
-  const manager = processManagerFor(options);
+  const manager = processManagerFor(options, record);
   const status = await manager.status({ processName: 'preview', containerPort: ports.containerPort });
   const processState = record.preview?.processes?.preview || {};
   return { ok: status.ok !== false, action: 'status', project_id: projectId, status: status.status, operator_url: processState.operator_url || '', host_port: ports.hostPort, container_port: ports.containerPort, error_category: status.error_category || '' };
@@ -120,7 +182,7 @@ export async function previewLogs(options) {
   const projectId = safeProjectId(options.projectId);
   const record = loadProjectRecord(options.pidexRoot, projectId);
   const ports = previewPortsFromRecord(record);
-  const manager = processManagerFor(options);
+  const manager = processManagerFor(options, record);
   const logs = await manager.logs({ processName: 'preview', containerPort: ports.containerPort, maxBytes: options.maxBytes });
   return { ok: logs.ok !== false, action: 'logs', project_id: projectId, status: logs.status || 'ok', log_excerpt: logs.text || '', error_category: logs.error_category || '' };
 }
@@ -129,7 +191,7 @@ export async function previewStop(options) {
   const projectId = safeProjectId(options.projectId);
   const record = loadProjectRecord(options.pidexRoot, projectId);
   const ports = previewPortsFromRecord(record);
-  const manager = processManagerFor(options);
+  const manager = processManagerFor(options, record);
   const stopped = await manager.stop({ processName: 'preview', containerPort: ports.containerPort, stopTimeoutMs: options.stopTimeoutMs });
   record.preview = record.preview || {};
   record.preview.processes = record.preview.processes || {};

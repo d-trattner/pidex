@@ -99,7 +99,10 @@ test('preview status logs and stop default process boundary use Docker exec', as
   assert.equal((await previewStatus(common)).status, 'running');
   assert.equal((await previewLogs(common)).log_excerpt, 'safe log');
   assert.equal((await previewStop(common)).status, 'stopped');
-  assert.equal(calls.filter((args) => args[0] === 'exec' && args.includes('pidex-project-pp-demo-dockerexec2')).length, 3);
+  const processExecActions = calls
+    .filter((args) => args[0] === 'exec' && args.includes('pidex-project-pp-demo-dockerexec2') && args.includes('/cache/pidex-preview/manager/process.mjs'))
+    .map((args) => args.find((arg) => ['status', 'logs', 'stop'].includes(arg)));
+  assert.deepEqual(processExecActions, ['status', 'logs', 'stop']);
 });
 
 test('preview facade uses real process manager for start/status/logs/stop', async () => {
