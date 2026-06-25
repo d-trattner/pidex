@@ -3,6 +3,7 @@ import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allocatePreviewPorts, resolveOperatorHost } from './ports.mjs';
+import { createProcessManager } from './process.mjs';
 import { loadProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
 
 export function parsePreviewArgs(argv) {
@@ -33,12 +34,8 @@ function commandLabel(command) {
   return command.join(' ').replace(/(token|secret|password)=[^\s]+/gi, '$1=<redacted>').slice(0, 160);
 }
 
-function defaultProcessManager() {
-  return {
-    async start() {
-      return { ok: false, status: 'failed', error_category: 'preview_process_manager_unavailable' };
-    },
-  };
+function processManagerFor(options = {}) {
+  return options.processManager || createProcessManager({ stateRoot: options.processStateRoot, workspace: options.workspace, readinessTimeoutMs: options.readinessTimeoutMs, stopTimeoutMs: options.stopTimeoutMs });
 }
 
 export async function previewStart(options) {
@@ -50,8 +47,8 @@ export async function previewStart(options) {
   const hostPort = ports.base;
   const containerPort = ports.container_base;
   const operatorUrl = `http://${operator.operatorHost}:${hostPort}`;
-  const manager = options.processManager || defaultProcessManager();
-  const started = await manager.start({ projectId, command: options.command, hostPort, containerPort, hostBind: ports.host_bind, env: { HOST: '0.0.0.0', PORT: String(containerPort), PIDEX_PREVIEW_HOST: '0.0.0.0', PIDEX_PREVIEW_PORT: String(containerPort) } });
+  const manager = processManagerFor(options);
+  const started = await manager.start({ projectId, processName: 'preview', command: options.command, hostPort, containerPort, hostBind: ports.host_bind, env: { ...(options.commandEnv || {}), HOST: '0.0.0.0', PORT: String(containerPort), PIDEX_PREVIEW_HOST: '0.0.0.0', PIDEX_PREVIEW_PORT: String(containerPort) }, readinessTimeoutMs: options.readinessTimeoutMs });
   const ok = started.ok === true;
   record.preview = {
     ...(record.preview || {}),
@@ -88,6 +85,47 @@ export async function previewStart(options) {
   };
 }
 
+function previewPortsFromRecord(record) {
+  const ports = record.preview?.ports;
+  const processState = record.preview?.processes?.preview || {};
+  return {
+    hostPort: processState.host_port || ports?.base,
+    containerPort: processState.container_port || ports?.container_base || ports?.base,
+  };
+}
+
+export async function previewStatus(options) {
+  const projectId = safeProjectId(options.projectId);
+  const record = loadProjectRecord(options.pidexRoot, projectId);
+  const ports = previewPortsFromRecord(record);
+  const manager = processManagerFor(options);
+  const status = await manager.status({ processName: 'preview', containerPort: ports.containerPort });
+  const processState = record.preview?.processes?.preview || {};
+  return { ok: status.ok !== false, action: 'status', project_id: projectId, status: status.status, operator_url: processState.operator_url || '', host_port: ports.hostPort, container_port: ports.containerPort, error_category: status.error_category || '' };
+}
+
+export async function previewLogs(options) {
+  const projectId = safeProjectId(options.projectId);
+  const record = loadProjectRecord(options.pidexRoot, projectId);
+  const ports = previewPortsFromRecord(record);
+  const manager = processManagerFor(options);
+  const logs = await manager.logs({ processName: 'preview', containerPort: ports.containerPort, maxBytes: options.maxBytes });
+  return { ok: logs.ok !== false, action: 'logs', project_id: projectId, status: logs.status || 'ok', log_excerpt: logs.text || '', error_category: logs.error_category || '' };
+}
+
+export async function previewStop(options) {
+  const projectId = safeProjectId(options.projectId);
+  const record = loadProjectRecord(options.pidexRoot, projectId);
+  const ports = previewPortsFromRecord(record);
+  const manager = processManagerFor(options);
+  const stopped = await manager.stop({ processName: 'preview', containerPort: ports.containerPort, stopTimeoutMs: options.stopTimeoutMs });
+  record.preview = record.preview || {};
+  record.preview.processes = record.preview.processes || {};
+  record.preview.processes.preview = { ...(record.preview.processes.preview || {}), status: stopped.ok ? 'stopped' : 'stopping', stopped_at: new Date().toISOString(), last_error_category: stopped.error_category || '' };
+  saveProjectRecord(options.pidexRoot, record);
+  return { ok: stopped.ok !== false, action: 'stop', project_id: projectId, status: stopped.status, error_category: stopped.error_category || '' };
+}
+
 export function summarizePreviewResult(result) {
   if (result.ok && result.action === 'start') {
     return [
@@ -113,10 +151,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (args.help) { console.log(usage()); process.exit(0); }
     let result;
     if (args.action === 'start') result = await previewStart(args);
-    else {
-      const record = loadProjectRecord(args.pidexRoot, args.projectId);
-      result = { ok: true, action: args.action, project_id: record.project_id, status: record.preview?.processes?.preview?.status || 'stopped', operator_url: record.preview?.processes?.preview?.operator_url || '' };
-    }
+    else if (args.action === 'status') result = await previewStatus(args);
+    else if (args.action === 'logs') result = await previewLogs(args);
+    else if (args.action === 'stop') result = await previewStop(args);
     console.log(args.json ? JSON.stringify(result, null, 2) : summarizePreviewResult(result));
     process.exit(result.ok ? 0 : 1);
   } catch (error) {
