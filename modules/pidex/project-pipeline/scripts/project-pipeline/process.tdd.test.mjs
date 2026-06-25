@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import http from 'node:http';
 import { createProcessManager, redactPreviewLog, validateManagedStateRoot, validateProcessName } from './process.mjs';
 
 function tmpDir(prefix) { return mkdtempSync(path.join(os.tmpdir(), prefix)); }
@@ -70,6 +71,27 @@ test('createProcessManager fails and cleans up when process exits early or never
   const notListening = await manager.start({ processName: 'preview', command: [process.execPath, '-e', 'setInterval(()=>{},1000)'], containerPort: port + 1, env: { PORT: String(port + 1) }, readinessTimeoutMs: 700 });
   assert.equal(notListening.ok, false);
   assert.equal(notListening.error_category, 'preview_port_not_listening');
+});
+
+test('stop returns stopped when managed process exits but assigned port remains externally reserved', async () => {
+  const { manager, stateRoot } = managerFixture();
+  const port = portsBase();
+  const reserver = http.createServer((req, res) => res.end('reserved'));
+  await new Promise((resolve) => reserver.listen(port, '127.0.0.1', resolve));
+  const sleeper = await import('node:child_process').then(({ spawn }) => spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { detached: true, stdio: 'ignore' }));
+  sleeper.unref();
+  const dir = path.join(stateRoot, 'preview');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ pid: sleeper.pid, owner_token: `pidex-preview:${realpathSync(stateRoot)}:preview`, status: 'running', port, command_label: 'managed sleeper' }));
+  try {
+    const stopped = await manager.stop({ processName: 'preview', containerPort: port, stopTimeoutMs: 500 });
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.status, 'stopped');
+    const stoppedStatus = await manager.status({ processName: 'preview', containerPort: port });
+    assert.equal(stoppedStatus.status, 'stopped');
+  } finally {
+    await new Promise((resolve) => reserver.close(resolve));
+  }
 });
 
 test('stop refuses stale PID marker and does not kill unrelated process', async () => {
