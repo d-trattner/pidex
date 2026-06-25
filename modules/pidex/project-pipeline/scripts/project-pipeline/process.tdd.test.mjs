@@ -94,6 +94,34 @@ test('stop returns stopped when managed process exits but assigned port remains 
   }
 });
 
+test('stop returns stopped when managed PID remains observable but assigned app port is no longer listening', async () => {
+  const { stateRoot, workspace } = managerFixture();
+  const port = portsBase();
+  const sleeper = await import('node:child_process').then(({ spawn }) => spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { detached: true, stdio: 'ignore' }));
+  sleeper.unref();
+  const manager = createProcessManager({
+    stateRoot,
+    workspace,
+    stopTimeoutMs: 25,
+    processControl: {
+      isProcessAlive: (pid) => pid === sleeper.pid,
+      killProcessGroup: () => true,
+      isPortListening: async () => false,
+    },
+  });
+  const dir = path.join(stateRoot, 'preview');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ pid: sleeper.pid, owner_token: `pidex-preview:${realpathSync(stateRoot)}:preview`, status: 'running', port, command_label: 'managed sleeper' }));
+  try {
+    const stopped = await manager.stop({ processName: 'preview', containerPort: port, stopTimeoutMs: 25 });
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.status, 'stopped');
+    assert.doesNotThrow(() => process.kill(sleeper.pid, 0));
+  } finally {
+    process.kill(-sleeper.pid, 'SIGKILL');
+  }
+});
+
 test('stop refuses stale PID marker and does not kill unrelated process', async () => {
   const { manager, stateRoot } = managerFixture();
   const sleeper = await import('node:child_process').then(({ spawn }) => spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { detached: true, stdio: 'ignore' }));
