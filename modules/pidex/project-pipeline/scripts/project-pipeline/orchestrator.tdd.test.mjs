@@ -44,6 +44,21 @@ test('buildPhaseTask threads previous context without host fallback', () => {
   assert.match(task, /Critique the previous plan/);
 });
 
+test('buildPhaseTask includes preview gate instructions for UI tasks without source export', () => {
+  const task = buildPhaseTask({ phase: 'pidex-implementer', initialTask: 'Build frontend UI dashboard page', nextPhase: 'pidex-code-reviewer', phaseIndex: 2, phaseCount: 4 });
+  assert.match(task, /UI preview gate/i);
+  assert.match(task, /\/pdproject preview start <project-id> -- <command>/);
+  assert.match(task, /approve|request changes|stop preview/i);
+  assert.match(task, /Preview URL\/status may be included/i);
+  assert.doesNotMatch(task, /export source/i);
+});
+
+test('buildPhaseTask does not force preview setup for non-UI tasks', () => {
+  const task = buildPhaseTask({ phase: 'pidex-implementer', initialTask: 'Refactor backend parser tests', nextPhase: 'pidex-code-reviewer', phaseIndex: 2, phaseCount: 4 });
+  assert.doesNotMatch(task, /UI preview gate/i);
+  assert.match(task, /Non-UI tasks do not require preview setup/);
+});
+
 test('buildPhaseTask gives validation phases mutation and Fallow instructions', () => {
   const securityTask = buildPhaseTask({ phase: 'pidex-security', initialTask: 'ship it', previous: { agent: 'pidex-code-reviewer', context_file: 'agents.output/code-review/a.md' }, nextPhase: 'pidex-qa', phaseIndex: 4, phaseCount: 6 });
   assert.match(securityTask, /Validation-only phase/);
