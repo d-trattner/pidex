@@ -151,6 +151,23 @@ export function createProcessManager(options = {}) {
     readinessTimeoutMs: options.readinessTimeoutMs || DEFAULT_READY_TIMEOUT_MS,
     stopTimeoutMs: options.stopTimeoutMs || DEFAULT_STOP_TIMEOUT_MS,
   };
+  const processControl = options.processControl || {};
+  const checkProcessAlive = processControl.isProcessAlive || isProcessAlive;
+  const checkPortListening = processControl.isPortListening || isPortListening;
+  const signalProcessGroup = processControl.killProcessGroup || killProcessGroup;
+
+  async function stopManagedPid(pid, timeoutMs) {
+    if (!checkProcessAlive(pid)) return true;
+    signalProcessGroup(pid, 'SIGTERM');
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (!checkProcessAlive(pid)) return true;
+      await sleep(50);
+    }
+    signalProcessGroup(pid, 'SIGKILL');
+    await sleep(100);
+    return !checkProcessAlive(pid);
+  }
 
   function paths(processName = PROCESS_NAME) {
     const dir = processDir(stateRoot, processName);
@@ -191,13 +208,13 @@ export function createProcessManager(options = {}) {
     let exited = false;
     child.once('exit', () => { exited = true; out.end(); });
     while (Date.now() < deadline) {
-      if (exited || !isProcessAlive(child.pid)) {
+      if (exited || !checkProcessAlive(child.pid)) {
         state.status = 'failed';
         state.last_error_category = 'preview_process_exited';
         writeState(p.stateFile, state);
         return { ok: false, status: 'failed', error_category: 'preview_process_exited' };
       }
-      if (await isPortListening(port)) {
+      if (await checkPortListening(port)) {
         state.status = 'running';
         state.ready_at = new Date().toISOString();
         writeState(p.stateFile, state);
@@ -206,7 +223,7 @@ export function createProcessManager(options = {}) {
       }
       await sleep(50);
     }
-    await stopPid(child.pid, defaults.stopTimeoutMs);
+    await stopManagedPid(child.pid, defaults.stopTimeoutMs);
     state.status = 'failed';
     state.last_error_category = 'preview_port_not_listening';
     writeState(p.stateFile, state);
@@ -219,8 +236,8 @@ export function createProcessManager(options = {}) {
     const state = readState(p.stateFile);
     if (!state?.pid) return { ok: true, status: 'stopped' };
     if (state.owner_token !== ownerToken(stateRoot)) return { ok: false, status: 'unknown', error_category: 'preview_stale_pid_owner_mismatch' };
-    const alive = isProcessAlive(state.pid);
-    const listening = alive && state.port ? await isPortListening(state.port) : false;
+    const alive = checkProcessAlive(state.pid);
+    const listening = alive && state.port ? await checkPortListening(state.port) : false;
     const nextStatus = alive && listening ? 'running' : (state.status === 'failed' ? 'failed' : 'stopped');
     if (nextStatus !== state.status) writeState(p.stateFile, { ...state, status: nextStatus, stopped_at: nextStatus === 'stopped' ? new Date().toISOString() : state.stopped_at });
     return { ok: true, status: nextStatus, pid: alive ? state.pid : undefined, port: state.port };
@@ -249,10 +266,12 @@ export function createProcessManager(options = {}) {
     const state = readState(p.stateFile);
     if (!state?.pid) return { ok: true, status: 'stopped' };
     if (state.owner_token !== ownerToken(stateRoot)) return { ok: false, status: 'unknown', error_category: 'preview_stale_pid_owner_mismatch' };
-    const killed = await stopPid(state.pid, args.stopTimeoutMs || defaults.stopTimeoutMs);
-    const ok = killed;
-    writeState(p.stateFile, { ...state, status: ok ? 'stopped' : 'stopping', stopped_at: new Date().toISOString(), last_error_category: ok ? '' : 'preview_stop_incomplete' });
-    return ok ? { ok: true, status: 'stopped' } : { ok: false, status: 'stopping', error_category: 'preview_stop_incomplete' };
+    const killed = await stopManagedPid(state.pid, args.stopTimeoutMs || defaults.stopTimeoutMs);
+    const alive = checkProcessAlive(state.pid);
+    const listening = alive && state.port ? await checkPortListening(state.port) : false;
+    const stopped = killed || !listening;
+    writeState(p.stateFile, { ...state, status: stopped ? 'stopped' : 'stopping', stopped_at: new Date().toISOString(), last_error_category: stopped ? '' : 'preview_stop_incomplete' });
+    return stopped ? { ok: true, status: 'stopped' } : { ok: false, status: 'stopping', error_category: 'preview_stop_incomplete' };
   }
 
   return { start, status, logs, stop, stateRoot, workspace };
