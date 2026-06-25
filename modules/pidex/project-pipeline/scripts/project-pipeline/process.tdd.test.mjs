@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { createProcessManager, redactPreviewLog, validateManagedStateRoot, validateProcessName } from './process.mjs';
 
 function tmpDir(prefix) { return mkdtempSync(path.join(os.tmpdir(), prefix)); }
@@ -60,6 +62,25 @@ test('createProcessManager starts preview in workspace, records status/logs, the
   assert.equal(stopped.status, 'stopped');
   const stoppedStatus = await manager.status({ processName: 'preview', containerPort: port });
   assert.notEqual(stoppedStatus.status, 'running');
+});
+
+test('CLI-started preview survives request logging after start command exits', async () => {
+  const { stateRoot, workspace, manager } = managerFixture();
+  const port = portsBase();
+  const cli = fileURLToPath(new URL('./process.mjs', import.meta.url));
+  const server = `const http=require('http');const server=http.createServer((req,res)=>{console.log('request '+req.url);res.end('ok')});server.listen(process.env.PORT,'0.0.0.0',()=>console.log('ready'));setInterval(()=>{},1000);`;
+  const start = spawnSync(process.execPath, [cli, 'start', '--state-root', stateRoot, '--workspace', workspace, '--port', String(port), '--json', '--', process.execPath, '-e', server], { encoding: 'utf8' });
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+  const started = JSON.parse(start.stdout);
+  assert.equal(started.ok, true);
+  assert.equal((await manager.status({ processName: 'preview', containerPort: port })).status, 'running');
+  const res = await fetch(`http://127.0.0.1:${port}/after-parent-exit`);
+  assert.equal(await res.text(), 'ok');
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal((await manager.status({ processName: 'preview', containerPort: port })).status, 'running');
+  const logs = await manager.logs({ processName: 'preview', maxBytes: 4096 });
+  assert.match(logs.text, /request \/after-parent-exit/);
+  await manager.stop({ processName: 'preview', containerPort: port });
 });
 
 test('createProcessManager fails and cleans up when process exits early or never listens', async () => {

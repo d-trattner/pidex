@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { createReadStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, createReadStream, existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
@@ -69,10 +69,6 @@ export function redactPreviewLog(input = '', { maxBytes = DEFAULT_LOG_BYTES } = 
     .replace(/(?:^|\s)docker\s+(?:run|create|exec)\b[^\n]*/gi, ' <redacted-docker-command>')
     .replace(/fingerprint[:=][^\s]+/gi, 'fingerprint=<redacted>');
   return redacted.slice(-limit);
-}
-
-function appendLogStream(stream, fileStream) {
-  stream.on('data', (chunk) => fileStream.write(chunk));
 }
 
 async function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
@@ -189,10 +185,9 @@ export function createProcessManager(options = {}) {
     if (previous?.status === 'running') await stop({ processName, containerPort: previous.port || port });
 
     const env = { ...process.env, ...args.env, HOST: '0.0.0.0', PORT: String(port), PIDEX_PREVIEW_HOST: '0.0.0.0', PIDEX_PREVIEW_PORT: String(port) };
-    const out = await import('node:fs').then(({ createWriteStream }) => createWriteStream(p.logFile, { flags: 'w', mode: 0o600 }));
-    const child = spawn(command[0], command.slice(1), { cwd: workspace, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    appendLogStream(child.stdout, out);
-    appendLogStream(child.stderr, out);
+    const logFd = openSync(p.logFile, 'w', 0o600);
+    const child = spawn(command[0], command.slice(1), { cwd: workspace, env, detached: true, stdio: ['ignore', logFd, logFd] });
+    closeSync(logFd);
     const state = {
       status: 'starting',
       pid: child.pid,
@@ -206,7 +201,7 @@ export function createProcessManager(options = {}) {
     writeState(p.stateFile, state);
     const deadline = Date.now() + (args.readinessTimeoutMs || defaults.readinessTimeoutMs);
     let exited = false;
-    child.once('exit', () => { exited = true; out.end(); });
+    child.once('exit', () => { exited = true; });
     while (Date.now() < deadline) {
       if (exited || !checkProcessAlive(child.pid)) {
         state.status = 'failed';
