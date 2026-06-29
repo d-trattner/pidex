@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Project Pipeline Preview Bridge code-level QA passed: focused preview suites 54/54 green, full `corepack pnpm run check` green, and Fallow clean. Remote/headless Linux UAT passed; local Docker and native Windows Docker Desktop UAT remain pending.
+
 ## 0.1.9 - 2026-06-24
 
 Project Pipeline first-run `/pd` release-readiness update:
