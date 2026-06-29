@@ -93,20 +93,24 @@ function expectedPublishedPorts(record) {
   }));
 }
 
-function parseDockerPortOutput(output = '') {
-  const published = new Set();
+export function parseDockerPortOutput(output = '') {
+  const published = [];
   for (const line of String(output).split(/\r?\n/)) {
     const match = line.match(/^(\d+)\/tcp\s+->\s+([^:]+):(\d+)$/);
-    if (match) published.add(`${match[2]}:${match[3]}:${match[1]}`);
+    if (match) published.push({ containerPort: Number(match[1]), hostBind: match[2], hostPort: Number(match[3]) });
   }
   return published;
+}
+
+export function publishedPortsForContainer(record, runner) {
+  const output = runDocker(['port', record.docker.container_name], runner);
+  return parseDockerPortOutput(output);
 }
 
 async function defaultVerifyPublishedPorts(record, runner) {
   const expected = expectedPublishedPorts(record);
   if (!expected.length) return false;
-  const output = runDocker(['port', record.docker.container_name], runner);
-  const published = parseDockerPortOutput(output);
+  const published = new Set(publishedPortsForContainer(record, runner).map((port) => `${port.hostBind}:${port.hostPort}:${port.containerPort}`));
   return expected.every((port) => published.has(`${port.hostBind}:${port.hostPort}:${port.containerPort}`));
 }
 

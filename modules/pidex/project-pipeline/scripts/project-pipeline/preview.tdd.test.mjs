@@ -120,6 +120,30 @@ test('previewStart reuses existing published ports without allocator churn befor
   assert.equal(result.operator_url, 'http://localhost:42100');
 });
 
+test('previewStart adopts an already-published project preview range before allocating', async () => {
+  const root = tmpRoot();
+  saveProjectRecord(root, createProjectRecord({ project_id: 'pp-demo-adoptports1', name: 'demo' }));
+  const calls = [];
+  const result = await previewStart({
+    pidexRoot: root,
+    projectId: 'pp-demo-adoptports1',
+    command: ['pnpm', 'dev'],
+    env: { PIDEX_PROJECT_PIPELINE_PORT_BASE: '42000', PIDEX_PROJECT_PIPELINE_PORT_POOL_SIZE: '20', PIDEX_PROJECT_PIPELINE_PORT_RANGE_SIZE: '20' },
+    runner: (args) => {
+      calls.push(args);
+      if (args[0] === 'port') return Array.from({ length: 20 }, (_, i) => `${42000 + i}/tcp -> 127.0.0.1:${42000 + i}`).join('\n');
+      return 'ok\n';
+    },
+    probePort: async () => { throw new Error('allocator must not probe already-published project ports'); },
+    processManager: { start: async ({ hostPort, containerPort }) => ({ ok: hostPort === 42000 && containerPort === 42000, status: 'running' }) },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.host_port, 42000);
+  assert.equal(result.container_port, 42000);
+  assert.equal(result.operator_url, 'http://localhost:42000');
+  assert.equal(calls.some((args) => args[0] === 'port'), true);
+});
+
 test('preview status logs and stop default process boundary use Docker exec', async () => {
   const root = tmpRoot();
   const record = createProjectRecord({ project_id: 'pp-demo-dockerexec2', name: 'demo' });

@@ -3,8 +3,8 @@ import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { allocatePreviewPorts, resolveOperatorHost } from './ports.mjs';
-import { ensurePreviewContainerPublished } from './lifecycle.mjs';
+import { allocatePreviewPorts, candidateRanges, choosePreviewBindMode, parsePreviewPortConfig, resolveOperatorHost } from './ports.mjs';
+import { ensurePreviewContainerPublished, publishedPortsForContainer } from './lifecycle.mjs';
 import { createProcessManager } from './process.mjs';
 import { loadProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
 
@@ -118,10 +118,54 @@ function processManagerFor(options = {}, record = undefined) {
   return createDockerExecProcessManager(record, options);
 }
 
+export function adoptPublishedPreviewPorts(record, options = {}) {
+  if (record.preview?.ports) return record;
+  let published = [];
+  try { published = publishedPortsForContainer(record, options.runner); } catch { return record; }
+  if (!published.length) return record;
+  const env = options.env || process.env;
+  const config = parsePreviewPortConfig(env);
+  const expectedHostBind = options.hostBind || choosePreviewBindMode({ platform: options.platform || process.platform, headless: options.headless, remote: options.remote, env });
+  const publishedSet = new Set(published.map((port) => `${port.hostBind}:${port.hostPort}:${port.containerPort}`));
+  for (const candidate of candidateRanges(config)) {
+    let complete = true;
+    for (let offset = 0; offset < candidate.size; offset += 1) {
+      const hostPort = candidate.base + offset;
+      const containerPort = candidate.container_base + offset;
+      if (!publishedSet.has(`${expectedHostBind}:${hostPort}:${containerPort}`)) {
+        complete = false;
+        break;
+      }
+    }
+    if (!complete) continue;
+    const previousGeneration = Number(record.preview?.ports?.generation || 0);
+    return {
+      ...record,
+      schema_version: 2,
+      features: { ...(record.features || {}), preview_ports: true },
+      preview: {
+        ...(record.preview || {}),
+        ports: {
+          base: candidate.base,
+          size: candidate.size,
+          host_bind: expectedHostBind,
+          container_base: candidate.container_base,
+          assigned_at: new Date().toISOString(),
+          assigned_by: 'adopt-published',
+          generation: previousGeneration + 1,
+        },
+      },
+    };
+  }
+  return record;
+}
+
 export async function previewStart(options) {
   const projectId = safeProjectId(options.projectId);
   const existingRecord = loadProjectRecord(options.pidexRoot, projectId);
-  let record = existingRecord.preview?.ports ? existingRecord : (await allocatePreviewPorts(options.pidexRoot, projectId, options)).record;
+  let record = existingRecord.preview?.ports ? existingRecord : adoptPublishedPreviewPorts(existingRecord, options);
+  if (record !== existingRecord) saveProjectRecord(options.pidexRoot, record);
+  if (!record.preview?.ports) record = (await allocatePreviewPorts(options.pidexRoot, projectId, options)).record;
   const lifecycleManager = options.lifecycleManager || { ensurePreviewContainerPublished };
   const published = await lifecycleManager.ensurePreviewContainerPublished({
     pidexRoot: options.pidexRoot,
