@@ -22,7 +22,7 @@ test('previewStart auto-assigns ports, validates published state before process 
     pidexRoot: root,
     projectId: 'pp-demo-prev1',
     command: ['pnpm', 'dev'],
-    env: { PIDEX_PROJECT_PIPELINE_PORT_BASE: '42000', PIDEX_PROJECT_PIPELINE_PORT_POOL_SIZE: '20', PIDEX_PROJECT_PIPELINE_PORT_RANGE_SIZE: '20', PIDEX_PROJECT_PIPELINE_PREVIEW_HOST: '10.0.0.5' },
+    env: { PIDEX_PROJECT_PIPELINE_PORT_BASE: '42000', PIDEX_PROJECT_PIPELINE_PORT_POOL_SIZE: '20', PIDEX_PROJECT_PIPELINE_PORT_RANGE_SIZE: '20', PIDEX_PROJECT_PIPELINE_PREVIEW_HOST: '192.0.2.5' },
     hostBind: '0.0.0.0',
     probePort: async () => true,
     lifecycleManager: { ensurePreviewContainerPublished: async ({ record }) => { events.push(`published:${record.preview.ports.base}`); return { ok: true, record }; } },
@@ -30,7 +30,7 @@ test('previewStart auto-assigns ports, validates published state before process 
   });
   assert.equal(result.ok, true);
   assert.deepEqual(events, ['published:42000', 'process-start']);
-  assert.equal(result.operator_url, 'http://10.0.0.5:42000');
+  assert.equal(result.operator_url, 'http://192.0.2.5:42000');
   assert.equal(result.host_bind, '0.0.0.0');
   assert.match(result.exposure_note, /all interfaces/);
 });

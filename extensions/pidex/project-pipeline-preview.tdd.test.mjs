@@ -25,7 +25,7 @@ test('preview summaries are concise and safe', () => {
   assert.match(start, /Preview ready for pp-demo-abc123/);
   assert.match(start, /http:\/\/localhost:42000/);
   assert.doesNotMatch(start, /0\.0\.0\.0|docker|pidex-secrets|auth\.json|\{/);
-  const remote = mod.summarizePreviewStart({ ok: true, project_id: 'pp-demo-abc123', operator_url: 'http://10.0.0.5:42000', host_bind: '0.0.0.0', exposure_note: 'Exposure: preview is bound to all interfaces on this Docker host. PIDEX did not open firewalls or tunnels.' });
+  const remote = mod.summarizePreviewStart({ ok: true, project_id: 'pp-demo-abc123', operator_url: 'http://192.0.2.5:42000', host_bind: '0.0.0.0', exposure_note: 'Exposure: preview is bound to all interfaces on this Docker host. PIDEX did not open firewalls or tunnels.' });
   assert.match(remote, /all interfaces/);
   assert.doesNotMatch(remote.split('\n')[1], /0\.0\.0\.0/);
 });

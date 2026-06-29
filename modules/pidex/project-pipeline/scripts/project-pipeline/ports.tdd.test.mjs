@@ -39,6 +39,6 @@ test('choosePreviewBindMode and resolveOperatorHost never return 0.0.0.0 browser
   assert.equal(choosePreviewBindMode({ platform: 'win32' }), '127.0.0.1');
   assert.equal(choosePreviewBindMode({ platform: 'linux', headless: true }), '0.0.0.0');
   assert.deepEqual(resolveOperatorHost({ hostBind: '127.0.0.1' }), { operatorHost: 'localhost', source: 'local' });
-  assert.deepEqual(resolveOperatorHost({ hostBind: '0.0.0.0', env: { PIDEX_PROJECT_PIPELINE_PREVIEW_HOST: '10.0.0.5' } }), { operatorHost: '10.0.0.5', source: 'env' });
+  assert.deepEqual(resolveOperatorHost({ hostBind: '0.0.0.0', env: { PIDEX_PROJECT_PIPELINE_PREVIEW_HOST: '192.0.2.5' } }), { operatorHost: '192.0.2.5', source: 'env' });
   assert.throws(() => resolveOperatorHost({ hostBind: '0.0.0.0', env: { PIDEX_PROJECT_PIPELINE_PREVIEW_HOST: 'http://bad' } }), /preview_operator_host_unknown/);
 });
