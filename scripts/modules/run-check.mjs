@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { allCapabilities, appendJsonLine, capabilityAvailability, evidencePath, loadModuleSystem, parseArgs, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
@@ -22,6 +23,7 @@ if (!capabilityId || !agent || !phase) {
 }
 let project;
 try {
+  if (!path.isAbsolute(String(args.project || ''))) throw new Error('--project must be absolute');
   project = validateProjectPath(args.project);
 } catch (error) {
   console.error(error.message);
@@ -51,14 +53,27 @@ if (passthroughArgs.length && command.passthrough !== true) {
   console.error(`capability does not allow passthrough args: ${capabilityId}`);
   process.exit(2);
 }
+function expandPolicyRoot(root) {
+  return String(root)
+    .replaceAll('__PIDEX_ROOT__', pidexRoot)
+    .replaceAll('__PROJECT_ROOT__', project)
+    .replaceAll('__HOME__', os.homedir());
+}
+
+function withinRoot(root, target) {
+  const resolvedRoot = path.resolve(root);
+  const resolvedTarget = path.resolve(target);
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
 function pathAllowedByPolicy(policy, arg) {
   const value = String(arg);
   if (value.includes('..')) return false;
   if (!path.isAbsolute(value)) return true;
-  if (policy.allow_absolute_project_paths !== true) return false;
   const resolved = path.resolve(value);
-  const projectResolved = path.resolve(project);
-  return resolved === projectResolved || resolved.startsWith(`${projectResolved}${path.sep}`);
+  if (policy.allow_absolute_project_paths === true && withinRoot(project, resolved)) return true;
+  const allowedRoots = Array.isArray(policy.allowed_absolute_roots) ? policy.allowed_absolute_roots : [];
+  return allowedRoots.some((root) => withinRoot(expandPolicyRoot(root), resolved));
 }
 
 function passthroughAllowed(command, argsToCheck) {

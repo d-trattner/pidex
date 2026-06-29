@@ -3,14 +3,14 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import path from 'node:path';
 import process from 'node:process';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { dockerSpawnSync } from './docker-spawn.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 const BROAD_ROOTS = new Set(['.ssh', '.config', '.pi', '.codex']);
 
 function docker(args, opts = {}) {
-  const proc = spawnSync('docker', args, { encoding: opts.input ? undefined : 'utf8', maxBuffer: 10 * 1024 * 1024, ...opts });
+  const proc = dockerSpawnSync(args, { encoding: opts.input ? undefined : 'utf8', maxBuffer: 10 * 1024 * 1024, ...opts });
   const stdout = Buffer.isBuffer(proc.stdout) ? proc.stdout.toString('utf8') : proc.stdout;
   const stderr = Buffer.isBuffer(proc.stderr) ? proc.stderr.toString('utf8') : proc.stderr;
   if (proc.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${(stderr || stdout || '').trim()}`);

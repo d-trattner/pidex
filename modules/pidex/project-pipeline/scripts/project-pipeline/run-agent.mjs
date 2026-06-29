@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { dockerSpawnSync } from './docker-spawn.mjs';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,7 +11,7 @@ import { syncProjectArchive } from './archive-sync.mjs';
 const CHILD_ENV = 'PIDEX_PROJECT_PIPELINE_CHILD';
 
 function docker(args, opts = {}) {
-  const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
+  const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
   return { status: proc.status ?? 1, stdout: proc.stdout || '', stderr: proc.stderr || '' };
 }
 

@@ -89,6 +89,18 @@ test('run-check scrubs secret-like passthrough values even without sensitive fla
   assert.deepEqual(row.passthrough_args, ['[REDACTED]']);
 });
 
+test('run-check allows explicit safe absolute roots in passthrough policy', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^[A-Za-z0-9_./:-]+$'], allow_absolute_project_paths: true, allowed_absolute_roots: ['__PIDEX_ROOT__'] };
+  writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log(process.argv.slice(2).join(' '));\n");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const out = execFileSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', root, project], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.match(out, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
 test('run-check rejects absolute passthrough paths outside project', () => {
   const { root, project } = makeModuleFixture();
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');

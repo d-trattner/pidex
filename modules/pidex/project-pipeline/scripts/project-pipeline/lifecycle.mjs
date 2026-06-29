@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { dockerSpawnSync } from './docker-spawn.mjs';
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -26,7 +26,7 @@ export function dockerLabels(projectId, kind) {
 }
 
 function docker(args, opts = {}) {
-  const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, ...opts });
+  const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, ...opts });
   if (proc.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${(proc.stderr || proc.stdout || '').trim()}`);
   return proc.stdout;
 }

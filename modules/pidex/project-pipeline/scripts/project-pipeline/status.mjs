@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { dockerSpawnSync } from './docker-spawn.mjs';
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -20,7 +20,7 @@ export function parseArgs(argv) {
 }
 
 function docker(args) {
-  const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 });
+  const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 });
   return { status: proc.status ?? 1, stdout: proc.stdout || '', stderr: proc.stderr || '' };
 }
 

@@ -146,6 +146,8 @@
         "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/run-flow.mjs"],
         "passthrough": true,
         "passthrough_policy": {
+          "allow_absolute_project_paths": true,
+          "allowed_absolute_roots": ["__PIDEX_ROOT__", "__HOME__/.pi/agent", "__HOME__/.codex"],
           "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|agent|task|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
         }
       }
@@ -164,6 +166,8 @@
         "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.mjs"],
         "passthrough": true,
         "passthrough_policy": {
+          "allow_absolute_project_paths": true,
+          "allowed_absolute_roots": ["__PIDEX_ROOT__", "__HOME__/.pi/agent", "__HOME__/.codex"],
           "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|task|phases|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ ,-]+$"]
         }
       }

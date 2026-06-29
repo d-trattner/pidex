@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readdirSync } from 'node:fs';
+import { dockerSpawnSync } from './docker-spawn.mjs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -80,7 +81,11 @@ export function importLocalProject(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
   const collected = collectImportFiles(options.source);
-  const runner = options.runner || ((args) => run('docker', args));
+  const runner = options.runner || ((args) => {
+    const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 });
+    if (proc.status !== 0) throw new Error(`docker ${args.join(' ')} failed: ${((proc.stderr || proc.stdout || '')).trim()}`);
+    return proc.stdout;
+  });
   const copied = [];
   for (const file of collected.files) {
     const source = path.join(collected.project, file.path);

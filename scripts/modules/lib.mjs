@@ -137,6 +137,9 @@ export function validateCapabilityCommand(pidexRoot, capability) {
       if ('allow_absolute_project_paths' in policy && typeof policy.allow_absolute_project_paths !== 'boolean') {
         errors.push(`${capability.id}: passthrough_policy.allow_absolute_project_paths must be boolean when present`);
       }
+      if ('allowed_absolute_roots' in policy && (!Array.isArray(policy.allowed_absolute_roots) || policy.allowed_absolute_roots.some((root) => typeof root !== 'string'))) {
+        errors.push(`${capability.id}: passthrough_policy.allowed_absolute_roots must be a string array when present`);
+      }
       for (const pattern of policy.allowed_patterns) {
         if (typeof pattern !== 'string') errors.push(`${capability.id}: passthrough allowed pattern must be a string`);
         else { try { new RegExp(pattern); } catch { errors.push(`${capability.id}: invalid passthrough allowed pattern: ${pattern}`); } }

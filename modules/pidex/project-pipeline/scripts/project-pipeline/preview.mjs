@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { dockerSpawnSync } from './docker-spawn.mjs';
 import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,7 @@ const CONTAINER_PROCESS_STATE_ROOT = '/cache/pidex-preview';
 const CONTAINER_WORKSPACE = '/workspace';
 
 function docker(args) {
-  const proc = spawnSync('docker', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+  const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
   if (proc.status !== 0) {
     const error = new Error('docker operation failed');
     error.status = proc.status;
