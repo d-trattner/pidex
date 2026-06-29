@@ -41,6 +41,12 @@ test('orchestrator instructions describe per-project modes without direct-only c
   assert.match(sandboxRule, /do not reinterpret it as the temporary hardened agent sandbox/);
 });
 
+test('Project Pipeline UI preview detection and default command are host-orchestrator owned', () => {
+  assert.equal(mod.isProjectPipelineUiPreviewTask('Build a Vite React page'), true);
+  assert.equal(mod.isProjectPipelineUiPreviewTask('Refactor backend parser'), false);
+  assert.deepEqual([...mod.DEFAULT_PROJECT_PIPELINE_PREVIEW_COMMAND], ['pnpm', 'dev', '--', '--host', '0.0.0.0', '--port', '$PORT']);
+});
+
 test('buildProjectPipelineRunFlowArgs constructs fail-closed orchestrator request', () => {
   const built = mod.buildProjectPipelineRunFlowArgs({ projectRoot: process.cwd(), task: 'ship the thing', copyPiCredentials: true, acknowledgeTrustedPersistentContainer: true });
   assert.match(built.projectId, /^pp-/);

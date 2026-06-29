@@ -496,6 +496,12 @@ type ProjectPipelineRunFlowResult = {
 	no_fallback: true;
 };
 
+export function isProjectPipelineUiPreviewTask(task?: string): boolean {
+	return /\b(ui|frontend|front-end|browser|page|dashboard|component|css|visual|vite|react|vue|svelte)\b/i.test(String(task || ""));
+}
+
+export const DEFAULT_PROJECT_PIPELINE_PREVIEW_COMMAND = ["pnpm", "dev", "--", "--host", "0.0.0.0", "--port", "$PORT"] as const;
+
 function slugForProjectPipelineId(projectRoot: string): string {
 	const base = path.basename(path.resolve(projectRoot)).toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "project";
 	const hash = createHash("sha256").update(path.resolve(projectRoot)).digest("hex").slice(0, 12);
@@ -568,6 +574,10 @@ export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest
 	const proc = spawnSync(process.execPath, built.args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 20 * 1024 * 1024 });
 	const safe = safeProjectPipelineHelperOutput(proc.stdout || "", built.projectId, proc.status);
 	return { ok: proc.status === 0, exitCode: proc.status, projectId: built.projectId, stdout: safe.stdout, stderr: "", error: proc.status === 0 ? undefined : safe.error, no_fallback: true };
+}
+
+export function startDefaultProjectPipelinePreview(projectId: string): { ok: boolean; summary: string; no_fallback?: true } {
+	return runPdProjectCommand({ command: "preview", action: "start", projectId, commandArgs: [...DEFAULT_PROJECT_PIPELINE_PREVIEW_COMMAND] }, {});
 }
 
 export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRunFlowResult): string {
@@ -869,7 +879,9 @@ export function summarizePreviewStart(result: any): string {
 	if (!result?.ok) {
 		if (result?.error_category === "preview_operator_host_unknown") return "Preview port is bound, but PIDEX could not determine the host/IP to show your browser. Set PIDEX_PROJECT_PIPELINE_PREVIEW_HOST and retry.";
 		if (result?.error_category === "preview_port_not_listening") return `Preview process started but did not become reachable on the assigned port before timeout. Check bounded logs with /pdproject preview logs ${result?.project_id ?? "<project-id>"}.`;
-		return "Preview could not safely reserve a local port range for this Project Pipeline sandbox. No fallback was used.";
+		if (result?.error_category === "preview_process_exited") return `Preview process exited before becoming reachable. Check bounded logs with /pdproject preview logs ${result?.project_id ?? "<project-id>"}.`;
+		if (/^preview_(port|container|reassign|recreate)/.test(result?.error_category || "")) return `Preview could not safely reserve/publish a local port range for this Project Pipeline sandbox (${result.error_category}). No fallback was used.`;
+		return `Preview failed (${result?.error_category || "preview_failed"}). No fallback was used.`;
 	}
 	return [
 		`Preview ready for ${result.project_id}:`,
@@ -1003,6 +1015,12 @@ async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): 
 		return;
 	}
 	await ctx.ui.notify(summarizeProjectPipelineRunFlowResult(result), "info");
+	if (result.projectId && isProjectPipelineUiPreviewTask(initialTask)) {
+		const preview = startDefaultProjectPipelinePreview(result.projectId);
+		await ctx.ui.notify(preview.ok
+			? `Project Pipeline managed preview started for G9/user verification.\n\n${preview.summary}\n\nPlease inspect the URL and reply approve/reject.`
+			: `Project Pipeline managed preview did not start automatically. ${preview.summary}\n\nNo source fallback was used; use logs/status or retry preview after fixing the app/server.`, preview.ok ? "info" : "warning");
+	}
 }
 
 function sandboxEvidenceLine(state: SandboxState = resolveSandboxState()): string {

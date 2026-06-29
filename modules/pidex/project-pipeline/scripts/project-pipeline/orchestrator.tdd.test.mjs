@@ -47,9 +47,10 @@ test('buildPhaseTask threads previous context without host fallback', () => {
 test('buildPhaseTask includes preview gate instructions for UI tasks without source export', () => {
   const task = buildPhaseTask({ phase: 'pidex-implementer', initialTask: 'Build frontend UI dashboard page', nextPhase: 'pidex-code-reviewer', phaseIndex: 2, phaseCount: 4 });
   assert.match(task, /UI preview gate/i);
-  assert.match(task, /\/pdproject preview start <project-id> -- <command>/);
+  assert.match(task, /host Project Pipeline orchestrator can start managed preview automatically/i);
+  assert.match(task, /pnpm dev -- --host 0\.0\.0\.0 --port \$PORT/);
   assert.match(task, /approve|request changes|stop preview/i);
-  assert.match(task, /Preview URL\/status may be included/i);
+  assert.match(task, /Do not tell the user to run \/pdproject manually/i);
   assert.doesNotMatch(task, /export source/i);
 });
 
