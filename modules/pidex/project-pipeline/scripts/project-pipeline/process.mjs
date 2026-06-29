@@ -139,6 +139,10 @@ export function parseProcessManagerCliArgs(argv = []) {
   return out;
 }
 
+export function expandPreviewCommandPort(command, port) {
+  return command.map((arg) => String(arg).replace(/\$\{PORT\}|\$PORT|%PORT%/g, String(port)));
+}
+
 export function createProcessManager(options = {}) {
   const workspace = path.resolve(options.workspace || DEFAULT_WORKSPACE);
   ensureDir(workspace);
@@ -176,10 +180,11 @@ export function createProcessManager(options = {}) {
 
   async function start(args = {}) {
     const processName = validateProcessName(args.processName || PROCESS_NAME);
-    const command = args.command || [];
-    if (!Array.isArray(command) || command.length === 0) throw new Error('preview command required');
+    const rawCommand = args.command || [];
+    if (!Array.isArray(rawCommand) || rawCommand.length === 0) throw new Error('preview command required');
     const port = Number(args.containerPort || args.port || args.env?.PORT);
     if (!Number.isInteger(port) || port <= 0) throw new Error('valid preview port required');
+    const command = expandPreviewCommandPort(rawCommand, port);
     const p = paths(processName);
     const previous = readState(p.stateFile);
     if (previous?.status === 'running') await stop({ processName, containerPort: previous.port || port });

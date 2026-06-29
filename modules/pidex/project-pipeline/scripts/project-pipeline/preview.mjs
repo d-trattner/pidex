@@ -274,7 +274,9 @@ export function summarizePreviewResult(result) {
   }
   if (!result.ok && result.error_category === 'preview_operator_host_unknown') return 'Preview port is bound, but PIDEX could not determine the host/IP to show your browser. Set PIDEX_PROJECT_PIPELINE_PREVIEW_HOST and retry.';
   if (!result.ok && result.error_category === 'preview_port_not_listening') return `Preview process started but did not become reachable on the assigned port before timeout. Check bounded logs with /pdproject preview logs ${result.project_id}.`;
-  if (!result.ok) return 'Preview could not safely reserve a local port range for this Project Pipeline sandbox. No fallback was used.';
+  if (!result.ok && result.error_category === 'preview_process_exited') return `Preview process exited before becoming reachable. Check bounded logs with /pdproject preview logs ${result.project_id}.`;
+  if (!result.ok && /^preview_(port|container|reassign|recreate)/.test(result.error_category || '')) return `Preview could not safely reserve/publish a local port range for this Project Pipeline sandbox (${result.error_category}). No fallback was used.`;
+  if (!result.ok) return `Preview failed (${result.error_category || 'preview_failed'}). No fallback was used.`;
   return `${result.project_id}: preview status=${result.status || 'unknown'}`;
 }
 

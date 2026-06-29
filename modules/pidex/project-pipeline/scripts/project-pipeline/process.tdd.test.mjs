@@ -7,7 +7,7 @@ import path from 'node:path';
 import process from 'node:process';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { createProcessManager, redactPreviewLog, validateManagedStateRoot, validateProcessName } from './process.mjs';
+import { createProcessManager, expandPreviewCommandPort, redactPreviewLog, validateManagedStateRoot, validateProcessName } from './process.mjs';
 
 function tmpDir(prefix) { return mkdtempSync(path.join(os.tmpdir(), prefix)); }
 function portsBase() { return 45000 + Math.floor(Math.random() * 10000); }
@@ -23,6 +23,10 @@ function managerFixture() {
 function serverCommand(port, extra = '') {
   return [process.execPath, '-e', `const http=require('http');${extra};const server=http.createServer((req,res)=>res.end('ok'));server.listen(process.env.PORT,'0.0.0.0');setInterval(()=>{},1000);`];
 }
+
+test('expandPreviewCommandPort replaces common port placeholders without shell expansion', () => {
+  assert.deepEqual(expandPreviewCommandPort(['pnpm', 'dev', '--', '--port', '$PORT', '--alt=${PORT}', '%PORT%'], 42000), ['pnpm', 'dev', '--', '--port', '42000', '--alt=42000', '42000']);
+});
 
 test('validateProcessName allows only preview and rejects traversal/metacharacters', () => {
   assert.equal(validateProcessName('preview'), 'preview');
