@@ -457,9 +457,9 @@ export async function choosePidexProjectRoot(ctx: any): Promise<string | undefin
 	}
 	const currentLabel = `Use current directory as project: ${current}`;
 	optionMap.set(currentLabel, current);
-	const newProjectLabel = "New project / different path — ask name/path/new in orchestrator";
+	const newProjectLabel = "New project / different path — continue to the PIDEX new-project interview";
 	const cancelLabel = "Cancel — do not start PIDEX";
-	const choice = await ctx.ui.select("Choose which project this /pd run is for. PIDEX resolves saved mode only after an existing project is selected. Choose New project / different path to let the orchestrator ask for name/path/new.", [...optionMap.keys(), newProjectLabel, cancelLabel]);
+	const choice = await ctx.ui.select("Choose which project this /pd run is for. Pick an existing saved project, or continue to the normal PIDEX new-project interview.", [...optionMap.keys(), newProjectLabel, cancelLabel]);
 	if (choice === cancelLabel) return undefined;
 	if (choice === newProjectLabel) return PIDEX_DEFER_PROJECT_SELECTION;
 	return optionMap.get(choice) ?? current;
@@ -3259,7 +3259,7 @@ export default function runningPi(pi: ExtensionAPI) {
 				return;
 			}
 		}
-		const authPreflight = await runDelegateAuthPreflight();
+		const authPreflight = deferProjectSelection ? { ok: true, output: "" } : await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
 		const sandboxState = resolveSandboxStateForProjectMode(deferProjectSelection ? undefined : projectPipelineMode);
 		const sandboxProbe = sandboxState.enabled ? probeSandboxAvailability() : { ok: true, summary: sandboxEvidenceLine(sandboxState) };
@@ -3288,12 +3288,14 @@ export default function runningPi(pi: ExtensionAPI) {
 			sandboxState.enabled
 				? "Sandbox is internal hardening, not a user workflow change. Continue normal /pidex orchestration and dynamic routing. For source-mutating/risky phases, use the sandbox runtime helpers and include sandbox evidence or SANDBOX-SKIP in artifacts. Do not ask the user mid-run for sandbox configuration."
 				: "Sandbox is off by config; do not probe Docker or alter normal /pidex routing for sandbox unless local config enables it.",
-			authPreflight.ok
-				? "Delegate auth preflight passed for configured non-Pi providers."
-				: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
+			deferProjectSelection
+				? "Delegate auth preflight is deferred until after project selection; do not start delegated agents before resolving project/mode and auth readiness."
+				: authPreflight.ok
+					? "Delegate auth preflight passed for configured non-Pi providers."
+					: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
 			task ? `Initial user task: ${task}` : "Initial user task: not provided; begin by asking which project and what deliverable.",
 		].join("\n\n");
-		ctx.ui.notify(deferProjectSelection ? "Starting pidex orchestrator (project selection required)" : `Starting pidex orchestrator (${projectPipelineMode?.mode ?? "host-direct"})`, "info");
+		ctx.ui.notify(deferProjectSelection ? "Starting PIDEX new-project interview" : `Starting pidex orchestrator (${projectPipelineMode?.mode ?? "host-direct"})`, "info");
 		pi.sendUserMessage(kickoff);
 	};
 

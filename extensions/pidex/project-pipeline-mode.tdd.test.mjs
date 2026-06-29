@@ -281,7 +281,7 @@ console.log(JSON.stringify({ notifications, sent, selectCalls }));
     assert.doesNotMatch(parsed.sent[0], /Selected project root:/);
     assert.match(parsed.sent[0], /No project root was preselected/);
     assert.match(parsed.sent[0], /New project flow/);
-    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /project selection required/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /new-project interview/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -339,7 +339,7 @@ console.log(JSON.stringify({ notifications, sent, modeSelectCalls }));
     assert.equal(parsed.sent.length, 1);
     assert.match(parsed.sent[0], /No project root was preselected/);
     assert.match(parsed.sent[0], /New project flow/);
-    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /project selection required/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /new-project interview/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
