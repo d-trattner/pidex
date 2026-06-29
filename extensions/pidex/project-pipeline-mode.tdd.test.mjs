@@ -339,76 +339,25 @@ console.log(JSON.stringify({ notifications, sent, modeSelectCalls }));
     assert.equal(parsed.sent.length, 1);
     assert.match(parsed.sent[0], /No project root was preselected/);
     assert.match(parsed.sent[0], /New project flow/);
+    assert.match(parsed.sent[0], /recent-project/);
     assert.match(parsed.notifications.map((item) => item.message).join('\n'), /new-project interview/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('/pd chooses recent project before resolving mode and project-pipeline source', () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-recent-'));
-  const startRoot = path.join(dir, 'start-here');
-  const selectedRoot = path.join(dir, 'selected-project');
-  const state = path.join(dir, 'state');
-  mkdirSync(startRoot);
-  mkdirSync(selectedRoot);
-  mkdirSync(state);
-  writeFileSync(path.join(state, 'history.jsonl'), `${JSON.stringify({ cwd: selectedRoot, ts: '2026-06-01T00:00:00Z', event: 'complete', mode: 'project-pipeline' })}\n`);
-  const modeHelper = path.join(dir, 'mode.mjs');
-  const orchestratorHelper = path.join(dir, 'orchestrator.mjs');
-  const recorder = path.join(dir, 'record.json');
-  writeFileSync(modeHelper, `
-import { appendFileSync } from 'node:fs';
-const argv = process.argv.slice(2);
-appendFileSync(process.env.PIDEX_TEST_RECORDER, JSON.stringify({ kind: 'mode', projectRoot: argv[argv.indexOf('--project-root') + 1], mode: argv.includes('--mode') ? argv[argv.indexOf('--mode') + 1] : null }) + '\\n');
-if (!argv.includes('--mode')) console.log(JSON.stringify({ ok: false, decision_required: true, reason: 'missing saved mode', no_fallback: true }));
-else console.log(JSON.stringify({ ok: true, mode: argv[argv.indexOf('--mode') + 1], no_fallback: true }));
-`);
-  writeFileSync(orchestratorHelper, `
-import { appendFileSync } from 'node:fs';
-const argv = process.argv.slice(2);
-appendFileSync(process.env.PIDEX_TEST_RECORDER, JSON.stringify({ kind: 'orchestrator', source: argv[argv.indexOf('--source') + 1], task: argv[argv.indexOf('--task') + 1] }) + '\\n');
-console.log(JSON.stringify({ ok: true, no_fallback: true, lifecycle: { record: { project_id: 'pp-recent' } }, final_context_file: 'agents.output/qa/recent.md', runs: [{ agent: 'pidex-qa', ok: true, context_file: 'agents.output/qa/recent.md', archive_sync_status: 'complete' }] }));
-`);
+test('choosePidexProjectRoot does not show recent-project selector from current project cwd', async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-current-'));
+  const currentRoot = path.join(dir, 'current-project');
+  mkdirSync(currentRoot);
+  writeFileSync(path.join(currentRoot, 'package.json'), '{"name":"current-project"}\n');
   try {
-    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
-const mod = await import('./extensions/pidex/index.ts');
-const commands = new Map();
-mod.default({ on: () => {}, registerTool: () => {}, registerCommand: (name, spec) => commands.set(name, spec), sendUserMessage: () => { throw new Error('host kickoff should not run'); } });
-await commands.get('pd').handler('do selected project work', {
-  cwd: process.env.PIDEX_TEST_START_ROOT,
-  hasUI: true,
-  ui: {
-    select: async (message, options) => message.includes('Choose which project') ? options[0] : options.find((option) => option.startsWith('project-pipeline')),
-    notify: async () => {},
-  },
-});
-`], {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        PIDEX_CHILD: '0',
-        PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: modeHelper,
-        PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT: orchestratorHelper,
-        PIDEX_STATE_DIR: state,
-        PIDEX_TEST_RECORDER: recorder,
-        PIDEX_TEST_START_ROOT: startRoot,
-        PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS: '0',
-      },
-      encoding: 'utf8',
-      timeout: 30_000,
-    });
-    assert.equal(child.status, 0, child.stderr);
-    const rows = readFileSync(recorder, 'utf8').trim().split(/\n/).map((line) => JSON.parse(line));
-    assert.deepEqual(rows.filter((row) => row.kind === 'mode').map((row) => row.projectRoot), [selectedRoot, selectedRoot]);
-    const orchestration = rows.find((row) => row.kind === 'orchestrator');
-    assert.equal(orchestration.source, selectedRoot);
-    assert.match(orchestration.task, /Initial user task: do selected project work/);
+    const selected = await mod.choosePidexProjectRoot({ cwd: currentRoot, hasUI: true, ui: { select: async () => { throw new Error('recent selector should not be shown'); } } });
+    assert.equal(selected, currentRoot);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
-
 test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', () => {
   const result = {
     ok: true,

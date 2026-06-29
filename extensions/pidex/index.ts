@@ -445,24 +445,21 @@ export function isLikelyPidexProjectDirectory(projectRoot: string): boolean {
 	return fs.existsSync(wikiIndex);
 }
 
+export function recentPidexProjectsPrompt(limit = 12, stateDir = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state")): string {
+	const recent = listRecentPidexProjects(limit, stateDir);
+	if (recent.length === 0) return "Recent PIDEX projects: none recorded.";
+	const lines = recent.map((item, index) => {
+		const mode = item.last_mode ? ` mode=${item.last_mode}` : "";
+		const ts = item.last_ts ? ` last=${item.last_ts}` : "";
+		return `${String.fromCharCode(65 + index)}) ${item.cwd}${mode}${ts}`;
+	});
+	return `Recent PIDEX projects for interview context:\n${lines.join("\n")}`;
+}
+
 export async function choosePidexProjectRoot(ctx: any): Promise<string | undefined> {
 	const current = path.resolve(ctx.cwd ?? process.cwd());
 	if (!ctx.hasUI) return current;
-	const recent = listRecentPidexProjects(5).filter((item) => path.resolve(item.cwd) !== current);
-	if (recent.length === 0) return isLikelyPidexProjectDirectory(current) ? current : PIDEX_DEFER_PROJECT_SELECTION;
-	const optionMap = new Map<string, string>();
-	for (const [index, item] of recent.entries()) {
-		const label = `${String.fromCharCode(65 + index)}) Use recent project: ${item.cwd}${item.last_ts ? ` — last touched ${item.last_ts}` : ""}`;
-		optionMap.set(label, item.cwd);
-	}
-	const currentLabel = `Use current directory as project: ${current}`;
-	optionMap.set(currentLabel, current);
-	const newProjectLabel = "New project / different path — continue to the PIDEX new-project interview";
-	const cancelLabel = "Cancel — do not start PIDEX";
-	const choice = await ctx.ui.select("Choose which project this /pd run is for. Pick an existing saved project, or continue to the normal PIDEX new-project interview.", [...optionMap.keys(), newProjectLabel, cancelLabel]);
-	if (choice === cancelLabel) return undefined;
-	if (choice === newProjectLabel) return PIDEX_DEFER_PROJECT_SELECTION;
-	return optionMap.get(choice) ?? current;
+	return isLikelyPidexProjectDirectory(current) ? current : PIDEX_DEFER_PROJECT_SELECTION;
 }
 
 const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox for the selected project, import/clone source into /workspace, run Pi inside the container, and sync only agents.output/** and wiki/** back to the host archive. No source is mirrored back automatically. Failures do not fall back.";
@@ -3282,6 +3279,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			deferProjectSelection ? "No project root was preselected by the extension because the user chose new/different path or the current directory did not look like a project. Run the skill Step 0/Step 1 project interview now, including the New project flow when the user chooses new." : "",
 			`PIDEX global Git security hook: ${gitHookStatus}.`,
 			deferProjectSelection ? "PIDEX project root: not selected yet; ask which project/name/path/new before any specialist handoff." : `Selected project root: ${selectedProjectRoot}`,
+			deferProjectSelection ? recentPidexProjectsPrompt() : "",
 			deferProjectSelection ? "PIDEX pipeline mode: not resolved yet because no project root is selected. After the project path exists, use the normal per-project mode rules for later runs; do not select a mode for the user's home directory." : `PIDEX pipeline mode: ${projectPipelineModeEvidenceLine(projectPipelineMode)}.`,
 			deferProjectSelection ? "PIDEX mode instruction: project selection/new-project interview comes before mode selection on fresh starts." : projectPipelineModeInstructionLine(projectPipelineMode),
 			`PIDEX sandbox preflight: ${sandboxState.enabled ? "hardened-pipeline enabled" : "off"}; ${sandboxProbe.summary}.`,
