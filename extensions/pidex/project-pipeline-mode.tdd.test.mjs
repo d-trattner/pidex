@@ -131,6 +131,27 @@ test('listRecentPidexProjects returns newest unique existing project directories
   }
 });
 
+test('listRecentPidexProjects includes saved project-pipeline modes even when host project dir is sandbox-only', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-history-modes-'));
+  const state = path.join(dir, 'state');
+  const modeDir = path.join(state, 'project-pipeline-modes');
+  const existingHostProject = path.join(dir, 'host-project');
+  const sandboxOnlyProject = path.join(dir, 'sandbox-only-project');
+  mkdirSync(modeDir, { recursive: true });
+  mkdirSync(existingHostProject);
+  writeFileSync(path.join(modeDir, 'host.json'), JSON.stringify({ schema_version: 1, project_root: existingHostProject, mode: 'host-direct', decided_at: '2026-01-01T00:00:00Z' }));
+  writeFileSync(path.join(modeDir, 'sandbox.json'), JSON.stringify({ schema_version: 1, project_root: sandboxOnlyProject, mode: 'project-pipeline', decided_at: '2026-01-02T00:00:00Z' }));
+  writeFileSync(path.join(modeDir, 'missing-host.json'), JSON.stringify({ schema_version: 1, project_root: path.join(dir, 'missing-host'), mode: 'host-direct', decided_at: '2026-01-03T00:00:00Z' }));
+  try {
+    const recent = mod.listRecentPidexProjects(5, state);
+    assert.deepEqual(recent.map((item) => item.cwd), [sandboxOnlyProject, existingHostProject]);
+    assert.equal(recent[0].last_mode, 'project-pipeline');
+    assert.equal(recent[0].last_event, 'mode-saved');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('/pd first-run project-pipeline selection continues same task into run-flow seam', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-seam-'));
   const modeHelper = path.join(dir, 'mode.mjs');

@@ -393,21 +393,42 @@ type RecentPidexProject = {
 	last_mode?: string;
 };
 
+function upsertRecentProject(byCwd: Map<string, RecentPidexProject>, item: RecentPidexProject): void {
+	const previous = byCwd.get(item.cwd);
+	if (!previous || String(item.last_ts || "") > String(previous.last_ts || "")) byCwd.set(item.cwd, item);
+}
+
 export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state")): RecentPidexProject[] {
-	const historyFile = path.join(stateDir, "history.jsonl");
-	if (!fs.existsSync(historyFile)) return [];
 	const byCwd = new Map<string, RecentPidexProject>();
-	for (const line of fs.readFileSync(historyFile, "utf8").split(/\r?\n/)) {
-		if (!line.trim()) continue;
-		try {
-			const row = JSON.parse(line);
-			const cwd = path.resolve(String(row?.cwd || ""));
-			if (!cwd || !fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) continue;
-			const previous = byCwd.get(cwd);
-			const lastTs = String(row?.ts || "");
-			if (!previous || lastTs > String(previous.last_ts || "")) byCwd.set(cwd, { cwd, last_ts: lastTs, last_event: row?.event ? String(row.event) : undefined, last_mode: row?.mode ? String(row.mode) : undefined });
-		} catch {
-			// Ignore malformed history rows; project selection is a convenience, not authority.
+	const historyFile = path.join(stateDir, "history.jsonl");
+	if (fs.existsSync(historyFile)) {
+		for (const line of fs.readFileSync(historyFile, "utf8").split(/\r?\n/)) {
+			if (!line.trim()) continue;
+			try {
+				const row = JSON.parse(line);
+				const cwd = path.resolve(String(row?.cwd || ""));
+				if (!cwd || !fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) continue;
+				upsertRecentProject(byCwd, { cwd, last_ts: String(row?.ts || ""), last_event: row?.event ? String(row.event) : undefined, last_mode: row?.mode ? String(row.mode) : undefined });
+			} catch {
+				// Ignore malformed history rows; project selection is a convenience, not authority.
+			}
+		}
+	}
+	const modeDir = path.join(stateDir, "project-pipeline-modes");
+	if (fs.existsSync(modeDir)) {
+		for (const entry of fs.readdirSync(modeDir, { withFileTypes: true })) {
+			if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+			try {
+				const row = JSON.parse(fs.readFileSync(path.join(modeDir, entry.name), "utf8"));
+				const mode = row?.mode ? String(row.mode) : undefined;
+				const cwd = path.resolve(String(row?.project_root || ""));
+				if (!cwd) continue;
+				const hostDirExists = fs.existsSync(cwd) && fs.statSync(cwd).isDirectory();
+				if (!hostDirExists && mode !== "project-pipeline") continue;
+				upsertRecentProject(byCwd, { cwd, last_ts: String(row?.decided_at || ""), last_event: "mode-saved", last_mode: mode });
+			} catch {
+				// Ignore malformed saved mode rows; project selection is a convenience, not authority.
+			}
 		}
 	}
 	return [...byCwd.values()].sort((a, b) => String(b.last_ts || "").localeCompare(String(a.last_ts || ""))).slice(0, limit);
