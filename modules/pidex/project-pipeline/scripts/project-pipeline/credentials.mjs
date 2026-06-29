@@ -19,8 +19,10 @@ function docker(args, opts = {}) {
 
 function runCredentialDockerOp(op) {
   if (op[0] === 'exec-input') {
-    const [, source, ...args] = op;
-    return docker(args, { input: readFileSync(source) });
+    const [, sourceSpec, ...args] = op;
+    const source = typeof sourceSpec === 'string' ? sourceSpec : sourceSpec.source;
+    const input = typeof sourceSpec === 'string' ? readFileSync(source) : Buffer.from(sourceSpec.input, 'utf8');
+    return docker(args, { input });
   }
   return docker(op);
 }
@@ -52,6 +54,24 @@ export function classifyCredentialSource(file) {
 
 export function fingerprintFile(file) {
   return crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
+export function sanitizePiSettingsContent(text) {
+  let settings;
+  try {
+    settings = JSON.parse(text);
+  } catch {
+    throw new Error('pi-settings must be valid JSON');
+  }
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('pi-settings must be a JSON object');
+  const sanitized = { ...settings, packages: [] };
+  delete sanitized.packageSettings;
+  return `${JSON.stringify(sanitized, null, 2)}\n`;
+}
+
+function credentialInputSource(kind, source) {
+  if (kind !== 'pi-settings') return source;
+  return { source, input: sanitizePiSettingsContent(readFileSync(source, 'utf8')) };
 }
 
 export function credentialDest(kind, source) {
@@ -92,7 +112,7 @@ export function buildCredentialCopyOps(record, entries) {
     const dir = path.posix.dirname(dest);
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', dir]);
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir]);
-    ops.push(['exec-input', source, 'exec', '-i', '--user', 'node', record.docker.container_name, 'sh', '-c', 'cat > "$1" && chmod "$2" "$1"', 'sh', dest, credentialMode(entry.kind)]);
+    ops.push(['exec-input', credentialInputSource(entry.kind, source), 'exec', '-i', '--user', 'node', record.docker.container_name, 'sh', '-c', 'cat > "$1" && chmod "$2" "$1"', 'sh', dest, credentialMode(entry.kind)]);
     inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
   }
   if (entries.some((entry) => entry.kind.startsWith('pi-'))) {

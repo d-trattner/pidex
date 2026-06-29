@@ -140,6 +140,18 @@ export function validateCapabilityCommand(pidexRoot, capability) {
       if ('allowed_absolute_roots' in policy && (!Array.isArray(policy.allowed_absolute_roots) || policy.allowed_absolute_roots.some((root) => typeof root !== 'string'))) {
         errors.push(`${capability.id}: passthrough_policy.allowed_absolute_roots must be a string array when present`);
       }
+      if ('allowed_value_patterns' in policy && (!policy.allowed_value_patterns || typeof policy.allowed_value_patterns !== 'object' || Array.isArray(policy.allowed_value_patterns))) {
+        errors.push(`${capability.id}: passthrough_policy.allowed_value_patterns must be an object when present`);
+      }
+      for (const [flag, patterns] of Object.entries(policy.allowed_value_patterns || {})) {
+        if (typeof flag !== 'string' || !flag.startsWith('--') || !Array.isArray(patterns) || patterns.length === 0 || patterns.some((pattern) => typeof pattern !== 'string')) {
+          errors.push(`${capability.id}: passthrough_policy.allowed_value_patterns entries must map flags to non-empty string arrays`);
+          continue;
+        }
+        for (const pattern of patterns) {
+          try { new RegExp(pattern); } catch { errors.push(`${capability.id}: invalid passthrough value pattern for ${flag}: ${pattern}`); }
+        }
+      }
       for (const pattern of policy.allowed_patterns) {
         if (typeof pattern !== 'string') errors.push(`${capability.id}: passthrough allowed pattern must be a string`);
         else { try { new RegExp(pattern); } catch { errors.push(`${capability.id}: invalid passthrough allowed pattern: ${pattern}`); } }

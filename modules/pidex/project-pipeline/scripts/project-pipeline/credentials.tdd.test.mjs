@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials, copySelectedCredentials, resetCredentials, validateCredentialCommand } from './credentials.mjs';
+import { buildCredentialCopyOps, classifyCredentialSource, copyGitCredentials, copySelectedCredentials, resetCredentials, sanitizePiSettingsContent, validateCredentialCommand } from './credentials.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-creds-')); }
@@ -58,6 +58,27 @@ test('buildCredentialCopyOps supports Pi and provider allowlisted destinations',
   assert.equal(result.ops.some((op) => op.includes('777')), false);
   assert.deepEqual(result.inventory.map((item) => item.group), ['pi', 'providers']);
   assert.equal(JSON.stringify(result.inventory).includes('redacted'), false);
+});
+
+test('sanitizePiSettingsContent strips host-local packages for container Pi startup', () => {
+  const sanitized = sanitizePiSettingsContent(JSON.stringify({ packages: ['/host/pi-web-access'], packageSettings: { x: true }, defaultProvider: 'openai-codex', theme: 'dark' }));
+  const parsed = JSON.parse(sanitized);
+  assert.deepEqual(parsed.packages, []);
+  assert.equal('packageSettings' in parsed, false);
+  assert.equal(parsed.defaultProvider, 'openai-codex');
+  assert.equal(parsed.theme, 'dark');
+});
+
+test('buildCredentialCopyOps sanitizes pi-settings before copy', () => {
+  const root = tmp();
+  const piSettings = path.join(root, 'settings.json');
+  write(piSettings, JSON.stringify({ packages: ['/host/pi-web-access'], defaultProvider: 'openai-codex' }));
+  const record = createProjectRecord({ project_id: 'pp-creds-settings1', name: 'demo' });
+  const result = buildCredentialCopyOps(record, [{ kind: 'pi-settings', source: piSettings }]);
+  const op = result.ops.find((item) => item[0] === 'exec-input');
+  assert.equal(op[1].source, piSettings);
+  assert.deepEqual(JSON.parse(op[1].input).packages, []);
+  assert.equal(op.includes('/pidex-secrets/pi/agent/settings.json'), true);
 });
 
 test('buildCredentialCopyOps passes hostile destination filenames as positional shell args', () => {

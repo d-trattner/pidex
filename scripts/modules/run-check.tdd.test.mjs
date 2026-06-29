@@ -101,6 +101,21 @@ test('run-check allows explicit safe absolute roots in passthrough policy', () =
   assert.match(out, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
+test('run-check allows contextual multiline task values without broadening other args', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^--task$'], allowed_value_patterns: { '--task': ['^[\\s\\S]{1,20000}$'] } };
+  writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log(process.argv.slice(2).join('\\n'));\n");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const task = 'Render title "PIDEX Managed Preview Auto Gate 2".\nInclude colorful panel.';
+  const out = execFileSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', '--task', task], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.match(out, /PIDEX Managed Preview Auto Gate 2/);
+  const proc = spawnSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', '--xml'], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.equal(proc.status, 2);
+});
+
 test('run-check rejects absolute passthrough paths outside project', () => {
   const { root, project } = makeModuleFixture();
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');

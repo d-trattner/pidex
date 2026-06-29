@@ -76,10 +76,23 @@ function pathAllowedByPolicy(policy, arg) {
   return allowedRoots.some((root) => withinRoot(expandPolicyRoot(root), resolved));
 }
 
+function argMatchesAny(patterns, arg) {
+  return patterns.some((pattern) => new RegExp(pattern).test(arg));
+}
+
 function passthroughAllowed(command, argsToCheck) {
   const policy = command.passthrough_policy || {};
   const patterns = policy.allowed_patterns || [];
-  return argsToCheck.every((arg) => pathAllowedByPolicy(policy, arg) && patterns.some((pattern) => new RegExp(pattern).test(arg)));
+  const valuePatterns = policy.allowed_value_patterns || {};
+  for (let i = 0; i < argsToCheck.length; i += 1) {
+    const arg = argsToCheck[i];
+    const previous = i > 0 ? argsToCheck[i - 1] : undefined;
+    const contextualPatterns = previous && Array.isArray(valuePatterns[previous]) ? valuePatterns[previous] : undefined;
+    if (!pathAllowedByPolicy(policy, arg)) return false;
+    if (contextualPatterns && argMatchesAny(contextualPatterns, arg)) continue;
+    if (!argMatchesAny(patterns, arg)) return false;
+  }
+  return true;
 }
 
 function scrubSecretLike(value) {
