@@ -60,6 +60,15 @@ test('shouldStartProjectPipelineRunFlow selects only explicit project-pipeline m
   assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: false, decision_required: true }), false);
 });
 
+test('hardened sandbox state is gated by resolved per-project mode', () => {
+  assert.equal(mod.resolveSandboxStateForProjectMode(undefined).enabled, false);
+  assert.match(mod.resolveSandboxStateForProjectMode(undefined).reason, /per-project-mode-unresolved/);
+  assert.equal(mod.resolveSandboxStateForProjectMode({ ok: true, mode: 'host-direct' }).enabled, false);
+  assert.match(mod.resolveSandboxStateForProjectMode({ ok: true, mode: 'host-direct' }).reason, /per-project-mode-host-direct/);
+  assert.equal(mod.resolveSandboxStateForProjectMode({ ok: true, mode: 'project-pipeline' }).enabled, false);
+  assert.match(mod.resolveSandboxStateForProjectMode({ ok: true, mode: 'project-pipeline' }).reason, /per-project-mode-project-pipeline/);
+});
+
 test('chooseProjectPipelineMode saves selected project-pipeline mode and preserves credential boundary', async () => {
   const calls = [];
   const notifications = [];

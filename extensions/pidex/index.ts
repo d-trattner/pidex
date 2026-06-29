@@ -349,6 +349,18 @@ type ProjectPipelineModeResult = {
 	no_fallback?: boolean;
 };
 
+export function resolveSandboxStateForProjectMode(projectMode?: ProjectPipelineModeResult): SandboxState {
+	const state = resolveSandboxState();
+	if (projectMode?.ok && projectMode.mode === "hardened-pipeline") return state;
+	const reasonMode = projectMode?.mode ?? (projectMode?.decision_required ? "decision-required" : "unresolved");
+	return {
+		...state,
+		mode: "off",
+		enabled: false,
+		reason: `per-project-mode-${reasonMode}; global ${state.reason}`,
+	};
+}
+
 function redactedProjectPipelineModeFailure(exitCode: number | null): ProjectPipelineModeResult {
 	return { ok: false, decision_required: true, reason: `project-pipeline mode resolver failed exit=${exitCode}; helper output omitted to avoid local path or credential metadata exposure` };
 }
@@ -993,8 +1005,7 @@ async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): 
 	await ctx.ui.notify(summarizeProjectPipelineRunFlowResult(result), "info");
 }
 
-function sandboxEvidenceLine(): string {
-	const state = resolveSandboxState();
+function sandboxEvidenceLine(state: SandboxState = resolveSandboxState()): string {
 	return state.enabled
 		? `sandbox_mode: hardened-pipeline; sandbox_reason: ${state.reason}; image: ${state.profile?.image ?? "node:22-slim"}`
 		: `sandbox_mode: off; sandbox_reason: ${state.reason}`;
@@ -3132,8 +3143,8 @@ export default function runningPi(pi: ExtensionAPI) {
 		const boundaryBlock = inspectProjectBoundaryToolCall(event, ctx);
 		if (boundaryBlock) return boundaryBlock;
 		if (process.env[PIDEX_CHILD_ENV] === "1") return undefined;
-		const sandboxState = resolveSandboxState();
-		if (sandboxState.enabled && event?.toolName === "read") {
+		const sandboxContext = readSandboxRuntimeContext();
+		if (sandboxContext && event?.toolName === "read") {
 			const blocked = sensitiveSandboxPath(event?.input?.path || event?.input?.file || event?.input?.filepath);
 			if (blocked) return { block: true, reason: `PIDEX sandbox blocks reads of env/secret/runtime paths while active: ${blocked}` };
 		}
@@ -3211,8 +3222,8 @@ export default function runningPi(pi: ExtensionAPI) {
 		}
 		const authPreflight = await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
-		const sandboxState = resolveSandboxState();
-		const sandboxProbe = sandboxState.enabled ? probeSandboxAvailability() : { ok: true, summary: sandboxEvidenceLine() };
+		const sandboxState = resolveSandboxStateForProjectMode(deferProjectSelection ? undefined : projectPipelineMode);
+		const sandboxProbe = sandboxState.enabled ? probeSandboxAvailability() : { ok: true, summary: sandboxEvidenceLine(sandboxState) };
 		if (sandboxState.enabled && !sandboxProbe.ok) {
 			ctx.ui.notify(`PIDEX sandbox is enabled but unavailable: ${sandboxProbe.summary}`, "error");
 			return;
@@ -3351,7 +3362,9 @@ export default function runningPi(pi: ExtensionAPI) {
 			try {
 				const homeStatus = canonicalHomeStatus();
 				if (!homeStatus.ok) throw new Error(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before using pidex_agent.` : canonicalHomeMissingMessage());
-				const sandboxState = resolveSandboxState();
+				const agentCwd = path.resolve(params.cwd ?? ctx.cwd);
+				const agentProjectMode = runProjectPipelineModeResolver(agentCwd);
+				const sandboxState = resolveSandboxStateForProjectMode(agentProjectMode);
 				if (sandboxState.enabled) {
 					const probe = probeSandboxAvailability();
 					if (!probe.ok) throw new Error(`PIDEX sandbox is enabled but unavailable: ${probe.summary}`);
@@ -3364,7 +3377,6 @@ export default function runningPi(pi: ExtensionAPI) {
 					"Include sandbox evidence or SANDBOX-SKIP in your artifact.",
 					"",
 				].join("\n") : "";
-				const agentCwd = path.resolve(params.cwd ?? ctx.cwd);
 				const runParams = {
 					agent: params.agent,
 					task: `${sandboxTaskPrefix}${params.task}`,
