@@ -97,7 +97,7 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
     lines.push([
       'UI preview gate instructions:',
       'For browser-visible UI, prepare the app so the host Project Pipeline orchestrator can start managed preview automatically after QA. Do not tell the user to run /pdproject manually as the primary gate.',
-      'Use/record the project dev command if known; default convention is `pnpm dev -- --host 0.0.0.0 --port $PORT`. Preview URL/status belongs in gate context when the host starts it.',
+      'Use/record the project dev command if known; default Vite convention is `pnpm exec vite --host 0.0.0.0 --port $PORT`. Preview URL/status belongs in gate context when the host starts it.',
       'Ask user to approve, request changes, or stop preview only after the host-managed preview URL is available; route correction feedback back to normal implementation/design/QA phase with preview context.',
       'Do not ask user to choose ports or bind addresses. No source export implied; host archive sync remains agents.output/** and wiki/** only.',
     ].join('\n'));

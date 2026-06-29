@@ -48,7 +48,7 @@ test('buildPhaseTask includes preview gate instructions for UI tasks without sou
   const task = buildPhaseTask({ phase: 'pidex-implementer', initialTask: 'Build frontend UI dashboard page', nextPhase: 'pidex-code-reviewer', phaseIndex: 2, phaseCount: 4 });
   assert.match(task, /UI preview gate/i);
   assert.match(task, /host Project Pipeline orchestrator can start managed preview automatically/i);
-  assert.match(task, /pnpm dev -- --host 0\.0\.0\.0 --port \$PORT/);
+  assert.match(task, /pnpm exec vite --host 0\.0\.0\.0 --port \$PORT/);
   assert.match(task, /approve|request changes|stop preview/i);
   assert.match(task, /Do not tell the user to run \/pdproject manually/i);
   assert.doesNotMatch(task, /export source/i);

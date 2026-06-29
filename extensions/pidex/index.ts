@@ -500,7 +500,7 @@ export function isProjectPipelineUiPreviewTask(task?: string): boolean {
 	return /\b(ui|frontend|front-end|browser|page|dashboard|component|css|visual|vite|react|vue|svelte)\b/i.test(String(task || ""));
 }
 
-export const DEFAULT_PROJECT_PIPELINE_PREVIEW_COMMAND = ["pnpm", "dev", "--", "--host", "0.0.0.0", "--port", "$PORT"] as const;
+export const DEFAULT_PROJECT_PIPELINE_PREVIEW_COMMAND = ["pnpm", "exec", "vite", "--host", "0.0.0.0", "--port", "$PORT"] as const;
 
 function slugForProjectPipelineId(projectRoot: string): string {
 	const base = path.basename(path.resolve(projectRoot)).toLowerCase().replace(/[^a-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "project";
