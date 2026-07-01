@@ -30,6 +30,16 @@ function inspect(command) {
   return withSandboxContext(() => mod.inspectSandboxToolCall({ toolName: 'bash', input: { command } }, { cwd: context.sandboxWorkspace }));
 }
 
+function withoutProjectBoundaryEnv(fn) {
+  const prev = process.env.PIDEX_PROJECT_BOUNDARY_CONTEXT;
+  delete process.env.PIDEX_PROJECT_BOUNDARY_CONTEXT;
+  try { return fn(); }
+  finally {
+    if (prev === undefined) delete process.env.PIDEX_PROJECT_BOUNDARY_CONTEXT;
+    else process.env.PIDEX_PROJECT_BOUNDARY_CONTEXT = prev;
+  }
+}
+
 function git(cwd, args) { const p = spawnSync('git', args, { cwd, encoding: 'utf8' }); assert.equal(p.status, 0, p.stderr); return p.stdout.trim(); }
 function tmpRepo() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-extension-sandbox-test-'));
@@ -96,7 +106,7 @@ test('validation source mutation ignores untracked local wiki but rejects tracke
   assert.deepEqual(mod.validationSourceMutationFiles(repo, [{ status: 'M', paths: ['wiki/product.md'] }]), ['wiki/product.md']);
 });
 
-test('project boundary blocks structured writes outside project but allows pidex reads', () => {
+test('project boundary blocks structured writes outside project but allows pidex reads', () => withoutProjectBoundaryEnv(() => {
   const repo = tmpRepo();
   const outside = mkdtempSync(path.join(os.tmpdir(), 'pidex-boundary-outside-'));
   const writeBlock = mod.inspectProjectBoundaryToolCall({ toolName: 'write', input: { path: path.join(outside, 'x.txt') } }, { cwd: repo });
@@ -107,7 +117,7 @@ test('project boundary blocks structured writes outside project but allows pidex
   assert.equal(readPidex, undefined);
   const readSecret = mod.inspectProjectBoundaryToolCall({ toolName: 'read', input: { path: path.join(repo, '.env') } }, { cwd: repo });
   assert.equal(readSecret?.block, true);
-});
+}));
 
 test('project boundary blocks high-risk bash host mutations', () => {
   const repo = tmpRepo();

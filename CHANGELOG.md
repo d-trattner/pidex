@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- QA passed for Initiative 021 Project Pipeline browser-smoke contract Slice 1 R3: sandbox-tool-call env isolation fixed, focused browser-smoke/bridge tests green, full `corepack pnpm run check` green, and public readiness green.
+
 ## 0.1.10 - 2026-06-29
 
 Project Pipeline managed preview and Windows Docker Desktop UX hardening:
