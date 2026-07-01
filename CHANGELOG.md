@@ -2,7 +2,19 @@
 
 ## Unreleased
 
-- Project Pipeline Preview Bridge code-level QA passed: focused preview suites 54/54 green, full `corepack pnpm run check` green, and Fallow clean. Remote/headless Linux UAT passed; local Docker and native Windows Docker Desktop UAT remain pending.
+## 0.1.10 - 2026-06-29
+
+Project Pipeline managed preview and Windows Docker Desktop UX hardening:
+
+- Project Pipeline UI runs now auto-start a managed preview gate and present the browser URL for user approval/rejection instead of asking operators to manually run `/pdproject preview start` when automatic preview startup is possible.
+- Per-project mode routing was hardened so `/pd` only probes the hardened sandbox when the selected project mode is `hardened-pipeline`; Project Pipeline mode remains explicit and fail-closed with no host-direct fallback.
+- Project Pipeline preview lifecycle now adopts already-published per-project preview port ranges, expands `$PORT`/`${PORT}`/`%PORT%` placeholders without requiring a shell, and uses `pnpm exec vite --host 0.0.0.0 --port $PORT` as the default Vite preview command.
+- Docker CLI calls from Project Pipeline helpers now set Git Bash/MSYS-safe path-conversion guards so Windows Docker Desktop runs no longer require operators to remember `MSYS_NO_PATHCONV=1` manually.
+- Module capability passthrough policy now accepts realistic multiline `--task` text and safe absolute PIDEX/project/auth paths for Project Pipeline orchestrator calls without broadly opening arbitrary passthrough arguments.
+- Project Pipeline credential bootstrap sanitizes copied Pi `settings.json` for container use by stripping host-local package extension paths that are invalid inside Docker.
+- `/pd` project selection UX was restored to the orchestrator/chat-style interview for non-project starts, with recent projects supplied as context instead of a cramped extension select menu; saved Project Pipeline projects are included in recent-project context.
+- Native Windows Docker Desktop UAT passed multiple Project Pipeline preview scenarios, including simple Vite React fixtures and a richer dashboard fixture with automatic managed preview, HTTP 200 verification, QA approval, and user preview acceptance.
+- Release-readiness QA passed: focused Project Pipeline suites, full `corepack pnpm run check`, public-readiness packlist validation, and Windows end-to-end preview UAT evidence all green.
 
 ## 0.1.9 - 2026-06-24
 
