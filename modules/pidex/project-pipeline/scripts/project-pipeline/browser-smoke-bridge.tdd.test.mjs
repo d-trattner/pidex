@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { BROWSER_SMOKE_STATUS } from '../../../browser-smoke/scripts/browser-smoke/status.mjs';
-import { browserSmokeResultDir, classifyBrowserSmokeRequestPath, reserveBrowserSmokeResultDir, validateProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
+import { browserSmokePaths } from '../../../browser-smoke/scripts/browser-smoke/paths.mjs';
+import { browserSmokeBridgeRoot, browserSmokeResultDir, classifyBrowserSmokeRequestPath, parseArgs, reserveBrowserSmokeResultDir, runProjectPipelineBrowserSmokeRequest, validateProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
 import { createProjectRecord, saveProjectRecord } from './registry.mjs';
 
@@ -96,4 +97,53 @@ test('bridge rejects missing or stopped managed preview instead of trusting requ
   const result = validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: file, record, now: '2026-07-01T12:00:00.000Z' });
   assert.equal(result.ok, false);
   assert.equal(result.status_reason, 'preview-not-running');
+});
+
+test('runProjectPipelineBrowserSmokeRequest reserves result dir and invokes generic check with registry URL', async () => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const file = writeRequest(archiveRoot, 'agents.output/qa/run-request.json', request({ request_id: 'qa-phase-6-run' }));
+  const calls = [];
+  const result = await runProjectPipelineBrowserSmokeRequest({
+    pidexRoot,
+    projectId,
+    requestPath: file,
+    now: '2026-07-01T12:00:30.000Z',
+    browserSmokeRunner: async (args) => {
+      calls.push(args);
+      const artifact = { ok: true, status: BROWSER_SMOKE_STATUS.PASS, status_reason: 'all-checks-passed', preview_url_source: args.previewUrlSource };
+      writeFileSync(path.join(args.outputDir, 'browser-smoke-result.json'), `${JSON.stringify(artifact, null, 2)}\n`);
+      return artifact;
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'http://localhost:42080');
+  assert.equal(calls[0].requestPath, file);
+  assert.equal(calls[0].outputRoot, browserSmokeBridgeRoot(pidexRoot, projectId));
+  assert.equal(calls[0].project, browserSmokePaths(pidexRoot).stateDir);
+  assert.equal(calls[0].stateDir, browserSmokePaths(pidexRoot).stateDir);
+  assert.equal(calls[0].previewUrlSource, 'project-pipeline-registry');
+  assert.equal(existsSync(result.result_file), true);
+  assert.equal(JSON.parse(readFileSync(result.result_file, 'utf8')).preview_url_source, 'project-pipeline-registry');
+});
+
+test('browser smoke bridge CLI rejects caller-controlled project runtime root', () => {
+  assert.throws(() => parseArgs(['--project-id', 'pp-demo', '--request', 'state/project-archives/pp-demo/agents.output/qa/request.json', '--project', 'state/project-archives/pp-demo', '--json']), /unknown argument: --project/);
+});
+
+test('runProjectPipelineBrowserSmokeRequest is no-overwrite and does not invoke runner for duplicates', async () => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const file = writeRequest(archiveRoot, 'agents.output/qa/duplicate-run-request.json', request({ request_id: 'qa-phase-6-duplicate-run' }));
+  reserveBrowserSmokeResultDir(browserSmokeResultDir(pidexRoot, projectId, 'qa-phase-6-duplicate-run'));
+  let invoked = false;
+  const result = await runProjectPipelineBrowserSmokeRequest({
+    pidexRoot,
+    projectId,
+    requestPath: file,
+    now: '2026-07-01T12:00:30.000Z',
+    browserSmokeRunner: async () => { invoked = true; },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status_reason, 'duplicate-request');
+  assert.equal(invoked, false);
 });

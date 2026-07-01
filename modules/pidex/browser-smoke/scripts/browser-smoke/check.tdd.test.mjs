@@ -49,6 +49,14 @@ test('runBrowserSmokeCheck passes safe checks and writes result evidence', async
   assert.equal(JSON.parse(readFileSync(path.join(outputDir, 'browser-smoke-result.json'), 'utf8')).status, BROWSER_SMOKE_STATUS.PASS);
 });
 
+test('runBrowserSmokeCheck accepts trusted previewUrlSource from host bridge', async () => {
+  const outputDir = tmp();
+  const result = await runBrowserSmokeCheck({ url: 'http://localhost:42080/', request: request(), outputDir, previewUrlSource: 'project-pipeline-registry', playwright: fakePlaywright() });
+  assert.equal(result.status, BROWSER_SMOKE_STATUS.PASS);
+  assert.equal(result.preview_url_source, 'project-pipeline-registry');
+  assert.equal(JSON.parse(readFileSync(path.join(outputDir, 'browser-smoke-result.json'), 'utf8')).preview_url_source, 'project-pipeline-registry');
+});
+
 test('runBrowserSmokeCheck reports failed feature when assertion fails and does not disable Chromium sandbox', async () => {
   const launchOptions = [];
   const result = await runBrowserSmokeCheck({ url: 'http://localhost:42080/', request: request(), outputDir: tmp(), playwright: fakePlaywright({ title: 'Other', launchOptions }) });

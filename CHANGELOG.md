@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- UAT passed for Initiative 021 Project Pipeline browser-smoke contract Slice 3 host bridge/capability: controlled request-artifact bridge, registry-managed preview URL provenance, no-overwrite archive evidence, and trusted runtime root approved for release; `/pd` automation remains Slice 4.
+- QA passed for Initiative 021 Project Pipeline browser-smoke contract Slice 3 host bridge/capability: 32 focused tests green, CLI typed-skip smoke green, full `corepack pnpm run check` green, public readiness green, and Fallow recorded.
+- Added Initiative 021 browser-smoke contract Slice 3 Project Pipeline bridge execution/capability: QA/UAT/devops request artifacts are validated against the registered project archive, the host resolves the managed preview URL from the Project Pipeline registry, results are written under no-overwrite `browser-smoke/<request-id>/` archive dirs, and browser runtime resolution is bound to trusted PIDEX `state/browser-smoke`. Code review, security, QA, UAT, full `corepack pnpm run check`, and public readiness passed.
 - Added Initiative 021 browser-smoke contract Slice 2 generic `browser-smoke.check` substrate: loopback-only deterministic browser checks, no browser install side effects, typed `BROWSER-SMOKE-SKIP-NOT-CONFIGURED` when Playwright is unavailable, realpath-confined result artifacts, console redaction/caps, and neutral caller-provided URL provenance. Code review, security, QA, UAT, full `corepack pnpm run check`, and public readiness passed.
 - QA passed for Initiative 021 Project Pipeline browser-smoke contract Slice 1 R3: sandbox-tool-call env isolation fixed, focused browser-smoke/bridge tests green, full `corepack pnpm run check` green, and public readiness green.
 

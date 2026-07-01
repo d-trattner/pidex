@@ -50,6 +50,7 @@ function failResult(request, status, statusReason, url, extras = {}) {
     project_id: request?.project_id || 'unknown',
     request_id: request?.request_id || 'unknown',
     phase_run_id: request?.phase_run_id || 'unknown',
+    preview_url_source: extras.preview_url_source,
     url: url || '',
     checks: extras.checks || [],
     console_errors: extras.console_errors || [],
@@ -128,20 +129,21 @@ export async function runBrowserSmokeCheck(options = {}) {
     return failResult(undefined, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'invalid-output-dir', url);
   }
   const parsedUrl = validateUrl(url);
+  const previewUrlSource = options.previewUrlSource;
   let rawRequest;
   try {
     rawRequest = options.request || JSON.parse(readFileSync(options.requestPath, 'utf8'));
   } catch {
-    return writeResult(outputDir, failResult(undefined, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'invalid-request', url));
+    return writeResult(outputDir, failResult(undefined, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'invalid-request', url, { preview_url_source: previewUrlSource }));
   }
   const validation = validateBrowserSmokeRequest(rawRequest);
-  if (!validation.ok) return writeResult(outputDir, failResult(rawRequest, validation.status, validation.status_reason, url));
+  if (!validation.ok) return writeResult(outputDir, failResult(rawRequest, validation.status, validation.status_reason, url, { preview_url_source: previewUrlSource }));
   const request = validation.request;
-  if (!parsedUrl.ok) return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, parsedUrl.reason, url));
+  if (!parsedUrl.ok) return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, parsedUrl.reason, url, { preview_url_source: previewUrlSource }));
 
   const resolved = options.playwright ? { ok: true, playwright: options.playwright } : resolvePlaywright(options.project || process.cwd(), options.stateDir || browserSmokePaths().stateDir);
   if (!resolved.ok) {
-    return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.SKIP_NOT_CONFIGURED, 'playwright-not-configured', url));
+    return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.SKIP_NOT_CONFIGURED, 'playwright-not-configured', url, { preview_url_source: previewUrlSource }));
   }
 
   const consoleErrors = [];
@@ -149,7 +151,7 @@ export async function runBrowserSmokeCheck(options = {}) {
   const startedAt = new Date().toISOString();
   try {
     const playwright = resolved.playwright || await loadPlaywright(resolved.resolved);
-    if (!playwright.chromium) return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'chromium-api-unavailable', url));
+    if (!playwright.chromium) return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'chromium-api-unavailable', url, { preview_url_source: previewUrlSource }));
     browser = await playwright.chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.on?.('console', (msg) => { if (msg.type?.() === 'error') appendConsoleError(consoleErrors, msg.text?.() || ''); });
@@ -174,6 +176,7 @@ export async function runBrowserSmokeCheck(options = {}) {
       project_id: request.project_id,
       request_id: request.request_id,
       phase_run_id: request.phase_run_id,
+      preview_url_source: previewUrlSource,
       url,
       checks,
       console_errors: consoleErrors,
@@ -184,7 +187,7 @@ export async function runBrowserSmokeCheck(options = {}) {
     return writeResult(outputDir, result);
   } catch (error) {
     try { if (browser) await browser.close(); } catch {}
-    const result = { ...failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'browser-check-exception', url, { console_errors: consoleErrors }), error: String(error?.message || error).slice(0, 500) };
+    const result = { ...failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'browser-check-exception', url, { console_errors: consoleErrors, preview_url_source: previewUrlSource }), error: String(error?.message || error).slice(0, 500) };
     return writeResult(outputDir, result);
   }
 }

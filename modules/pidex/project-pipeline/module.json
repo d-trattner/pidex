@@ -175,6 +175,25 @@
       }
     },
     {
+      "id": "project-pipeline.browser-smoke",
+      "kind": "check",
+      "phases": ["qa", "uat", "devops"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-uat", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/browser-smoke-bridge.mjs"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_absolute_roots": ["__PIDEX_ROOT__"],
+          "allowed_patterns": ["^--(project-id|request|json)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
       "id": "project-pipeline.status",
       "kind": "check",
       "phases": ["preflight", "planning", "implementation", "qa", "security", "devops", "maintenance"],
