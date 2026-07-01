@@ -8,7 +8,7 @@ In Project Pipeline mode, the project source lives and runs inside a persistent 
 
 - Local Docker workflow: complete for the current MVP.
 - Linux validation: highest real `/pd` scenario passed with two Project Pipeline runs in one Project Sandbox.
-- Native Windows validation: focused `/pd` Project Pipeline low smoke passed with Docker Desktop Linux containers.
+- Native Windows validation: focused `/pd` Project Pipeline runs passed with Docker Desktop Linux containers, including automatic managed preview gates for simple and dashboard-style Vite React UI fixtures.
 - Entry point: `/pd` with saved `project-pipeline` mode.
 - Management command: `/pdproject`.
 - In-container multi-agent orchestration: local facade and `/pd` bridge wired with phase-specific role prompts.
@@ -58,7 +58,7 @@ From a project directory, run normal `/pd`:
 /pd Describe the work you want done
 ```
 
-If recent PIDEX projects exist, `/pd` first asks which project to run, so you can start Pi from another directory. After the project is selected, if no mode is saved for that project, PIDEX asks once and saves the choice:
+From a non-project directory such as `$HOME`, `/pd` starts the orchestrator/chat-style project interview. Recent PIDEX projects are supplied as interview context so the orchestrator can list/group/filter them naturally instead of forcing a large extension select menu. After the project is selected, if no mode is saved for that project, PIDEX asks once and saves the choice:
 
 ```text
 host-direct / hardened-pipeline / project-pipeline / Cancel
@@ -164,10 +164,10 @@ Reset copied credentials from the sandbox secrets volume and registry metadata:
 /pdproject credentials reset <project-id> --confirm <project-id>
 ```
 
-Start a browser preview from inside the sandbox with an explicit command:
+For UI tasks, Project Pipeline attempts to start a managed preview automatically after a successful run and presents a browser URL for approval/rejection. If automatic startup cannot be used, start a browser preview from inside the sandbox with an explicit command:
 
 ```text
-/pdproject preview start <project-id> -- pnpm dev -- --host 0.0.0.0 --port $PORT
+/pdproject preview start <project-id> -- pnpm exec vite --host 0.0.0.0 --port $PORT
 ```
 
 Inspect or stop preview:
@@ -178,7 +178,7 @@ Inspect or stop preview:
 /pdproject preview stop <project-id>
 ```
 
-Preview reserves a high host port range per Project Sandbox and publishes it on container create/recreate. Local Docker Desktop/native runs prefer `localhost`. Remote/headless Linux may bind all Docker-host interfaces and shows a browser URL using `PIDEX_PROJECT_PIPELINE_PREVIEW_HOST`, saved project host, or one detected LAN IPv4. PIDEX never shows `0.0.0.0` as browser URL, never opens cloud firewalls/tunnels, and does not copy credentials for preview setup. Summaries omit raw Docker commands, helper JSON, absolute secret paths, and unbounded logs.
+Preview reserves a high host port range per Project Sandbox and publishes it on container create/recreate. Existing published preview ranges are adopted when safe. Local Docker Desktop/native runs prefer `localhost`. Remote/headless Linux may bind all Docker-host interfaces and shows a browser URL using `PIDEX_PROJECT_PIPELINE_PREVIEW_HOST`, saved project host, or one detected LAN IPv4. PIDEX never shows `0.0.0.0` as browser URL, never opens cloud firewalls/tunnels, and does not copy credentials for preview setup. Preview helpers expand `$PORT`, `${PORT}`, and `%PORT%` before process start, and Docker CLI calls are guarded against Git Bash/MSYS path conversion. Summaries omit raw Docker commands, helper JSON, absolute secret paths, and unbounded logs.
 
 Remove a persistent sandbox explicitly:
 
