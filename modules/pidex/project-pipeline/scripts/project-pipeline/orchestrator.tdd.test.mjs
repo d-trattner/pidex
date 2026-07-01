@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildPhaseTask, ensureProjectImage, parsePhaseList, runProjectPipelineOrchestration } from './orchestrator.mjs';
+import { buildBrowserSmokeVerdictTask, buildPhaseTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 
@@ -14,6 +14,21 @@ function seedRecord(pidexRoot, projectId = 'pp-orch-test') {
   record.archive.path = path.join(pidexRoot, 'state', 'project-archives', projectId);
   saveProjectRecord(pidexRoot, record);
   return record;
+}
+
+function browserSmokeRequest(projectId, requestId = 'qa-browser-smoke-req') {
+  return {
+    schema: 1,
+    requester: 'pidex-qa',
+    project_id: projectId,
+    request_id: requestId,
+    phase_run_id: 'pprun-abc123/pidex-qa/phase-6',
+    created_at: '2026-07-01T12:00:00.000Z',
+    preview: { managed: true, process: 'preview' },
+    checks: [{ type: 'title', contains: 'Demo' }],
+    capture: { screenshot: false, console_errors: true },
+    timeout_ms: 10000,
+  };
 }
 
 test('ensureProjectImage skips Docker preflight for deterministic fake runners', () => {
@@ -71,7 +86,7 @@ test('buildPhaseTask gives validation phases mutation and Fallow instructions', 
   assert.match(qaTask, /Expected artifact path prefix: agents\.output\/qa\//);
 });
 
-test('runProjectPipelineOrchestration runs phases sequentially and records archive contexts', () => {
+test('runProjectPipelineOrchestration runs phases sequentially and records archive contexts', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
   mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
@@ -89,7 +104,7 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
     }
     return 'ok';
   };
-  const result = runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-test', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-test', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner });
   assert.equal(result.ok, true);
   assert.deepEqual(execAgents, ['pidex-planner', 'pidex-critic', 'pidex-qa']);
   assert.equal(result.runs.length, 3);
@@ -101,16 +116,16 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
-test('runProjectPipelineOrchestration validates array phases before runner execution', () => {
+test('runProjectPipelineOrchestration validates array phases before runner execution', async () => {
   const pidexRoot = tmp();
   seedRecord(pidexRoot, 'pp-orch-invalid');
   let runnerCalled = false;
-  assert.throws(() => runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-invalid', task: 'x', phases: ['pidex-qa\nINJECT'], runner: () => { runnerCalled = true; return 'ok'; } }), /invalid project-pipeline phase/);
+  await assert.rejects(() => runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-invalid', task: 'x', phases: ['pidex-qa\nINJECT'], runner: () => { runnerCalled = true; return 'ok'; } }), /invalid project-pipeline phase/);
   assert.equal(runnerCalled, false);
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
-test('runProjectPipelineOrchestration retries once when a phase omits routing', () => {
+test('runProjectPipelineOrchestration retries once when a phase omits routing', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
   mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
@@ -132,7 +147,7 @@ test('runProjectPipelineOrchestration retries once when a phase omits routing', 
     }
     return 'ok';
   };
-  const result = runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-retry', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-retry', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
   assert.equal(result.ok, true);
   assert.equal(qaAttempts, 2);
   assert.equal(result.runs.length, 1);
@@ -140,7 +155,7 @@ test('runProjectPipelineOrchestration retries once when a phase omits routing', 
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
-test('runProjectPipelineOrchestration stops fail-closed on failed phase', () => {
+test('runProjectPipelineOrchestration stops fail-closed on failed phase', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
   mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
@@ -157,7 +172,7 @@ test('runProjectPipelineOrchestration stops fail-closed on failed phase', () => 
     }
     return 'ok';
   };
-  const result = runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-fail', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-fail', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner });
   assert.equal(result.ok, false);
   assert.equal(result.no_fallback, true);
   assert.equal(result.failed_agent, 'pidex-critic');
@@ -165,7 +180,132 @@ test('runProjectPipelineOrchestration stops fail-closed on failed phase', () => 
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
-test('runProjectPipelineOrchestration omits failed child raw output from public result', () => {
+test('discoverBrowserSmokeRequests finds only validation phase request json files', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-orch-discover-smoke';
+  seedRecord(pidexRoot, projectId);
+  const root = path.join(pidexRoot, 'state', 'project-archives', projectId);
+  mkdirSync(path.join(root, 'agents.output/qa/nested'), { recursive: true });
+  writeFileSync(path.join(root, 'agents.output/qa/nested/request.json'), '{}');
+  writeFileSync(path.join(root, 'agents.output/qa/note.md'), '# no');
+  assert.equal(discoverBrowserSmokeRequests({ pidexRoot, projectId, agent: 'pidex-qa' }).length, 1);
+  assert.deepEqual(discoverBrowserSmokeRequests({ pidexRoot, projectId, agent: 'pidex-implementer' }), []);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('buildBrowserSmokeVerdictTask instructs validation agent to write final verdict only', () => {
+  const task = buildBrowserSmokeVerdictTask({ phase: 'pidex-qa', initialTask: 'Build dashboard UI', previous: { context_file: 'agents.output/qa/qa.md' }, results: [{ status: 'BROWSER-SMOKE-PASS', status_reason: 'all-checks-passed', result_file: 'browser-smoke/req/browser-smoke-result.json', preview_url: 'http://localhost:42080', preview_url_source: 'project-pipeline-registry' }] });
+  assert.match(task, /browser-smoke final verdict/i);
+  assert.match(task, /Do not modify source files/);
+  assert.match(task, /BROWSER-SMOKE-PASS/);
+  assert.match(task, /project-pipeline-registry/);
+  assert.match(task, /context_file: agents\.output\/qa\/browser-smoke-verdict\.md/);
+});
+
+test('sanitizeBrowserSmokeResultForSandbox converts host paths to archive-relative evidence refs', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-orch-sanitize-smoke';
+  seedRecord(pidexRoot, projectId);
+  const absoluteResult = path.join(pidexRoot, 'state/project-archives', projectId, 'browser-smoke/req/browser-smoke-result.json');
+  const sanitized = sanitizeBrowserSmokeResultForSandbox({ status: 'BROWSER-SMOKE-PASS', result_file: absoluteResult, preview_url: 'http://localhost:42080' }, { pidexRoot, projectId });
+  assert.equal(sanitized.result_file, 'browser-smoke/req/browser-smoke-result.json');
+  assert.equal(sanitizeBrowserSmokeResultForSandbox({ result_file: path.join(pidexRoot, 'outside/result.json') }, { pidexRoot, projectId }).result_file, '');
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration auto-runs browser smoke bridge after QA and requests final verdict', async () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-orch-browser-smoke';
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  const record = seedRecord(pidexRoot, projectId);
+  record.preview = { ports: { base: 42080, size: 20, container_base: 42080, host_bind: '127.0.0.1', generation: 7 }, processes: { preview: { status: 'running', operator_url: 'http://localhost:42080', host_port: 42080, container_port: 42080 } } };
+  saveProjectRecord(pidexRoot, record);
+  const prompts = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = args.at(-1);
+      prompts.push(String(prompt));
+      const isVerdict = String(prompt).includes('browser-smoke final verdict');
+      const context = isVerdict ? 'agents.output/qa/browser-smoke-verdict.md' : 'agents.output/qa/artifact.md';
+      mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), isVerdict ? '# verdict\n' : '# qa\n');
+      if (!isVerdict) writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId), null, 2)}\n`);
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const bridgeCalls = [];
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot,
+    projectId,
+    task: 'Build dashboard UI',
+    phases: ['pidex-qa'],
+    archiveWorkspace,
+    runner,
+    now: '2026-07-01T12:00:30.000Z',
+    browserSmokeBridgeRunner: async (args) => {
+      bridgeCalls.push(args);
+      return { ok: true, status: 'BROWSER-SMOKE-PASS', status_reason: 'all-checks-passed', result_file: path.join(pidexRoot, 'state/project-archives', projectId, 'browser-smoke/qa-browser-smoke-req/browser-smoke-result.json'), preview_url: 'http://localhost:42080', preview_url_source: 'project-pipeline-registry', request_id: 'qa-browser-smoke-req' };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(bridgeCalls.length, 1);
+  assert.match(bridgeCalls[0].requestPath.replace(/\\/g, '/'), /agents\.output\/qa\/browser-smoke-request\.json$/);
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /browser-smoke final verdict/i);
+  assert.doesNotMatch(prompts[1], new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(prompts[1], /state\/project-archives/);
+  assert.equal(result.runs.length, 2);
+  assert.equal(result.runs[0].browser_smoke_results[0].status, 'BROWSER-SMOKE-PASS');
+  assert.equal(result.runs[0].browser_smoke_results[0].result_file, 'browser-smoke/qa-browser-smoke-req/browser-smoke-result.json');
+  assert.doesNotMatch(JSON.stringify(result.runs[0].browser_smoke_results), new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.equal(result.runs[1].browser_smoke_verdict_for, result.runs[0].project_run_id);
+  assert.equal(result.final_context_file, 'agents.output/qa/browser-smoke-verdict.md');
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration sanitizes browser smoke evidence when final verdict fails', async () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-orch-browser-smoke-verdict-fail';
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  const record = seedRecord(pidexRoot, projectId);
+  record.preview = { ports: { base: 42080, size: 20, container_base: 42080, host_bind: '127.0.0.1', generation: 7 }, processes: { preview: { status: 'running', operator_url: 'http://localhost:42080', host_port: 42080, container_port: 42080 } } };
+  saveProjectRecord(pidexRoot, record);
+  let attempt = 0;
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      attempt += 1;
+      if (attempt === 2) return { status: 1, stdout: 'verdict failed', stderr: '' };
+      const context = 'agents.output/qa/artifact.md';
+      mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), '# qa\n');
+      writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId), null, 2)}\n`);
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const absoluteResult = path.join(pidexRoot, 'state/project-archives', projectId, 'browser-smoke/qa-browser-smoke-req/browser-smoke-result.json');
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot,
+    projectId,
+    task: 'Build dashboard UI',
+    phases: ['pidex-qa'],
+    archiveWorkspace,
+    runner,
+    now: '2026-07-01T12:00:30.000Z',
+    browserSmokeBridgeRunner: async () => ({ ok: true, status: 'BROWSER-SMOKE-PASS', status_reason: 'all-checks-passed', result_file: absoluteResult, preview_url: 'http://localhost:42080', preview_url_source: 'project-pipeline-registry', request_id: 'qa-browser-smoke-req' }),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'browser-smoke-verdict-failed');
+  assert.equal(result.browser_smoke_results[0].result_file, 'browser-smoke/qa-browser-smoke-req/browser-smoke-result.json');
+  assert.doesNotMatch(JSON.stringify(result.browser_smoke_results), new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(JSON.stringify(result.browser_smoke_results), /state\/project-archives/);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration omits failed child raw output from public result', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
   mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
@@ -174,7 +314,7 @@ test('runProjectPipelineOrchestration omits failed child raw output from public 
     if (args[0] === 'exec' && args.includes('pi')) return { status: 1, stdout: 'token=SECRET_DEMO_VALUE_1234567890', stderr: 'stderr secret' };
     return 'ok';
   };
-  const result = runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secret-fail', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secret-fail', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
   const serialized = JSON.stringify(result);
   assert.equal(result.ok, false);
   assert.equal(result.run.error, 'child-pi-failed');

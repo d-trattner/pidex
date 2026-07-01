@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,8 @@ import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
 import { runProjectPipelineAgent } from './run-agent.mjs';
 import { loadProjectRecord } from './registry.mjs';
+import { resolveArchiveRoot } from './archive-sync.mjs';
+import { runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
 
 export const DEFAULT_PROJECT_PIPELINE_PHASES = Object.freeze([
@@ -40,6 +43,8 @@ const PHASE_OUTPUT_PREFIX = Object.freeze({
   'pidex-uat': 'agents.output/uat/',
   'pidex-devops': 'agents.output/devops/',
 });
+
+const BROWSER_SMOKE_REQUEST_SEGMENTS = Object.freeze({ 'pidex-qa': 'qa', 'pidex-uat': 'uat', 'pidex-devops': 'devops' });
 
 const PHASE_ROLE_GUIDANCE = Object.freeze({
   'pidex-planner': 'Plan the work. Produce a concrete implementation plan, risks, test strategy, and explicit acceptance criteria. Do not change source files in planning.',
@@ -124,6 +129,89 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
   return lines.join('\n\n');
 }
 
+function walkJsonFiles(root, out = []) {
+  if (!existsSync(root)) return out;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) walkJsonFiles(full, out);
+    else if (entry.isFile() && entry.name.endsWith('.json')) out.push(full);
+  }
+  return out.sort();
+}
+
+export function discoverBrowserSmokeRequests({ pidexRoot, projectId, agent } = {}) {
+  const segment = BROWSER_SMOKE_REQUEST_SEGMENTS[agent];
+  if (!segment) return [];
+  const archiveRoot = resolveArchiveRoot({ pidexRoot: path.resolve(pidexRoot || process.cwd()), projectId });
+  return walkJsonFiles(path.join(archiveRoot, 'agents.output', segment));
+}
+
+export async function runBrowserSmokeBridgeForPhase(options = {}) {
+  const requests = discoverBrowserSmokeRequests(options);
+  const results = [];
+  for (const requestPath of requests) {
+    const result = await (options.browserSmokeBridgeRunner || runProjectPipelineBrowserSmokeRequest)({
+      pidexRoot: options.pidexRoot,
+      projectId: options.projectId,
+      requestPath,
+      now: options.now,
+      maxAgeMs: options.maxAgeMs,
+      playwright: options.playwright,
+    });
+    if (result?.status_reason !== 'duplicate-request') results.push(result);
+  }
+  return results;
+}
+
+export function sanitizeBrowserSmokeResultForSandbox(item = {}, { pidexRoot, projectId } = {}) {
+  const archiveRoot = resolveArchiveRoot({ pidexRoot: path.resolve(pidexRoot || process.cwd()), projectId });
+  const sanitizePath = (value) => {
+    if (!value) return '';
+    const resolved = path.resolve(String(value));
+    const rel = path.relative(archiveRoot, resolved).replaceAll('\\', '/');
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
+    return '';
+  };
+  return {
+    status: item.status,
+    status_reason: item.status_reason,
+    request_id: item.request_id,
+    result_file: sanitizePath(item.result_file),
+    preview_url: item.preview_url,
+    preview_url_source: item.preview_url_source,
+  };
+}
+
+export function buildBrowserSmokeVerdictTask({ phase, initialTask, previous, results = [] }) {
+  const evidence = results.map((item, index) => [
+    `Browser smoke result ${index + 1}:`,
+    `status: ${item.status || 'unknown'}`,
+    `status_reason: ${item.status_reason || ''}`,
+    `preview_url: ${item.preview_url || ''}`,
+    `preview_url_source: ${item.preview_url_source || ''}`,
+    `result_file: ${item.result_file || ''}`,
+  ].join('\n')).join('\n\n');
+  return [
+    `Project Pipeline browser-smoke final verdict phase for ${phase}.`,
+    'You are running inside the persistent Project Sandbox at /workspace.',
+    'Do not modify source files. Read the browser-smoke result context below and write a final verdict artifact under your agents.output prefix.',
+    'If the result is BROWSER-SMOKE-PASS, record acceptance evidence. If it is BROWSER-SMOKE-FAILED-FEATURE, document the user-visible failure and route back for correction. If it is BROWSER-SMOKE-SKIP-NOT-CONFIGURED or BROWSER-SMOKE-BLOCKED-INFRA, document whether acceptance is blocked or can proceed with stated limitations.',
+    `Original user task:\n${initialTask || ''}`,
+    previous?.context_file ? `Previous phase artifact in container: ${previous.context_file}` : '',
+    evidence,
+    [
+      'Finish with a ROUTING HTML comment exactly like:',
+      '<!-- ROUTING',
+      'verdict: COMPLETE',
+      'route_to: orchestrator',
+      'reason: browser smoke final verdict recorded',
+      `context_file: ${phaseOutputPrefix(phase)}browser-smoke-verdict.md`,
+      '-->',
+      'The context_file value must be a relative agents.output/** path, never an absolute path.',
+    ].join('\n'),
+  ].filter(Boolean).join('\n\n');
+}
+
 function shouldRetryRoutingFailure(run) {
   return run?.ok === false && run?.error === 'routing-invalid' && (run?.reason === 'routing-missing' || run?.reason === 'context-file-missing');
 }
@@ -163,7 +251,7 @@ function ensureSandboxAndSource(options, pidexRoot, projectId) {
   }
 }
 
-export function runProjectPipelineOrchestration(options = {}) {
+export async function runProjectPipelineOrchestration(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = options.projectId;
   if (!projectId) throw new Error('--project-id is required');
@@ -210,9 +298,22 @@ export function runProjectPipelineOrchestration(options = {}) {
     } catch (error) {
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
     }
-    runs.push({ agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, retry_count: retryCount, error: run.error, reason: run.reason });
+    const runSummary = { agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, retry_count: retryCount, error: run.error, reason: run.reason };
+    runs.push(runSummary);
     if (!run.ok) return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
+    if (options.browserSmokeAuto !== false && BROWSER_SMOKE_REQUEST_SEGMENTS[agent]) {
+      const browserSmokeResults = await runBrowserSmokeBridgeForPhase({ pidexRoot, projectId, agent, browserSmokeBridgeRunner: options.browserSmokeBridgeRunner, now: options.now, maxAgeMs: options.browserSmokeMaxAgeMs, playwright: options.playwright });
+      if (browserSmokeResults.length) {
+        const sandboxResults = browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId }));
+        runSummary.browser_smoke_results = sandboxResults;
+        const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
+        const verdictRun = runAgentOnce(verdictTask);
+        runs.push({ agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason });
+        if (!verdictRun.ok) return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
+        previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
+      }
+    }
   }
   return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, no_fallback: true };
 }
@@ -248,7 +349,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) { console.log(usage()); process.exit(0); }
-    const result = runProjectPipelineOrchestration(args);
+    const result = await runProjectPipelineOrchestration(args);
     console.log(args.json ? JSON.stringify(result, null, 2) : (result.ok ? result.final_context_file : result.error));
     process.exit(result.ok ? 0 : 1);
   } catch (error) {
