@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added Initiative 021 browser-smoke contract Slice 2 generic `browser-smoke.check` substrate: loopback-only deterministic browser checks, no browser install side effects, typed `BROWSER-SMOKE-SKIP-NOT-CONFIGURED` when Playwright is unavailable, realpath-confined result artifacts, console redaction/caps, and neutral caller-provided URL provenance. Code review, security, QA, UAT, full `corepack pnpm run check`, and public readiness passed.
 - QA passed for Initiative 021 Project Pipeline browser-smoke contract Slice 1 R3: sandbox-tool-call env isolation fixed, focused browser-smoke/bridge tests green, full `corepack pnpm run check` green, and public readiness green.
 
 ## 0.1.10 - 2026-06-29

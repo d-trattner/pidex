@@ -34,7 +34,7 @@ export function buildBrowserSmokeResult(params = {}) {
     project_id: String(params.project_id || ''),
     request_id: String(params.request_id || ''),
     phase_run_id: String(params.phase_run_id || ''),
-    preview_url_source: params.preview_url_source || 'project-pipeline-registry',
+    preview_url_source: params.preview_url_source || 'caller-provided-url',
     url: params.url || '',
     checks: Array.isArray(params.checks) ? params.checks : [],
     console_errors: Array.isArray(params.console_errors) ? params.console_errors : [],

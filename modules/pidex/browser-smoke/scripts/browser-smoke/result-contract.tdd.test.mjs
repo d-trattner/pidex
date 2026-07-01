@@ -15,6 +15,7 @@ test('buildBrowserSmokeResult emits canonical hyphenated browser-smoke status', 
   });
   assert.equal(result.ok, true);
   assert.equal(result.status, 'BROWSER-SMOKE-PASS');
+  assert.equal(result.preview_url_source, 'caller-provided-url');
   assert.equal(validateBrowserSmokeResult(result).ok, true);
 });
 
@@ -28,6 +29,6 @@ test('validateBrowserSmokeResult rejects invented statuses and unsafe screenshot
 test('isSafeRelativeEvidencePath allows only relative archive references', () => {
   assert.equal(isSafeRelativeEvidencePath('browser-smoke/req/screenshot.png'), true);
   assert.equal(isSafeRelativeEvidencePath('C:/Users/Daniel/secret.png'), false);
-  assert.equal(isSafeRelativeEvidencePath('/home/daniel/secret.png'), false);
+  assert.equal(isSafeRelativeEvidencePath('/absolute/secret.png'), false);
   assert.equal(isSafeRelativeEvidencePath('browser-smoke/../secret.png'), false);
 });

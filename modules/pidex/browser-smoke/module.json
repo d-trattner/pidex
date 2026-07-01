@@ -43,6 +43,26 @@
       }
     },
     {
+      "id": "browser-smoke.check",
+      "kind": "check",
+      "phases": ["qa", "uat", "devops"],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-uat", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "mutability": ["writes-artifacts"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/browser-smoke/scripts/browser-smoke/check.mjs", "--project", "__PIDEX_PROJECT__", "--output-root", "__PIDEX_PROJECT__"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allow_absolute_project_paths": true,
+          "allowed_absolute_roots": ["__PIDEX_ROOT__"],
+          "allowed_patterns": ["^--(url|request|output-dir|json)$", "^https?://[^\\s]{1,500}$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+        }
+      }
+    },
+    {
       "id": "browser-smoke.cleanup-check",
       "kind": "check",
       "phases": ["qa", "devops", "maintenance"],
