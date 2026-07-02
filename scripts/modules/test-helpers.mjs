@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -26,4 +26,31 @@ export function makeModuleFixture(options = {}) {
   writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log('fixture reference ok');\n");
   writeFileSync(path.join(root, 'scripts/release/fail.mjs'), "console.error('fixture failure'); process.exit(7);\n");
   return { root, project };
+}
+
+export function addFixtureAgentRule(root, overrides = {}) {
+  const moduleDir = path.join(root, 'modules/pidex/release-safety');
+  const rulesDir = path.join(moduleDir, 'rules/pidex-devops');
+  mkdirSync(rulesDir, { recursive: true });
+  const rulePath = overrides.path || 'rules/pidex-devops/pre-release.md';
+  const targetRuleFile = path.join(moduleDir, rulePath);
+  mkdirSync(path.dirname(targetRuleFile), { recursive: true });
+  writeFileSync(targetRuleFile, overrides.content || '# Release module rule\n');
+  const manifestPath = path.join(moduleDir, 'module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.agent_rules = [
+    {
+      id: 'pidex.release-safety.pre-release-devops',
+      agent: 'pidex-devops',
+      phases: ['pre-release'],
+      path: rulePath,
+      authority: 'module-scoped',
+      summary: 'Release safety pre-release rule',
+      audience_scope: 'pre-release',
+      applies_when: { mode: 'release', capabilities: ['release.reference-integrity'] },
+      ...overrides.rule,
+    },
+  ];
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  return manifest.agent_rules[0];
 }

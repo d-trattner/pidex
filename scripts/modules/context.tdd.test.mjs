@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { makeModuleFixture } from './test-helpers.mjs';
+import { addFixtureAgentRule, makeModuleFixture } from './test-helpers.mjs';
 
 function runContext(root, project, extra = []) {
   return execFileSync(process.execPath, ['scripts/modules/context.mjs', '--pidex-root', root, '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, ...extra], { cwd: process.cwd(), encoding: 'utf8' });
@@ -34,6 +34,53 @@ test('context quotes project paths safely in command lines', () => {
   execFileSync('mkdir', ['-p', spacedProject]);
   const out = runContext(root, spacedProject);
   assert.match(out, /--project '.*project with space'/);
+});
+
+test('context emits metadata-only module-scoped agent_rules when mode and capability match', () => {
+  const { root, project } = makeModuleFixture();
+  addFixtureAgentRule(root, { rule: { summary: 'Release safety rule' } });
+  const out = runContext(root, project, ['--mode', 'release']);
+  assert.match(out, /## Module rules for this phase/);
+  assert.match(out, /Core PIDEX rules and explicit user instructions take precedence/);
+  assert.match(out, /pidex\.release-safety\.pre-release-devops/);
+  assert.match(out, /module: pidex\.release-safety/);
+  assert.match(out, /source: rules\/pidex-devops\/pre-release\.md/);
+  assert.match(out, /mode=release/);
+  assert.doesNotMatch(out, /# Release module rule/);
+  assert.doesNotMatch(out, /scripts\/release\/reference-integrity\.mjs/);
+  assert.doesNotMatch(out, /javascript:alert/);
+  assert.doesNotMatch(out, /<b>/);
+});
+
+test('context suppresses module-scoped agent_rules for missing mode wrong mode disabled module and unavailable capability', () => {
+  const missingMode = makeModuleFixture();
+  addFixtureAgentRule(missingMode.root);
+  assert.doesNotMatch(runContext(missingMode.root, missingMode.project), /pidex\.release-safety\.pre-release-devops/);
+  assert.doesNotMatch(runContext(missingMode.root, missingMode.project, ['--mode', 'other']), /pidex\.release-safety\.pre-release-devops/);
+
+  const disabled = makeModuleFixture({ releaseEnabled: false });
+  addFixtureAgentRule(disabled.root);
+  assert.doesNotMatch(runContext(disabled.root, disabled.project, ['--mode', 'release']), /pidex\.release-safety\.pre-release-devops/);
+
+  const unavailable = makeModuleFixture();
+  addFixtureAgentRule(unavailable.root);
+  const manifestPath = path.join(unavailable.root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].allowed_agents = ['pidex-pi'];
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  assert.doesNotMatch(runContext(unavailable.root, unavailable.project, ['--mode', 'release']), /pidex\.release-safety\.pre-release-devops/);
+});
+
+test('context emits module-scoped agent_rules in deterministic sorted order', () => {
+  const { root, project } = makeModuleFixture();
+  addFixtureAgentRule(root);
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  writeFileSync(path.join(root, 'modules/pidex/release-safety/rules/pidex-devops/second.md'), '# second\n');
+  manifest.agent_rules.push({ ...manifest.agent_rules[0], id: 'pidex.release-safety.a-first', path: 'rules/pidex-devops/second.md' });
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const out = runContext(root, project, ['--mode', 'release']);
+  assert.ok(out.indexOf('pidex.release-safety.a-first') < out.indexOf('pidex.release-safety.pre-release-devops'));
 });
 
 test('context rejects invalid module manifests through validation', () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -9,6 +9,11 @@ export const VALID_IMPORTANCE = new Set(['required', 'recommended', 'optional'])
 export const VALID_SCOPES = new Set(['install', 'project']);
 export const VALID_MUTABILITY = new Set(['read-only', 'writes-artifacts', 'writes-project', 'writes-config', 'external-side-effects']);
 export const VALID_CAPABILITY_KINDS = new Set(['check', 'tool', 'report']);
+export const VALID_AGENT_RULE_AUTHORITY = new Set(['module-scoped']);
+const AGENT_RULE_ID_RE = /^[a-z0-9][a-z0-9.-]{2,160}$/;
+const AGENT_RULE_TOKEN_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
+const CAPABILITY_ID_RE = /^[A-Za-z0-9_.:-]{1,160}$/;
+const MAX_AGENT_RULE_FILE_BYTES = 16 * 1024;
 
 export function scriptPidexRoot(importMetaUrl) {
   return path.resolve(path.dirname(fileURLToPath(importMetaUrl)), '../..');
@@ -186,6 +191,83 @@ export function validateCapabilityCommand(pidexRoot, capability) {
   return errors;
 }
 
+function moduleRootFromManifestFile(system, manifest) {
+  const item = system.byId.get(manifest.id);
+  return item ? path.dirname(item.file) : system.pidexRoot;
+}
+
+function pathWithin(root, target) {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function pathHasSymlink(root, relativePath) {
+  let current = path.resolve(root);
+  for (const part of relativePath.split(/[\\/]+/).filter(Boolean)) {
+    current = path.join(current, part);
+    if (existsSync(current) && lstatSync(current).isSymbolicLink()) return true;
+  }
+  return false;
+}
+
+function safeMetadataString(value, max = 200) {
+  return typeof value === 'string' && value.length <= max && !/[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069<>`\[\]\(\)]/u.test(value);
+}
+
+function validateAgentRulePath(moduleRoot, rule, errors) {
+  const ruleId = rule?.id || 'agent_rule';
+  const rel = rule?.path;
+  if (typeof rel !== 'string' || rel.length === 0 || rel.length > 240) return errors.push(`${ruleId}: invalid agent_rule path`);
+  if (path.isAbsolute(rel)) return errors.push(`${ruleId}: agent_rule path must be relative`);
+  const normalized = rel.replaceAll('\\', '/');
+  if (normalized.split('/').some((part) => part === '..' || part === '')) return errors.push(`${ruleId}: agent_rule path must not contain traversal`);
+  if (path.extname(normalized) !== '.md') return errors.push(`${ruleId}: agent_rule path must be markdown`);
+  if (pathHasSymlink(moduleRoot, normalized)) return errors.push(`${ruleId}: agent_rule path must not include symlinks`);
+  const target = path.resolve(moduleRoot, normalized);
+  if (!pathWithin(moduleRoot, target)) return errors.push(`${ruleId}: agent_rule path escapes module root`);
+  if (!existsSync(target)) return errors.push(`${ruleId}: agent_rule file missing: ${normalized}`);
+  const st = lstatSync(target);
+  if (!st.isFile()) return errors.push(`${ruleId}: agent_rule path must be a regular file`);
+  if (st.size > MAX_AGENT_RULE_FILE_BYTES) return errors.push(`${ruleId}: agent_rule file exceeds max size`);
+  const realRoot = realpathSync(moduleRoot);
+  const realTarget = realpathSync(target);
+  if (!pathWithin(realRoot, realTarget)) return errors.push(`${ruleId}: agent_rule realpath escapes module root`);
+}
+
+export function validateAgentRules(system, manifest, agents = knownAgents(system.pidexRoot)) {
+  const errors = [];
+  const moduleRoot = moduleRootFromManifestFile(system, manifest);
+  const rules = manifest.agent_rules;
+  if (rules === undefined) return errors;
+  if (!Array.isArray(rules)) return [`${manifest.id}: agent_rules must be array`];
+  for (const rule of rules) {
+    const id = rule?.id;
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) { errors.push(`${manifest.id}: agent_rule must be object`); continue; }
+    if (typeof id !== 'string' || !AGENT_RULE_ID_RE.test(id)) errors.push(`${manifest.id}: invalid agent_rule id`);
+    else if (!id.startsWith(`${manifest.id}.`)) errors.push(`${id}: agent_rule id must start with module id prefix ${manifest.id}.`);
+    if (rule.authority !== 'module-scoped') errors.push(`${id || manifest.id}: invalid agent_rule authority`);
+    if (rule.agent === 'orchestrator') errors.push(`${id || manifest.id}: orchestrator agent_rules are not allowed in v1`);
+    if (typeof rule.agent !== 'string' || !agents.has(rule.agent)) errors.push(`${id || manifest.id}: unknown agent_rule agent ${rule.agent}`);
+    if (!Array.isArray(rule.phases) || rule.phases.length === 0) errors.push(`${id || manifest.id}: agent_rule phases must be non-empty array`);
+    for (const phase of rule.phases || []) if (!VALID_PHASES.has(phase)) errors.push(`${id || manifest.id}: invalid agent_rule phase ${phase}`);
+    validateAgentRulePath(moduleRoot, rule, errors);
+    if ('summary' in rule && !safeMetadataString(rule.summary, 200)) errors.push(`${id || manifest.id}: invalid agent_rule summary`);
+    if ('audience_scope' in rule && (typeof rule.audience_scope !== 'string' || !AGENT_RULE_TOKEN_RE.test(rule.audience_scope))) errors.push(`${id || manifest.id}: invalid agent_rule audience_scope`);
+    const applies = rule.applies_when;
+    if (applies !== undefined) {
+      if (!applies || typeof applies !== 'object' || Array.isArray(applies)) errors.push(`${id || manifest.id}: agent_rule applies_when must be object`);
+      else {
+        if ('mode' in applies && (typeof applies.mode !== 'string' || !AGENT_RULE_TOKEN_RE.test(applies.mode))) errors.push(`${id || manifest.id}: invalid agent_rule applies_when.mode`);
+        if ('capabilities' in applies) {
+          if (!Array.isArray(applies.capabilities)) errors.push(`${id || manifest.id}: agent_rule applies_when.capabilities must be array`);
+          for (const capability of applies.capabilities || []) if (typeof capability !== 'string' || !CAPABILITY_ID_RE.test(capability)) errors.push(`${id || manifest.id}: invalid agent_rule capability filter ${capability}`);
+        }
+      }
+    }
+  }
+  return errors;
+}
+
 export function validateSystem(system) {
   const errors = [];
   const moduleIds = new Set();
@@ -216,6 +298,15 @@ export function validateSystem(system) {
       if (!capability.command || typeof capability.command.bin !== 'string' || !Array.isArray(capability.command.args)) errors.push(`${capability.id}: command must use structured {bin,args}`);
       errors.push(...validateCapabilityCommand(system.pidexRoot, capability));
     }
+    errors.push(...validateAgentRules(system, manifest, agents));
+  }
+  const agentRuleIds = new Set();
+  for (const { manifest } of system.modules) {
+    for (const rule of manifest.agent_rules || []) {
+      if (!rule?.id) continue;
+      if (agentRuleIds.has(rule.id)) errors.push(`duplicate agent_rule id: ${rule.id}`);
+      agentRuleIds.add(rule.id);
+    }
   }
   for (const configuredId of Object.keys(system.configModules)) {
     const item = system.byId.get(configuredId);
@@ -231,6 +322,15 @@ export function validateSystem(system) {
     }
   }
   return { ok: errors.length === 0, errors };
+}
+
+export function allAgentRules(system) {
+  const out = [];
+  for (const { manifest } of system.modules) {
+    const moduleState = moduleEnabled(system, manifest);
+    for (const rule of manifest.agent_rules || []) out.push({ module: manifest, moduleState, rule });
+  }
+  return out.sort((a, b) => `${a.module.id}\0${a.rule.id}\0${a.rule.path}`.localeCompare(`${b.module.id}\0${b.rule.id}\0${b.rule.path}`));
 }
 
 export function allCapabilities(system) {
@@ -258,6 +358,30 @@ export function capabilityAvailability(system, entry, agent, phase, projectRoot)
   if (supported.length && !supported.includes(platform)) return { available: false, reason: 'platform_not_declared', requirement_active: capability.importance === 'required', platform };
   if (!commandExists(capability.command.bin)) return { available: false, reason: 'platform_command_unavailable', requirement_active: capability.importance === 'required', platform };
   return { available: true, reason: undefined, requirement_active: capability.importance === 'required', platform };
+}
+
+export function agentRuleAvailability(system, entry, context = {}) {
+  const { module, moduleState, rule } = entry;
+  if (!moduleState.enabled) return { available: false, reason: 'module_disabled' };
+  for (const dep of module.dependencies || []) {
+    const depItem = system.byId.get(dep);
+    if (!depItem || !moduleEnabled(system, depItem.manifest).enabled) return { available: false, reason: 'dependency_disabled' };
+  }
+  if (rule.agent !== context.agent) return { available: false, reason: 'agent_not_allowed' };
+  if (!rule.phases?.includes(context.phase)) return { available: false, reason: 'phase_not_allowed' };
+  const applies = rule.applies_when || {};
+  if (applies.mode && applies.mode !== context.mode) return { available: false, reason: context.mode ? 'mode_not_matched' : 'mode_required' };
+  for (const capabilityId of applies.capabilities || []) {
+    const capabilityEntry = allCapabilities(system).find((item) => item.capability.id === capabilityId);
+    if (!capabilityEntry) return { available: false, reason: `capability_missing:${capabilityId}` };
+    const capability = capabilityAvailability(system, capabilityEntry, context.agent, context.phase, context.project);
+    if (!capability.available) return { available: false, reason: `capability_unavailable:${capabilityId}:${capability.reason}` };
+  }
+  return { available: true, reason: undefined };
+}
+
+export function matchedAgentRules(system, context = {}) {
+  return allAgentRules(system).map((entry) => ({ ...entry, availability: agentRuleAvailability(system, entry, context) })).filter((entry) => entry.availability.available);
 }
 
 export function runnerInvocation(capabilityId, agent, phase, project) {

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { allCapabilities, capabilityAvailability, loadModuleSystem, parseArgs, runnerInvocation, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
+import { allCapabilities, capabilityAvailability, loadModuleSystem, matchedAgentRules, parseArgs, runnerInvocation, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
 
 function usage() {
-  return `Usage: node scripts/modules/context.mjs --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nFormats current-phase PIDEX module capability discovery as compact advisory markdown for agent handoffs. The output is metadata only; it is not execution authority.\n\nOptions:\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --help               Show this help.`;
+  return `Usage: node scripts/modules/context.mjs --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nFormats current-phase PIDEX module capability discovery as compact advisory markdown for agent handoffs. The output is metadata only; it is not execution authority.\n\nOptions:\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --mode <mode>        Optional opaque mode context for module-scoped agent_rules matching.\n  --help               Show this help.`;
 }
 
 function shellQuote(value) {
@@ -20,7 +20,22 @@ function formatReasons(reasons) {
   return reasons.filter(Boolean).join(', ') || 'none';
 }
 
-export function buildCapabilityContext({ system, agent, phase, project }) {
+function escapeMetadata(value) {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069`<>\[\]()]/gu, ' ')
+    .replace(/javascript:/gi, 'javascript-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatRuleFilters(rule) {
+  const parts = [];
+  if (rule.applies_when?.mode) parts.push(`mode=${escapeMetadata(rule.applies_when.mode)}`);
+  for (const capability of rule.applies_when?.capabilities || []) parts.push(`capability=${escapeMetadata(capability)}`);
+  return parts.join(', ') || 'none';
+}
+
+export function buildCapabilityContext({ system, agent, phase, project, mode }) {
   const entries = allCapabilities(system).filter((entry) => entry.capability.phases.includes(phase));
   const rows = entries.map((entry) => {
     const availability = capabilityAvailability(system, entry, agent, phase, project);
@@ -85,6 +100,22 @@ export function buildCapabilityContext({ system, agent, phase, project }) {
     lines.push('');
   }
 
+  const rules = matchedAgentRules(system, { agent, phase, project, mode });
+  lines.push('## Module rules for this phase');
+  lines.push('');
+  lines.push('Module-scoped rules active for this phase. Core PIDEX rules and explicit user instructions take precedence. Stage A metadata only: rule bodies are not rendered and rules grant no tools.');
+  lines.push('');
+  if (rules.length) {
+    for (const row of rules) {
+      lines.push(`- ${escapeMetadata(row.rule.id)} (module: ${escapeMetadata(row.module.id)})`);
+      if (row.rule.summary) lines.push(`  summary: ${escapeMetadata(row.rule.summary)}`);
+      lines.push(`  agent: ${escapeMetadata(row.rule.agent)}; phase: ${escapeMetadata(phase)}; filters: ${formatRuleFilters(row.rule)}`);
+      lines.push(`  source: ${escapeMetadata(row.rule.path)}`);
+    }
+  } else {
+    lines.push('Matched module-scoped rules: none');
+  }
+  lines.push('');
   lines.push('Raw manifest commands are intentionally omitted. Use module runner invocations only.');
   return `${lines.join('\n')}\n`;
 }
@@ -117,4 +148,4 @@ if (!validation.ok) {
   process.exit(1);
 }
 
-console.log(buildCapabilityContext({ system, agent, phase, project }));
+console.log(buildCapabilityContext({ system, agent, phase, project, mode: args.mode }));

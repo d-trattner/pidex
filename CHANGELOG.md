@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added Initiative 022 module-scoped `agent_rules` Stage A: module manifests can now declare validated, module-id-prefixed, metadata-only agent rule files with strict path, size, symlink, metadata, authority, agent/phase, mode, and capability-availability controls; `context.mjs --mode` shows matched rule provenance without rendering rule bodies or injecting prompts. Code review, security R2, QA, UAT, full `corepack pnpm run check`, and public readiness passed.
 - UAT passed for Initiative 021 Project Pipeline browser-smoke orchestration Slice 4: `/pd` can auto-discover browser-smoke request artifacts after validation phases, run deterministic host bridge checks, and return archive-relative evidence to same-agent final verdict tasks without manual bridge commands or host-direct fallback.
 - UAT passed for Initiative 021 Project Pipeline browser-smoke contract Slice 3 host bridge/capability: controlled request-artifact bridge, registry-managed preview URL provenance, no-overwrite archive evidence, and trusted runtime root approved for release; `/pd` automation remains Slice 4.
 - QA passed for Initiative 021 Project Pipeline browser-smoke contract Slice 3 host bridge/capability: 32 focused tests green, CLI typed-skip smoke green, full `corepack pnpm run check` green, public readiness green, and Fallow recorded.

@@ -4,7 +4,7 @@ PIDEX modules are an internal architecture boundary for PIDEX-owned workflow fea
 
 ## Current status
 
-The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, and read-only dashboard transparency.
+The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, module-scoped `agent_rules` metadata discovery, and read-only dashboard transparency.
 
 Physically migrated first-party modules now include:
 
@@ -26,7 +26,8 @@ Not implemented yet:
 - dashboard feature contribution loader;
 - dashboard module management UI;
 - removal of compatibility wrappers;
-- external rule contributions.
+- external rule contributions;
+- module rule content rendering or prompt injection.
 
 ## Runtime root
 
@@ -129,7 +130,7 @@ node scripts/modules/discover.mjs \
   --project "$PWD"
 ```
 
-Format current-phase capabilities as compact advisory markdown for agent handoffs:
+Format current-phase capabilities and matched module-scoped rule metadata as compact markdown for agent handoffs:
 
 ```bash
 node scripts/modules/context.mjs \
@@ -173,7 +174,9 @@ The pseudo-agent `orchestrator` receives a phase-grouped capability map with the
 
 Discovery returns runner invocations by default, not raw implementation commands. Raw commands are visible only with `--debug`.
 
-`context.mjs` turns discovery into handoff markdown. Its output is advisory-only metadata; it does not grant permission to execute checks. Agents should execute only checks explicitly requested by the handoff and should use `scripts/modules/run-check.mjs` runner invocations.
+`context.mjs` turns discovery into handoff markdown. Capability output is advisory-only metadata; it does not grant permission to execute checks. Agents should execute only checks explicitly requested by the handoff and should use `scripts/modules/run-check.mjs` runner invocations.
+
+Module-scoped `agent_rules` are shown as metadata only in Stage A. They are filter-bound by enabled module, dependencies, agent, phase, explicit `--mode`, and capability availability. The context output lists rule id/module/path provenance and precedence text, but it does not render rule bodies, inject rules into prompts automatically, or grant tools. Disabled modules and unavailable capability filters suppress matching rules. Core PIDEX/global rules and explicit user instructions take precedence over module-scoped rules.
 
 Deterministic scripts are different from agents: `install.sh`, `uninstall.sh`, `doctor.sh`, smoke scripts, and package scripts must not discover capabilities and choose one dynamically. They own their policy decision and call fixed capability IDs through `run-check.mjs`; the module system owns only path resolution, availability checks, execution, and evidence.
 
@@ -230,7 +233,7 @@ Evidence rows use:
 - Do not modularize dashboard host/core as a normal module.
 - Do not move dashboard feature slices until a dashboard contribution/feature-loader design exists.
 - Do not add third-party loading yet.
-- Do not let optional modules silently add process rules.
+- Do not let optional modules silently add global process rules. Module-scoped `agent_rules` are allowed only when manifest-declared, validated, visible in context metadata, filter-bound, disabled-module-suppressed, and lower precedence than core PIDEX/global rules.
 - Treat 100% first-party modularity as an ownership/classification scorecard: physical module-owned, fixed core, public-contract exception, or explicit deferred backlog.
 
 ## Wrapper lifecycle
