@@ -13,6 +13,7 @@ import { loadProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
 import { runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
+import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
 
 export const DEFAULT_PROJECT_PIPELINE_PHASES = Object.freeze([
   'pidex-planner',
@@ -45,6 +46,16 @@ const PHASE_OUTPUT_PREFIX = Object.freeze({
 });
 
 const BROWSER_SMOKE_REQUEST_SEGMENTS = Object.freeze({ 'pidex-qa': 'qa', 'pidex-uat': 'uat', 'pidex-devops': 'devops' });
+const AGENT_RULE_PHASE = Object.freeze({
+  'pidex-planner': 'planning',
+  'pidex-critic': 'critic-review',
+  'pidex-implementer': 'implementation',
+  'pidex-code-reviewer': 'code-review',
+  'pidex-security': 'security',
+  'pidex-qa': 'qa',
+  'pidex-uat': 'uat',
+  'pidex-devops': 'devops',
+});
 
 const PHASE_ROLE_GUIDANCE = Object.freeze({
   'pidex-planner': 'Plan the work. Produce a concrete implementation plan, risks, test strategy, and explicit acceptance criteria. Do not change source files in planning.',
@@ -83,7 +94,7 @@ function summarizeRunForPublicResult(run = {}) {
   };
 }
 
-export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseIndex, phaseCount }) {
+export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseIndex, phaseCount, moduleRulesText = '' }) {
   const routeTo = nextPhase || 'orchestrator';
   const artifactPrefix = phaseOutputPrefix(phase);
   const lines = [
@@ -96,6 +107,7 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
     'Do not mirror source back to the host. Host archive sync is limited to agents.output/** and wiki/**.',
     `Phase role guidance: ${phaseRoleGuidance(phase)}`,
     `Expected artifact path prefix: ${artifactPrefix}`,
+    ...(moduleRulesText ? [`## Module-scoped rules active for this Project Pipeline phase\n\n${moduleRulesText}`] : []),
     `Original user task:\n${initialTask || ''}`,
   ];
   if (looksLikeUiTask(initialTask)) {
@@ -127,6 +139,22 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
     'The context_file value must be a relative agents.output/** path, never an absolute path.',
   ].join('\n'));
   return lines.join('\n\n');
+}
+
+export function projectPipelineRulePhase(agent) {
+  return AGENT_RULE_PHASE[agent] || String(agent || '').replace(/^pidex-/, '');
+}
+
+export function renderProjectPipelineModuleRules(options = {}) {
+  if (options.moduleRules === false) return '';
+  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+  const context = { agent: options.agent, phase: projectPipelineRulePhase(options.agent), project: path.resolve(options.project || pidexRoot), mode: 'project-pipeline' };
+  if (options.moduleRuleRenderer) return options.moduleRuleRenderer({ ...options, ...context, pidexRoot }) || '';
+  const system = loadModuleSystem(pidexRoot);
+  const validation = validateSystem(system);
+  if (!validation.ok) throw new Error(`module validation failed for Project Pipeline rule injection: ${validation.errors.join('; ')}`);
+  if (!matchedAgentRules(system, context).length) return '';
+  return renderMatchedAgentRules(system, context, { maxBytes: options.maxBytes || 16 * 1024 }).trim();
 }
 
 function walkJsonFiles(root, out = []) {
@@ -276,7 +304,8 @@ export async function runProjectPipelineOrchestration(options = {}) {
   let previous;
   for (let i = 0; i < phases.length; i += 1) {
     const agent = phases[i];
-    const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length });
+    const moduleRulesText = renderProjectPipelineModuleRules({ pidexRoot, agent, project: pidexRoot, moduleRules: options.moduleRules, moduleRuleRenderer: options.moduleRuleRenderer, maxBytes: options.moduleRulesMaxBytes });
+    const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length, moduleRulesText });
     let run;
     let retryCount = 0;
     const runAgentOnce = (phaseTask) => runProjectPipelineAgent({

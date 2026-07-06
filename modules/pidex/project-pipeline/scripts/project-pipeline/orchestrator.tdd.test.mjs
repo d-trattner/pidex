@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildBrowserSmokeVerdictTask, buildPhaseTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
+import { buildBrowserSmokeVerdictTask, buildPhaseTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 
@@ -69,6 +69,14 @@ test('buildPhaseTask includes preview gate instructions for UI tasks without sou
   assert.doesNotMatch(task, /export source/i);
 });
 
+test('buildPhaseTask injects rendered module-scoped rules when provided', () => {
+  const rules = '## Rendered module-scoped rules\n\n### Rule: pidex.project-pipeline.browser-smoke.qa-request\n\nDo not include preview URLs.';
+  const task = buildPhaseTask({ phase: 'pidex-qa', initialTask: 'Build UI', nextPhase: 'orchestrator', phaseIndex: 0, phaseCount: 1, moduleRulesText: rules });
+  assert.match(task, /^## Module-scoped rules active for this Project Pipeline phase$/m);
+  assert.match(task, /pidex\.project-pipeline\.browser-smoke\.qa-request/);
+  assert.match(task, /Do not include preview URLs/);
+});
+
 test('buildPhaseTask does not force preview setup for non-UI tasks', () => {
   const task = buildPhaseTask({ phase: 'pidex-implementer', initialTask: 'Refactor backend parser tests', nextPhase: 'pidex-code-reviewer', phaseIndex: 2, phaseCount: 4 });
   assert.doesNotMatch(task, /UI preview gate/i);
@@ -84,6 +92,50 @@ test('buildPhaseTask gives validation phases mutation and Fallow instructions', 
   const qaTask = buildPhaseTask({ phase: 'pidex-qa', initialTask: 'ship it', previous: { agent: 'pidex-security', context_file: 'agents.output/security/a.md' }, phaseIndex: 5, phaseCount: 6 });
   assert.match(qaTask, /route_to: orchestrator/);
   assert.match(qaTask, /Expected artifact path prefix: agents\.output\/qa\//);
+});
+
+test('renderProjectPipelineModuleRules returns Project Pipeline QA rules and no implementer rules', () => {
+  const rules = renderProjectPipelineModuleRules({ pidexRoot: path.resolve('.'), agent: 'pidex-qa', project: path.resolve('.') });
+  assert.match(rules, /pidex\.project-pipeline\.browser-smoke\.qa-request/);
+  assert.match(rules, /# Project Pipeline browser-smoke request rules for QA/);
+  assert.doesNotMatch(rules, /pidex\.project-pipeline\.browser-smoke\.devops-reachability/);
+  assert.equal(renderProjectPipelineModuleRules({ pidexRoot: path.resolve('.'), agent: 'pidex-implementer', project: path.resolve('.') }), '');
+  assert.equal(projectPipelineRulePhase('pidex-code-reviewer'), 'code-review');
+});
+
+test('runProjectPipelineOrchestration injects module-scoped rules into validation phase prompts only', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-rules');
+  const prompts = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = String(args.at(-1));
+      prompts.push(prompt);
+      const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-unknown';
+      const context = `agents.output/${agent}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, 'agents.output', agent), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), `# ${agent}\n`);
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot,
+    projectId: 'pp-orch-rules',
+    task: 'Build dashboard UI',
+    phases: ['pidex-implementer', 'pidex-qa'],
+    archiveWorkspace,
+    runner,
+    moduleRuleRenderer: ({ agent, phase }) => (agent === 'pidex-qa' && phase === 'qa' ? '## Rendered module-scoped rules\n\n### Rule: pidex.project-pipeline.browser-smoke.qa-request\n\nQA must decide whether browser smoke is required.' : ''),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(prompts.length, 2);
+  assert.doesNotMatch(prompts[0], /Module-scoped rules active/);
+  assert.match(prompts[1], /^## Module-scoped rules active for this Project Pipeline phase$/m);
+  assert.match(prompts[1], /pidex\.project-pipeline\.browser-smoke\.qa-request/);
+  rmSync(pidexRoot, { recursive: true, force: true });
 });
 
 test('runProjectPipelineOrchestration runs phases sequentially and records archive contexts', async () => {
@@ -104,7 +156,7 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
     }
     return 'ok';
   };
-  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-test', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-test', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner, moduleRules: false });
   assert.equal(result.ok, true);
   assert.deepEqual(execAgents, ['pidex-planner', 'pidex-critic', 'pidex-qa']);
   assert.equal(result.runs.length, 3);
