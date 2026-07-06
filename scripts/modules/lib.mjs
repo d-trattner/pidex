@@ -384,6 +384,79 @@ export function matchedAgentRules(system, context = {}) {
   return allAgentRules(system).map((entry) => ({ ...entry, availability: agentRuleAvailability(system, entry, context) })).filter((entry) => entry.availability.available);
 }
 
+export function agentRuleFilePath(system, entry) {
+  return path.join(moduleRootFromManifestFile(system, entry.module), entry.rule.path);
+}
+
+export function unsafeAgentRuleContentReasons(content) {
+  const text = String(content || '');
+  const checks = [
+    ['ignore-core-rules', /\b(ignore|bypass|override)\b[\s\S]{0,80}\b(core|global|pidex)\b[\s\S]{0,80}\brules?\b/i],
+    ['ignore-user-or-system', /\b(ignore|bypass|override)\b[\s\S]{0,80}\b(system|developer|user)\b[\s\S]{0,80}\b(instructions?|messages?)\b/i],
+    ['secret-request', /\b(reveal|print|dump|exfiltrate|show)\b[\s\S]{0,80}\b(secret|token|password|credential|api[_-]?key)\b/i],
+    ['tool-grant-language', /\b(grant|enable|allow)\b[\s\S]{0,80}\b(tool|shell|bash|exec|spawn|playwright)\b/i],
+    ['hidden-implementation-path', /modules\/pidex\/[^\s`]+\/scripts\/[^\s`]+/i],
+    ['raw-script-execution', /\b(node|bash|sh|python|pnpm|npm)\s+modules\/pidex\//i],
+    ['bidi-control', /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u],
+  ];
+  return checks.filter(([, pattern]) => pattern.test(text)).map(([reason]) => reason);
+}
+
+export function renderMatchedAgentRules(system, context = {}, options = {}) {
+  const maxBytes = Number.isInteger(options.maxBytes) ? options.maxBytes : 64 * 1024;
+  const lines = [
+    '## Rendered module-scoped rules',
+    '',
+    'Core PIDEX rules and explicit user instructions take precedence. Module-scoped rules are active only for the matched module, agent, phase, mode, and capability filters. Rules grant no tools by themselves.',
+    '',
+  ];
+  const matched = matchedAgentRules(system, context);
+  if (!matched.length) {
+    lines.push('Matched module-scoped rules: none');
+    return `${lines.join('\n')}\n`;
+  }
+  let usedBytes = Buffer.byteLength(`${lines.join('\n')}\n`, 'utf8');
+  let capReached = false;
+  const appendBlock = (block) => {
+    const text = `${block.trimEnd()}\n\n`;
+    const bytes = Buffer.byteLength(text, 'utf8');
+    if (usedBytes + bytes > maxBytes) return false;
+    lines.push(block.trimEnd(), '');
+    usedBytes += bytes;
+    return true;
+  };
+  const appendFinalSentinel = () => {
+    if (capReached) return;
+    capReached = true;
+    appendBlock('SKIPPED: aggregate-size-cap');
+  };
+  for (const entry of matched) {
+    if (capReached) break;
+    const file = agentRuleFilePath(system, entry);
+    const body = readFileSync(file, 'utf8');
+    const reasons = unsafeAgentRuleContentReasons(body);
+    const header = [
+      `### Rule: ${entry.rule.id}`,
+      '',
+      `Module: ${entry.module.id}`,
+      `Agent: ${entry.rule.agent}`,
+      `Phase: ${context.phase}`,
+      `Source: ${entry.rule.path}`,
+      '',
+    ].join('\n');
+    if (reasons.length) {
+      if (!appendBlock(`${header}BLOCKED: unsafe module rule content (${reasons.join(', ')})`)) appendFinalSentinel();
+      continue;
+    }
+    const block = `${header}${body.trimEnd()}`;
+    if (!appendBlock(block)) {
+      if (!appendBlock(`${header}SKIPPED: aggregate-size-cap`)) appendFinalSentinel();
+    }
+  }
+  const rendered = `${lines.join('\n')}\n`;
+  return Buffer.byteLength(rendered, 'utf8') <= maxBytes ? rendered : `${lines.slice(0, 4).join('\n')}\n`;
+}
+
 export function runnerInvocation(capabilityId, agent, phase, project) {
   return { bin: 'node', args: ['scripts/modules/run-check.mjs', '--capability', capabilityId, '--agent', agent, '--phase', phase, '--project', project] };
 }

@@ -141,6 +141,18 @@ node scripts/modules/context.mjs \
 pnpm run modules:context
 ```
 
+Render matched module-scoped rule bodies with provenance wrappers:
+
+```bash
+node scripts/modules/render-rules.mjs \
+  --agent pidex-qa \
+  --phase qa \
+  --project "$PWD" \
+  --mode project-pipeline
+```
+
+This helper renders only rules matched by enabled module, dependencies, agent, phase, explicit mode, and capability availability. It wraps rendered rules with precedence/provenance text, enforces aggregate size caps, and blocks unsafe content patterns. It still does not inject prompts or grant tools.
+
 Run a capability through the module runner:
 
 ```bash
@@ -177,6 +189,8 @@ Discovery returns runner invocations by default, not raw implementation commands
 `context.mjs` turns discovery into handoff markdown. Capability output is advisory-only metadata; it does not grant permission to execute checks. Agents should execute only checks explicitly requested by the handoff and should use `scripts/modules/run-check.mjs` runner invocations.
 
 Module-scoped `agent_rules` are shown as metadata only in Stage A. They are filter-bound by enabled module, dependencies, agent, phase, explicit `--mode`, and capability availability. The context output lists rule id/module/path provenance and precedence text, but it does not render rule bodies, inject rules into prompts automatically, or grant tools. Disabled modules and unavailable capability filters suppress matching rules. Core PIDEX/global rules and explicit user instructions take precedence over module-scoped rules.
+
+Stage B adds `render-rules.mjs` as an explicit rendering helper. It renders matched rule bodies with provenance wrappers for reviewed consumers, but it still does not inject those rules into live agent prompts automatically.
 
 Deterministic scripts are different from agents: `install.sh`, `uninstall.sh`, `doctor.sh`, smoke scripts, and package scripts must not discover capabilities and choose one dynamically. They own their policy decision and call fixed capability IDs through `run-check.mjs`; the module system owns only path resolution, availability checks, execution, and evidence.
 
