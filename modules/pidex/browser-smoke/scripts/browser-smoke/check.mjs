@@ -64,7 +64,7 @@ function writeResult(outputDir, result) {
 }
 
 function resolvePlaywright(project = process.cwd(), stateDir = browserSmokePaths().stateDir) {
-  for (const baseDir of [path.resolve(project), stateDir]) {
+  for (const baseDir of [path.resolve(project), path.resolve(stateDir)]) {
     for (const pkg of ['playwright', '@playwright/test']) {
       try {
         const req = createRequire(path.join(baseDir, 'package.json'));
@@ -78,6 +78,19 @@ function resolvePlaywright(project = process.cwd(), stateDir = browserSmokePaths
 async function loadPlaywright(resolvedModule) {
   const mod = await import(pathToFileURL(resolvedModule).href);
   return mod.chromium ? mod : (mod.default || mod);
+}
+
+function cacheDirFromStateDir(stateDir) {
+  const resolved = path.resolve(stateDir || browserSmokePaths().stateDir);
+  return path.join(path.dirname(path.dirname(resolved)), '.cache', 'ms-playwright');
+}
+
+function ensurePlaywrightBrowsersPath(resolved, options = {}) {
+  if (options.playwright) return;
+  const stateDir = path.resolve(options.stateDir || browserSmokePaths().stateDir);
+  const sourceDir = resolved?.source_dir ? path.resolve(resolved.source_dir) : '';
+  const browsersPath = options.browsersPath || (sourceDir === stateDir ? cacheDirFromStateDir(stateDir) : '');
+  if (browsersPath && !process.env.PLAYWRIGHT_BROWSERS_PATH) process.env.PLAYWRIGHT_BROWSERS_PATH = path.resolve(browsersPath);
 }
 
 function isLoopbackHost(hostname) {
@@ -150,6 +163,7 @@ export async function runBrowserSmokeCheck(options = {}) {
   let browser;
   const startedAt = new Date().toISOString();
   try {
+    ensurePlaywrightBrowsersPath(resolved, options);
     const playwright = resolved.playwright || await loadPlaywright(resolved.resolved);
     if (!playwright.chromium) return writeResult(outputDir, failResult(request, BROWSER_SMOKE_STATUS.BLOCKED_INFRA, 'chromium-api-unavailable', url, { preview_url_source: previewUrlSource }));
     browser = await playwright.chromium.launch({ headless: true });

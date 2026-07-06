@@ -107,6 +107,7 @@ export async function runProjectPipelineBrowserSmokeRequest(options = {}) {
     outputRoot: browserSmokeBridgeRoot(pidexRoot, projectId),
     project: runtime.stateDir,
     stateDir: runtime.stateDir,
+    browsersPath: runtime.cacheDir,
     playwright: options.playwright,
     previewUrlSource: validated.preview_url_source,
   });

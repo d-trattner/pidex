@@ -122,6 +122,7 @@ test('runProjectPipelineBrowserSmokeRequest reserves result dir and invokes gene
   assert.equal(calls[0].outputRoot, browserSmokeBridgeRoot(pidexRoot, projectId));
   assert.equal(calls[0].project, browserSmokePaths(pidexRoot).stateDir);
   assert.equal(calls[0].stateDir, browserSmokePaths(pidexRoot).stateDir);
+  assert.equal(calls[0].browsersPath, browserSmokePaths(pidexRoot).cacheDir);
   assert.equal(calls[0].previewUrlSource, 'project-pipeline-registry');
   assert.equal(existsSync(result.result_file), true);
   assert.equal(JSON.parse(readFileSync(result.result_file, 'utf8')).preview_url_source, 'project-pipeline-registry');

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed Project Pipeline browser-smoke host bridge to use the PIDEX-local Playwright browser cache automatically. Remote tmux validation on the test server proved the host bridge can run Playwright against a live Project Sandbox managed preview without manually setting `PLAYWRIGHT_BROWSERS_PATH`.
+- QA passed for Project Pipeline browser-smoke host cache fix: focused check/bridge regressions 18/18 green, full `corepack pnpm run check` green, public readiness green, Fallow recorded, and remote tmux no-env E2E evidence accepted.
+- UAT passed for Project Pipeline browser-smoke host cache fix: implementation, code review, security, and QA evidence demonstrate no-env host-side Playwright bridge works against live managed preview with PIDEX-local cache and sandbox cleanup complete.
+
 ## 0.1.11 - 2026-07-06
 
 Browser-smoke automation and module-scoped `agent_rules` integration:

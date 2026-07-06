@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { BROWSER_SMOKE_STATUS } from './status.mjs';
@@ -64,6 +64,42 @@ test('runBrowserSmokeCheck reports failed feature when assertion fails and does 
   assert.equal(result.ok, false);
   assert.equal(result.checks.find((check) => check.type === 'title').ok, false);
   assert.deepEqual(launchOptions[0], { headless: true });
+});
+
+test('runBrowserSmokeCheck sets PIDEX-local browser cache path before loading local Playwright', async () => {
+  const root = tmp();
+  const stateDir = path.join(root, 'state', 'browser-smoke');
+  const cacheDir = path.join(root, '.cache', 'ms-playwright');
+  const pkgDir = path.join(stateDir, 'node_modules', '@playwright', 'test');
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(path.join(stateDir, 'package.json'), '{"type":"module"}\n');
+  writeFileSync(path.join(pkgDir, 'package.json'), '{"type":"module","main":"index.mjs"}\n');
+  writeFileSync(path.join(pkgDir, 'index.mjs'), `
+export const chromium = {
+  launch: async () => {
+    if (process.env.PLAYWRIGHT_BROWSERS_PATH !== ${JSON.stringify(cacheDir)}) throw new Error('wrong browsers path: ' + process.env.PLAYWRIGHT_BROWSERS_PATH);
+    return {
+      newPage: async () => ({
+        on: () => {},
+        goto: async () => {},
+        title: async () => 'Demo App',
+        locator: () => ({ textContent: async () => 'Ready body', count: async () => 1 }),
+        screenshot: async () => {},
+      }),
+      close: async () => {},
+    };
+  },
+};
+`);
+  const previous = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+  try {
+    const result = await runBrowserSmokeCheck({ url: 'http://localhost:42080/', request: request({ capture: { screenshot: false, console_errors: true } }), outputDir: tmp(), project: path.join(root, 'missing-project'), stateDir, browsersPath: cacheDir });
+    assert.equal(result.status, BROWSER_SMOKE_STATUS.PASS);
+  } finally {
+    if (previous === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+    else process.env.PLAYWRIGHT_BROWSERS_PATH = previous;
+  }
 });
 
 test('runBrowserSmokeCheck returns typed skip when Playwright is not configured', async () => {
