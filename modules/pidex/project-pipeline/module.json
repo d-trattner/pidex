@@ -5,6 +5,58 @@
   "kind": "optional-internal",
   "default_enabled": true,
   "dependencies": ["pidex.core"],
+  "agent_rules": [
+    {
+      "id": "pidex.project-pipeline.browser-smoke.qa-request",
+      "agent": "pidex-qa",
+      "phases": ["qa"],
+      "path": "rules/pidex-qa/browser-smoke-request.md",
+      "authority": "module-scoped",
+      "summary": "Project Pipeline QA browser-smoke request rules",
+      "audience_scope": "project-pipeline",
+      "applies_when": { "mode": "project-pipeline", "capabilities": ["project-pipeline.browser-smoke"] }
+    },
+    {
+      "id": "pidex.project-pipeline.browser-smoke.qa-verdict",
+      "agent": "pidex-qa",
+      "phases": ["qa"],
+      "path": "rules/pidex-qa/browser-smoke-verdict.md",
+      "authority": "module-scoped",
+      "summary": "Project Pipeline QA browser-smoke verdict rules",
+      "audience_scope": "project-pipeline",
+      "applies_when": { "mode": "project-pipeline", "capabilities": ["project-pipeline.browser-smoke"] }
+    },
+    {
+      "id": "pidex.project-pipeline.browser-smoke.uat-request",
+      "agent": "pidex-uat",
+      "phases": ["uat"],
+      "path": "rules/pidex-uat/browser-smoke-request.md",
+      "authority": "module-scoped",
+      "summary": "Project Pipeline UAT browser-smoke request rules",
+      "audience_scope": "project-pipeline",
+      "applies_when": { "mode": "project-pipeline", "capabilities": ["project-pipeline.browser-smoke"] }
+    },
+    {
+      "id": "pidex.project-pipeline.browser-smoke.uat-verdict",
+      "agent": "pidex-uat",
+      "phases": ["uat"],
+      "path": "rules/pidex-uat/browser-smoke-verdict.md",
+      "authority": "module-scoped",
+      "summary": "Project Pipeline UAT browser-smoke verdict rules",
+      "audience_scope": "project-pipeline",
+      "applies_when": { "mode": "project-pipeline", "capabilities": ["project-pipeline.browser-smoke"] }
+    },
+    {
+      "id": "pidex.project-pipeline.browser-smoke.devops-reachability",
+      "agent": "pidex-devops",
+      "phases": ["devops"],
+      "path": "rules/pidex-devops/browser-smoke-reachability.md",
+      "authority": "module-scoped",
+      "summary": "Project Pipeline DevOps browser-smoke reachability rules",
+      "audience_scope": "project-pipeline",
+      "applies_when": { "mode": "project-pipeline", "capabilities": ["project-pipeline.browser-smoke"] }
+    }
+  ],
   "capabilities": [
     {
       "id": "project-pipeline.image",
