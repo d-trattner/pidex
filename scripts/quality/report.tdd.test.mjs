@@ -33,6 +33,11 @@ let summary = summarize({ metrics: [], pipeline_events: [], orchestrator_events:
 assert.equal(summary.operator_trace.observed_operator_events.OpRuleAction, 1);
 assert.equal(summary.rule_actions_as_operators[0].operator_type, 'OpRuleAction');
 
+summary = summarize({ metrics: [{ plan: '4', project_mode: 'project-pipeline', source: 'project_pipeline_orchestrator', agent: 'pidex-qa', timestamp: '2026-01-01T00:00:00Z' }], pipeline_events: [{ plan: '4', project_mode: 'project-pipeline', source: 'project_pipeline_orchestrator', event_type: 'pipeline_started', timestamp: '2026-01-01T00:00:00Z' }], orchestrator_events: [], rule_actions: [], routing_artifacts: [], rules: [], untracked_rule_changes: [], pidex_root_rule_actions: [], pidex_root_untracked_rule_changes: [] }, ['plan-004']);
+assert.equal(summary.project_mode, 'project-pipeline');
+assert.equal(summary.mode_coverage.project_pipeline_rows, 2);
+assert.deepEqual(summary.mode_coverage.observed_project_modes, { 'project-pipeline': 2 });
+
 trace = build_expected_observed({ metrics: [], pipeline_events: [{ plan: '4', event_type: 'pipeline_completed', _source_path: 'x' }], orchestrator_events: [], rule_actions: [] }, ['plan-004']);
 assert.equal(trace.expected_required, 1);
 assert.ok(trace.findings.some((f) => f.operator_type === 'OpQualityReview' && f.type === 'instrumentation_missing' && f.contract_id === 'operator.OpQualityReview.terminal-pdq'));
@@ -103,5 +108,5 @@ assert.equal(summary.rule_action_windows[0].label, 'insufficient-data');
 assert.ok(summary.regression_detectors.some((r) => r.dimension === 'rule-lifecycle'));
 
 const td = mkdtempSync(path.join(os.tmpdir(), 'pidex-report-md-'));
-try { const out = path.join(td, 'report.md'); write_markdown({ generated_at: 'now', project_path: '/tmp/project', summary: { ...summary, recent_rule_actions: [{ action: 'monitor', status: 'monitoring', expected_impact_dimension: 'routing-correctness' }], untracked_rule_changes: [{ path: 'rules/pidex-qa/new.md', git_status: '??' }], pidex_root_untracked_rule_changes: [{ path: 'rules/pidex-planner/root-new.md', git_status: '??' }] } }, out); const text = readFileSync(out, 'utf8'); for (const needle of ['PIDEX Quality Report', 'Expected-vs-Observed Operator Trace', 'Rule-Action Ledger', 'Untracked Rule Changes', 'PIDEX Root Rule Hygiene', 'rules/pidex-qa/new.md', 'rules/pidex-planner/root-new.md', 'routing-correctness']) assert.match(text, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))); } finally { rmSync(td, { recursive: true, force: true }); }
+try { const out = path.join(td, 'report.md'); write_markdown({ generated_at: 'now', project_path: '/tmp/project', summary: { ...summary, recent_rule_actions: [{ action: 'monitor', status: 'monitoring', expected_impact_dimension: 'routing-correctness' }], untracked_rule_changes: [{ path: 'rules/pidex-qa/new.md', git_status: '??' }], pidex_root_untracked_rule_changes: [{ path: 'rules/pidex-planner/root-new.md', git_status: '??' }] } }, out); const text = readFileSync(out, 'utf8'); for (const needle of ['PIDEX Quality Report', 'Mode / Telemetry Coverage', 'Project mode:', 'Expected-vs-Observed Operator Trace', 'Rule-Action Ledger', 'Untracked Rule Changes', 'PIDEX Root Rule Hygiene', 'rules/pidex-qa/new.md', 'rules/pidex-planner/root-new.md', 'routing-correctness']) assert.match(text, new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))); } finally { rmSync(td, { recursive: true, force: true }); }
 console.log('quality report.mjs tests passed');

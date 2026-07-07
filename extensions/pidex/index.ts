@@ -1987,6 +1987,8 @@ function runPidexQualityReport(cwd: string, argsLine?: string): { ok: boolean; s
 				`JSON: ${payload.json}`,
 				payload.review_state ? `Review state: ${payload.review_state}` : undefined,
 				payload.plans ? `Plans: ${(payload.plans ?? []).join(", ") || "none"}` : undefined,
+				payload.project_mode ? `Project mode: ${payload.project_mode}` : undefined,
+				Array.isArray(payload.mode_warnings) && payload.mode_warnings.length ? `Mode warnings: ${payload.mode_warnings.join("; ")}` : undefined,
 				payload.confidence ? `Confidence: ${payload.confidence}` : undefined,
 				payload.trace_gaps !== undefined ? `Trace gaps: ${payload.trace_gaps}` : undefined,
 			].filter(Boolean).join("\n"),

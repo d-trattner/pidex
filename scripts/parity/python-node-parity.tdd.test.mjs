@@ -37,7 +37,7 @@ function stable(value) {
   if (value && typeof value === 'object') {
     const out = {};
     for (const [k, v] of Object.entries(value).sort()) {
-      if (['timestamp', 'generated_at', 'created_at', 'updated_at', 'last_hygiene_at', 'installed_at', 'uninstalled_at', 'operator_decisions', 'operator_decisions_by_type', 'operator_decisions_by_reason', 'valid_skips', 'expectation_corrections', 'valid_skip_count', 'contract_id', 'expected_when', 'observed_state', 'allowed_skip_reasons', 'resolution_options', 'decision_evidence'].includes(k)) continue;
+      if (['timestamp', 'generated_at', 'created_at', 'updated_at', 'last_hygiene_at', 'installed_at', 'uninstalled_at', 'operator_decisions', 'operator_decisions_by_type', 'operator_decisions_by_reason', 'valid_skips', 'expectation_corrections', 'valid_skip_count', 'contract_id', 'expected_when', 'observed_state', 'allowed_skip_reasons', 'resolution_options', 'decision_evidence', 'project_mode', 'mode_coverage'].includes(k)) continue;
       if (String(k).startsWith('_source')) continue;
       out[k] = stable(v);
     }
