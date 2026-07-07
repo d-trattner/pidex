@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildBrowserSmokeVerdictTask, buildPhaseTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
+import { buildBrowserSmokeVerdictTask, buildPhaseTask, buildProjectPipelineSecondaryLaneTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 
@@ -109,6 +109,18 @@ test('buildPhaseTask gives validation phases mutation and Fallow instructions', 
   assert.match(qaTask, /Expected artifact path prefix: agents\.output\/qa\//);
 });
 
+test('Project Pipeline secondary lane task is artifact-only and archive-syncable', () => {
+  const lane = { lane_id: 'pidex-critic:deepseek:model', agent: 'pidex-critic', provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model' };
+  const artifact = projectPipelineParallelArtifactPath({ ...lane, trigger: 'after-plan' });
+  assert.equal(artifact, 'agents.output/parallel-agents/pidex-critic.deepseek.model.after-plan.md');
+  const task = buildProjectPipelineSecondaryLaneTask({ lane, trigger: 'after-plan', primary: { context_file: 'agents.output/critiques/primary.md' }, initialTask: 'ship it' });
+  assert.match(task, /PIDEX mode: project-pipeline/);
+  assert.match(task, /inside the persistent Project Sandbox at \/workspace/);
+  assert.match(task, /Write only the assigned artifact path/);
+  assert.match(task, /Do not edit source files, config, rules, wiki, project memory/);
+  assert.match(task, new RegExp(artifact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
 test('renderProjectPipelineModuleRules returns Project Pipeline QA rules and no implementer rules', () => {
   const rules = renderProjectPipelineModuleRules({ pidexRoot: path.resolve('.'), agent: 'pidex-qa', project: path.resolve('.') });
   assert.match(rules, /pidex\.project-pipeline\.browser-smoke\.qa-request/);
@@ -188,6 +200,49 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   const eventRows = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
   assert.deepEqual(eventRows.map((row) => row.event_type), ['pipeline_started', 'pipeline_completed']);
   assert.equal(eventRows.every((row) => row.project_mode === 'project-pipeline'), true);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration runs configured secondary lane and merge before next phase', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-parallel');
+  const prompts = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = String(args.at(-1));
+      prompts.push(prompt);
+      const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-unknown';
+      const secondary = prompt.includes('configured secondary review lane');
+      const context = secondary ? 'agents.output/parallel-agents/pidex-critic.deepseek.model.after-plan.md' : `agents.output/${agent}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), secondary ? '# secondary critic\n' : `# ${agent}\n`);
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot,
+    projectId: 'pp-orch-parallel',
+    task: 'ship it',
+    phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'],
+    archiveWorkspace,
+    runner,
+    moduleRules: false,
+    parallelLaneProvider: ({ agent, trigger }) => agent === 'pidex-critic' && trigger === 'after-plan'
+      ? [{ lane_id: 'pidex-critic:deepseek:model', agent, provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model', effort: 'low' }]
+      : [],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.runs.some((run) => run.parallel_role === 'secondary' && run.parallel_lane_id === 'pidex-critic:deepseek:model'), true);
+  assert.equal(result.runs.some((run) => run.parallel_role === 'merge' && run.context_file === 'agents.output/parallel-agents/after-plan-merge.md'), true);
+  assert.equal(prompts.some((prompt) => /configured secondary review lane/.test(prompt)), true);
+  assert.match(prompts.at(-1), /Previous context file in the container: agents\.output\/parallel-agents\/after-plan-merge\.md/);
+  assert.equal(existsSync(path.join(pidexRoot, 'state/project-archives/pp-orch-parallel/agents.output/parallel-agents/after-plan-merge.md')), true);
+  const metricRows = readJsonlRecursive(path.join(pidexRoot, 'state', 'metrics'));
+  assert.equal(metricRows.some((row) => row.parallel_role === 'secondary' && row.parallel_lane_id === 'pidex-critic:deepseek:model'), true);
+  assert.equal(metricRows.some((row) => row.parallel_role === 'merge' && row.parallel_trigger === 'after-plan'), true);
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 

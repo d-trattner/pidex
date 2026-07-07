@@ -1228,6 +1228,8 @@ Secondary artifact suffixes:
 Secondary lane brief requirements:
 ```text
 This is a configured secondary review lane for PIDEX parallel agents.
+PIDEX mode: <host-direct|hardened-pipeline>.
+If mode is hardened-pipeline, host project source remains canonical; treat sandbox output/evidence as review input only and do not apply source changes.
 Lane: <lane_id>.
 Do not overwrite the primary artifact.
 Write only the assigned secondary artifact file.

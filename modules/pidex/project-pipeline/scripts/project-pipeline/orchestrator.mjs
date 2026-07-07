@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +10,9 @@ import { buildImage, DEFAULT_TAG, imageStatus } from './image.mjs';
 import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
-import { runProjectPipelineAgent } from './run-agent.mjs';
+import { copyArchiveWorkspaceFromContainer, runProjectPipelineAgent } from './run-agent.mjs';
 import { loadProjectRecord } from './registry.mjs';
-import { resolveArchiveRoot } from './archive-sync.mjs';
+import { resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
 import { runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
 import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
@@ -56,6 +58,29 @@ const AGENT_RULE_PHASE = Object.freeze({
   'pidex-uat': 'uat',
   'pidex-devops': 'devops',
 });
+
+const PARALLEL_TRIGGER_BY_PRIMARY_AGENT = Object.freeze({
+  'pidex-critic': 'after-plan',
+  'pidex-code-reviewer': 'after-implementation',
+});
+
+function safeLaneSegment(value) {
+  const segment = String(value || 'unknown').trim().toLowerCase().replace(/[^a-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+  return segment || 'unknown';
+}
+
+export function projectPipelineParallelArtifactPath(lane = {}) {
+  const agent = String(lane.agent || 'pidex-secondary');
+  if (!/^pidex-[a-z0-9-]+$/.test(agent)) throw new Error(`invalid parallel lane agent: ${agent}`);
+  const trigger = safeLaneSegment(lane.trigger || 'parallel');
+  const provider = safeLaneSegment(lane.provider || lane.runner_provider || 'provider');
+  const model = safeLaneSegment(lane.model || lane.runner_model || 'model');
+  return `agents.output/parallel-agents/${agent}.${provider}.${model}.${trigger}.md`;
+}
+
+export function projectPipelineMergeArtifactPath(trigger = 'parallel') {
+  return `agents.output/parallel-agents/${safeLaneSegment(trigger)}-merge.md`;
+}
 
 const PHASE_ROLE_GUIDANCE = Object.freeze({
   'pidex-planner': 'Plan the work. Produce a concrete implementation plan, risks, test strategy, and explicit acceptance criteria. Do not change source files in planning.',
@@ -142,6 +167,9 @@ function appendProjectPipelineMetric({ pidexRoot, record, pipelineId, planKey = 
       project_id: record.project_id,
       project_run_id: run.project_run_id || null,
       pipeline_id: pipelineId,
+      parallel_lane_id: run.parallel_lane_id || null,
+      parallel_trigger: run.parallel_trigger || null,
+      parallel_role: run.parallel_role || null,
       agent: agent || run.agent || 'unknown',
       provider: 'project-pipeline',
       model: null,
@@ -214,6 +242,86 @@ export function projectPipelineRulePhase(agent) {
   return AGENT_RULE_PHASE[agent] || String(agent || '').replace(/^pidex-/, '');
 }
 
+function defaultEligibleParallelLanes({ pidexRoot, agent, trigger }) {
+  const statusScript = path.join(pidexRoot, 'modules/pidex/parallel-agents/scripts/status.mjs');
+  if (!existsSync(statusScript)) return [];
+  const proc = spawnSync(process.execPath, [statusScript, '--root', pidexRoot, 'eligible', '--agent', agent, '--trigger', trigger, '--json'], { cwd: pidexRoot, encoding: 'utf8', timeout: 30_000 });
+  if (proc.status !== 0) return [];
+  try {
+    const parsed = JSON.parse(proc.stdout || '{}');
+    return Array.isArray(parsed.lanes) ? parsed.lanes : [];
+  } catch {
+    return [];
+  }
+}
+
+export function buildProjectPipelineSecondaryLaneTask({ lane, trigger, primary, initialTask }) {
+  const artifactPath = projectPipelineParallelArtifactPath({ ...lane, trigger });
+  return [
+    `Project Pipeline configured secondary review lane: ${lane.lane_id || `${lane.agent}:${lane.provider || lane.runner_provider}:${lane.model || lane.runner_model}`}.`,
+    'PIDEX mode: project-pipeline.',
+    'You are running inside the persistent Project Sandbox at /workspace.',
+    'This is an advisory secondary/parallel review lane, not the primary lane.',
+    `Trigger: ${trigger}.`,
+    `Primary artifact in container: ${primary?.context_file || 'unknown'}`,
+    `Assigned artifact path: ${artifactPath}`,
+    'Write only the assigned artifact path. Do not edit source files, config, rules, wiki, project memory, or any other artifact path.',
+    'Do not spawn nested parallel lanes. Do not route directly to implementation, release, or the user.',
+    'Review the primary artifact and project state relevant to the original task. Put deferred/non-blocking findings inside your assigned artifact as candidates for orchestrator merge/adjudication.',
+    `Original user task:\n${initialTask || ''}`,
+    [
+      'Finish with a ROUTING HTML comment exactly like:',
+      '<!-- ROUTING',
+      'verdict: COMPLETE',
+      'route_to: orchestrator',
+      'reason: secondary lane review complete',
+      `context_file: ${artifactPath}`,
+      '-->',
+      'The context_file value must exactly match the assigned artifact path.',
+    ].join('\n'),
+  ].join('\n\n');
+}
+
+export function buildProjectPipelineParallelMergeMarkdown({ trigger, primary, laneSummaries = [] }) {
+  const lines = [
+    `# Project Pipeline Parallel Merge — ${trigger}`,
+    '',
+    '## Primary artifact',
+    '',
+    `- agent: ${primary?.agent || 'unknown'}`,
+    `- context_file: ${primary?.context_file || 'unknown'}`,
+    `- archive_context_file: ${primary?.archive_context_file || 'unknown'}`,
+    '',
+    '## Secondary lanes',
+    '',
+  ];
+  if (!laneSummaries.length) lines.push('- No eligible secondary lanes ran.');
+  for (const lane of laneSummaries) {
+    lines.push(`- lane: ${lane.lane_id || 'unknown'}; status: ${lane.ok ? 'complete' : 'failed'}; context_file: ${lane.context_file || 'none'}; archive_context_file: ${lane.archive_context_file || 'none'}${lane.error ? `; error: ${lane.error}` : ''}`);
+  }
+  lines.push(
+    '',
+    '## Adjudication',
+    '',
+    '- accepted: none recorded by deterministic merge; read lane artifacts for advisory findings.',
+    '- deferred: none recorded by deterministic merge.',
+    '- rejected/duplicate: none recorded by deterministic merge.',
+    '',
+    '## Route decision',
+    '',
+    'Continue with the primary Project Pipeline route unless a later orchestrator/user review of the lane artifacts decides otherwise.',
+    '',
+    '<!-- ROUTING',
+    'verdict: COMPLETE',
+    'route_to: orchestrator',
+    'reason: parallel secondary lane merge recorded',
+    `context_file: ${projectPipelineMergeArtifactPath(trigger)}`,
+    '-->',
+    '',
+  );
+  return lines.join('\n');
+}
+
 export function renderProjectPipelineModuleRules(options = {}) {
   if (options.moduleRules === false) return '';
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
@@ -258,6 +366,36 @@ export async function runBrowserSmokeBridgeForPhase(options = {}) {
     if (result?.status_reason !== 'duplicate-request') results.push(result);
   }
   return results;
+}
+
+function writeProjectPipelineMergeArtifact({ pidexRoot, record, trigger, markdown, archiveWorkspace, runner }) {
+  const mergePath = projectPipelineMergeArtifactPath(trigger);
+  let syncReport;
+  let archiveContextFile;
+  if (archiveWorkspace) {
+    const full = path.join(archiveWorkspace, mergePath);
+    mkdirSync(path.dirname(full), { recursive: true });
+    writeFileSync(full, markdown, 'utf8');
+    syncReport = syncProjectArchive({ workspace: archiveWorkspace, pidexRoot, projectId: record.project_id });
+    archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, mergePath);
+    return { ok: syncReport.ok, context_file: mergePath, archive_context_file: archiveContextFile, archive_sync_status: syncReport.ok ? 'complete' : 'failed', archiveSyncReport: syncReport };
+  }
+  const temp = mkdtempSync(path.join(tmpdir(), 'pidex-project-parallel-merge-'));
+  try {
+    const local = path.join(temp, path.basename(mergePath));
+    writeFileSync(local, markdown, 'utf8');
+    const dockerRunner = runner || (() => ({ status: 1, stdout: '', stderr: 'no runner' }));
+    dockerRunner(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', '/workspace/agents.output/parallel-agents']);
+    dockerRunner(['cp', local, `${record.docker.container_name}:/workspace/${mergePath}`]);
+    const copied = copyArchiveWorkspaceFromContainer(record, dockerRunner);
+    syncReport = syncProjectArchive({ workspace: copied.workspace, pidexRoot, projectId: record.project_id });
+    if (copied.warnings?.length) syncReport.warnings.push(...copied.warnings);
+    archiveContextFile = path.join(pidexRoot, 'state', 'project-archives', record.project_id, mergePath);
+    rmSync(copied.temp, { recursive: true, force: true });
+    return { ok: syncReport.ok, context_file: mergePath, archive_context_file: archiveContextFile, archive_sync_status: syncReport.ok ? 'complete' : 'failed', archiveSyncReport: syncReport };
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
 }
 
 export function sanitizeBrowserSmokeResultForSandbox(item = {}, { pidexRoot, projectId } = {}) {
@@ -409,6 +547,41 @@ export async function runProjectPipelineOrchestration(options = {}) {
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
     }
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
+
+    const parallelTrigger = options.parallelAgents === false ? undefined : PARALLEL_TRIGGER_BY_PRIMARY_AGENT[agent];
+    if (parallelTrigger) {
+      const eligible = (options.parallelLaneProvider || defaultEligibleParallelLanes)({ pidexRoot, projectId, agent, trigger: parallelTrigger });
+      const laneSummaries = [];
+      for (const lane of eligible) {
+        const laneTask = buildProjectPipelineSecondaryLaneTask({ lane: { ...lane, agent }, trigger: parallelTrigger, primary: previous, initialTask: options.task || '' });
+        const laneRun = runProjectPipelineAgent({
+          pidexRoot,
+          projectId,
+          agent,
+          task: laneTask,
+          providerOverride: lane.runner_provider,
+          modelOverride: lane.runner_model,
+          effortOverride: lane.effort,
+          archiveFromContainer: options.archiveFromContainer !== false,
+          archiveWorkspace: options.archiveWorkspace,
+          runner: options.runner,
+          archiveCopyRunner: options.runner,
+        });
+        const laneSummary = { agent, ok: laneRun.ok, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
+        laneSummaries.push(laneSummary);
+        runs.push(laneSummary);
+        appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: laneSummary, source: 'parallel_agents' });
+      }
+      if (laneSummaries.length) {
+        const mergeMarkdown = buildProjectPipelineParallelMergeMarkdown({ trigger: parallelTrigger, primary: previous, laneSummaries });
+        const merge = writeProjectPipelineMergeArtifact({ pidexRoot, record: telemetryRecord, trigger: parallelTrigger, markdown: mergeMarkdown, archiveWorkspace: options.archiveWorkspace, runner: options.runner });
+        const mergeSummary = { agent: 'orchestrator', ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, archive_sync_status: merge.archive_sync_status, parallel_trigger: parallelTrigger, parallel_role: 'merge' };
+        runs.push(mergeSummary);
+        appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent: 'orchestrator', run: mergeSummary, source: 'parallel_agents_merge' });
+        if (merge.ok) previous = { agent: 'orchestrator', context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: previous.project_run_id };
+      }
+    }
+
     if (options.browserSmokeAuto !== false && BROWSER_SMOKE_REQUEST_SEGMENTS[agent]) {
       const browserSmokeResults = await runBrowserSmokeBridgeForPhase({ pidexRoot, projectId, agent, browserSmokeBridgeRunner: options.browserSmokeBridgeRunner, now: options.now, maxAgeMs: options.browserSmokeMaxAgeMs, playwright: options.playwright });
       if (browserSmokeResults.length) {
