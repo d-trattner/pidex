@@ -15,6 +15,7 @@ type RunRow = {
   timestamp: unknown;
   project: unknown;
   plan_key: unknown;
+  project_mode: unknown;
   agent: unknown;
   provider: unknown;
   model: unknown;
@@ -32,6 +33,7 @@ type PipelineRow = {
   completed_at: unknown;
   project: unknown;
   plan_key: unknown;
+  project_mode: unknown;
   agent_runs: unknown;
   distinct_agents: unknown;
   wall_runtime_ms: unknown;
@@ -164,6 +166,7 @@ function RunsPlaceholder() {
               <th>Started</th>
               <th>Project</th>
               <th>Plan</th>
+              <th>Mode</th>
               <th>Agent</th>
               <th>Provider</th>
               <th>Model</th>
@@ -181,6 +184,7 @@ function RunsPlaceholder() {
                 <td>{formatDate(row.timestamp)}</td>
                 <td>{formatText(row.project)}</td>
                 <td>{formatText(row.plan_key)}</td>
+                <td>{formatText(row.project_mode)}</td>
                 <td>{formatText(row.agent)}</td>
                 <td>{formatText(row.provider)}</td>
                 <td>{formatText(row.model)}</td>
@@ -192,7 +196,7 @@ function RunsPlaceholder() {
               </tr>
             ))}
             {runs.length === 0 && (
-              <tr><td colSpan={12}>No runs loaded yet.</td></tr>
+              <tr><td colSpan={13}>No runs loaded yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -209,6 +213,7 @@ function RunsPlaceholder() {
                 <th>Completed</th>
                 <th>Project</th>
                 <th>Plan</th>
+                <th>Mode</th>
                 <th>Agent Runs</th>
                 <th>Agents</th>
                 <th>Wall Time</th>
@@ -227,6 +232,7 @@ function RunsPlaceholder() {
                   <td>{formatDate(row.completed_at)}</td>
                   <td>{formatText(row.project)}</td>
                   <td>{formatText(row.plan_key)}</td>
+                  <td>{formatText(row.project_mode)}</td>
                   <td>{formatNumber(row.agent_runs)}</td>
                   <td>{formatNumber(row.distinct_agents)}</td>
                   <td>{formatDuration(row.wall_runtime_ms)}</td>

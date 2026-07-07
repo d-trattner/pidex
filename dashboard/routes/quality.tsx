@@ -76,6 +76,7 @@ type QualityPayload = {
   gatesByPipeline: Array<{ project?: string | null; plan_key?: string | null; gates?: number | string | null; failures?: number | string | null; total_runtime_ms?: number | string | null; cost_usd?: number | string | null }>;
   reworkByPipeline: Array<{ project?: string | null; plan_key?: string | null; agent_runs?: number | string | null; gates?: number | string | null; failures?: number | string | null; total_runtime_ms?: number | string | null; cost_usd?: number | string | null }>;
   plannerRevisionsByPlan: Array<{ project?: string | null; plan_key?: string | null; planner_runs?: number | string | null }>;
+  runsByMode: Array<{ project_mode?: string | null; count?: number | string | null; failures?: number | string | null; cost_usd?: number | string | null }>;
   analystVerdicts: unknown;
   qualityImpactByDay: unknown[];
   infraMarkers: Record<string, unknown>;
@@ -168,6 +169,7 @@ const EMPTY_QUALITY: QualityPayload = {
   gatesByPipeline: [],
   reworkByPipeline: [],
   plannerRevisionsByPlan: [],
+  runsByMode: [],
   analystVerdicts: [],
   qualityImpactByDay: [],
   infraMarkers: {},
@@ -292,6 +294,12 @@ function QualityPage() {
   const managedIncluded = (latestQuality?.included_projects || []).filter((item) => item.project !== 'pidex');
   const managedTraceGaps = managedIncluded.length ? managedIncluded.reduce((sum, item) => sum + safeNumber(item.trace_gaps), 0) : latestQuality?.trace_gaps || 0;
   const managedCritical = managedIncluded.length ? managedIncluded.reduce((sum, item) => sum + safeNumber(item.critical_missing_operators), 0) : latestQuality?.critical_missing_operators || 0;
+  const modeRows = (quality?.runsByMode || []).map((row) => ({
+    project_mode: row.project_mode || 'unknown',
+    count: safeNumber(row.count),
+    failures: safeNumber(row.failures),
+    cost_usd: safeNumber(row.cost_usd),
+  }));
   const regressionHeatmap = latestQuality
     ? Object.values(latestQuality.regression_detectors.reduce<Record<string, { dimension: string; low: number; medium: number; high: number; critical: number; confidence: string; reason: string }>>((acc, item) => {
         const dimension = String(item.dimension || 'unknown');
@@ -369,6 +377,30 @@ function QualityPage() {
             caveats="This avoids a fake single quality score and does not claim causality."
           />
         </div>
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full">
+        <div className="card-heading-row">
+          <div>
+            <h3>Mode telemetry</h3>
+            <p className="muted">Run counts by saved/observed PIDEX project mode. Use this to spot missing Project Pipeline or hardened-pipeline telemetry before comparing quality trends.</p>
+          </div>
+          <HelpPopover
+            title="Mode telemetry"
+            shows="Agent-run counts grouped by project_mode from standard PIDEX metrics."
+            source="agent_runs.project_mode populated by host PIDEX and Project Pipeline telemetry."
+            reading="Unknown means legacy or not-yet-tagged telemetry. Project Pipeline rows prove archive/container runs reached standard metrics."
+            improve="Run a fresh /pd flow in the selected mode if expected rows are missing."
+            caveats="This is observability coverage, not a quality verdict by itself."
+          />
+        </div>
+        {modeRows.length ? (
+          <div className="table-scroll">
+            <table className="table" aria-label="mode telemetry table"><thead><tr><th>Mode</th><th>Runs</th><th>Failures</th><th>Cost</th></tr></thead><tbody>
+              {modeRows.map((row) => <tr key={String(row.project_mode)}><td>{row.project_mode}</td><td>{row.count}</td><td>{row.failures}</td><td>${row.cost_usd.toFixed(5)}</td></tr>)}
+            </tbody></table>
+          </div>
+        ) : <p className="muted">No mode telemetry loaded yet.</p>}
       </article>
 
       <article className="glass-card glass quality-card quality-card-full">

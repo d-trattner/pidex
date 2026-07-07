@@ -53,7 +53,7 @@ test('root layout mounts shared header and mobile menu controls', async () => {
 
   const navText = await readFile(join(componentsRoot.pathname, 'navigation/global-nav.tsx'), 'utf8');
   assert.match(navText, /to:\s*'\/live'/, 'shared nav should include /live route');
-  assert.match(navText, /label:\s*'Overview'/, 'shared nav should include Overview label');
+  assert.match(navText, /label:\s*'Dashboard'/, 'shared nav should include Dashboard label');
   assert.match(navText, /event\.key === 'Tab'/, 'mobile sheet should trap Tab focus');
   assert.match(navText, /querySelectorAll\('a\[href\], button/, 'mobile sheet should collect tabbable elements for focus trap');
 });
@@ -97,12 +97,27 @@ test('limits page uses table scroll wrapper and stable unique row keys', async (
   assert.match(limitsText, /const rows = payload\?\.limits\?\.length \? payload\.limits : payload\?\.records \|\| \[\]/, 'limits should fallback to records when limits missing');
 });
 
+test('dashboard surfaces project mode telemetry in overview runs and quality pages', async () => {
+  const overviewText = await readFile(join(rootRouteRoot.pathname, 'overview.tsx'), 'utf8');
+  assert.match(overviewText, /by_mode/, 'overview payload should include mode counts');
+  assert.match(overviewText, /Top Mode/, 'overview should show top project mode tile');
+
+  const runsText = await readFile(join(rootRouteRoot.pathname, 'runs.tsx'), 'utf8');
+  assert.match(runsText, /project_mode/, 'runs payload should include project mode');
+  assert.match(runsText, /<th>Mode<\/th>/, 'runs tables should show mode column');
+
+  const qualityText = await readFile(join(rootRouteRoot.pathname, 'quality.tsx'), 'utf8');
+  assert.match(qualityText, /runsByMode/, 'quality payload should include mode health rows');
+  assert.match(qualityText, /Mode telemetry/, 'quality page should show mode telemetry section');
+  assert.match(qualityText, /agent_runs\.project_mode/, 'quality help text should cite project mode source');
+});
+
 test('pipelines route guards object-valued fields before rendering cells', async () => {
   const pipelinesText = await readFile(join(rootRouteRoot.pathname, 'pipelines.tsx'), 'utf8');
   assert.match(pipelinesText, /function formatText\(value: unknown\): string/, 'pipelines should normalize unknown text values to render-safe strings');
   assert.match(pipelinesText, /if \(value == null\) return '—';/, 'text formatter should handle nullish values');
   assert.match(pipelinesText, /if \(typeof value === 'object'\) return '—';/, 'text formatter should reject object values');
-  assert.match(pipelinesText, /const endpoint = '\/api\/pipelines';/, 'pipelines should avoid coercing router search object into endpoint string');
+  assert.match(pipelinesText, /withProjectParam\('\/api\/pipelines', project\)/, 'pipelines should avoid coercing router search object into endpoint string');
   assert.match(pipelinesText, /<td>\{formatText\(row\.project\)\}<\/td>/, 'project cell should use safe text formatter');
   assert.match(pipelinesText, /<td>\{formatText\(row\.plan_key\)\}<\/td>/, 'plan key cell should use safe text formatter');
   assert.match(pipelinesText, /key=\{`\$\{formatText\(row\.completed_at\)\}-\$\{formatText\(row\.project\)\}-\$\{formatText\(row\.plan_key\)\}-\$\{index\}`\}/, 'row key should avoid direct object coercion');

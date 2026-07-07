@@ -32,6 +32,7 @@ export interface DashboardSummary {
   estimated_cost: number | null;
   by_model: Array<{ model: string; count: number }>;
   by_agent: Array<{ agent: string; count: number }>;
+  by_mode: Array<{ project_mode: string; count: number }>;
 }
 
 export function parseSearchParams(search = ''): URLSearchParams {
@@ -71,7 +72,7 @@ export async function getSummary(search = ''): Promise<DashboardSummary> {
     [...projectFilter.params, ...projectFilter.params],
   ) || { started: 0, completed: 0 };
 
-  const [pipelineEvents, agentRuns, secondaryArtifacts, mergeArtifacts, malformedSecondary, cost, byModel, byAgent, projects] =
+  const [pipelineEvents, agentRuns, secondaryArtifacts, mergeArtifacts, malformedSecondary, cost, byModel, byAgent, byMode, projects] =
     await Promise.all([
       queryValue<number>(`SELECT COUNT(*) AS count FROM pipeline_events pe JOIN projects p ON p.id = pe.project_id WHERE 1=1 ${projectFilter.sql}`, [...projectFilter.params]),
       queryValue<number>(`SELECT COUNT(*) AS count FROM agent_runs ar JOIN projects p ON p.id = ar.project_id ${where}`, [...projectFilter.params]),
@@ -103,6 +104,14 @@ export async function getSummary(search = ''): Promise<DashboardSummary> {
          ORDER BY count DESC`,
         [...projectFilter.params],
       ),
+      queryRows<{ project_mode: string; count: number }>(
+        `SELECT COALESCE(NULLIF(ar.project_mode, ''), 'unknown') AS project_mode, COUNT(*) AS count
+         FROM agent_runs ar JOIN projects p ON p.id = ar.project_id
+         WHERE 1=1 ${projectFilter.sql}
+         GROUP BY 1
+         ORDER BY count DESC, project_mode ASC`,
+        [...projectFilter.params],
+      ),
       queryValue<number>(`SELECT COUNT(DISTINCT p.id) AS count FROM projects p WHERE 1=1 ${projectFilter.sql}`, [...projectFilter.params]),
     ]);
 
@@ -119,6 +128,7 @@ export async function getSummary(search = ''): Promise<DashboardSummary> {
     estimated_cost: cost == null ? null : Number(cost),
     by_model: byModel,
     by_agent: byAgent,
+    by_mode: byMode,
   };
 }
 
@@ -133,7 +143,7 @@ export async function listRuns(search = ''): Promise<DbRow[]> {
 
   const baseWhere = `WHERE 1=1 ${projectFilter.sql}${providerClause.clause}`;
   const rows = await queryRows<DbRow>(
-    `SELECT ar.timestamp, p.name AS project, ar.plan_key, ar.agent, ar.provider, ar.model, ar.verdict,
+    `SELECT ar.timestamp, p.name AS project, ar.plan_key, ar.project_mode, ar.agent, ar.provider, ar.model, ar.verdict,
             ar.route_to, ar.gate, ar.duration_ms, ar.input_tokens, ar.output_tokens,
             ROUND(ar.cost_usd, 5) AS cost_usd, ar.context_file
      FROM agent_runs ar JOIN projects p ON p.id = ar.project_id
@@ -156,6 +166,7 @@ export async function listPipelines(search = ''): Promise<DbRow[]> {
         ar.project_id,
         p.name AS project,
         ar.plan_key,
+        COALESCE(NULLIF(MAX(ar.project_mode), ''), 'unknown') AS project_mode,
         MIN(ar.timestamp) AS started_at,
         MAX(CASE WHEN ar.agent IN ('pidex-devops','pidex-roadmap','pidex-pi') OR ar.route_to IN ('pidex-roadmap','user') OR ar.verdict IN ('Released','COMPLETE') THEN ar.timestamp END) AS completed_at,
         COUNT(*) AS agent_runs,
@@ -383,6 +394,16 @@ export async function qualityChartData(search = ''): Promise<JsonObject> {
       ),
     ]);
 
+  const runsByMode = await queryRows<DbRow>(
+    `SELECT COALESCE(NULLIF(ar.project_mode, ''), 'unknown') AS project_mode, COUNT(*) AS count,
+            SUM(CASE WHEN ar.exit_code IS NOT NULL AND ar.exit_code != 0 THEN 1 ELSE 0 END) AS failures,
+            ROUND(SUM(COALESCE(ar.cost_usd, 0)), 5) AS cost_usd
+     FROM agent_runs ar JOIN projects p ON p.id = ar.project_id
+     WHERE 1=1 ${projectFilter.sql}
+     GROUP BY 1 ORDER BY count DESC, project_mode ASC`,
+    [...projectFilter.params],
+  );
+
   return {
     completionByDay,
     agentVerdicts,
@@ -396,6 +417,7 @@ export async function qualityChartData(search = ''): Promise<JsonObject> {
     reworkByPipeline,
     plannerRevisionsByPlan,
     g9ByDay,
+    runsByMode,
     analystVerdicts: (await listAnalysis('pipeline-analysis')) as unknown as JsonValue,
     qualityImpactByDay: [],
     infraMarkers: {},

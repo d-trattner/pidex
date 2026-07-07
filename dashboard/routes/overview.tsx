@@ -20,6 +20,7 @@ type SummaryPayload = {
   estimated_cost: number | null;
   by_model: Array<{ model: string; count: number }>;
   by_agent: Array<{ agent: string; count: number }>;
+  by_mode: Array<{ project_mode: string; count: number }>;
 };
 
 function DashboardOverviewPage() {
@@ -70,6 +71,12 @@ function DashboardOverviewPage() {
             value={data?.by_agent?.[0]?.agent || '—'}
             subtitle={data?.by_agent?.[0]?.count ? `${data.by_agent[0].count} runs` : 'no agent data'}
             icon={<ShieldAlert size={18} />}
+          />
+          <MetricTile
+            title="Top Mode"
+            value={data?.by_mode?.[0]?.project_mode || '—'}
+            subtitle={data?.by_mode?.[0]?.count ? `${data.by_mode[0].count} runs` : 'no mode telemetry'}
+            icon={<GitBranch size={18} />}
           />
         </>
       )}
