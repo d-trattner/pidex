@@ -58,15 +58,19 @@ test('project mode docs include supporting feature mode behavior rows', () => {
   for (const row of supportingFeatureRows) {
     assert.equal(modesDoc.includes(row), true, row);
   }
-  assert.match(modesDoc, /Initiative 030 F4/);
-  assert.match(modesDoc, /Initiative 030 F7/);
+  assert.match(modesDoc, /host project directory regardless of mode/);
+  assert.match(modesDoc, /mode\/archive metrics should be expanded/);
 });
 
 test('project mode docs capture intentional mode-specific differences', () => {
   assert.match(modesDoc, /Project Pipeline managed preview is mode-native/);
   assert.match(modesDoc, /Project Pipeline browser-smoke automation is mode-native today/);
   assert.match(modesDoc, /Hardened-pipeline is temporary protection/);
-  assert.match(modesDoc, /Project Pipeline source is not mirrored back to the host automatically/);
+  assert.match(modesDoc, /Host-direct should remain the least-boundary, lowest-overhead mode/);
+  assert.match(modesDoc, /Project Pipeline source is intentionally not mirrored back to the host automatically/);
+  assert.match(modesDoc, /Project-specific PIDEX context, wiki, and memory files live in the host project directory/);
+  assert.match(modesDoc, /live prompt injection is a module need, not a baseline requirement/);
+  assert.match(modesDoc, /parallel secondary lanes in every mode/);
   assert.match(modesDoc, /must state mode impact explicitly/);
   assert.match(modesDoc, /quality governance, dashboard views, provider profiles, project context/);
 });
