@@ -60,7 +60,8 @@ test('project mode docs include supporting feature mode behavior rows', () => {
     assert.equal(modesDoc.includes(row), true, row);
   }
   assert.match(modesDoc, /host project directory regardless of mode/);
-  assert.match(modesDoc, /mode\/archive metrics should be expanded/);
+  assert.match(modesDoc, /saved\/observed `project_mode`/);
+  assert.match(modesDoc, /parallel-lane telemetry/);
 });
 
 test('project mode docs capture intentional mode-specific differences', () => {
@@ -71,7 +72,7 @@ test('project mode docs capture intentional mode-specific differences', () => {
   assert.match(modesDoc, /Project Pipeline source is intentionally not mirrored back to the host automatically/);
   assert.match(modesDoc, /Project-specific PIDEX context, wiki, and memory files live in the host project directory/);
   assert.match(modesDoc, /live prompt injection is a module need, not a baseline requirement/);
-  assert.match(modesDoc, /parallel secondary lanes in every mode/);
+  assert.match(modesDoc, /true concurrency and richer dashboard\/PDQ lane visualization/);
   assert.match(modesDoc, /must state mode impact explicitly/);
   assert.match(modesDoc, /quality governance, dashboard views, provider profiles, project context/);
 });
