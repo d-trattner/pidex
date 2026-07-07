@@ -4,6 +4,7 @@
 
 - Added Initiative 030 F1 project mode capability matrix documenting `host-direct`, `hardened-pipeline`, and `project-pipeline` support boundaries, supporting feature behavior, intentional differences, and required mode-impact rule for future features.
 - Added mode telemetry for standard metrics/events and Project Pipeline phases, preserving optional `project_mode` through dashboard ingest, PDQ mode/source coverage summaries, and dashboard Overview/Runs/Quality mode visibility.
+- Documented the all-mode optional parallel-lane contract for `host-direct`, `hardened-pipeline`, and `project-pipeline` before implementation slices.
 
 ## 0.1.14 - 2026-07-07
 

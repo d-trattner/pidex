@@ -65,14 +65,32 @@ Disable with:
 PIDEX_TELEGRAM_PARALLEL_WARNINGS=0
 ```
 
-## Automatic orchestration
+## Automatic orchestration contract
 
 The PIDEX orchestrator checks configured lanes before supported review gates:
 
-- `after-plan` launches enabled `pidex-critic` secondary lanes alongside the primary critic.
-- `after-implementation` launches enabled `pidex-code-reviewer` secondary lanes alongside the primary reviewer.
+- `after-plan` launches enabled `pidex-critic` secondary lanes for plan review.
+- `after-implementation` launches enabled `pidex-code-reviewer` secondary lanes for implementation review.
 
-Each secondary is a visible `pidex_agent` call with explicit `provider`, `model`, and `effort` from `status.mjs eligible`. For Pi-auth providers such as DeepSeek or Minimax, `eligible` emits `runner_provider=pi` and `runner_model=<provider>/<model>` because `pidex_agent` direct provider overrides only support `pi` and `codex`. Secondary artifacts must use unique paths under `agents.output/**` and are advisory. The orchestrator records lane success/failure in `state/parallel-agents/status.json`, writes a merge/adjudication summary, and continues primary flow unless a secondary reports concrete High/Critical evidence that needs adjudication.
+Each secondary receives explicit lane id, provider, model, effort, trigger, project mode, and assigned artifact path. For Pi-auth providers such as DeepSeek or Minimax, `eligible` emits `runner_provider=pi` and `runner_model=<provider>/<model>` because `pidex_agent` direct provider overrides only support `pi` and `codex`.
+
+Secondary lanes are advisory until the orchestrator writes a merge/adjudication summary. They must write only their assigned `agents.output/**` artifact, must not edit source/config/rules/wiki/memory, and must route back to `orchestrator`.
+
+## Mode contract
+
+Parallel lanes are a target capability for every saved PIDEX project mode, but each mode preserves its own boundary:
+
+| Mode | Lane execution contract |
+|---|---|
+| `host-direct` | Host orchestrator launches visible `pidex_agent` secondary lanes. Disabled/no eligible lanes must add no meaningful overhead. |
+| `hardened-pipeline` | Host source remains canonical. MVP should run secondary review lanes host-side against host artifacts/sandbox evidence; secondary lanes do not apply source changes. |
+| `project-pipeline` | Host orchestrator owns discovery/status/merge, but secondary review lanes run as Project Pipeline child Pi executions inside the Project Sandbox. Source remains container-canonical and archive sync remains `agents.output/**` + `wiki/**`. MVP may execute secondary lanes sequentially; true wall-clock concurrency is an optimization. |
+
+Each trigger with active lanes writes one merge/adjudication artifact under `agents.output/parallel-agents/**`. For Project Pipeline this artifact is written inside `/workspace` and archive-synced.
+
+Telemetry for secondary lanes should include `project_mode`, `parallel_lane_id`, `parallel_trigger`, `parallel_role`, and Project Pipeline identifiers when applicable.
+
+Current implementation note: config/status helpers exist and public defaults are disabled. Full automatic execution across all modes is being implemented in slices; `run-lane.mjs` remains a scaffold until the shared lane/merge contract and mode-specific executors are complete.
 
 ## Guarantees
 

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const modesDoc = readFileSync('readme/modes.md', 'utf8');
 const readme = readFileSync('README.md', 'utf8');
 const projectPipeline = readFileSync('readme/project-pipeline.md', 'utf8');
+const parallelAgents = readFileSync('readme/parallel-agents.md', 'utf8');
 
 const modes = ['host-direct', 'hardened-pipeline', 'project-pipeline'];
 const capabilityRows = [
@@ -79,4 +80,14 @@ test('public docs link the project mode matrix', () => {
   assert.match(readme, /\[Project modes\]\(readme\/modes\.md\)/);
   assert.match(readme, /host-direct.*hardened-pipeline.*project-pipeline/s);
   assert.match(projectPipeline, /\[Project modes\]\(modes\.md\)/);
+});
+
+test('parallel agents docs preserve all-mode boundary contract', () => {
+  assert.match(parallelAgents, /## Mode contract/);
+  for (const mode of modes) assert.equal(parallelAgents.includes(`\`${mode}\``), true, mode);
+  assert.match(parallelAgents, /Disabled\/no eligible lanes must add no meaningful overhead/);
+  assert.match(parallelAgents, /Host source remains canonical/);
+  assert.match(parallelAgents, /Source remains container-canonical/);
+  assert.match(parallelAgents, /MVP may execute secondary lanes sequentially/);
+  assert.match(parallelAgents, /project_mode.*parallel_lane_id.*parallel_trigger.*parallel_role/s);
 });
