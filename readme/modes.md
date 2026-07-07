@@ -37,6 +37,25 @@ Parity means differences are intentional, documented, and tested. It does **not*
 | Windows evidence | Experimental/general coverage incomplete | Helper smoke only; needs fresh real scenario | Focused native Windows Docker Desktop `/pd` + managed preview + browser-smoke pass |
 | Primary management commands | `/pd`, `/pdq`, `/pdwiki`, `/pdmem`, `/pdparallel` | Same host commands plus sandbox evidence | `/pd`, `/pdproject`, archive helpers; host commands may need mode-aware interpretation |
 
+## Supporting feature mode behavior
+
+These features are not always part of the source-changing agent path, but they are user-visible PIDEX surfaces. The table documents where they read, write, or report today so future changes can avoid accidental mode drift.
+
+| Supporting feature | `host-direct` | `hardened-pipeline` | `project-pipeline` |
+|---|---|---|---|
+| Project context / grilling | Reads and writes host project `pidex/context/**`; pre-flight may use project docs before planner handoff | Same host project context; sandboxed agent work must treat host context as orchestrator-provided input | Pre-flight and saved project metadata are host-orchestrated; Project Sandbox source is container-canonical, so context/archive semantics need explicit review before mutation-heavy context features |
+| Quality reports / PDQ | Reads host PIDEX state, project artifacts, metrics, and rules; writes reports under host PIDEX/report locations | Reads host state plus sandbox evidence where available | Needs archive-aware interpretation for Project Pipeline runs; tracked as Initiative 030 F4 |
+| Quality governance / rule learning | Host PIDEX quality state and rule evidence | Host PIDEX quality state plus sandbox run evidence | Host PIDEX quality state; Project Pipeline archive evidence needs explicit data-source mapping |
+| Wiki hygiene | Audits host project `wiki/**` and project-local PIDEX rules | Same host project wiki/rules after sandbox extraction | Needs mode-aware decision: Project Sandbox wiki/archive vs host project path; tracked as Initiative 030 F4 |
+| Project session memory | Writes host project `wiki/session-memory/**` | Writes host project memory outside temporary sandbox | Needs mode-aware decision: host project memory, Project Pipeline archive memory, or container workspace memory; tracked as Initiative 030 F4 |
+| Dashboard views | Host PIDEX dashboard reads host runtime state, metrics, wiki/context summaries, and provider data | Same host dashboard plus any sandbox events that are recorded | Host dashboard reads Project Pipeline archive/state where implemented; unified archive/source UX remains Initiative 030 F7 |
+| Provider limits / profiles | Host PIDEX provider governance and profile state | Same host provider governance; sandboxed phases may inherit constrained routing | Host PIDEX profile state plus copied in-container Pi/provider config for Project Sandbox execution |
+| History / metrics / recent projects | Host PIDEX metrics/history state records runs and recent projects | Host PIDEX metrics/history plus sandbox warnings/evidence when emitted | Host PIDEX history plus Project Pipeline registry/archive records |
+| Host safety / project boundary / Git hooks | Host policy guards and optional global Git hook protect host checkout work | Host guards plus temporary Docker boundary before apply/extract | Host orchestrator guards plus Docker Project Sandbox and archive-only host sync; optional Git hook applies to host repos, not container commits by itself |
+| Package-manager helpers | Detect/build commands against host project package root | Host or sandbox package root depending phase wrapper | In-container `/workspace` package root for Project Sandbox work; host helpers remain PIDEX-runtime utilities unless bridged deliberately |
+| Browser-smoke runtime maintenance | PIDEX-local host Playwright/cache cleanup and preflight | Same host PIDEX runtime maintenance | Same host PIDEX runtime maintenance plus Project Pipeline bridge/archive cleanup considerations |
+| Install / doctor / release readiness | Host PIDEX runtime maintenance, not per-project execution | Same | Same host PIDEX runtime maintenance; Project Sandbox images/volumes are managed separately |
+
 ## Intentional differences
 
 - Project Pipeline managed preview is mode-native because the app runs inside Docker and needs registry-owned port/URL handling. Host-direct and hardened-pipeline projects can run dev servers directly unless a future host preview runner is designed.
@@ -53,12 +72,13 @@ Tracked in Initiative 030 Project Mode Feature Parity:
 2. Whether live module-scoped rule injection should expand beyond Project Pipeline.
 3. Whether Project Pipeline should remain sequential-only or support optional parallel lanes.
 4. Whether `/pdq`, `/pdwiki`, `/pdmem`, and `/pdparallel` need mode-aware data-source summaries.
-5. Whether a unified mode-aware artifact/status command should exist.
-6. Fresh hardened-pipeline validation after the Project Pipeline/browser-smoke work.
+5. Whether dashboard, project context, memory, wiki, quality governance, and history views need one common mode-aware data-source contract.
+6. Whether a unified mode-aware artifact/status command should exist.
+7. Fresh hardened-pipeline validation after the Project Pipeline/browser-smoke work.
 
 ## Rule for future feature changes
 
-Any feature touching `/pd`, `pidex_agent`, artifacts, preview, browser-smoke, credentials, modules, quality reports, memory/wiki commands, or parallel lanes must state mode impact explicitly:
+Any feature touching `/pd`, `pidex_agent`, artifacts, preview, browser-smoke, credentials, modules, quality reports, quality governance, dashboard views, provider profiles, project context, memory/wiki commands, history/metrics, package-manager helpers, host safety hooks, or parallel lanes must state mode impact explicitly:
 
 - applies to all three modes;
 - applies to one or two modes only, with reason;

@@ -24,6 +24,21 @@ const capabilityRows = [
   'Windows evidence',
 ];
 
+const supportingFeatureRows = [
+  'Project context / grilling',
+  'Quality reports / PDQ',
+  'Quality governance / rule learning',
+  'Wiki hygiene',
+  'Project session memory',
+  'Dashboard views',
+  'Provider limits / profiles',
+  'History / metrics / recent projects',
+  'Host safety / project boundary / Git hooks',
+  'Package-manager helpers',
+  'Browser-smoke runtime maintenance',
+  'Install / doctor / release readiness',
+];
+
 test('project mode docs define all supported per-project modes', () => {
   for (const mode of modes) {
     assert.equal(modesDoc.includes(`\`${mode}\``), true, mode);
@@ -38,12 +53,22 @@ test('project mode docs include required capability matrix rows', () => {
   }
 });
 
+test('project mode docs include supporting feature mode behavior rows', () => {
+  assert.match(modesDoc, /## Supporting feature mode behavior/);
+  for (const row of supportingFeatureRows) {
+    assert.equal(modesDoc.includes(row), true, row);
+  }
+  assert.match(modesDoc, /Initiative 030 F4/);
+  assert.match(modesDoc, /Initiative 030 F7/);
+});
+
 test('project mode docs capture intentional mode-specific differences', () => {
   assert.match(modesDoc, /Project Pipeline managed preview is mode-native/);
   assert.match(modesDoc, /Project Pipeline browser-smoke automation is mode-native today/);
   assert.match(modesDoc, /Hardened-pipeline is temporary protection/);
   assert.match(modesDoc, /Project Pipeline source is not mirrored back to the host automatically/);
   assert.match(modesDoc, /must state mode impact explicitly/);
+  assert.match(modesDoc, /quality governance, dashboard views, provider profiles, project context/);
 });
 
 test('public docs link the project mode matrix', () => {
