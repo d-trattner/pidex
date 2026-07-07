@@ -2,9 +2,14 @@
 
 ## Unreleased
 
+## 0.1.13 - 2026-07-06
+
+Project Pipeline browser-smoke request schema hardening:
+
 - Tightened Project Pipeline browser-smoke QA/UAT module rules with the canonical request JSON schema after Windows `/pd` E2E showed QA could emit an ad-hoc invalid request shape; rendered rules now explicitly require `schema: 1`, `project_id`, `contains`, `exists`, and `errors: "none"`, and forbid `request_type`, `project`, `expected`, `expected_text`, `selector`, and `level`.
 - QA passed for Project Pipeline browser-smoke request schema rules fix: focused rendered-rule checks 4/4 green, render spot checks green, `modules:test`, full `check`, public readiness, and Fallow static audit completed.
 - UAT passed for Project Pipeline browser-smoke request schema rules fix: doc chain proves QA/UAT rendered rules now include canonical schema examples, URL key guidance, and forbidden invalid Windows keys; release approved without pre-release Windows G9 rerun.
+- Windows full `/pd` rerun from home passed after the schema-rule fix: `pidex-win-pd-smoke-2` produced a valid QA browser-smoke request, Project Pipeline registry preview URL `http://localhost:42120`, `BROWSER-SMOKE-PASS`, title/text/selector/url/console checks all green, and screenshot evidence archived.
 
 ## 0.1.12 - 2026-07-06
 
