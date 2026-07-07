@@ -1,6 +1,6 @@
 # Project Pipeline
 
-Project Pipeline is PIDEX's local Docker-backed Project Sandbox mode. It is separate from the existing hardened agent sandbox.
+Project Pipeline is PIDEX's local Docker-backed Project Sandbox mode. It is separate from the existing hardened agent sandbox. For a comparison with `host-direct` and `hardened-pipeline`, see [Project modes](modes.md).
 
 In Project Pipeline mode, the project source lives and runs inside a persistent Docker container/volumes. The host receives only reviewable artifacts from the container archive sync.
 

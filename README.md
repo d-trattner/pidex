@@ -28,6 +28,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Wiki hygiene](readme/wiki-hygiene.md)
 - [Optional parallel agents](readme/parallel-agents.md)
 - [Docker sandbox](readme/sandbox.md)
+- [Project modes](readme/modes.md)
 - [Project Pipeline](readme/project-pipeline.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
@@ -176,7 +177,7 @@ In Pi:
 /pidex Work on ~/my-project
 ```
 
-`/pd` is available as a short alias. The orchestrator routes work through Codex-oriented `pidex-*` specialist agents. For projects saved in `project-pipeline` mode, `/pd` runs through the persistent Docker Project Sandbox path instead of host-direct kickoff.
+`/pd` is available as a short alias. The orchestrator routes work through Codex-oriented `pidex-*` specialist agents. PIDEX saves an explicit per-project mode: `host-direct`, `hardened-pipeline`, or `project-pipeline`. See [Project modes](readme/modes.md) for the capability matrix. For projects saved in `project-pipeline` mode, `/pd` runs through the persistent Docker Project Sandbox path instead of host-direct kickoff.
 
 Project session memory:
 
