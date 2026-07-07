@@ -24,6 +24,11 @@ function count(dbPath, table) {
   try { return db.prepare(`select count(*) as n from ${table}`).get().n; }
   finally { db.close(); }
 }
+function value(dbPath, sql) {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try { return Object.values(db.prepare(sql).get())[0]; }
+  finally { db.close(); }
+}
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-ingest-mjs-'));
 try {
@@ -35,10 +40,10 @@ try {
   mkdirSync(path.join(project, 'agents.output', 'parallel-agents'), { recursive: true });
 
   writeFileSync(path.join(state, 'metrics', 'tmp-project', 'plan-001.jsonl'), `${JSON.stringify({
-    timestamp: '2026-01-01T00:00:00Z', project, plan: '1', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.4-mini', input_tokens_estimate: 10, output_tokens_estimate: 20,
+    timestamp: '2026-01-01T00:00:00Z', project, plan: '1', project_mode: 'project-pipeline', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.4-mini', input_tokens_estimate: 10, output_tokens_estimate: 20,
   })}\n`);
   writeFileSync(path.join(state, 'pipeline-events', 'project', 'pipe-1.jsonl'), `${JSON.stringify({
-    timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',
+    timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',
   })}\n`);
   writeFileSync(path.join(project, 'agents.output', 'parallel-agents', '001-merge.md'), `# Merge Summary\n\n| Source | Severity | Classification | Disposition | Summary |\n|---|---|---|---|---|\n| secondary | high | secondary-only | accepted | smoke finding |\n\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: user\n-->\n`);
 
@@ -49,6 +54,8 @@ try {
   assert.equal(report.merge_findings, 1);
   assert.equal(count(dbPath, 'agent_runs'), 1);
   assert.equal(count(dbPath, 'pipeline_events'), 1);
+  assert.equal(value(dbPath, 'select project_mode from agent_runs'), 'project-pipeline');
+  assert.equal(value(dbPath, 'select project_mode from pipeline_events'), 'project-pipeline');
   assert.equal(count(dbPath, 'artifacts'), 1);
   assert.equal(count(dbPath, 'merge_findings'), 1);
 } finally {

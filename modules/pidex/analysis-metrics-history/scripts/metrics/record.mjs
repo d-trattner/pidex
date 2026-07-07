@@ -4,10 +4,10 @@ import path from 'node:path';
 import process from 'node:process';
 
 function parse(argv) {
-  const out = { project: 'unknown', plan: 'unknown-plan', agent: 'unknown', provider: 'unknown', model: '', inputTokens: '0', outputTokens: '0', durationMs: '0', exitCode: '0', source: 'manual', fallbackFrom: '', logFile: '', finalTextChars: '0' };
+  const out = { project: 'unknown', plan: 'unknown-plan', agent: 'unknown', provider: 'unknown', model: '', projectMode: '', inputTokens: '0', outputTokens: '0', durationMs: '0', exitCode: '0', source: 'manual', fallbackFrom: '', logFile: '', finalTextChars: '0' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i] || '';
-    if (a === '--project') out.project = v(); else if (a === '--plan') out.plan = v(); else if (a === '--agent') out.agent = v(); else if (a === '--provider') out.provider = v(); else if (a === '--model') out.model = v(); else if (a === '--input-tokens') out.inputTokens = v(); else if (a === '--output-tokens') out.outputTokens = v(); else if (a === '--duration-ms') out.durationMs = v(); else if (a === '--exit' || a === '--exit-code') out.exitCode = v(); else if (a === '--source') out.source = v(); else if (a === '--fallback-from') out.fallbackFrom = v(); else if (a === '--log-file') out.logFile = v(); else if (a === '--final-text-chars') out.finalTextChars = v(); else { console.error(`Unknown arg: ${a}`); process.exit(2); }
+    if (a === '--project') out.project = v(); else if (a === '--plan') out.plan = v(); else if (a === '--agent') out.agent = v(); else if (a === '--provider') out.provider = v(); else if (a === '--model') out.model = v(); else if (a === '--project-mode') out.projectMode = v(); else if (a === '--input-tokens') out.inputTokens = v(); else if (a === '--output-tokens') out.outputTokens = v(); else if (a === '--duration-ms') out.durationMs = v(); else if (a === '--exit' || a === '--exit-code') out.exitCode = v(); else if (a === '--source') out.source = v(); else if (a === '--fallback-from') out.fallbackFrom = v(); else if (a === '--log-file') out.logFile = v(); else if (a === '--final-text-chars') out.finalTextChars = v(); else { console.error(`Unknown arg: ${a}`); process.exit(2); }
   }
   return out;
 }
@@ -29,7 +29,7 @@ try { pricing = JSON.parse(readFileSync(pricingFile, 'utf8')); } catch {}
 const inTok = asInt(args.inputTokens); const outTok = asInt(args.outputTokens);
 const price = pricing[normalizedModel];
 const cost = price ? (inTok / 1_000_000) * Number(price.input || 0) + (outTok / 1_000_000) * Number(price.output || 0) : null;
-const record = { timestamp: new Date().toISOString(), project: args.project, plan: args.plan, agent: args.agent, provider: args.provider, model: normalizedModel || null, duration_ms: asInt(args.durationMs), exit_code: asInt(args.exitCode), fallback_from: args.fallbackFrom || null, input_tokens_estimate: inTok, output_tokens_estimate: outTok, cost_usd_estimate: cost, final_text_chars: asInt(args.finalTextChars), log_file: args.logFile || null, source: args.source };
+const record = { timestamp: new Date().toISOString(), project: args.project, plan: args.plan, agent: args.agent, provider: args.provider, model: normalizedModel || null, project_mode: args.projectMode || null, duration_ms: asInt(args.durationMs), exit_code: asInt(args.exitCode), fallback_from: args.fallbackFrom || null, input_tokens_estimate: inTok, output_tokens_estimate: outTok, cost_usd_estimate: cost, final_text_chars: asInt(args.finalTextChars), log_file: args.logFile || null, source: args.source };
 const outDir = path.join(stateDir, 'metrics', slug(args.project));
 mkdirSync(outDir, { recursive: true });
 const outPath = path.join(outDir, `${slug(args.plan)}.jsonl`);

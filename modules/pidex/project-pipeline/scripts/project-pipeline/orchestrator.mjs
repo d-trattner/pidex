@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -92,6 +92,75 @@ function summarizeRunForPublicResult(run = {}) {
     archive_sync_status: run.archive_sync_status,
     project_run_id: run.project_run_id,
   };
+}
+
+function slug(value) {
+  return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'unknown';
+}
+
+function projectTelemetryRoot(record = {}, pidexRoot) {
+  const sourceRef = record.source?.kind === 'host-path' && record.source?.ref ? record.source.ref : '';
+  if (sourceRef) return path.resolve(sourceRef);
+  return resolveArchiveRoot({ pidexRoot, projectId: record.project_id || 'unknown-project' });
+}
+
+function appendProjectPipelineTelemetryEvent({ pidexRoot, record, pipelineId, planKey = 'project-pipeline', eventType, status = '', message = '', metadata = {} }) {
+  try {
+    const projectRoot = projectTelemetryRoot(record, pidexRoot);
+    const dir = path.join(pidexRoot, 'state', 'pipeline-events', slug(record.project_id || projectRoot));
+    mkdirSync(dir, { recursive: true });
+    const row = {
+      timestamp: new Date().toISOString(),
+      project_path: projectRoot,
+      project_slug: record.project_id || path.basename(projectRoot),
+      pipeline_id: pipelineId,
+      plan_key: planKey,
+      event_type: eventType,
+      status: status || null,
+      actor: 'orchestrator',
+      message: message || null,
+      project_mode: 'project-pipeline',
+      metadata: { project_id: record.project_id, archive_root: record.archive?.path || resolveArchiveRoot({ pidexRoot, projectId: record.project_id }), ...metadata },
+      source: 'project_pipeline_orchestrator',
+    };
+    writeFileSync(path.join(dir, `${slug(pipelineId)}.jsonl`), `${JSON.stringify(row)}\n`, { encoding: 'utf8', flag: 'a' });
+  } catch {
+    // Best-effort telemetry must never break Project Pipeline execution.
+  }
+}
+
+function appendProjectPipelineMetric({ pidexRoot, record, pipelineId, planKey = 'project-pipeline', agent, run = {}, source = 'project_pipeline_orchestrator' }) {
+  try {
+    const projectRoot = projectTelemetryRoot(record, pidexRoot);
+    const dir = path.join(pidexRoot, 'state', 'metrics', slug(projectRoot));
+    mkdirSync(dir, { recursive: true });
+    const row = {
+      timestamp: new Date().toISOString(),
+      project: projectRoot,
+      plan: planKey,
+      project_mode: 'project-pipeline',
+      project_id: record.project_id,
+      project_run_id: run.project_run_id || null,
+      pipeline_id: pipelineId,
+      agent: agent || run.agent || 'unknown',
+      provider: 'project-pipeline',
+      model: null,
+      duration_ms: null,
+      exit_code: run.ok === false ? 1 : 0,
+      input_tokens_estimate: 0,
+      output_tokens_estimate: 0,
+      cost_usd_estimate: null,
+      context_file: run.context_file || null,
+      archive_context_file: run.archive_context_file || null,
+      archive_sync_status: run.archive_sync_status || null,
+      agent_verdict: run.ok === false ? 'FAILED' : 'COMPLETE',
+      routing_reason: run.reason || null,
+      source,
+    };
+    writeFileSync(path.join(dir, `${slug(planKey)}.jsonl`), `${JSON.stringify(row)}\n`, { encoding: 'utf8', flag: 'a' });
+  } catch {
+    // Best-effort telemetry must never break Project Pipeline execution.
+  }
 }
 
 export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseIndex, phaseCount, moduleRulesText = '' }) {
@@ -300,6 +369,10 @@ export async function runProjectPipelineOrchestration(options = {}) {
     return { ok: false, error: 'credential-bootstrap-failed', reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, no_fallback: true };
   }
 
+  const telemetryRecord = loadProjectRecord(pidexRoot, projectId);
+  const telemetryPipelineId = `project-pipeline-${projectId}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_started', status: 'running', metadata: { phases } });
+
   const runs = [];
   let previous;
   for (let i = 0; i < phases.length; i += 1) {
@@ -325,11 +398,16 @@ export async function runProjectPipelineOrchestration(options = {}) {
         run = runAgentOnce(retryRoutingTask(task));
       }
     } catch (error) {
+      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase threw: ${agent}`, metadata: { failed_agent: agent, reason: error.message || String(error), runs } });
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
     }
     const runSummary = { agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, retry_count: retryCount, error: run.error, reason: run.reason };
     runs.push(runSummary);
-    if (!run.ok) return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
+    appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: runSummary });
+    if (!run.ok) {
+      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase failed: ${agent}`, metadata: { failed_agent: agent, runs } });
+      return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
+    }
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
     if (options.browserSmokeAuto !== false && BROWSER_SMOKE_REQUEST_SEGMENTS[agent]) {
       const browserSmokeResults = await runBrowserSmokeBridgeForPhase({ pidexRoot, projectId, agent, browserSmokeBridgeRunner: options.browserSmokeBridgeRunner, now: options.now, maxAgeMs: options.browserSmokeMaxAgeMs, playwright: options.playwright });
@@ -338,12 +416,18 @@ export async function runProjectPipelineOrchestration(options = {}) {
         runSummary.browser_smoke_results = sandboxResults;
         const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
         const verdictRun = runAgentOnce(verdictTask);
-        runs.push({ agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason });
-        if (!verdictRun.ok) return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
+        const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
+        runs.push(verdictSummary);
+        appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
+        if (!verdictRun.ok) {
+          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline browser-smoke verdict failed: ${agent}`, metadata: { failed_agent: agent, browser_smoke_results: sandboxResults, runs } });
+          return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
+        }
         previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
       }
     }
   }
+  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_completed', status: 'complete', metadata: { runs } });
   return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, no_fallback: true };
 }
 

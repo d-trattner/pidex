@@ -497,6 +497,15 @@ export function projectPipelineModeInstructionLine(result: ProjectPipelineModeRe
 		: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.";
 }
 
+export function projectModeForTelemetry(projectRoot: string): ProjectPipelineMode | undefined {
+	try {
+		const resolved = runProjectPipelineModeResolver(projectRoot);
+		return resolved.ok && resolved.mode ? resolved.mode : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 type ProjectPipelineRunFlowRequest = {
 	projectRoot: string;
 	task: string;
@@ -1678,12 +1687,14 @@ function appendOperatorEvent(cwd: string, planId: string, event: Record<string, 
 		const normalizedPlan = normalizePlanKey(planId);
 		const { file, pipelineId } = operatorEventFile(cwd, normalizedPlan);
 		fs.mkdirSync(path.dirname(file), { recursive: true });
+		const mode = projectModeForTelemetry(cwd);
 		const record = {
 			timestamp: new Date().toISOString(),
 			project_path: cwd,
 			project_slug: path.basename(cwd) || safePathSegment(cwd),
 			pipeline_id: pipelineId,
 			plan_key: normalizedPlan,
+			project_mode: mode,
 			actor: "orchestrator",
 			source: "pidex_agent_extension",
 			...event,
@@ -2001,6 +2012,7 @@ function recordAgentMetric(result: RpResult, cwd: string, task: string): string 
 			project: cwd,
 			plan: planId,
 			plan_uuid: extractPlanUuid(task, result.finalText),
+			project_mode: projectModeForTelemetry(cwd),
 			agent: result.agent,
 			provider: result.provider,
 			model: normalizeModelForPricing(result.model),

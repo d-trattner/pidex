@@ -10,10 +10,10 @@ function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-
 function normalizePlan(value) { const s = String(value || '').trim(); let m = s.match(/^(?:plan-)?(\d{1,3})$/i); if (m) return `plan-${m[1].padStart(3, '0')}`; m = s.match(/^(?:plan-)?(\d{1,3})[-_]/i); if (m) return `plan-${m[1].padStart(3, '0')}`; return s || 'unknown-plan'; }
 function timestampId() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); }
 function parse(argv) {
-  const out = { root: rootFromScript(), stateDir: process.env.RUNNING_PI_STATE_DIR || '', project: '', projectSlug: '', pipelineId: process.env.RUNNING_PI_PIPELINE_ID || '', plan: 'unknown-plan', event: '', status: '', actor: 'orchestrator', message: '', source: 'manual', metadataJson: '' };
+  const out = { root: rootFromScript(), stateDir: process.env.RUNNING_PI_STATE_DIR || '', project: '', projectSlug: '', pipelineId: process.env.RUNNING_PI_PIPELINE_ID || '', plan: 'unknown-plan', event: '', status: '', actor: 'orchestrator', message: '', source: 'manual', projectMode: '', metadataJson: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i] || '';
-    if (a === '--project') out.project = v(); else if (a === '--state-dir') out.stateDir = v(); else if (a === '--project-slug' || a === '--slug') out.projectSlug = v(); else if (a === '--pipeline-id') out.pipelineId = v(); else if (a === '--plan') out.plan = v(); else if (a === '--event' || a === '--event-type') out.event = v(); else if (a === '--status') out.status = v(); else if (a === '--actor') out.actor = v(); else if (a === '--message') out.message = v(); else if (a === '--source') out.source = v(); else if (a === '--metadata-json') out.metadataJson = v(); else if (a === '-h' || a === '--help') { console.log('Usage: event.mjs --plan PLAN --event EVENT [options]'); process.exit(0); } else { console.error(`Unknown arg: ${a}`); process.exit(2); }
+    if (a === '--project') out.project = v(); else if (a === '--state-dir') out.stateDir = v(); else if (a === '--project-slug' || a === '--slug') out.projectSlug = v(); else if (a === '--pipeline-id') out.pipelineId = v(); else if (a === '--plan') out.plan = v(); else if (a === '--event' || a === '--event-type') out.event = v(); else if (a === '--status') out.status = v(); else if (a === '--actor') out.actor = v(); else if (a === '--message') out.message = v(); else if (a === '--source') out.source = v(); else if (a === '--project-mode') out.projectMode = v(); else if (a === '--metadata-json') out.metadataJson = v(); else if (a === '-h' || a === '--help') { console.log('Usage: event.mjs --plan PLAN --event EVENT [options]'); process.exit(0); } else { console.error(`Unknown arg: ${a}`); process.exit(2); }
   }
   out.stateDir ||= path.join(out.root, 'state');
   if (!out.project) out.project = process.cwd();
@@ -56,7 +56,7 @@ if (args.metadataJson) {
   try { metadata = JSON.parse(args.metadataJson); } catch (error) { console.error(`Invalid --metadata-json: ${error instanceof Error ? error.message : String(error)}`); process.exit(1); }
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) { console.error('--metadata-json must be a JSON object'); process.exit(1); }
 }
-const record = { timestamp: new Date().toISOString(), project_path: projectPath, project_slug: projectSlug, pipeline_id: pipelineId, plan_key: planKey, event_type: args.event, status: args.status || null, actor: args.actor || null, message: args.message || null, metadata, source: args.source || null };
+const record = { timestamp: new Date().toISOString(), project_path: projectPath, project_slug: projectSlug, pipeline_id: pipelineId, plan_key: planKey, event_type: args.event, status: args.status || null, actor: args.actor || null, message: args.message || null, project_mode: args.projectMode || null, metadata, source: args.source || null };
 const outPath = path.join(base, `${pipelineId}.jsonl`);
 writeFileSync(outPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', flag: 'a' });
 if (terminalEvents.has(args.event) && existsSync(currentFile)) { try { if (readFileSync(currentFile, 'utf8').trim() === pipelineId) unlinkSync(currentFile); } catch {} }

@@ -10,12 +10,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-metrics-'));
 try {
   const env = { ...process.env, RUNNING_PI_STATE_DIR: state };
-  const rec = spawnSync(process.execPath, [path.join(root, 'modules/pidex/analysis-metrics-history/scripts/metrics/record.mjs'), '--project', 'My Project', '--plan', 'plan-001', '--agent', 'pidex-planner', '--provider', 'codex', '--model', 'gpt-5.4-mini', '--input-tokens', '100', '--output-tokens', '50', '--duration-ms', '1200', '--exit-code', '0'], { encoding: 'utf8', env });
+  const rec = spawnSync(process.execPath, [path.join(root, 'modules/pidex/analysis-metrics-history/scripts/metrics/record.mjs'), '--project', 'My Project', '--plan', 'plan-001', '--agent', 'pidex-planner', '--provider', 'codex', '--model', 'gpt-5.4-mini', '--project-mode', 'project-pipeline', '--input-tokens', '100', '--output-tokens', '50', '--duration-ms', '1200', '--exit-code', '0'], { encoding: 'utf8', env });
   assert.equal(rec.status, 0, rec.stderr || rec.stdout);
   const file = rec.stdout.trim();
   const row = JSON.parse(readFileSync(file, 'utf8').trim());
   assert.equal(row.project, 'My Project');
   assert.equal(row.input_tokens_estimate, 100);
+  assert.equal(row.project_mode, 'project-pipeline');
 
   const sum = spawnSync(process.execPath, [path.join(root, 'modules/pidex/analysis-metrics-history/scripts/metrics/summarize.mjs'), '--plan', 'plan-001'], { encoding: 'utf8', env });
   assert.equal(sum.status, 0, sum.stderr || sum.stdout);

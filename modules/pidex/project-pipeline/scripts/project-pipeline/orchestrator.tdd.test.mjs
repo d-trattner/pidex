@@ -1,12 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { buildBrowserSmokeVerdictTask, buildPhaseTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
+
+function readJsonlRecursive(root) {
+  const rows = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+        for (const line of readFileSync(full, 'utf8').trim().split(/\r?\n/).filter(Boolean)) rows.push(JSON.parse(line));
+      }
+    }
+  };
+  walk(root);
+  return rows;
+}
 
 function seedRecord(pidexRoot, projectId = 'pp-orch-test') {
   const record = createProjectRecord({ project_id: projectId, name: projectId });
@@ -165,6 +180,14 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   const loaded = loadProjectRecord(pidexRoot, 'pp-orch-test');
   assert.equal(loaded.runs.length, 3);
   assert.equal(loaded.runs.every((run) => run.archive_sync_status === 'complete'), true);
+  const metricRows = readJsonlRecursive(path.join(pidexRoot, 'state', 'metrics'));
+  assert.equal(metricRows.length, 3);
+  assert.deepEqual(metricRows.map((row) => row.agent), ['pidex-planner', 'pidex-critic', 'pidex-qa']);
+  assert.equal(metricRows.every((row) => row.project_mode === 'project-pipeline'), true);
+  assert.equal(metricRows.every((row) => row.project_id === 'pp-orch-test'), true);
+  const eventRows = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
+  assert.deepEqual(eventRows.map((row) => row.event_type), ['pipeline_started', 'pipeline_completed']);
+  assert.equal(eventRows.every((row) => row.project_mode === 'project-pipeline'), true);
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 

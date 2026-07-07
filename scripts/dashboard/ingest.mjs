@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   agent TEXT,
   provider TEXT,
   model TEXT,
+  project_mode TEXT,
   verdict TEXT,
   route_to TEXT,
   gate TEXT,
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS pipeline_events (
   pipeline_id TEXT NOT NULL,
   plan_key TEXT NOT NULL,
   event_type TEXT NOT NULL,
+  project_mode TEXT,
   status TEXT,
   actor TEXT,
   message TEXT,
@@ -136,10 +138,18 @@ function readText(p) { return readFileSync(p, 'utf8'); }
 function parseBool(value, defaultValue = false) { return value == null ? defaultValue : ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase()); }
 function includeHistoricalProviderRecords() { return parseBool(process.env.PIDEX_INCLUDE_HISTORICAL_PROVIDERS, false); }
 
+function hasColumn(db, table, column) {
+  return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
+}
+function ensureColumn(db, table, column, definition) {
+  if (!hasColumn(db, table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
 function dbConnect(dbPath) {
   mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+  ensureColumn(db, 'agent_runs', 'project_mode', 'TEXT');
+  ensureColumn(db, 'pipeline_events', 'project_mode', 'TEXT');
   return db;
 }
 
@@ -215,10 +225,10 @@ function ingestMetrics(db) {
   let count = 0;
   const stmt = db.prepare(`INSERT OR REPLACE INTO agent_runs(
     source_path, source_line, source_hash, project_id, plan_key, timestamp,
-    agent, provider, model, verdict, route_to, gate, duration_ms,
+    agent, provider, model, project_mode, verdict, route_to, gate, duration_ms,
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
     cost_usd, context_file, exit_code, fallback_from, tool_count, routing_reason
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const file of globJsonlTwoLevels(METRICS_DIR)) {
     const fallbackProject = metricProjectFromSlug(path.basename(path.dirname(file)));
     const planKey = path.basename(file, '.jsonl');
@@ -231,7 +241,7 @@ function ingestMetrics(db) {
       if (!includeHistoricalProviderRecords() && isHistoricalProvider(rec.provider || '')) continue;
       const pid = projectId(db, rec.project || fallbackProject);
       stmt.run(String(file), i + 1, safeHash(`${file}:${i + 1}:${line}`), pid, normalizePlanKey(rec, planKey), rec.timestamp ?? null,
-        rec.agent ?? null, rec.provider ?? null, rec.model ?? null, rec.agent_verdict ?? null, rec.route_to ?? null, rec.gate ?? null, rec.duration_ms ?? null,
+        rec.agent ?? null, rec.provider ?? null, rec.model ?? null, rec.project_mode ?? null, rec.agent_verdict ?? null, rec.route_to ?? null, rec.gate ?? null, rec.duration_ms ?? null,
         rec.input_tokens_estimate ?? null, rec.output_tokens_estimate ?? null, rec.cache_read_tokens ?? null, rec.cache_write_tokens ?? null, rec.cost_usd_estimate ?? null,
         rec.context_file ?? null, rec.exit_code ?? null, rec.fallback_from ?? null, rec.tool_count ?? null, rec.routing_reason ?? null);
       count++;
@@ -244,9 +254,9 @@ function ingestPipelineEvents(db) {
   let count = 0;
   const stmt = db.prepare(`INSERT OR REPLACE INTO pipeline_events(
     source_path, source_line, source_hash, timestamp, project_id, project_path,
-    project_slug, pipeline_id, plan_key, event_type, status, actor, message,
+    project_slug, pipeline_id, plan_key, event_type, project_mode, status, actor, message,
     metadata_json, source
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const file of globJsonlTwoLevels(PIPELINE_EVENTS_DIR)) {
     const lines = readText(file).split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
@@ -263,7 +273,7 @@ function ingestPipelineEvents(db) {
       const metadataJson = rec.metadata == null ? (rec.metadata_json ?? null) : JSON.stringify(rec.metadata);
       const pid = projectId(db, projectPath);
       stmt.run(String(file), i + 1, safeHash(`${file}:${i + 1}:${line}`), timestamp, pid, String(projectPath), rec.project_slug ?? null,
-        pipelineId, normalizePipelinePlanKey(rec.plan_key || rec.plan), eventType, rec.status ?? null, rec.actor ?? null, rec.message ?? null, metadataJson, rec.source ?? null);
+        pipelineId, normalizePipelinePlanKey(rec.plan_key || rec.plan), eventType, rec.project_mode ?? null, rec.status ?? null, rec.actor ?? null, rec.message ?? null, metadataJson, rec.source ?? null);
       count++;
     }
   }
