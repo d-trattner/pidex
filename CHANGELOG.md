@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.1.14 - 2026-07-07
+
+Project Pipeline documentation refresh:
+
+- Refreshed README, Project Pipeline, and Windows docs to reflect the latest validated Project Sandbox state: local Docker Project Pipeline is working for the MVP on Linux and native Windows Docker Desktop, including managed preview and host-side browser-smoke evidence. Broader native Windows PIDEX support remains experimental pending more real-project evidence across delegates, auth, path quoting, hooks, dashboard, and provider workflows.
+
 ## 0.1.13 - 2026-07-06
 
 Project Pipeline browser-smoke request schema hardening:
