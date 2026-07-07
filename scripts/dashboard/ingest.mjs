@@ -160,6 +160,14 @@ function projectId(db, projectPath) {
   const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(p);
   return Number(row.id);
 }
+function registerProject(db, projectPath, name) {
+  const p = canonicalPath(projectPath);
+  const n = String(name || path.basename(p) || p).trim() || p;
+  db.prepare('INSERT OR IGNORE INTO projects(path, name) VALUES (?, ?)').run(p, n);
+  db.prepare('UPDATE projects SET name = ? WHERE path = ? AND (name IS NULL OR name = ? OR name = ?)').run(n, p, path.basename(p), p);
+  const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(p);
+  return Number(row.id);
+}
 
 function metricProjectFromSlug(slug) {
   if (slug.startsWith('home-')) {
@@ -336,6 +344,39 @@ function ingestMergeRows(db, filePath, pid, planKey, text) {
   return count;
 }
 
+function projectPipelineRegistryRoot() {
+  return path.join(STATE_DIR, 'sandbox-projects');
+}
+function projectPipelineArchiveRoot(projectId) {
+  return path.join(STATE_DIR, 'project-archives', String(projectId || ''));
+}
+function registryProjectPath(record) {
+  const sourceRef = String(record?.source?.ref || '').trim();
+  if (sourceRef) return sourceRef;
+  const archivePath = String(record?.archive?.path || '').trim();
+  if (archivePath) return archivePath;
+  if (record?.project_id) return projectPipelineArchiveRoot(record.project_id);
+  return '';
+}
+function ingestProjectPipelineRegistry(db) {
+  let count = 0;
+  const root = projectPipelineRegistryRoot();
+  if (!pathExists(root)) return count;
+  for (const entry of readdirSync(root, { withFileTypes: true }).filter((item) => item.isFile() && item.name.endsWith('.json'))) {
+    const file = path.join(root, entry.name);
+    let record;
+    try { record = JSON.parse(readText(file)); } catch { continue; }
+    if (record?.mode !== 'project-pipeline') continue;
+    const projectPath = registryProjectPath(record);
+    if (!projectPath) continue;
+    registerProject(db, projectPath, record.name || record.project_id || path.basename(projectPath));
+    const archive = record.archive?.path || (record.project_id ? projectPipelineArchiveRoot(record.project_id) : '');
+    if (archive && pathExists(archive)) registerProject(db, archive, `${record.name || record.project_id} archive`);
+    count++;
+  }
+  return count;
+}
+
 function discoverProjects(rawProjects) {
   const projects = [];
   for (const raw of rawProjects) {
@@ -388,9 +429,10 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   const db = dbConnect(path.resolve(args.db));
   const projects = discoverProjects(args.project);
-  let metricCount = 0, pipelineEventCount = 0, artifactCount = 0, mergeCount = 0;
+  let metricCount = 0, pipelineEventCount = 0, artifactCount = 0, mergeCount = 0, projectPipelineRegistryCount = 0;
   try {
     db.exec('BEGIN');
+    projectPipelineRegistryCount = ingestProjectPipelineRegistry(db);
     metricCount = ingestMetrics(db);
     pipelineEventCount = ingestPipelineEvents(db);
     [artifactCount, mergeCount] = ingestArtifacts(db, projects);
@@ -401,7 +443,7 @@ function main() {
   } finally {
     db.close();
   }
-  console.log(JSON.stringify({ db: path.resolve(args.db), projects, agent_runs: metricCount, pipeline_events: pipelineEventCount, artifacts: artifactCount, merge_findings: mergeCount }, null, 2));
+  console.log(JSON.stringify({ db: path.resolve(args.db), projects, project_pipeline_registry: projectPipelineRegistryCount, agent_runs: metricCount, pipeline_events: pipelineEventCount, artifacts: artifactCount, merge_findings: mergeCount }, null, 2));
 }
 
 main();

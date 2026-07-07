@@ -35,8 +35,10 @@ try {
   const state = path.join(tmp, 'state');
   const project = path.join(tmp, 'project');
   const dbPath = path.join(tmp, 'pidex.sqlite');
+  const sandboxOnly = path.join(tmp, 'sandbox-only-host-project');
   mkdirSync(path.join(state, 'metrics', 'tmp-project'), { recursive: true });
   mkdirSync(path.join(state, 'pipeline-events', 'project'), { recursive: true });
+  mkdirSync(path.join(state, 'sandbox-projects'), { recursive: true });
   mkdirSync(path.join(project, 'agents.output', 'parallel-agents'), { recursive: true });
 
   writeFileSync(path.join(state, 'metrics', 'tmp-project', 'plan-001.jsonl'), `${JSON.stringify({
@@ -46,8 +48,17 @@ try {
     timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',
   })}\n`);
   writeFileSync(path.join(project, 'agents.output', 'parallel-agents', '001-merge.md'), `# Merge Summary\n\n| Source | Severity | Classification | Disposition | Summary |\n|---|---|---|---|---|\n| secondary | high | secondary-only | accepted | smoke finding |\n\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: user\n-->\n`);
+  writeFileSync(path.join(state, 'sandbox-projects', 'pp-sandbox-only.json'), JSON.stringify({
+    schema_version: 2,
+    project_id: 'pp-sandbox-only',
+    name: 'Sandbox Only Project',
+    mode: 'project-pipeline',
+    source: { kind: 'local', ref: sandboxOnly },
+    archive: { path: path.join(state, 'project-archives', 'pp-sandbox-only') },
+  }, null, 2));
 
   const report = runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  assert.equal(report.project_pipeline_registry, 1);
   assert.equal(report.agent_runs, 1);
   assert.equal(report.pipeline_events, 1);
   assert.equal(report.artifacts, 1);
@@ -58,6 +69,7 @@ try {
   assert.equal(value(dbPath, 'select project_mode from pipeline_events'), 'project-pipeline');
   assert.equal(count(dbPath, 'artifacts'), 1);
   assert.equal(count(dbPath, 'merge_findings'), 1);
+  assert.equal(value(dbPath, `select name from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 'Sandbox Only Project');
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

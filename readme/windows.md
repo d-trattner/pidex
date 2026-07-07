@@ -8,10 +8,10 @@ Windows compatibility is under active validation. This page is intentionally con
 
 | Environment | Status | Notes |
 |---|---|---|
-| Linux | Supported/currently tested | Canonical PIDEX path. Use the existing `install.sh`, `dashboard/start.sh`, and validation commands. |
+| Linux | Supported/currently tested | Canonical PIDEX path. Use the existing `install.sh`, `dashboard/start.sh` or cross-platform `node dashboard/start.mjs`, and validation commands. |
 | WSL2 | Safest Windows recommendation for full pipelines for now | Expected to be closest to the Linux path, but still needs explicit PIDEX smoke evidence before being called fully supported. |
 | Windows + Git Bash | Experimental / under analysis | Pi documents a Git Bash-based Windows path. PIDEX still needs validation of delegated pipeline behavior, hooks, and broader path handling before support is claimed. Git Bash can satisfy Bash-backed validation commands such as `pnpm run check`. |
-| Native PowerShell / CMD | Experimental, partially validated | `install.windows.ps1`, Bash-backed `pnpm run check`, Docker sandbox helper smoke, and real `/pd` Project Pipeline runs with managed preview approval and browser-smoke evidence have passed with Docker Desktop Linux containers. Full native Windows pipeline support is not claimed yet. |
+| Native PowerShell / CMD | Experimental, partially validated | `install.windows.ps1`, cross-platform `node dashboard/start.mjs`, Bash-backed `pnpm run check`, Docker sandbox helper smoke, and real `/pd` Project Pipeline runs with managed preview approval and browser-smoke evidence have passed with Docker Desktop Linux containers. Full native Windows pipeline support is not claimed yet. |
 
 ## Platform separation rule
 
@@ -23,7 +23,7 @@ Preferred future pattern:
 |---|---|
 | `install.sh` | `install.windows.ps1` |
 | `uninstall.sh` | `uninstall.windows.ps1` |
-| `dashboard/start.sh` | `dashboard/start.windows.ps1` |
+| `dashboard/start.sh` | `dashboard/start.mjs` cross-platform Node launcher |
 | `scripts/release/public-readiness.sh` | `compat-windows.audit` capability |
 | `git-security-hooks.install` capability | `scripts/git-hooks/install-global.windows.ps1` or explicit unsupported docs |
 
@@ -58,7 +58,7 @@ The audit is informational. Missing tools or risky entrypoints are reported as f
 These areas need more evidence before PIDEX can make a stronger Windows support claim:
 
 - `install.sh` and `uninstall.sh` are Linux-owned Bash entrypoints.
-- `dashboard/start.sh` is a Linux-owned dashboard launcher.
+- `dashboard/start.sh` is a Linux-owned dashboard launcher; use `node dashboard/start.mjs` on native Windows where Bash is unavailable.
 - `pnpm run check` is Bash-backed and is not a pure native PowerShell validation path; use Git Bash/WSL or a future Windows-owned check wrapper.
 - global Git hook install/uninstall scripts are Linux-owned and may not map cleanly to Windows Git configuration.
 - provider/delegate and broader/full pipeline scripts still need native Windows validation of delegated agent behavior, auth handling, and path quoting beyond the focused Project Pipeline smoke/preview/browser-smoke scenarios.
@@ -128,19 +128,19 @@ Additional native Windows Docker sandbox evidence, refreshed on 2026-06-07 from 
 
 ## Experimental dashboard launcher
 
-Windows includes an additive PowerShell dashboard launcher:
+Windows uses the cross-platform Node dashboard launcher; Bash is not required for starting the dashboard:
 
 ```powershell
-cd $HOME\pidex\dashboard
-.\start.windows.ps1
+cd $HOME\pidex
+node dashboard/start.mjs
 ```
 
 Useful options:
 
 ```powershell
-.\start.windows.ps1 -NoBuild
-.\start.windows.ps1 -Dev
-.\start.windows.ps1 -HostName 0.0.0.0 -Domain your.local.name
+node dashboard/start.mjs --no-build
+node dashboard/start.mjs --dev
+node dashboard/start.mjs --host 0.0.0.0 --domain your.local.name
 ```
 
 A local friendly domain can also be configured in `$HOME\pidex\config\dashboard.local.json`:
@@ -151,7 +151,7 @@ A local friendly domain can also be configured in `$HOME\pidex\config\dashboard.
 }
 ```
 
-The launcher is experimental and runs in the foreground.
+The launcher is experimental; by default it starts the dashboard detached and prints the local URL. Use `--foreground` to keep the Vite process attached.
 
 Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29 and 2026-07-06 from `$HOME\pidex` with Docker Desktop Linux containers and standalone `pnpm@10.33.0`:
 

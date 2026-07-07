@@ -7,6 +7,7 @@
 - Documented the all-mode optional parallel-lane contract for `host-direct`, `hardened-pipeline`, and `project-pipeline` before implementation slices.
 - Added minimal Project Pipeline secondary parallel-lane support using existing child Pi execution, sequential MVP lane runs, archive-synced merge summaries, and hardened-pipeline review-only wording.
 - Improved `/pd` Project Pipeline migration UX by replacing the blocking run-flow bridge with async child execution, visible Docker/phase progress notifications, and fail-closed interrupt handling.
+- Added cross-platform `node dashboard/start.mjs` launcher for native Windows/no-Bash environments and made dashboard ingest register Project Pipeline sandbox registry records so migrated projects appear in the project selector.
 
 ## 0.1.14 - 2026-07-07
 

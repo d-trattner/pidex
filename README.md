@@ -213,24 +213,30 @@ node scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agen
 
 ## Dashboard
 
-Linux / WSL2:
+Cross-platform dashboard launcher:
+
+```bash
+cd ~/pidex
+node dashboard/start.mjs
+```
+
+Linux / WSL2 can also use the compatibility shell launcher:
 
 ```bash
 cd ~/pidex/dashboard
 ./start.sh
 ```
 
-Windows has experimental PowerShell install/dashboard/uninstall entrypoints:
+Windows has an experimental PowerShell install/uninstall bootstrap plus the cross-platform Node dashboard launcher:
 
 ```powershell
 .\install.windows.ps1
-cd $HOME\pidex\dashboard
-.\start.windows.ps1
 cd $HOME\pidex
+node dashboard/start.mjs
 .\uninstall.windows.ps1
 ```
 
-See [Windows status](readme/windows.md). The Linux shell launchers are not the Windows entrypoints.
+See [Windows status](readme/windows.md). The Linux shell launchers are not required for the dashboard on native Windows.
 
 The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
 

@@ -6,7 +6,14 @@ The PIDEX dashboard is a local analytics UI for pipeline state, quality, provide
 
 Dashboard commands assume the canonical `<pidex-root>` checkout. If you installed PIDEX through the lightweight Pi package bootstrap, run `/pidex-init-home` first and then `/reload` so `<pidex-root>` resolves to `~/pidex`.
 
-Linux / WSL2:
+Cross-platform launcher:
+
+```bash
+cd <pidex-root>
+node dashboard/start.mjs
+```
+
+This Node launcher is the preferred entrypoint on native Windows or any environment where Bash is unavailable. The Linux shell launcher remains available for compatibility:
 
 ```bash
 cd <pidex-root>/dashboard
@@ -14,13 +21,6 @@ cd <pidex-root>/dashboard
 ```
 
 The Linux installer installs PIDEX workspace dependencies when needed. If you used `./install.sh --skip-dashboard-deps`, run `pnpm install --frozen-lockfile --ignore-scripts` with pinned pnpm `10.33.0` from the PIDEX root before starting the dashboard.
-
-Windows native support is experimental. Use the additive PowerShell launcher instead of the Linux shell script:
-
-```powershell
-cd <pidex-root>\dashboard
-.\start.windows.ps1
-```
 
 See [Windows status](windows.md).
 
@@ -33,11 +33,13 @@ http://127.0.0.1:18777/dashboard
 If you expose the dashboard through your own LAN DNS/reverse proxy, pass the domain explicitly so the launcher prints it:
 
 ```bash
-./start.sh --host 0.0.0.0 --domain your.local.name
+node dashboard/start.mjs --host 0.0.0.0 --domain your.local.name
 ```
 
-```powershell
-.\start.windows.ps1 -HostName 0.0.0.0 -Domain your.local.name
+or, from `<pidex-root>/dashboard` on Linux/WSL2:
+
+```bash
+./start.sh --host 0.0.0.0 --domain your.local.name
 ```
 
 You can also set a local default domain in `config/dashboard.local.json`:
