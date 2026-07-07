@@ -8,11 +8,12 @@ In Project Pipeline mode, the project source lives and runs inside a persistent 
 
 - Local Docker workflow: complete for the current MVP.
 - Linux validation: highest real `/pd` scenario passed with two Project Pipeline runs in one Project Sandbox.
-- Native Windows validation: focused `/pd` Project Pipeline runs passed with Docker Desktop Linux containers, including automatic managed preview gates for simple and dashboard-style Vite React UI fixtures.
+- Native Windows validation: focused `/pd` Project Pipeline runs passed with Docker Desktop Linux containers, including automatic managed preview gates and host-side browser-smoke checks for simple and dashboard-style Vite React UI fixtures.
 - Entry point: `/pd` with saved `project-pipeline` mode.
 - Management command: `/pdproject`.
 - In-container multi-agent orchestration: local facade and `/pd` bridge wired with phase-specific role prompts.
 - Safe run/archive browsing: `runs`, `show-run`, and `artifacts` are available.
+- Project Pipeline browser-smoke: QA/UAT/devops can request deterministic host-side browser checks through module-scoped rules; the host bridge resolves the managed preview URL from the Project Pipeline registry and writes archive evidence under `browser-smoke/**`.
 - External Docker hosts: deferred.
 - PR automation/review branches: deferred.
 - Dashboard/archive browsing UI: deferred.
@@ -164,7 +165,7 @@ Reset copied credentials from the sandbox secrets volume and registry metadata:
 /pdproject credentials reset <project-id> --confirm <project-id>
 ```
 
-For UI tasks, Project Pipeline attempts to start a managed preview automatically after a successful run and presents a browser URL for approval/rejection. If automatic startup cannot be used, start a browser preview from inside the sandbox with an explicit command:
+For UI tasks, Project Pipeline attempts to start a managed preview automatically after a successful run and presents a browser URL for approval/rejection. Validation agents may also emit Project Pipeline browser-smoke request artifacts; when a managed preview is running, the host bridge runs deterministic browser checks with PIDEX-local Playwright and archives sanitized evidence. If automatic startup cannot be used, start a browser preview from inside the sandbox with an explicit command:
 
 ```text
 /pdproject preview start <project-id> -- pnpm exec vite --host 0.0.0.0 --port $PORT
