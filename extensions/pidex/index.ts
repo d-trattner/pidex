@@ -603,6 +603,65 @@ export function runProjectPipelineRunFlow(request: ProjectPipelineRunFlowRequest
 	return { ok: proc.status === 0, exitCode: proc.status, projectId: built.projectId, stdout: safe.stdout, stderr: "", error: proc.status === 0 ? undefined : safe.error, no_fallback: true };
 }
 
+function projectPipelineProgressMessage(line: string): string | undefined {
+	const match = String(line || "").match(/^\[pidex:project-pipeline\]\s*(.+)$/);
+	return match?.[1]?.trim();
+}
+
+export async function runProjectPipelineRunFlowAsync(request: ProjectPipelineRunFlowRequest, options: { onProgress?: (message: string) => void; timeoutMs?: number } = {}): Promise<ProjectPipelineRunFlowResult> {
+	let built: { projectId: string; args: string[] };
+	try {
+		built = buildProjectPipelineRunFlowArgs(request);
+	} catch (error: any) {
+		return { ok: false, error: error?.message ?? String(error), no_fallback: true };
+	}
+	return await new Promise<ProjectPipelineRunFlowResult>((resolve) => {
+		const timeoutMs = options.timeoutMs ?? 30 * 60_000;
+		const child = spawn(process.execPath, built.args, { cwd: PACKAGE_ROOT, stdio: ["ignore", "pipe", "pipe"] });
+		let stdout = "";
+		let stderr = "";
+		let stderrRemainder = "";
+		let settled = false;
+		const finish = (result: ProjectPipelineRunFlowResult) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			process.off("SIGINT", onSigint);
+			resolve(result);
+		};
+		const onSigint = () => {
+			try { child.kill("SIGINT"); } catch {}
+			setTimeout(() => { try { if (!child.killed) child.kill("SIGTERM"); } catch {} }, 2000).unref?.();
+			finish({ ok: false, exitCode: null, projectId: built.projectId, stdout: "", stderr: "", error: "Project Pipeline interrupted by user; child process was signalled", no_fallback: true });
+		};
+		const timer = setTimeout(() => {
+			try { child.kill("SIGTERM"); } catch {}
+			finish({ ok: false, exitCode: null, projectId: built.projectId, stdout: "", stderr: "", error: `Project Pipeline timed out after ${timeoutMs}ms; child process was terminated`, no_fallback: true });
+		}, timeoutMs);
+		process.once("SIGINT", onSigint);
+		child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+		child.stderr?.on("data", (chunk) => {
+			stderr += String(chunk);
+			stderrRemainder += String(chunk);
+			const parts = stderrRemainder.split(/\r?\n/);
+			stderrRemainder = parts.pop() || "";
+			for (const part of parts) {
+				const progress = projectPipelineProgressMessage(part);
+				if (progress) options.onProgress?.(progress);
+			}
+		});
+		child.on("error", (error: any) => finish({ ok: false, exitCode: null, projectId: built.projectId, stdout: "", stderr: "", error: error?.message ?? String(error), no_fallback: true }));
+		child.on("close", (code) => {
+			if (stderrRemainder) {
+				const progress = projectPipelineProgressMessage(stderrRemainder);
+				if (progress) options.onProgress?.(progress);
+			}
+			const safe = safeProjectPipelineHelperOutput(stdout || "", built.projectId, code);
+			finish({ ok: code === 0, exitCode: code, projectId: built.projectId, stdout: safe.stdout, stderr: "", error: code === 0 ? undefined : safe.error, no_fallback: true });
+		});
+	});
+}
+
 export function startDefaultProjectPipelinePreview(projectId: string): { ok: boolean; summary: string; no_fallback?: true } {
 	return runPdProjectCommand({ command: "preview", action: "start", projectId, commandArgs: [...DEFAULT_PROJECT_PIPELINE_PREVIEW_COMMAND] }, {});
 }
@@ -1035,8 +1094,10 @@ async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): 
 		await ctx.ui.notify("Project Pipeline orchestrator cancelled before credential decision; no fallback was used.", "warning");
 		return;
 	}
-	await ctx.ui.notify("Starting Project Pipeline orchestrator in persistent Docker Project Sandbox", "info");
-	const result = runProjectPipelineRunFlow({ projectRoot: ctx.cwd ?? process.cwd(), task: initialTask, copyPiCredentials, acknowledgeTrustedPersistentContainer: copyPiCredentials });
+	await ctx.ui.notify("Starting Project Pipeline orchestrator in persistent Docker Project Sandbox. Progress will appear here while Docker/Pi child agents run; press Ctrl+C to interrupt.", "info");
+	const result = await runProjectPipelineRunFlowAsync({ projectRoot: ctx.cwd ?? process.cwd(), task: initialTask, copyPiCredentials, acknowledgeTrustedPersistentContainer: copyPiCredentials }, {
+		onProgress: (message) => { void ctx.ui.notify(`Project Pipeline: ${message}`, "info"); },
+	});
 	if (!result.ok) {
 		await ctx.ui.notify(`Project Pipeline orchestrator failed closed (no fallback). ${result.error ?? `exit=${result.exitCode}`}`, "error");
 		return;

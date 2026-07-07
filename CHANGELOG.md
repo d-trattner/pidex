@@ -6,6 +6,7 @@
 - Added mode telemetry for standard metrics/events and Project Pipeline phases, preserving optional `project_mode` through dashboard ingest, PDQ mode/source coverage summaries, and dashboard Overview/Runs/Quality mode visibility.
 - Documented the all-mode optional parallel-lane contract for `host-direct`, `hardened-pipeline`, and `project-pipeline` before implementation slices.
 - Added minimal Project Pipeline secondary parallel-lane support using existing child Pi execution, sequential MVP lane runs, archive-synced merge summaries, and hardened-pipeline review-only wording.
+- Improved `/pd` Project Pipeline migration UX by replacing the blocking run-flow bridge with async child execution, visible Docker/phase progress notifications, and fail-closed interrupt handling.
 
 ## 0.1.14 - 2026-07-07
 

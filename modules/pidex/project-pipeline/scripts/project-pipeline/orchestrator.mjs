@@ -486,22 +486,33 @@ function ensureSandboxAndSource(options, pidexRoot, projectId) {
   }
 }
 
+function projectPipelineProgress(options, message, metadata = {}) {
+  const event = { type: 'project-pipeline-progress', message, ...metadata };
+  if (typeof options.onProgress === 'function') options.onProgress(event);
+  else if (options.emitProgress !== false) console.error(`[pidex:project-pipeline] ${message}`);
+}
+
 export async function runProjectPipelineOrchestration(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = options.projectId;
   if (!projectId) throw new Error('--project-id is required');
   if (process.env.PIDEX_PROJECT_PIPELINE_CHILD === '1') return { ok: false, error: 'project-pipeline-recursion-guard', no_fallback: true };
   const phases = parsePhaseList(options.phases);
+  projectPipelineProgress(options, `preparing sandbox ${projectId}`, { phase: 'setup', project_id: projectId });
   const setup = ensureSandboxAndSource(options, pidexRoot, projectId);
   if (!setup.ok) return setup;
   if (setup.source?.ok === false) return { ok: false, error: 'source-init-failed', lifecycle: setup.lifecycle, source: setup.source, no_fallback: true };
+  projectPipelineProgress(options, `sandbox/source ready ${projectId}`, { phase: 'setup', project_id: projectId });
 
+  if (options.acknowledgeTrustedPersistentContainer === true) projectPipelineProgress(options, `credential copy requested for ${projectId}`, { phase: 'credentials', project_id: projectId });
   const entries = options.entries || parseCredentialEntries(options);
   let credentials = { ok: true, inventory: [] };
   try {
     if (entries.length) {
+      projectPipelineProgress(options, `copying selected credentials into trusted Project Sandbox ${projectId}`, { phase: 'credentials', project_id: projectId });
       credentials = copySelectedCredentials({ pidexRoot, projectId, command: 'copy', acknowledgeTrustedPersistentContainer: options.acknowledgeTrustedPersistentContainer === true, entries, runner: options.runner });
       if (!credentials.ok) return { ok: false, error: 'credential-bootstrap-failed', credentials, no_fallback: true };
+      projectPipelineProgress(options, `credential copy complete ${projectId}`, { phase: 'credentials', project_id: projectId });
     }
   } catch (error) {
     return { ok: false, error: 'credential-bootstrap-failed', reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, no_fallback: true };
@@ -515,6 +526,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
   let previous;
   for (let i = 0; i < phases.length; i += 1) {
     const agent = phases[i];
+    projectPipelineProgress(options, `running ${agent} (${i + 1}/${phases.length}) inside Project Sandbox`, { phase: agent, phase_index: i + 1, phase_count: phases.length, project_id: projectId });
     const moduleRulesText = renderProjectPipelineModuleRules({ pidexRoot, agent, project: pidexRoot, moduleRules: options.moduleRules, moduleRuleRenderer: options.moduleRuleRenderer, maxBytes: options.moduleRulesMaxBytes });
     const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length, moduleRulesText });
     let run;
@@ -541,6 +553,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
     }
     const runSummary = { agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, retry_count: retryCount, error: run.error, reason: run.reason };
     runs.push(runSummary);
+    projectPipelineProgress(options, `${agent} ${run.ok ? 'complete' : 'failed'}${run.context_file ? ` context_file=${run.context_file}` : ''}`, { phase: agent, status: run.ok ? 'complete' : 'failed', project_id: projectId });
     appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: runSummary });
     if (!run.ok) {
       appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase failed: ${agent}`, metadata: { failed_agent: agent, runs } });
@@ -553,6 +566,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
       const eligible = (options.parallelLaneProvider || defaultEligibleParallelLanes)({ pidexRoot, projectId, agent, trigger: parallelTrigger });
       const laneSummaries = [];
       for (const lane of eligible) {
+        projectPipelineProgress(options, `running secondary ${agent} lane ${lane.lane_id || 'unknown'} for ${parallelTrigger}`, { phase: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, project_id: projectId });
         const laneTask = buildProjectPipelineSecondaryLaneTask({ lane: { ...lane, agent }, trigger: parallelTrigger, primary: previous, initialTask: options.task || '' });
         const laneRun = runProjectPipelineAgent({
           pidexRoot,
@@ -570,9 +584,11 @@ export async function runProjectPipelineOrchestration(options = {}) {
         const laneSummary = { agent, ok: laneRun.ok, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
         laneSummaries.push(laneSummary);
         runs.push(laneSummary);
+        projectPipelineProgress(options, `secondary ${agent} lane ${lane.lane_id || 'unknown'} ${laneRun.ok ? 'complete' : 'failed'}`, { phase: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, status: laneRun.ok ? 'complete' : 'failed', project_id: projectId });
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: laneSummary, source: 'parallel_agents' });
       }
       if (laneSummaries.length) {
+        projectPipelineProgress(options, `writing parallel merge summary for ${parallelTrigger}`, { phase: 'parallel-merge', parallel_trigger: parallelTrigger, project_id: projectId });
         const mergeMarkdown = buildProjectPipelineParallelMergeMarkdown({ trigger: parallelTrigger, primary: previous, laneSummaries });
         const merge = writeProjectPipelineMergeArtifact({ pidexRoot, record: telemetryRecord, trigger: parallelTrigger, markdown: mergeMarkdown, archiveWorkspace: options.archiveWorkspace, runner: options.runner });
         const mergeSummary = { agent: 'orchestrator', ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, archive_sync_status: merge.archive_sync_status, parallel_trigger: parallelTrigger, parallel_role: 'merge' };
@@ -583,6 +599,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
     }
 
     if (options.browserSmokeAuto !== false && BROWSER_SMOKE_REQUEST_SEGMENTS[agent]) {
+      projectPipelineProgress(options, `checking browser-smoke requests after ${agent}`, { phase: 'browser-smoke', agent, project_id: projectId });
       const browserSmokeResults = await runBrowserSmokeBridgeForPhase({ pidexRoot, projectId, agent, browserSmokeBridgeRunner: options.browserSmokeBridgeRunner, now: options.now, maxAgeMs: options.browserSmokeMaxAgeMs, playwright: options.playwright });
       if (browserSmokeResults.length) {
         const sandboxResults = browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId }));
@@ -601,6 +618,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
     }
   }
   appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_completed', status: 'complete', metadata: { runs } });
+  projectPipelineProgress(options, `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId });
   return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, no_fallback: true };
 }
 

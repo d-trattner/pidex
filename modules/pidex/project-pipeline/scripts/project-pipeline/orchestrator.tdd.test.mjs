@@ -165,6 +165,44 @@ test('runProjectPipelineOrchestration injects module-scoped rules into validatio
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
+test('runProjectPipelineOrchestration emits progress for setup, credentials, phases, and completion', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-progress');
+  const progress = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = String(args.at(-1));
+      const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-unknown';
+      const context = `agents.output/${agent}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), `# ${agent}\n`);
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot,
+    projectId: 'pp-orch-progress',
+    task: 'ship it',
+    phases: ['pidex-planner'],
+    archiveWorkspace,
+    runner,
+    entries: [],
+    acknowledgeTrustedPersistentContainer: true,
+    moduleRules: false,
+    onProgress: (event) => progress.push(event.message),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(progress.some((message) => /preparing sandbox/.test(message)), true);
+  assert.equal(progress.some((message) => /credential copy requested/.test(message)), true);
+  assert.equal(progress.some((message) => /running pidex-planner/.test(message)), true);
+  assert.equal(progress.some((message) => /pidex-planner complete/.test(message)), true);
+  assert.equal(progress.some((message) => /Project Pipeline complete/.test(message)), true);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
 test('runProjectPipelineOrchestration runs phases sequentially and records archive contexts', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');

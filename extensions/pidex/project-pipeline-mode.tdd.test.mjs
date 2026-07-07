@@ -171,6 +171,8 @@ if (modeIndex === -1) {
   writeFileSync(orchestratorHelper, `
 import { writeFileSync } from 'node:fs';
 writeFileSync(process.env.PIDEX_TEST_RECORDER, JSON.stringify({ argv: process.argv.slice(2) }));
+console.error('[pidex:project-pipeline] preparing sandbox pp-seam');
+console.error('[pidex:project-pipeline] running pidex-planner (1/7) inside Project Sandbox');
 console.log(JSON.stringify({ ok: true, no_fallback: true, lifecycle: { record: { project_id: 'pp-seam' } }, final_context_file: 'agents.output/qa/seam.md', runs: [{ agent: 'pidex-qa', ok: true, context_file: 'agents.output/qa/seam.md', archive_sync_status: 'complete' }] }));
 `);
   try {
@@ -214,6 +216,8 @@ console.log(JSON.stringify({ notifications, sent, recorded: JSON.parse(readFileS
     const parsed = JSON.parse(child.stdout.trim().split(/\n/).at(-1));
     assert.equal(parsed.sent.length, 0, 'project-pipeline mode should not fall through to host kickoff');
     assert.match(parsed.notifications.map((item) => item.message).join('\n'), /persistent Docker Project Sandbox/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /Project Pipeline: preparing sandbox pp-seam/);
+    assert.match(parsed.notifications.map((item) => item.message).join('\n'), /Project Pipeline: running pidex-planner \(1\/7\) inside Project Sandbox/);
     assert.match(parsed.notifications.map((item) => item.message).join('\n'), /Project Pipeline run-flow complete for pp-seam/);
     const argv = parsed.recorded.argv;
     assert.match(argv[argv.indexOf('--task') + 1], /Initial user task: ship same task/);
