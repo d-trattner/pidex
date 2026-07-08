@@ -13,7 +13,7 @@
       "scope": "install",
       "importance": "optional",
       "allowed_agents": ["orchestrator", "pidex-planner", "pidex-devops", "pidex-pi"],
-      "supported_platforms": ["linux", "wsl2", "windows-git-bash"],
+      "supported_platforms": ["linux", "wsl2", "windows-git-bash", "windows-native"],
       "mutability": ["read-only", "writes-artifacts"],
       "command": {
         "bin": "node",
