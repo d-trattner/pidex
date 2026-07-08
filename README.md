@@ -236,7 +236,7 @@ node dashboard/start.mjs
 .\uninstall.windows.ps1
 ```
 
-See [Windows status](readme/windows.md). The Linux shell launchers are not required for the dashboard on native Windows.
+On native Windows, `node dashboard/start.mjs` runs the dashboard in the current terminal by default to avoid flashing helper console windows; stop it with `Ctrl+C`. See [Windows status](readme/windows.md). The Linux shell launchers are not required for the dashboard on native Windows.
 
 The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
 

@@ -13,7 +13,11 @@ cd <pidex-root>
 node dashboard/start.mjs
 ```
 
-This Node launcher is the preferred entrypoint on native Windows or any environment where Bash is unavailable. The Linux shell launcher remains available for compatibility:
+This Node launcher is the preferred entrypoint on native Windows or any environment where Bash is unavailable.
+
+On native Windows, the default is intentionally one-command and foreground/in-process: it ingests dashboard data, starts the local dev server in the current PowerShell/CMD window, and avoids spawning visible helper console windows. Stop it with `Ctrl+C`. Use `--production` only when you explicitly want the production build/preview path.
+
+The Linux shell launcher remains available for compatibility:
 
 ```bash
 cd <pidex-root>/dashboard
@@ -29,6 +33,11 @@ Default local URL:
 ```text
 http://127.0.0.1:18777/dashboard
 ```
+
+Stop the cross-platform launcher:
+
+- Windows default foreground mode: press `Ctrl+C` in the terminal running `node dashboard/start.mjs`.
+- Detached Linux/production mode: rerunning `node dashboard/start.mjs` replaces the previous PID recorded in `dashboard/.dashboard-18777.pid`.
 
 If you expose the dashboard through your own LAN DNS/reverse proxy, pass the domain explicitly so the launcher prints it:
 

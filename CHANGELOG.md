@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated `node dashboard/start.mjs` on native Windows to run the dashboard in-process/foreground by default, avoiding visible cmd-window churn while preserving a one-command no-Bash dashboard startup; stop with `Ctrl+C`, or pass `--production` to force build+preview.
 - Added `/pdproject diagnose <project-id>` as a no-Bash Project Pipeline diagnostic for native Windows/desktop sessions where the Pi `bash` tool cannot start `/bin/bash`; it reports registry, Docker, archive, dashboard DB visibility, and safe next actions through PIDEX Node helpers.
 - Hardened Project Pipeline browser-smoke phase prompts/rules so QA/UAT request JSON must use the canonical Project Pipeline registry `project_id` from the phase prompt, preventing app-name/source-name mismatches such as `demo-app` versus `pp-demo-app-...`.
 - Added read-only `pidex_project` tool so orchestrators can inspect Project Pipeline status, diagnostics, runs, artifacts, credential status, and preview status/logs through existing no-Bash PIDEX helpers instead of asking users to manually run `/pdproject` commands or spawning agents just to inspect Docker state.

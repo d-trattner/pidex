@@ -135,13 +135,16 @@ cd $HOME\pidex
 node dashboard/start.mjs
 ```
 
+On native Windows, the default is foreground/in-process to avoid visible cmd-window churn from spawned helper processes. Keep that PowerShell/CMD window open while using the dashboard, and stop it with `Ctrl+C`.
+
 Useful options:
 
 ```powershell
-node dashboard/start.mjs --no-build
-node dashboard/start.mjs --dev
 node dashboard/start.mjs --host 0.0.0.0 --domain your.local.name
+node dashboard/start.mjs --production
 ```
+
+`--production` forces the production build+preview path. The default native Windows path intentionally skips that path and starts the local dev server in-process for calmer one-command startup.
 
 A local friendly domain can also be configured in `$HOME\pidex\config\dashboard.local.json`:
 
@@ -151,7 +154,7 @@ A local friendly domain can also be configured in `$HOME\pidex\config\dashboard.
 }
 ```
 
-The launcher is experimental; by default it starts the dashboard detached and prints the local URL. Use `--foreground` to keep the Vite process attached.
+The launcher is experimental. On Linux it can start detached and prints the local URL. On native Windows it stays attached by default to keep startup predictable and avoid flashing helper console windows.
 
 Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29 and 2026-07-06 from `$HOME\pidex` with Docker Desktop Linux containers and standalone `pnpm@10.33.0`:
 
