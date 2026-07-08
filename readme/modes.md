@@ -28,7 +28,7 @@ Parity means differences are intentional, documented, and tested. It does **not*
 | Parallel secondary lanes | Supported by host orchestrator config with no required host-direct slowdown | Supported through host-side review-only secondary lanes; host source remains canonical and sandbox evidence is input only | Supported by Project Pipeline orchestrator; secondary lanes run sequentially in Project Sandbox for MVP and write archive-synced `agents.output/parallel-agents/**` artifacts |
 | Module capability discovery | Available | Available | Available |
 | Module-scoped rule metadata/rendering | Available | Available | Available |
-| Live module-rule prompt injection | Not an architectural baseline; only use when an active module/rule needs it, without adding host-direct bottlenecks | Not needed until a hardened-specific module/rule requires it | Yes for current Project Pipeline browser-smoke phase rules with `mode: project-pipeline` filters |
+| Module-rule prompt use | PIDEX-wide capability; host-direct may render/include matched module rules when a handoff has an approved consumer, without adding mandatory bottlenecks | PIDEX-wide capability; hardened-pipeline may render/include matched module rules when a sandboxed handoff has an approved consumer | Current first automatic consumer: Project Pipeline appends matched rendered rules to in-container phase prompts |
 | Managed preview lifecycle | Not mode-native today; host-direct should stay low-friction and avoid mandatory preview overhead | Wanted as a host-project preview helper while Docker remains only the programming harness | Yes: `/pdproject preview` and automatic UI preview gates |
 | Browser-smoke install/preflight | Available as PIDEX-local host capability for manual/operator-owned checks | Available as PIDEX-local host capability for manual/operator-owned checks | Available and integrated with Project Pipeline bridge |
 | Browser-smoke automatic request/bridge/verdict loop | Intentionally not automatic; host-direct preview/server ownership stays user/project-owned | Intentionally not automatic; Docker is a temporary programming harness, not the preview owner | Yes for QA/UAT/devops request artifacts |
@@ -66,7 +66,7 @@ These features are not always part of the source-changing agent path, but they a
 - Hardened-pipeline is temporary protection for selected host-project work. It should not become a persistent source-of-truth container.
 - Project Pipeline source is intentionally not mirrored back to the host automatically. The container is the desired source-of-truth for that mode.
 - Project-specific PIDEX context, wiki, and memory files live in the host project directory regardless of execution mode unless a future feature deliberately changes that contract.
-- Not all module-scoped rules should apply to all modes. Rules must declare mode scope when behavior is mode-specific; live prompt injection is a module need, not a baseline requirement.
+- Module-scoped rules are part of the PIDEX-wide module system, not Project Pipeline-only. Rules may declare mode scope when behavior is mode-specific, but the module-rule facility itself should remain available to all modes through approved handoff consumers.
 
 ## Known open parity decisions
 
@@ -80,7 +80,7 @@ Tracked in Initiative 030 Project Mode Feature Parity:
 
 ## Rule for future feature changes
 
-Any feature touching `/pd`, `pidex_agent`, artifacts, preview, browser-smoke, credentials, modules, quality reports, quality governance, dashboard views, provider profiles, project context, memory/wiki commands, history/metrics, package-manager helpers, host safety hooks, or parallel lanes must state mode impact explicitly:
+Any feature touching `/pd`, `pidex_agent`, artifacts, preview, browser-smoke, credentials, modules, module-scoped rules, quality reports, quality governance, dashboard views, provider profiles, project context, memory/wiki commands, history/metrics, package-manager helpers, host safety hooks, or parallel lanes must state mode impact explicitly:
 
 - applies to all three modes;
 - applies to one or two modes only, with reason;

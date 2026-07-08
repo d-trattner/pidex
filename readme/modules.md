@@ -4,7 +4,7 @@ PIDEX modules are an internal architecture boundary for PIDEX-owned workflow fea
 
 ## Current status
 
-The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, module-scoped `agent_rules` metadata discovery, reviewed rule rendering, Project Pipeline-scoped rule prompt integration, and read-only dashboard transparency.
+The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, module-scoped `agent_rules` metadata discovery, reviewed rule rendering, PIDEX-wide module-rule eligibility, the first automatic prompt-integration consumer in Project Pipeline, and read-only dashboard transparency.
 
 Physically migrated first-party modules now include:
 
@@ -27,7 +27,7 @@ Not implemented yet:
 - dashboard module management UI;
 - removal of compatibility wrappers;
 - external rule contributions;
-- global/host-direct module rule prompt injection beyond the reviewed Project Pipeline integration.
+- automatic host-direct/hardened-pipeline module rule prompt injection beyond the reviewed Project Pipeline integration.
 
 ## Runtime root
 
@@ -192,7 +192,7 @@ Module-scoped `agent_rules` are shown as metadata only in Stage A. They are filt
 
 Stage B adds `render-rules.mjs` as an explicit rendering helper. It renders matched rule bodies with provenance wrappers for reviewed consumers.
 
-Stage C wires the reviewed renderer into Project Pipeline only: the Project Pipeline orchestrator appends matched module-scoped rules under `## Module-scoped rules active for this Project Pipeline phase` in in-container phase prompts for `mode: project-pipeline`. Host-direct/no-mode flows do not call this injector. Non-matching agents/phases receive no rendered rule section; rendered text remains bounded by the renderer cap and still grants no tools.
+Stage C wires the reviewed renderer into Project Pipeline as the first automatic consumer: the Project Pipeline orchestrator appends matched module-scoped rules under `## Module-scoped rules active for this Project Pipeline phase` in in-container phase prompts for `mode: project-pipeline`. This does not make module-scoped rules Project Pipeline-only. Module-scoped rules are a PIDEX-wide module-system capability: any mode may render matched rules through `render-rules.mjs` when the orchestrator/handoff path has an approved consumer. Host-direct/no-mode flows do not currently have automatic injection, but that is an integration gap, not a module-scope guard. Non-matching agents/phases receive no rendered rule section; rendered text remains bounded by the renderer cap and still grants no tools.
 
 Deterministic scripts are different from agents: `install.sh`, `uninstall.sh`, `doctor.sh`, smoke scripts, and package scripts must not discover capabilities and choose one dynamically. They own their policy decision and call fixed capability IDs through `run-check.mjs`; the module system owns only path resolution, availability checks, execution, and evidence.
 
