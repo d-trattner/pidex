@@ -20,7 +20,7 @@
         "args": ["modules/pidex/provider-governance/scripts/provider-limits/probe.mjs"],
         "passthrough": true,
         "passthrough_policy": {
-          "allowed_patterns": ["^(latest|refresh|use|alert)$", "^--dry-run$", "^[A-Za-z0-9._:-]+$"]
+          "allowed_patterns": ["^(latest|refresh|use|alert|auth-status)$", "^--dry-run$", "^[A-Za-z0-9._:-]+$"]
         }
       }
     },

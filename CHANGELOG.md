@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Updated provider-limit probing to use Pi's `~/.pi/agent/auth.json` Codex OAuth token (`openai-codex.access`) before falling back to Codex CLI auth, plus a redacted `auth-status` check for diagnostics.
 - Fixed dashboard provider-limit auto-refresh to call the module-owned provider-governance probe, restoring Codex/Codex Spark usage refresh for native Windows/no-Bash dashboard startup when Codex auth is available.
 - Changed dashboard background canvas layers to static rendering and disabled hidden-tab query refetching to preserve the colorful background without continuous motion.
 - Fixed dashboard Project Pipeline ingest to overwrite stale technical `pp-...` project display names with the source folder basename on subsequent ingest.

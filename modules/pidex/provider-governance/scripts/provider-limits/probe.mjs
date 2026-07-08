@@ -51,11 +51,35 @@ function nativeRecords() {
   const rows = loadJson(path.join(STATE, 'native-records.json')).records;
   return Array.isArray(rows) ? rows.filter((row) => row && typeof row === 'object') : [];
 }
-function codexToken() {
-  if (process.env.CODEX_TOKEN) return process.env.CODEX_TOKEN;
+function piCodexToken() {
+  const authFile = process.env.CODEX_PI_AUTH_FILE || path.join(os.homedir(), '.pi', 'agent', 'auth.json');
+  const data = loadJson(authFile);
+  for (const key of ['openai-codex', 'codex', 'openai']) {
+    const entry = data?.[key];
+    if (!entry || typeof entry !== 'object') continue;
+    const token = entry.access || entry.access_token || entry.token || entry.tokens?.access_token;
+    if (token) return String(token);
+  }
+  return null;
+}
+function codexCliToken() {
   const authFile = process.env.CODEX_AUTH_FILE || path.join(os.homedir(), '.codex', 'auth.json');
   const data = loadJson(authFile);
   return data.tokens?.access_token || data.access_token || null;
+}
+function codexToken() {
+  if (process.env.CODEX_TOKEN) return process.env.CODEX_TOKEN;
+  return piCodexToken() || codexCliToken();
+}
+function codexAuthStatus() {
+  return {
+    ok: Boolean(codexToken()),
+    sources: {
+      env_CODEX_TOKEN: Boolean(process.env.CODEX_TOKEN),
+      pi_auth_openai_codex: Boolean(piCodexToken()),
+      codex_cli_auth: Boolean(codexCliToken()),
+    },
+  };
 }
 async function getJson(url, token) {
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': 'pidex-provider-limits/0.1' }, signal: AbortSignal.timeout(12_000) });
@@ -217,6 +241,7 @@ async function main() {
   if (!command || command === 'latest') result = latestSnapshot();
   else if (command === 'refresh') result = await refreshSnapshot();
   else if (command === 'use') result = setProfile(rest[0]);
+  else if (command === 'auth-status') result = codexAuthStatus();
   else if (command === 'alert') result = alert(rest.includes('--dry-run'));
   else { console.error(`Unknown command: ${command}`); process.exit(2); }
   console.log(JSON.stringify(result));
