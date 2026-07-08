@@ -7,7 +7,7 @@ import { errorResponse, jsonResponse } from '../../lib/server/response';
 import { authorizeProviderLimitsRequest } from '../../lib/server/provider-limits-auth';
 
 const PIDEX_ROOT = path.resolve(process.cwd(), '..');
-const SCRIPT = path.join(PIDEX_ROOT, 'scripts', 'parallel-agents', 'status.mjs');
+const SCRIPT = path.join(PIDEX_ROOT, 'modules', 'pidex', 'parallel-agents', 'scripts', 'status.mjs');
 const CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.json');
 const LOCAL_CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.local.json');
 const STATE_PATH = path.join(PIDEX_ROOT, 'state', 'parallel-agents', 'status.json');

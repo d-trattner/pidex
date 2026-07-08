@@ -358,6 +358,12 @@ function registryProjectPath(record) {
   if (record?.project_id) return projectPipelineArchiveRoot(record.project_id);
   return '';
 }
+function projectPipelineDisplayName(record, projectPath) {
+  const explicit = String(record?.name || '').trim();
+  const projectId = String(record?.project_id || '').trim();
+  if (explicit && explicit !== projectId && !explicit.startsWith('pp-')) return explicit;
+  return path.basename(canonicalPath(projectPath)) || projectId || 'Project Pipeline project';
+}
 function cleanupProjectPipelineArchiveProject(db, archivePath, projectId) {
   if (!archivePath) return;
   const archive = canonicalPath(archivePath);
@@ -392,7 +398,7 @@ function projectPipelineRegistryRecords() {
 function ingestProjectPipelineRegistry(db) {
   let count = 0;
   for (const { record, projectPath, archivePath } of projectPipelineRegistryRecords()) {
-    const projectId = registerProject(db, projectPath, record.name || record.project_id || path.basename(projectPath));
+    const projectId = registerProject(db, projectPath, projectPipelineDisplayName(record, projectPath));
     cleanupProjectPipelineArchiveProject(db, archivePath, projectId);
     count++;
   }
@@ -455,7 +461,7 @@ function ingestArtifacts(db, projects) {
   }
   for (const { record, projectPath, archivePath } of projectPipelineRegistryRecords()) {
     if (!archivePath || !pathExists(archivePath)) continue;
-    const pid = registerProject(db, projectPath, record.name || record.project_id || path.basename(projectPath));
+    const pid = registerProject(db, projectPath, projectPipelineDisplayName(record, projectPath));
     cleanupProjectPipelineArchiveProject(db, archivePath, pid);
     const [a, m] = ingestArtifactRoot(db, archivePath, pid, artifactStmt);
     artifactCount += a;

@@ -58,7 +58,7 @@ try {
   writeFileSync(path.join(state, 'sandbox-projects', 'pp-sandbox-only.json'), JSON.stringify({
     schema_version: 2,
     project_id: 'pp-sandbox-only',
-    name: 'Sandbox Only Project',
+    name: 'pp-sandbox-only',
     mode: 'project-pipeline',
     source: { kind: 'local', ref: sandboxOnly },
     archive: { path: sandboxArchive },
@@ -88,9 +88,9 @@ try {
   assert.equal(value(dbPath, 'select project_mode from pipeline_events'), 'project-pipeline');
   assert.equal(count(dbPath, 'artifacts'), 3);
   assert.equal(count(dbPath, 'merge_findings'), 3);
-  assert.equal(value(dbPath, `select name from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 'Sandbox Only Project');
+  assert.equal(value(dbPath, `select name from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 'sandbox-only-host-project');
   assert.equal(value(dbPath, `select count(*) from projects where path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
-  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), ['Sandbox Only Project', 'project']);
+  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), ['project', 'sandbox-only-host-project']);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxOnly.replaceAll("'", "''")}'`), 2);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
 } finally {
