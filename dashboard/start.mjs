@@ -67,14 +67,35 @@ export function findNodeBinUpwards(start, binName, platform = process.platform) 
   return '';
 }
 
+export function findPackageBinUpwards(start, packageName, relativeBin) {
+  let dir = path.resolve(start);
+  while (dir && dir !== path.dirname(dir)) {
+    const candidate = path.join(dir, 'node_modules', packageName, relativeBin);
+    if (existsSync(candidate)) return candidate;
+    dir = path.dirname(dir);
+  }
+  return '';
+}
+
+export function resolveViteInvocation(start = DASHBOARD_ROOT, platform = process.platform) {
+  const viteJs = findPackageBinUpwards(start, 'vite', path.join('bin', 'vite.js'));
+  if (viteJs) return { command: process.execPath, baseArgs: [viteJs], display: viteJs };
+  const viteShim = findNodeBinUpwards(start, 'vite', platform);
+  if (!viteShim) return null;
+  if (platform === 'win32' && /\.(cmd|ps1)$/i.test(viteShim)) {
+    return { command: viteShim, baseArgs: [], display: viteShim, shell: true };
+  }
+  return { command: viteShim, baseArgs: [], display: viteShim };
+}
+
 function stopPid(pid) {
   const n = Number.parseInt(String(pid || '').trim(), 10);
   if (!Number.isFinite(n) || n <= 0) return;
   try { process.kill(n, 'SIGTERM'); } catch {}
 }
 
-function runChecked(command, args, options = {}) {
-  const proc = spawnSync(command, args, { cwd: DASHBOARD_ROOT, stdio: 'inherit', shell: false, ...options });
+function runChecked(invocation, args, options = {}) {
+  const proc = spawnSync(invocation.command, [...invocation.baseArgs, ...args], { cwd: DASHBOARD_ROOT, stdio: 'inherit', shell: Boolean(invocation.shell), ...options });
   if (proc.status !== 0) process.exit(proc.status || 1);
 }
 
@@ -108,7 +129,7 @@ export async function main(argv = process.argv.slice(2)) {
     try { rmSync(pidFile, { force: true }); } catch {}
   }
 
-  const vite = findNodeBinUpwards(DASHBOARD_ROOT, 'vite');
+  const vite = resolveViteInvocation(DASHBOARD_ROOT);
   if (!vite) {
     console.error(`Missing dashboard dependency: vite. Run pnpm install --frozen-lockfile --ignore-scripts from '${PIDEX_ROOT}' using the pinned pnpm version, or install PIDEX through the full installer.`);
     process.exit(1);
@@ -147,7 +168,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (opts.foreground) {
     console.log(`==> Starting dashboard in foreground on ${opts.host}:${opts.port}`);
     for (const line of dashboardUrls(opts)) console.log(line);
-    const child = spawn(vite, args, { cwd: DASHBOARD_ROOT, env, stdio: 'inherit', shell: false });
+    const child = spawn(vite.command, [...vite.baseArgs, ...args], { cwd: DASHBOARD_ROOT, env, stdio: 'inherit', shell: Boolean(vite.shell) });
     const code = await new Promise((resolve) => child.on('close', resolve));
     process.exit(Number(code || 0));
   }
@@ -155,7 +176,7 @@ export async function main(argv = process.argv.slice(2)) {
   console.log(`==> Starting dashboard on ${opts.host}:${opts.port}`);
   const out = openSync(log, 'a');
   const err = openSync(log, 'a');
-  const child = spawn(vite, args, { cwd: DASHBOARD_ROOT, env, detached: true, stdio: ['ignore', out, err], shell: false });
+  const child = spawn(vite.command, [...vite.baseArgs, ...args], { cwd: DASHBOARD_ROOT, env, detached: true, stdio: ['ignore', out, err], shell: Boolean(vite.shell) });
   child.unref();
   writeFileSync(pidFile, `${child.pid}\n`, 'utf8');
   console.log('PIDEX dashboard started.');
