@@ -358,10 +358,24 @@ function registryProjectPath(record) {
   if (record?.project_id) return projectPipelineArchiveRoot(record.project_id);
   return '';
 }
-function ingestProjectPipelineRegistry(db) {
-  let count = 0;
+function cleanupProjectPipelineArchiveProject(db, archivePath, projectId) {
+  if (!archivePath) return;
+  const archive = canonicalPath(archivePath);
+  const row = db.prepare("SELECT id, name FROM projects WHERE path = ? AND name LIKE '% archive'").get(archive);
+  if (!row) return;
+  const archiveProjectId = Number(row.id);
+  if (!Number.isFinite(archiveProjectId) || archiveProjectId === projectId) return;
+  db.prepare('UPDATE artifacts SET project_id = ? WHERE project_id = ?').run(projectId, archiveProjectId);
+  db.prepare('UPDATE merge_findings SET project_id = ? WHERE project_id = ?').run(projectId, archiveProjectId);
+  db.prepare('UPDATE agent_runs SET project_id = ? WHERE project_id = ?').run(projectId, archiveProjectId);
+  db.prepare('UPDATE pipeline_events SET project_id = ? WHERE project_id = ?').run(projectId, archiveProjectId);
+  db.prepare('DELETE FROM projects WHERE id = ?').run(archiveProjectId);
+}
+
+function projectPipelineRegistryRecords() {
+  const records = [];
   const root = projectPipelineRegistryRoot();
-  if (!pathExists(root)) return count;
+  if (!pathExists(root)) return records;
   for (const entry of readdirSync(root, { withFileTypes: true }).filter((item) => item.isFile() && item.name.endsWith('.json'))) {
     const file = path.join(root, entry.name);
     let record;
@@ -369,9 +383,17 @@ function ingestProjectPipelineRegistry(db) {
     if (record?.mode !== 'project-pipeline') continue;
     const projectPath = registryProjectPath(record);
     if (!projectPath) continue;
-    registerProject(db, projectPath, record.name || record.project_id || path.basename(projectPath));
-    const archive = record.archive?.path || (record.project_id ? projectPipelineArchiveRoot(record.project_id) : '');
-    if (archive && pathExists(archive)) registerProject(db, archive, `${record.name || record.project_id} archive`);
+    const archivePath = record.archive?.path || (record.project_id ? projectPipelineArchiveRoot(record.project_id) : '');
+    records.push({ record, projectPath, archivePath });
+  }
+  return records;
+}
+
+function ingestProjectPipelineRegistry(db) {
+  let count = 0;
+  for (const { record, projectPath, archivePath } of projectPipelineRegistryRecords()) {
+    const projectId = registerProject(db, projectPath, record.name || record.project_id || path.basename(projectPath));
+    cleanupProjectPipelineArchiveProject(db, archivePath, projectId);
     count++;
   }
   return count;
@@ -395,6 +417,30 @@ function discoverProjects(rawProjects) {
   return projects;
 }
 
+function ingestArtifactRoot(db, projectRoot, pid, artifactStmt) {
+  let artifactCount = 0;
+  let mergeCount = 0;
+  const out = path.join(canonicalPath(projectRoot), 'agents.output');
+  if (!pathExists(out)) return [artifactCount, mergeCount];
+  for (const filePath of listFilesRecursive(out, (p) => p.endsWith('.md'))) {
+    let stat, text;
+    try { stat = statSync(filePath); text = readText(filePath); } catch { continue; }
+    const routing = parseRouting(text);
+    const title = (text.split(/\r?\n/).find((line) => line.startsWith('#')) || path.basename(filePath, '.md')).replace(/^#+\s*/, '').trim();
+    const role = artifactRole(filePath);
+    const label = modelLabel(filePath);
+    const secondary = label ? 1 : 0;
+    const merge = isMergeArtifact(filePath, text);
+    if (!secondary && !merge) continue;
+    const planKey = extractPlanKey(filePath, text);
+    artifactStmt.run(canonicalPath(filePath), pid, planKey, role, label, secondary, Object.keys(routing).length ? 1 : 0,
+      routing.verdict ?? null, routing.route_to ?? null, routing.gate ?? null, title.slice(0, 300), utcFromTsMs(stat.mtimeMs), stat.size, safeHash(text));
+    artifactCount++;
+    if (merge) mergeCount += ingestMergeRows(db, filePath, pid, planKey, text);
+  }
+  return [artifactCount, mergeCount];
+}
+
 function ingestArtifacts(db, projects) {
   let artifactCount = 0;
   let mergeCount = 0;
@@ -402,25 +448,18 @@ function ingestArtifacts(db, projects) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (let project of projects) {
     project = canonicalPath(project);
-    const out = path.join(project, 'agents.output');
-    if (!pathExists(out)) continue;
     const pid = projectId(db, project);
-    for (const filePath of listFilesRecursive(out, (p) => p.endsWith('.md'))) {
-      let stat, text;
-      try { stat = statSync(filePath); text = readText(filePath); } catch { continue; }
-      const routing = parseRouting(text);
-      const title = (text.split(/\r?\n/).find((line) => line.startsWith('#')) || path.basename(filePath, '.md')).replace(/^#+\s*/, '').trim();
-      const role = artifactRole(filePath);
-      const label = modelLabel(filePath);
-      const secondary = label ? 1 : 0;
-      const merge = isMergeArtifact(filePath, text);
-      if (!secondary && !merge) continue;
-      const planKey = extractPlanKey(filePath, text);
-      artifactStmt.run(canonicalPath(filePath), pid, planKey, role, label, secondary, Object.keys(routing).length ? 1 : 0,
-        routing.verdict ?? null, routing.route_to ?? null, routing.gate ?? null, title.slice(0, 300), utcFromTsMs(stat.mtimeMs), stat.size, safeHash(text));
-      artifactCount++;
-      if (merge) mergeCount += ingestMergeRows(db, filePath, pid, planKey, text);
-    }
+    const [a, m] = ingestArtifactRoot(db, project, pid, artifactStmt);
+    artifactCount += a;
+    mergeCount += m;
+  }
+  for (const { record, projectPath, archivePath } of projectPipelineRegistryRecords()) {
+    if (!archivePath || !pathExists(archivePath)) continue;
+    const pid = registerProject(db, projectPath, record.name || record.project_id || path.basename(projectPath));
+    cleanupProjectPipelineArchiveProject(db, archivePath, pid);
+    const [a, m] = ingestArtifactRoot(db, archivePath, pid, artifactStmt);
+    artifactCount += a;
+    mergeCount += m;
   }
   return [artifactCount, mergeCount];
 }

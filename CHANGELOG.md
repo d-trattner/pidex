@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed dashboard ingest so Project Pipeline archive directories are no longer registered as separate dashboard projects; archive artifacts are attributed to the registered Project Sandbox project and stale `* archive` project rows are cleaned up in the SQLite index only.
 - Updated `node dashboard/start.mjs` on native Windows to run the dashboard in-process/foreground by default, avoiding visible cmd-window churn while preserving a one-command no-Bash dashboard startup; stop with `Ctrl+C`, or pass `--production` to force build+preview.
 - Added `/pdproject diagnose <project-id>` as a no-Bash Project Pipeline diagnostic for native Windows/desktop sessions where the Pi `bash` tool cannot start `/bin/bash`; it reports registry, Docker, archive, dashboard DB visibility, and safe next actions through PIDEX Node helpers.
 - Hardened Project Pipeline browser-smoke phase prompts/rules so QA/UAT request JSON must use the canonical Project Pipeline registry `project_id` from the phase prompt, preventing app-name/source-name mismatches such as `demo-app` versus `pp-demo-app-...`.
