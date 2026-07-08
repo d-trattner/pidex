@@ -25,9 +25,9 @@ function makeParticles(): Particle[] {
   }));
 }
 
-export function DustParticles() {
+export function DustParticles({ staticRender = false }: { staticRender?: boolean } = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = Boolean(useReducedMotion() || staticRender);
   const particles = useMemo(makeParticles, []);
 
   useEffect(() => {

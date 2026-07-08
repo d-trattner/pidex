@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Removed animated dashboard background canvas layers and disabled hidden-tab query refetching to reduce visual motion and improve dashboard responsiveness.
+- Changed dashboard background canvas layers to static rendering and disabled hidden-tab query refetching to preserve the colorful background without continuous motion.
 - Fixed dashboard Project Pipeline ingest to overwrite stale technical `pp-...` project display names with the source folder basename on subsequent ingest.
 - Fixed dashboard server PIDEX-root resolution for native Windows in-process startup so usage/profile/quality/modules/parallel-agent APIs read the actual `$HOME\pidex` checkout instead of resolving paths relative to the caller's current directory.
 - Improved dashboard Project Pipeline display names so records whose registry name is the technical `pp-...` id fall back to the source folder basename, while preserving explicit friendly names.

@@ -87,9 +87,9 @@ function compile(gl: WebGLRenderingContext, type: number, source: string): WebGL
   return shader;
 }
 
-export function ShaderBackground() {
+export function ShaderBackground({ staticRender = false }: { staticRender?: boolean } = {}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = Boolean(useReducedMotion() || staticRender);
 
   useEffect(() => {
     const canvas = canvasRef.current;
