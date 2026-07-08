@@ -37,7 +37,8 @@ test('Project Pipeline browser-smoke request rules render canonical request sche
   const qa = renderedRules('pidex-qa', 'qa');
   assert.match(qa, /"schema": 1/);
   assert.match(qa, /"requester": "pidex-qa"/);
-  assert.match(qa, /"project_id": "<project-id>"/);
+  assert.match(qa, /"project_id": "<canonical Project Pipeline registry project_id from the phase prompt>"/);
+  assert.match(qa, /MUST exactly match the canonical Project Pipeline registry project_id shown in the phase prompt/);
   assert.match(qa, /"preview": \{/);
   assert.match(qa, /"managed": true/);
   assert.match(qa, /"contains": "<expected visible body text>"/);
@@ -51,7 +52,8 @@ test('Project Pipeline browser-smoke request rules render canonical request sche
 
   const uat = renderedRules('pidex-uat', 'uat');
   assert.match(uat, /"requester": "pidex-uat"/);
-  assert.match(uat, /"project_id": "<project-id>"/);
+  assert.match(uat, /"project_id": "<canonical Project Pipeline registry project_id from the phase prompt>"/);
+  assert.match(uat, /Do not derive it from the app name, folder name, package name/);
   assert.match(uat, /"exists": "\.status-card"/);
   assert.match(uat, /"type": "url"/);
   assert.match(uat, /"path_contains": "\/"/);

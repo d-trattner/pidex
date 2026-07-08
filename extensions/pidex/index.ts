@@ -1039,6 +1039,28 @@ function summarizePreviewStatusLike(action: string, result: any, projectId: stri
 	return `${result.project_id ?? projectId}: preview status=${result.status ?? "unknown"}${result.operator_url ? ` url=${result.operator_url}` : ""}`;
 }
 
+export function buildPdProjectCommandFromToolParams(params: any): PdProjectCommand {
+	const command = String(params?.command || '').trim();
+	const projectId = params?.projectId ? String(params.projectId).trim() : '';
+	const runId = params?.runId ? String(params.runId).trim() : '';
+	const requireProject = () => {
+		if (!projectId) throw new Error(`pidex_project ${command} requires projectId`);
+		return projectId;
+	};
+	if (command === 'status') return projectId ? { command: 'status', projectId } : { command: 'status' };
+	if (command === 'diagnose') return { command: 'diagnose', projectId: requireProject() };
+	if (command === 'runs') return { command: 'runs', projectId: requireProject() };
+	if (command === 'artifacts') return { command: 'artifacts', projectId: requireProject() };
+	if (command === 'credentials-status') return { command: 'credentials', action: 'status', projectId: requireProject() };
+	if (command === 'preview-status') return { command: 'preview', action: 'status', projectId: requireProject() };
+	if (command === 'preview-logs') return { command: 'preview', action: 'logs', projectId: requireProject() };
+	if (command === 'show-run') {
+		if (!runId) throw new Error('pidex_project show-run requires runId');
+		return { command: 'show-run', projectId: requireProject(), runId };
+	}
+	throw new Error(`unsupported pidex_project command: ${command || 'missing'}`);
+}
+
 export function runPdProjectCommand(parsed: PdProjectCommand, options: { projectRoot?: string } = {}): { ok: boolean; summary: string; no_fallback?: true } {
 	if (parsed.command === "help") return { ok: true, summary: pdProjectUsage() };
 	if (parsed.command === "use") {
@@ -3292,6 +3314,12 @@ function inspectBashForGitHookRisk(command: string): { block?: string; warn?: st
 	return undefined;
 }
 
+const PidexProjectParams = Type.Object({
+	command: Type.String({ description: "Read-only Project Pipeline command: status, diagnose, runs, show-run, artifacts, credentials-status, preview-status, or preview-logs." }),
+	projectId: Type.Optional(Type.String({ description: "Project Pipeline project id, usually pp-... Required except for status." })),
+	runId: Type.Optional(Type.String({ description: "Project Pipeline run id. Required for show-run." })),
+});
+
 const RpAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
@@ -3512,6 +3540,36 @@ export default function runningPi(pi: ExtensionAPI) {
 			await ctx.ui.notify(result.summary, result.ok ? "info" : "warning");
 		},
 	});
+
+	const pidexProjectTool: any = {
+		name: "pidex_project",
+		label: "PIDEX Project Pipeline",
+		description: "Inspect Project Pipeline / Project Sandbox state through PIDEX Node helpers without requiring Bash. Read-only commands wrap the same redacted logic as /pdproject.",
+		promptSnippet: "Inspect Project Pipeline registry, Docker health, runs, artifacts, credentials status, preview status/logs, and no-Bash diagnostics.",
+		promptGuidelines: [
+			"Use pidex_project when troubleshooting Project Pipeline / Project Sandbox state, especially on native Windows where the bash tool may fail to start /bin/bash.",
+			"Prefer pidex_project status/diagnose before spawning pidex-devops just to inspect Docker, registry, archive, dashboard DB, runs, or browser-smoke status.",
+			"This tool is read-only. It does not run arbitrary shell or arbitrary Docker commands, does not sync source back to host, and redacts raw helper output/secrets.",
+			"If multiple Project Pipeline projects are listed by status, ask the user which project id to inspect or choose only when the request clearly identifies one.",
+			"Use pidex_agent only after pidex_project diagnostics show a real specialist task is needed.",
+		],
+		parameters: PidexProjectParams as any,
+		async execute(_toolCallId, params: any, _signal, _onUpdate, ctx) {
+			try {
+				const homeStatus = canonicalHomeStatus();
+				if (!homeStatus.ok) throw new Error(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before using pidex_project.` : canonicalHomeMissingMessage());
+				const parsed = buildPdProjectCommandFromToolParams(params);
+				const result = runPdProjectCommand(parsed, { projectRoot: ctx.cwd ?? process.cwd() });
+				return {
+					content: [{ type: "text", text: result.summary }],
+					details: { ok: result.ok, no_fallback: result.no_fallback === true, command: params?.command || "", projectId: params?.projectId || null },
+				};
+			} catch (error: any) {
+				throw error instanceof Error ? error : new Error(String(error));
+			}
+		},
+	};
+	pi.registerTool(pidexProjectTool);
 
 	const rpAgentTool: any = {
 		name: "pidex_agent",

@@ -461,6 +461,56 @@ test('runPdProjectCommand artifacts blocks dot project id and archive symlink es
   }
 });
 
+test('buildPdProjectCommandFromToolParams maps read-only tool commands and rejects unsupported actions', () => {
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'status' }), { command: 'status' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'status', projectId: 'pp-demo' }), { command: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'diagnose', projectId: 'pp-demo' }), { command: 'diagnose', projectId: 'pp-demo' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'runs', projectId: 'pp-demo' }), { command: 'runs', projectId: 'pp-demo' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' }), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'artifacts', projectId: 'pp-demo' }), { command: 'artifacts', projectId: 'pp-demo' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'credentials-status', projectId: 'pp-demo' }), { command: 'credentials', action: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'preview-status', projectId: 'pp-demo' }), { command: 'preview', action: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.buildPdProjectCommandFromToolParams({ command: 'preview-logs', projectId: 'pp-demo' }), { command: 'preview', action: 'logs', projectId: 'pp-demo' });
+  assert.throws(() => mod.buildPdProjectCommandFromToolParams({ command: 'diagnose' }), /requires projectId/);
+  assert.throws(() => mod.buildPdProjectCommandFromToolParams({ command: 'show-run', projectId: 'pp-demo' }), /requires runId/);
+  assert.throws(() => mod.buildPdProjectCommandFromToolParams({ command: 'repair', projectId: 'pp-demo' }), /unsupported pidex_project command/);
+});
+
+test('pidex_project tool executes Project Pipeline status through no-Bash helper path', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-tool-helper-'));
+  const helper = path.join(dir, 'status.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, projects: [{ project_id: 'pp-demo', status: 'ready', source: { kind: 'local' }, credentials: { pi: 'present', git: 'missing' }, docker_health: { container: { exists: true, status: 'running' } }, archive: { path: 'C:/Users/Demo/pidex/state/project-archives/pp-demo' }, runs: [] }] }));\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+const mod = await import('./extensions/pidex/index.ts');
+const tools = new Map();
+mod.default({
+  on: () => {},
+  registerCommand: () => {},
+  registerTool: (tool) => tools.set(tool.name, tool),
+  sendUserMessage: () => {},
+});
+const tool = tools.get('pidex_project');
+const result = await tool.execute('call-1', { command: 'status', projectId: 'pp-demo' }, undefined, undefined, { cwd: process.cwd() });
+console.log(JSON.stringify({ names: [...tools.keys()], result }));
+`], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout.trim().split(/\n/).at(-1));
+    assert.equal(parsed.names.includes('pidex_project'), true);
+    assert.equal(parsed.names.includes('pidex_agent'), true);
+    assert.equal(parsed.result.details.ok, true);
+    assert.match(parsed.result.content[0].text, /pp-demo: status=ready/);
+    assert.match(parsed.result.content[0].text, /docker=running/);
+    assert.doesNotMatch(parsed.result.content[0].text, /SECRET-LIKE|auth\.json|pidex-secrets/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('runPdProjectCommand summarizes project runs without raw metadata', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-runs-helper-'));
   const helper = path.join(dir, 'status.mjs');

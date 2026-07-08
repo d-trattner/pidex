@@ -125,6 +125,8 @@ Run a no-Bash diagnostic for native Windows/desktop troubleshooting:
 
 `diagnose` uses PIDEX Node helpers and Docker CLI directly. It summarizes registry state, Docker container/volume health, run count, archive presence, dashboard DB visibility, and safe next actions without relying on the Pi `bash` tool.
 
+For orchestrator-driven troubleshooting, PIDEX also exposes a read-only `pidex_project` tool that wraps the same safe `/pdproject` logic. The orchestrator should use that tool for Project Pipeline diagnostics instead of spawning specialist agents just to inspect Docker/registry/archive state.
+
 Show recent Project Pipeline runs:
 
 ```text
@@ -227,6 +229,7 @@ or update `~/pidex` from Git.
 
 ## Current limitations
 
+- `pidex_project` is currently read-only. Actions such as repair, remove, open, and preview start remain explicit `/pdproject` commands while confirmation and safety UX are designed.
 - Project source is not exported back to host by PIDEX.
 - External Docker hosts are intentionally deferred and require user/admin preparation for a dedicated non-root `pidex@host` Docker-capable account.
 - PR creation/review automation is deferred.

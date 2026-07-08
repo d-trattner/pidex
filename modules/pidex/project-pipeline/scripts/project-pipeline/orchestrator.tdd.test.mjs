@@ -84,6 +84,12 @@ test('buildPhaseTask includes preview gate instructions for UI tasks without sou
   assert.doesNotMatch(task, /export source/i);
 });
 
+test('buildPhaseTask includes canonical Project Pipeline project id for control artifacts', () => {
+  const task = buildPhaseTask({ phase: 'pidex-qa', initialTask: 'test UI', previous: null, nextPhase: 'pidex-uat', phaseIndex: 1, phaseCount: 4, projectId: 'pp-demo-app-abc123' });
+  assert.match(task, /Canonical Project Pipeline registry project_id: pp-demo-app-abc123/);
+  assert.match(task, /browser-smoke request JSON, their project_id MUST exactly equal: pp-demo-app-abc123/);
+});
+
 test('buildPhaseTask injects rendered module-scoped rules when provided', () => {
   const rules = '## Rendered module-scoped rules\n\n### Rule: pidex.project-pipeline.browser-smoke.qa-request\n\nDo not include preview URLs.';
   const task = buildPhaseTask({ phase: 'pidex-qa', initialTask: 'Build UI', nextPhase: 'orchestrator', phaseIndex: 0, phaseCount: 1, moduleRulesText: rules });

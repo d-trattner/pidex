@@ -11,6 +11,7 @@ Rules:
 - The request artifact MUST use browser-smoke request schema version `1` exactly as shown below.
 - Do not invent alternate schema keys. In particular, do NOT use `request_type`, `project`, `expected`, `expected_text`, `selector`, or `level`.
 - Use `project_id`, not `project`.
+- The `project_id` value MUST exactly match the canonical Project Pipeline registry project_id shown in the phase prompt. Do not derive it from the app name, folder name, package name, route, or user-facing project title.
 - Use `contains` for `title` and `text` checks.
 - Use `exists` for `selector` checks.
 - Use `path_contains` or `path_equals` for `url` checks; do not use `contains`, `expected`, or other ad-hoc keys for `url`.
@@ -26,7 +27,7 @@ Canonical request template:
 {
   "schema": 1,
   "requester": "pidex-uat",
-  "project_id": "<project-id>",
+  "project_id": "<canonical Project Pipeline registry project_id from the phase prompt>",
   "request_id": "uat-browser-smoke-<stable-unique-id>",
   "phase_run_id": "<current-phase-or-run-id>/pidex-uat",
   "created_at": "<ISO-8601 timestamp>",
