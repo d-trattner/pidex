@@ -256,6 +256,8 @@ Walk through the appropriate interview flow to produce a crisp epic statement. T
 **Existing project with code/docs/context:**
 → Ask what the user wants to do, inspect code/docs/context when useful, and use PIDEX `grill-with-docs` for extra ambiguity resolution. `grill-with-docs` uses `<project-root>/pidex/context/**` for glossary/ADR context and must not default to root `CONTEXT.md` or root `docs/adr/`.
 
+**PIDEX compatibility / Project Sandbox setup special case:** If the user asks to migrate an existing project to PIDEX, make it PIDEX-compatible, prepare it for Project Pipeline/Project Sandbox, fix Project Pipeline dashboard visibility, or analyze an existing Project Sandbox setup, do not treat that as the generic product migration flow. Start with setup/control-plane intake: inspect existing docs/context only as needed, use `pidex_project status/diagnose/runs/artifacts` for Project Pipeline state, identify missing PIDEX compatibility files such as `pidex/context/CONTEXT.md` or `wiki/index.md`, and preserve legacy folders/files. Do not spawn `pidex-planner` or `pidex-implementer` just to create a read-only inventory. The orchestrator may create a coordination artifact under `agents.output/**` after user approval. Spawn specialists only after the intake shows actual approved source work, compatibility scaffolding, wiki cleanup, or product implementation is needed.
+
 Then route:
 
 1. **Is this a fresh project or an existing codebase?**
