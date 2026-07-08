@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `/pdproject diagnose <project-id>` as a no-Bash Project Pipeline diagnostic for native Windows/desktop sessions where the Pi `bash` tool cannot start `/bin/bash`; it reports registry, Docker, archive, dashboard DB visibility, and safe next actions through PIDEX Node helpers.
+
 ## 0.1.15 - 2026-07-07
 
 Project mode parity, Project Pipeline progress UX, and dashboard desktop fixes:

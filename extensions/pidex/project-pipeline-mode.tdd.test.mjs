@@ -393,6 +393,8 @@ test('parsePdProjectArgs supports status and exact-confirm remove', () => {
   assert.throws(() => mod.parsePdProjectArgs('use magic'), /pdproject use requires/);
   assert.deepEqual(mod.parsePdProjectArgs('status'), { command: 'status', projectId: undefined });
   assert.deepEqual(mod.parsePdProjectArgs('status pp-demo'), { command: 'status', projectId: 'pp-demo' });
+  assert.deepEqual(mod.parsePdProjectArgs('diagnose pp-demo'), { command: 'diagnose', projectId: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('diagnose'), /diagnose requires a project id/);
   assert.deepEqual(mod.parsePdProjectArgs('runs pp-demo'), { command: 'runs', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('runs --project-id pp-demo'), { command: 'runs', projectId: 'pp-demo' });
   assert.deepEqual(mod.parsePdProjectArgs('show-run pp-demo pprun-1'), { command: 'show-run', projectId: 'pp-demo', runId: 'pprun-1' });
@@ -479,6 +481,30 @@ test('runPdProjectCommand summarizes project runs without raw metadata', () => {
     assert.doesNotMatch(parsed.summary, /SECRET-LIKE/);
     assert.doesNotMatch(parsed.summary, /\/tmp\/archive/);
     assert.doesNotMatch(parsed.summary, /\.\.\/secret/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runPdProjectCommand diagnoses Project Pipeline without Bash or raw helper output', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-diagnose-helper-'));
+  const helper = path.join(dir, 'status.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, projects: [{ project_id: 'pp-demo', name: 'Demo Project', status: 'running', source: { kind: 'local', ref: 'C:/work/demo' }, archive: { path: 'C:/Users/Daniel/pidex/state/project-archives/pp-demo' }, credentials: { pi: 'present', git: 'missing' }, docker_health: { container: { exists: true, status: 'running' }, volumes: { workspace: { exists: true }, secrets: { exists: true }, cache: { exists: true } } }, runs: [{ project_run_id: 'pprun-1' }] }] }));\n");
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const mod = await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(mod.runPdProjectCommand({ command: 'diagnose', projectId: 'pp-demo' })));"], {
+      cwd: process.cwd(),
+      env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
+      encoding: 'utf8'
+    });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout);
+    assert.equal(parsed.ok, true);
+    assert.match(parsed.summary, /Project Pipeline diagnosis for pp-demo/);
+    assert.match(parsed.summary, /docker: container=running/);
+    assert.match(parsed.summary, /No-Bash note/);
+    assert.match(parsed.summary, /node dashboard\/start\.mjs/);
+    assert.match(parsed.summary, /\/pdproject status pp-demo/);
+    assert.doesNotMatch(parsed.summary, /SECRET-LIKE|auth\.json|pidex-secrets/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

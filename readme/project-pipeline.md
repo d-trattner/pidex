@@ -117,6 +117,14 @@ Show one sandbox:
 /pdproject status <project-id>
 ```
 
+Run a no-Bash diagnostic for native Windows/desktop troubleshooting:
+
+```text
+/pdproject diagnose <project-id>
+```
+
+`diagnose` uses PIDEX Node helpers and Docker CLI directly. It summarizes registry state, Docker container/volume health, run count, archive presence, dashboard DB visibility, and safe next actions without relying on the Pi `bash` tool.
+
 Show recent Project Pipeline runs:
 
 ```text

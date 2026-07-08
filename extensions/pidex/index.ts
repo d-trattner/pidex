@@ -691,6 +691,7 @@ type PdProjectCommand =
 	| { command: "help" }
 	| { command: "use"; mode: "host-direct" | "hardened-pipeline" | "project-pipeline" }
 	| { command: "status"; projectId?: string }
+	| { command: "diagnose"; projectId: string }
 	| { command: "runs"; projectId: string }
 	| { command: "show-run"; projectId: string; runId: string }
 	| { command: "artifacts"; projectId: string }
@@ -741,7 +742,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		if (tailRaw.trim()) throw new Error(`pdproject preview ${action} does not accept a command`);
 		return { command: "preview", action, projectId };
 	}
-	if (command === "status") {
+	if (command === "status" || command === "diagnose") {
 		let projectId: string | undefined;
 		for (let i = 0; i < parts.length; i += 1) {
 			if (parts[i] === "--project-id") {
@@ -749,7 +750,11 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 				projectId = read.value;
 				i = read.nextIndex;
 			} else if (!projectId && !parts[i].startsWith("--")) projectId = parts[i];
-			else throw new Error(`unknown pdproject status argument: ${parts[i]}`);
+			else throw new Error(`unknown pdproject ${command} argument: ${parts[i]}`);
+		}
+		if (command === "diagnose") {
+			if (!projectId) throw new Error("pdproject diagnose requires a project id");
+			return { command: "diagnose", projectId };
 		}
 		return { command: "status", projectId };
 	}
@@ -853,6 +858,7 @@ export function pdProjectUsage(): string {
 	return [
 		"Usage: /pdproject use project-pipeline|hardened-pipeline|host-direct",
 		"       /pdproject status [project-id|--project-id ID]",
+		"       /pdproject diagnose <project-id>",
 		"       /pdproject runs <project-id>",
 		"       /pdproject show-run <project-id> <run-id>",
 		"       /pdproject artifacts <project-id>",
@@ -961,6 +967,54 @@ function summarizeProjectRecords(projects: any[]): string {
 	}).join("\n");
 }
 
+function dashboardDbContainsProject(project: any): boolean | undefined {
+	const dbPath = path.join(PACKAGE_ROOT, "dashboard", "data", "pidex.sqlite");
+	if (!fs.existsSync(dbPath)) return undefined;
+	try {
+		const bytes = fs.readFileSync(dbPath);
+		for (const needle of [project?.project_id, project?.name, project?.source?.ref, project?.archive?.path].filter(Boolean).map(String)) {
+			if (needle.length >= 3 && bytes.includes(Buffer.from(needle))) return true;
+		}
+		return false;
+	} catch { return undefined; }
+}
+
+function archiveExistsForProject(project: any): boolean {
+	const archive = project?.archive?.path || path.join(PACKAGE_ROOT, "state", "project-archives", safePdProjectId(project?.project_id || "unknown"));
+	try { return fs.existsSync(archive) && fs.lstatSync(archive).isDirectory(); } catch { return false; }
+}
+
+function summarizeProjectDiagnose(project: any): string {
+	const projectId = project?.project_id || "unknown-project";
+	const runs = Array.isArray(project?.runs) ? project.runs : [];
+	const docker = project?.docker_health?.container;
+	const volumes = project?.docker_health?.volumes || {};
+	const volumeSummary = Object.entries(volumes).map(([kind, value]: [string, any]) => `${kind}=${value?.exists ? "ok" : "missing"}`).join(", ") || "not checked";
+	const dashboardVisible = dashboardDbContainsProject(project);
+	const archiveOk = archiveExistsForProject(project);
+	const lines = [
+		`Project Pipeline diagnosis for ${projectId}`,
+		`registry: found name=${project?.name || "unknown"} status=${project?.status || "unknown"}`,
+		`docker: container=${docker ? (docker.exists ? docker.status || "exists" : "missing") : "not checked"}; volumes=${volumeSummary}`,
+		`source: kind=${project?.source?.kind || "unknown"}${project?.source?.ref ? ` ref=${project.source.ref}` : ""}`,
+		`credentials: pi=${project?.credentials?.pi || "unknown"} git=${project?.credentials?.git || "unknown"}`,
+		`runs: ${runs.length}`,
+		`archive: ${archiveOk ? "present" : "missing"}${project?.archive?.path ? ` path=${project.archive.path}` : ""}`,
+		`dashboard_db: ${dashboardVisible === undefined ? "missing/not-readable" : dashboardVisible ? "project string present" : "project string not found"}`,
+		"",
+		"No-Bash note: this command uses PIDEX Node helpers and Docker CLI directly. It is intended for native Windows sessions where the Pi bash tool cannot start /bin/bash.",
+		"",
+		"Next actions:",
+	];
+	if (!docker?.exists || docker.status === "missing") lines.push(`- Repair/open Docker sandbox: /pdproject repair ${projectId} --confirm ${projectId}`);
+	if (!archiveOk) lines.push(`- Run or re-run Project Pipeline once so agents.output archive is synced: /pd <task>`);
+	if (dashboardVisible === false || dashboardVisible === undefined) lines.push("- Refresh dashboard DB without Bash from the PIDEX root: node dashboard/start.mjs  (or run: node scripts/dashboard/ingest.mjs --db dashboard/data/pidex.sqlite --project .)");
+	lines.push(`- Inspect registry/docker status: /pdproject status ${projectId}`);
+	lines.push(`- Inspect runs: /pdproject runs ${projectId}`);
+	lines.push(`- Inspect archive files: /pdproject artifacts ${projectId}`);
+	return lines.join("\n");
+}
+
 export function summarizePreviewStart(result: any): string {
 	if (!result?.ok) {
 		if (result?.error_category === "preview_operator_host_unknown") return "Preview port is bound, but PIDEX could not determine the host/IP to show your browser. Set PIDEX_PROJECT_PIPELINE_PREVIEW_HOST and retry.";
@@ -1004,13 +1058,14 @@ export function runPdProjectCommand(parsed: PdProjectCommand, options: { project
 		try { return { ok: true, summary: summarizeProjectArtifacts(parsed.projectId) }; }
 		catch { return { ok: false, summary: "Project Pipeline artifacts failed: invalid project id" }; }
 	}
-	if (parsed.command === "status" || parsed.command === "runs" || parsed.command === "show-run") {
+	if (parsed.command === "status" || parsed.command === "diagnose" || parsed.command === "runs" || parsed.command === "show-run") {
 		if (!fs.existsSync(PROJECT_PIPELINE_STATUS_SCRIPT)) return { ok: false, summary: "project-pipeline status helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
 		const args = [PROJECT_PIPELINE_STATUS_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--json"];
 		if (parsed.projectId) args.push("--project-id", parsed.projectId);
 		const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 5 * 1024 * 1024 });
 		try {
 			const json = JSON.parse(proc.stdout || "{}");
+			if (parsed.command === "diagnose") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectDiagnose((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }) };
 			if (parsed.command === "runs") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRuns((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }) };
 			if (parsed.command === "show-run") return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRun((json.projects || [])[0] || { project_id: parsed.projectId, runs: [] }, parsed.runId) };
 			return { ok: proc.status === 0 && json.ok !== false, summary: summarizeProjectRecords(json.projects || []) };
