@@ -94,8 +94,12 @@ function stopPid(pid) {
   try { process.kill(n, 'SIGTERM'); } catch {}
 }
 
+export function dashboardSpawnOptions(extra = {}) {
+  return { windowsHide: true, ...extra };
+}
+
 function runChecked(invocation, args, options = {}) {
-  const proc = spawnSync(invocation.command, [...invocation.baseArgs, ...args], { cwd: DASHBOARD_ROOT, stdio: 'inherit', shell: Boolean(invocation.shell), ...options });
+  const proc = spawnSync(invocation.command, [...invocation.baseArgs, ...args], dashboardSpawnOptions({ cwd: DASHBOARD_ROOT, stdio: 'inherit', shell: Boolean(invocation.shell), ...options }));
   if (proc.status !== 0) process.exit(proc.status || 1);
 }
 
@@ -139,7 +143,7 @@ export async function main(argv = process.argv.slice(2)) {
     const ingest = path.join(PIDEX_ROOT, 'scripts', 'dashboard', 'ingest.mjs');
     if (existsSync(ingest)) {
       console.log('==> Ingesting dashboard data');
-      const proc = spawnSync(process.execPath, [ingest, '--db', path.join(DASHBOARD_ROOT, 'data', 'pidex.sqlite'), '--project', PIDEX_ROOT], { cwd: PIDEX_ROOT, encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 });
+      const proc = spawnSync(process.execPath, [ingest, '--db', path.join(DASHBOARD_ROOT, 'data', 'pidex.sqlite'), '--project', PIDEX_ROOT], dashboardSpawnOptions({ cwd: PIDEX_ROOT, encoding: 'utf8', maxBuffer: 5 * 1024 * 1024 }));
       if (proc.status !== 0) {
         console.error('Dashboard ingest failed. Output omitted?');
         if (proc.stderr) console.error(proc.stderr);
@@ -168,7 +172,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (opts.foreground) {
     console.log(`==> Starting dashboard in foreground on ${opts.host}:${opts.port}`);
     for (const line of dashboardUrls(opts)) console.log(line);
-    const child = spawn(vite.command, [...vite.baseArgs, ...args], { cwd: DASHBOARD_ROOT, env, stdio: 'inherit', shell: Boolean(vite.shell) });
+    const child = spawn(vite.command, [...vite.baseArgs, ...args], dashboardSpawnOptions({ cwd: DASHBOARD_ROOT, env, stdio: 'inherit', shell: Boolean(vite.shell) }));
     const code = await new Promise((resolve) => child.on('close', resolve));
     process.exit(Number(code || 0));
   }
@@ -176,7 +180,7 @@ export async function main(argv = process.argv.slice(2)) {
   console.log(`==> Starting dashboard on ${opts.host}:${opts.port}`);
   const out = openSync(log, 'a');
   const err = openSync(log, 'a');
-  const child = spawn(vite.command, [...vite.baseArgs, ...args], { cwd: DASHBOARD_ROOT, env, detached: true, stdio: ['ignore', out, err], shell: Boolean(vite.shell) });
+  const child = spawn(vite.command, [...vite.baseArgs, ...args], dashboardSpawnOptions({ cwd: DASHBOARD_ROOT, env, detached: true, stdio: ['ignore', out, err], shell: Boolean(vite.shell) }));
   child.unref();
   writeFileSync(pidFile, `${child.pid}\n`, 'utf8');
   console.log('PIDEX dashboard started.');

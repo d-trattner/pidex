@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { findNodeBinUpwards, findPackageBinUpwards, parseDashboardStartArgs, resolveViteInvocation } from './start.mjs';
+import { dashboardSpawnOptions, findNodeBinUpwards, findPackageBinUpwards, parseDashboardStartArgs, resolveViteInvocation } from './start.mjs';
 
 test('parseDashboardStartArgs supports cross-platform dashboard launcher flags', () => {
   const parsed = parseDashboardStartArgs(['--host', '0.0.0.0', '--port', '18888', '--domain', 'pidex.local', '--no-build', '--no-ingest', '--dev', '--foreground', '--public-read', '--public-write']);
@@ -54,4 +54,8 @@ test('resolveViteInvocation prefers JS entrypoint over Windows cmd shim', () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('dashboard child process options hide Windows console windows', () => {
+  assert.deepEqual(dashboardSpawnOptions({ cwd: 'x' }), { windowsHide: true, cwd: 'x' });
 });
