@@ -168,6 +168,11 @@ function registerProject(db, projectPath, name) {
   const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(p);
   return Number(row.id);
 }
+function updateProjectDisplayName(db, projectPath, name) {
+  const p = canonicalPath(projectPath);
+  const n = String(name || path.basename(p) || p).trim() || p;
+  db.prepare('UPDATE projects SET name = ? WHERE path = ?').run(n, p);
+}
 
 function metricProjectFromSlug(slug) {
   if (slug.startsWith('home-')) {
@@ -398,7 +403,9 @@ function projectPipelineRegistryRecords() {
 function ingestProjectPipelineRegistry(db) {
   let count = 0;
   for (const { record, projectPath, archivePath } of projectPipelineRegistryRecords()) {
-    const projectId = registerProject(db, projectPath, projectPipelineDisplayName(record, projectPath));
+    const displayName = projectPipelineDisplayName(record, projectPath);
+    const projectId = registerProject(db, projectPath, displayName);
+    updateProjectDisplayName(db, projectPath, displayName);
     cleanupProjectPipelineArchiveProject(db, archivePath, projectId);
     count++;
   }
@@ -461,7 +468,9 @@ function ingestArtifacts(db, projects) {
   }
   for (const { record, projectPath, archivePath } of projectPipelineRegistryRecords()) {
     if (!archivePath || !pathExists(archivePath)) continue;
-    const pid = registerProject(db, projectPath, projectPipelineDisplayName(record, projectPath));
+    const displayName = projectPipelineDisplayName(record, projectPath);
+    const pid = registerProject(db, projectPath, displayName);
+    updateProjectDisplayName(db, projectPath, displayName);
     cleanupProjectPipelineArchiveProject(db, archivePath, pid);
     const [a, m] = ingestArtifactRoot(db, archivePath, pid, artifactStmt);
     artifactCount += a;

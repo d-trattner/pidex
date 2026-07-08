@@ -2,8 +2,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
 
 import { RouteTransition } from '../components/animations/route-transition';
-import { DustParticles } from '../components/background/dust-particles';
-import { ShaderBackground } from '../components/background/shader-background';
 import { GlobalHeader, MobileMenuSheet } from '../components/navigation/global-nav';
 
 import '@/styles/theme.css';
@@ -32,8 +30,6 @@ export const Route = createRootRoute({
       </head>
       <body className="h-full">
         <QueryClientProvider client={queryClient}>
-          <ShaderBackground />
-          <DustParticles />
           <div className="page-shell">
             <GlobalHeader />
             <RouteTransition>

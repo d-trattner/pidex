@@ -16,7 +16,7 @@ export function useDashboardQuery<T>(queryKey: readonly unknown[], url: string, 
     queryFn: () => fetchJson<T>(url),
     enabled: options.enabled ?? true,
     refetchInterval: DASHBOARD_REFETCH_INTERVAL_MS,
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: false,
     staleTime: 0,
     retry: 1,
   });
