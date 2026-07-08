@@ -1,6 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { PIDEX_ROOT } from './paths';
+
 export type BalanceSnapshotKind = 'balance_update' | 'balance_top_up';
 
 export interface BalanceSnapshot {
@@ -66,7 +68,7 @@ export interface AgentBalancesPayload {
   config: BalanceConfig;
 }
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = PIDEX_ROOT;
 const DEFAULT_CONFIG_PATH = path.resolve(ROOT, 'config', 'balance.json');
 const LOCAL_CONFIG_PATH = path.resolve(ROOT, 'config', 'balance.local.json');
 const METRICS_ROOT = path.resolve(ROOT, 'state', 'metrics');

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed dashboard server PIDEX-root resolution for native Windows in-process startup so usage/profile/quality/modules/parallel-agent APIs read the actual `$HOME\pidex` checkout instead of resolving paths relative to the caller's current directory.
 - Improved dashboard Project Pipeline display names so records whose registry name is the technical `pp-...` id fall back to the source folder basename, while preserving explicit friendly names.
 - Fixed dashboard parallel-agent API routes to use the module-owned `modules/pidex/parallel-agents/scripts/status.mjs` helper instead of the retired legacy `scripts/parallel-agents/status.mjs` path.
 - Fixed dashboard ingest so Project Pipeline archive directories are no longer registered as separate dashboard projects; archive artifacts are attributed to the registered Project Sandbox project and stale `* archive` project rows are cleaned up in the SQLite index only.

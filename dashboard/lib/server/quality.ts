@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { URLSearchParams } from 'node:url';
 
-const PIDEX_ROOT = path.resolve(process.cwd(), '..');
+import { PIDEX_ROOT } from './paths';
 
 type AnyRecord = Record<string, any>;
 

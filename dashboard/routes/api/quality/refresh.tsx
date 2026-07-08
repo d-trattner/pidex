@@ -2,11 +2,10 @@ import { createFileRoute } from '@tanstack/react-router';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
+import { PIDEX_ROOT } from '../../../lib/server/paths';
 import { getQualityLatest, getQualityProjects } from '../../../lib/server/quality';
 import { authorizeProviderLimitsRequest } from '../../../lib/server/provider-limits-auth';
 import { errorResponse, jsonResponse } from '../../../lib/server/response';
-
-const PIDEX_ROOT = path.resolve(process.cwd(), '..');
 const REPORT_SCRIPT = path.join(PIDEX_ROOT, 'scripts', 'quality', 'report.mjs');
 
 type RefreshResult = {

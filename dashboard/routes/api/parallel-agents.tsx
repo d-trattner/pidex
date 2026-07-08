@@ -5,8 +5,7 @@ import { spawnSync } from 'node:child_process';
 
 import { errorResponse, jsonResponse } from '../../lib/server/response';
 import { authorizeProviderLimitsRequest } from '../../lib/server/provider-limits-auth';
-
-const PIDEX_ROOT = path.resolve(process.cwd(), '..');
+import { PIDEX_ROOT } from '../../lib/server/paths';
 const SCRIPT = path.join(PIDEX_ROOT, 'modules', 'pidex', 'parallel-agents', 'scripts', 'status.mjs');
 const CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.json');
 const LOCAL_CONFIG_PATH = path.join(PIDEX_ROOT, 'config', 'parallel-agents.local.json');

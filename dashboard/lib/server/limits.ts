@@ -4,6 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 import type { JsonObject } from './api';
+import { PIDEX_ROOT } from './paths';
 
 export interface ProviderLimitRecord {
   provider: string;
@@ -39,7 +40,7 @@ export interface ProviderLimitsPayload {
   history: ProviderLimitRecord[];
 }
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = PIDEX_ROOT;
 const PROFILE_DIR = path.resolve(ROOT, 'config', 'profiles');
 const AGENTS_CONFIG_FILE = path.resolve(ROOT, 'config', 'agents.json');
 const STATE_DIR = path.resolve(ROOT, 'state', 'provider-limits');

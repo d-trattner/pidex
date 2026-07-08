@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-const PIDEX_ROOT = path.resolve(process.cwd(), '..');
+import { PIDEX_ROOT } from './paths';
 
 type ModuleManifest = {
   id: string;

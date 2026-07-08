@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-const PIDEX_ROOT = path.resolve(process.cwd(), '..');
+import { PIDEX_ROOT } from './paths';
 const DEFAULT_CONFIG = path.join(PIDEX_ROOT, 'config', 'contract-governor.json');
 const LOCAL_CONFIG = path.join(PIDEX_ROOT, 'config', 'contract-governor.local.json');
 const STATE_DIR = path.join(PIDEX_ROOT, 'state', 'quality', 'contract-governor');

@@ -1,11 +1,13 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { PIDEX_ROOT } from './paths';
+
 interface JsonObjectLike {
   [key: string]: unknown;
 }
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = PIDEX_ROOT;
 const ANALYSIS_DIR = path.resolve(ROOT, 'analysis');
 
 function toPosix(value: string): string {
