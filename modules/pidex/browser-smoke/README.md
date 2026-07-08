@@ -2,6 +2,12 @@
 
 Optional first-party browser-smoke substrate for PIDEX QA.
 
+## Project mode stance
+
+Browser-smoke install, preflight, and cleanup are PIDEX-local host maintenance capabilities that can support any project mode when the operator/project owns the preview URL and server lifecycle.
+
+Automatic browser-smoke request discovery, Project Pipeline registry URL resolution, host bridge execution, archive evidence, and final QA/UAT verdict integration are Project Pipeline-only today. Host-direct and hardened-pipeline remain manual/operator-owned for browser checks until a separate host-owned preview/process contract is designed.
+
 ## Capabilities
 
 - `browser-smoke.preflight` — read-only Playwright/browser availability and bounded launch probe.

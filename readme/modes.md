@@ -30,8 +30,8 @@ Parity means differences are intentional, documented, and tested. It does **not*
 | Module-scoped rule metadata/rendering | Available | Available | Available |
 | Live module-rule prompt injection | Not an architectural baseline; only use when an active module/rule needs it, without adding host-direct bottlenecks | Not needed until a hardened-specific module/rule requires it | Yes for current Project Pipeline browser-smoke phase rules with `mode: project-pipeline` filters |
 | Managed preview lifecycle | Not mode-native today; host-direct should stay low-friction and avoid mandatory preview overhead | Wanted as a host-project preview helper while Docker remains only the programming harness | Yes: `/pdproject preview` and automatic UI preview gates |
-| Browser-smoke install/preflight | Available as PIDEX-local host capability | Available as PIDEX-local host capability | Available and integrated with Project Pipeline bridge |
-| Browser-smoke automatic request/bridge/verdict loop | Not currently automatic | Not currently automatic | Yes for QA/UAT/devops request artifacts |
+| Browser-smoke install/preflight | Available as PIDEX-local host capability for manual/operator-owned checks | Available as PIDEX-local host capability for manual/operator-owned checks | Available and integrated with Project Pipeline bridge |
+| Browser-smoke automatic request/bridge/verdict loop | Intentionally not automatic; host-direct preview/server ownership stays user/project-owned | Intentionally not automatic; Docker is a temporary programming harness, not the preview owner | Yes for QA/UAT/devops request artifacts |
 | Browser URL source | User/project-owned | User/project-owned | Project Pipeline registry-managed preview URL |
 | Sandbox boundary | None beyond policy/tool guards | Temporary Docker workspace, host source protected until apply | Persistent Docker Project Sandbox, archive-only host sync |
 | Windows evidence | Experimental/general coverage incomplete | Helper smoke coverage; no special regression identified from Project Sandbox work | Focused native Windows Docker Desktop `/pd` + managed preview + browser-smoke pass |
@@ -62,7 +62,7 @@ These features are not always part of the source-changing agent path, but they a
 - Project Pipeline managed preview is mode-native because the app runs inside Docker and needs registry-owned port/URL handling.
 - Hardened-pipeline should use Docker as a programming harness only; host source remains main, and source changes copy back only after approval.
 - Hardened-pipeline managed preview is wanted as a host-project helper, not as proof that the Docker harness owns runtime preview state.
-- Project Pipeline browser-smoke automation is mode-native today because request validation is bound to a registered Project Pipeline archive and managed preview registry URL.
+- Project Pipeline browser-smoke automation is mode-native today because request validation is bound to a registered Project Pipeline archive and managed preview registry URL. Host-direct and hardened-pipeline keep only generic/manual PIDEX-local browser-smoke capability until a separate host-owned preview/process contract is designed.
 - Hardened-pipeline is temporary protection for selected host-project work. It should not become a persistent source-of-truth container.
 - Project Pipeline source is intentionally not mirrored back to the host automatically. The container is the desired source-of-truth for that mode.
 - Project-specific PIDEX context, wiki, and memory files live in the host project directory regardless of execution mode unless a future feature deliberately changes that contract.
@@ -72,12 +72,11 @@ These features are not always part of the source-changing agent path, but they a
 
 Tracked in Initiative 030 Project Mode Feature Parity:
 
-1. Whether host-direct/hardened should get browser-smoke automation or only generic/manual browser-smoke capability.
-2. Whether optional parallel secondary lanes need true concurrency and richer dashboard/PDQ lane visualization beyond the current all-mode contract and Project Pipeline sequential MVP.
-3. Whether `/pdwiki`, `/pdmem`, and `/pdparallel` need further mode-aware behavior, or whether their host-project contracts are already sufficient.
-4. Whether quality governance/rule learning needs deeper Project Pipeline archive evidence beyond the emitted mode/archive telemetry.
-5. Whether hardened-pipeline managed preview should be added as a host-project helper.
-6. Whether a unified mode-aware artifact/status command should exist.
+1. Whether optional parallel secondary lanes need true concurrency and richer dashboard/PDQ lane visualization beyond the current all-mode contract and Project Pipeline sequential MVP.
+2. Whether `/pdwiki`, `/pdmem`, and `/pdparallel` need further mode-aware behavior, or whether their host-project contracts are already sufficient.
+3. Whether quality governance/rule learning needs deeper Project Pipeline archive evidence beyond the emitted mode/archive telemetry.
+4. Whether hardened-pipeline managed preview should be added as a host-project helper.
+5. Whether a unified mode-aware artifact/status command should exist.
 
 ## Rule for future feature changes
 

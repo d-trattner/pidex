@@ -6,6 +6,7 @@ const modesDoc = readFileSync('readme/modes.md', 'utf8');
 const readme = readFileSync('README.md', 'utf8');
 const projectPipeline = readFileSync('readme/project-pipeline.md', 'utf8');
 const parallelAgents = readFileSync('readme/parallel-agents.md', 'utf8');
+const browserSmoke = readFileSync('modules/pidex/browser-smoke/README.md', 'utf8');
 
 const modes = ['host-direct', 'hardened-pipeline', 'project-pipeline'];
 const capabilityRows = [
@@ -67,6 +68,7 @@ test('project mode docs include supporting feature mode behavior rows', () => {
 test('project mode docs capture intentional mode-specific differences', () => {
   assert.match(modesDoc, /Project Pipeline managed preview is mode-native/);
   assert.match(modesDoc, /Project Pipeline browser-smoke automation is mode-native today/);
+  assert.match(modesDoc, /Host-direct and hardened-pipeline keep only generic\/manual PIDEX-local browser-smoke capability/);
   assert.match(modesDoc, /Hardened-pipeline is temporary protection/);
   assert.match(modesDoc, /Host-direct should remain the least-boundary, lowest-overhead mode/);
   assert.match(modesDoc, /Project Pipeline source is intentionally not mirrored back to the host automatically/);
@@ -81,6 +83,14 @@ test('public docs link the project mode matrix', () => {
   assert.match(readme, /\[Project modes\]\(readme\/modes\.md\)/);
   assert.match(readme, /host-direct.*hardened-pipeline.*project-pipeline/s);
   assert.match(projectPipeline, /\[Project modes\]\(modes\.md\)/);
+});
+
+test('browser-smoke docs preserve mode boundary decision', () => {
+  assert.match(modesDoc, /Intentionally not automatic; host-direct preview\/server ownership stays user\/project-owned/);
+  assert.match(modesDoc, /Intentionally not automatic; Docker is a temporary programming harness, not the preview owner/);
+  assert.match(browserSmoke, /Automatic browser-smoke request discovery/);
+  assert.match(browserSmoke, /Project Pipeline-only today/);
+  assert.match(browserSmoke, /Host-direct and hardened-pipeline remain manual\/operator-owned/);
 });
 
 test('parallel agents docs preserve all-mode boundary contract', () => {
