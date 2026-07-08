@@ -19,10 +19,12 @@ test('parseDashboardStartArgs supports cross-platform dashboard launcher flags',
   assert.equal(parsed.publicWrite, true);
 });
 
-test('Windows defaults to dev server to avoid production build console window churn', () => {
+test('Windows defaults to foreground in-process dev server to avoid console window churn', () => {
   const opts = applyPlatformDefaults(parseDashboardStartArgs([]), 'win32');
   assert.equal(opts.dev, true);
   assert.equal(opts.build, false);
+  assert.equal(opts.foreground, true);
+  assert.equal(opts.inProcess, true);
 });
 
 test('Windows production override keeps build and preview mode', () => {

@@ -6,7 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const DASHBOARD_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PIDEX_ROOT = path.resolve(DASHBOARD_ROOT, '..');
@@ -101,9 +101,21 @@ export function dashboardSpawnOptions(extra = {}) {
 
 export function applyPlatformDefaults(opts, platform = process.platform) {
   if (platform === 'win32' && !opts.production && !opts.dev) {
-    return { ...opts, dev: true, build: false };
+    return { ...opts, dev: true, build: false, foreground: true, inProcess: true };
   }
   return opts;
+}
+
+export async function startInProcessVite({ host = DEFAULT_HOST, port = DEFAULT_PORT, dev = true, build = false } = {}) {
+  const viteModulePath = findPackageBinUpwards(DASHBOARD_ROOT, 'vite', path.join('dist', 'node', 'index.js'));
+  if (!viteModulePath) throw new Error(`Missing dashboard dependency: vite. Run pnpm install --frozen-lockfile --ignore-scripts from '${PIDEX_ROOT}'.`);
+  const vite = await import(pathToFileURL(viteModulePath).href);
+  if (!dev && build) await vite.build({ root: DASHBOARD_ROOT });
+  const server = dev
+    ? await vite.createServer({ root: DASHBOARD_ROOT, server: { host, port: Number(port), strictPort: true } })
+    : await vite.preview({ root: DASHBOARD_ROOT, preview: { host, port: Number(port), strictPort: true } });
+  if (dev) await server.listen();
+  return server;
 }
 
 function runChecked(invocation, args, options = {}) {
@@ -143,7 +155,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   const vite = resolveViteInvocation(DASHBOARD_ROOT);
-  if (!vite) {
+  if (!opts.inProcess && !vite) {
     console.error(`Missing dashboard dependency: vite. Run pnpm install --frozen-lockfile --ignore-scripts from '${PIDEX_ROOT}' using the pinned pnpm version, or install PIDEX through the full installer.`);
     process.exit(1);
   }
@@ -162,7 +174,9 @@ export async function main(argv = process.argv.slice(2)) {
     }
   }
 
-  if (opts.dev) {
+  if (opts.inProcess) {
+    console.log('==> Starting dashboard in Windows in-process mode');
+  } else if (opts.dev) {
     console.log('==> Starting dashboard in dev mode');
   } else if (opts.build) {
     console.log('==> Building dashboard');
@@ -179,6 +193,13 @@ export async function main(argv = process.argv.slice(2)) {
     PIDEX_DASHBOARD_PUBLIC_BIND: ['127.0.0.1', 'localhost', '::1'].includes(opts.host) ? '0' : '1',
   };
   const args = opts.dev ? ['--host', opts.host, '--port', opts.port, '--strictPort'] : ['preview', '--host', opts.host, '--port', opts.port, '--strictPort'];
+
+  if (opts.inProcess) {
+    console.log(`==> Starting dashboard in foreground on ${opts.host}:${opts.port}`);
+    for (const line of dashboardUrls(opts)) console.log(line);
+    await startInProcessVite({ host: opts.host, port: opts.port, dev: opts.dev, build: false });
+    await new Promise(() => {});
+  }
 
   if (opts.foreground) {
     console.log(`==> Starting dashboard in foreground on ${opts.host}:${opts.port}`);
