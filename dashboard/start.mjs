@@ -14,7 +14,7 @@ const DEFAULT_PORT = '18777';
 const DEFAULT_HOST = '127.0.0.1';
 
 export function parseDashboardStartArgs(argv = []) {
-  const out = { host: DEFAULT_HOST, port: DEFAULT_PORT, domain: '', foreground: false, build: true, ingest: true, dev: false, publicRead: process.env.PIDEX_PROVIDER_LIMITS_PUBLIC_READ === '1', publicWrite: process.env.PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE === '1', help: false };
+  const out = { host: DEFAULT_HOST, port: DEFAULT_PORT, domain: '', foreground: false, build: true, ingest: true, dev: false, production: false, publicRead: process.env.PIDEX_PROVIDER_LIMITS_PUBLIC_READ === '1', publicWrite: process.env.PIDEX_PROVIDER_LIMITS_PUBLIC_WRITE === '1', help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = () => {
@@ -29,6 +29,7 @@ export function parseDashboardStartArgs(argv = []) {
     else if (arg === '--no-build') out.build = false;
     else if (arg === '--no-ingest') out.ingest = false;
     else if (arg === '--dev') out.dev = true;
+    else if (arg === '--production') out.production = true;
     else if (arg === '--public-read') out.publicRead = true;
     else if (arg === '--public-write') out.publicWrite = true;
     else if (arg === '-h' || arg === '--help') out.help = true;
@@ -38,7 +39,7 @@ export function parseDashboardStartArgs(argv = []) {
 }
 
 function usage() {
-  return `Usage: node dashboard/start.mjs [options]\n\nOptions:\n  --host HOST       Bind host. Default: 127.0.0.1\n  --port PORT       Bind port. Default: 18777\n  --domain NAME     Print friendly domain URL. Default: config/dashboard*.json or disabled\n  --public-read     Allow unauthenticated provider-limits GETs on public bind\n  --public-write    Allow same-origin provider-limits writes on public bind\n  --no-build        Skip production build before start\n  --no-ingest       Skip SQLite ingest before start\n  --dev             Run Vite dev server instead of production preview\n  --foreground      Run server in foreground instead of detached background\n  -h, --help        Show help`;
+  return `Usage: node dashboard/start.mjs [options]\n\nOptions:\n  --host HOST       Bind host. Default: 127.0.0.1\n  --port PORT       Bind port. Default: 18777\n  --domain NAME     Print friendly domain URL. Default: config/dashboard*.json or disabled\n  --public-read     Allow unauthenticated provider-limits GETs on public bind\n  --public-write    Allow same-origin provider-limits writes on public bind\n  --no-build        Skip production build before start\n  --no-ingest       Skip SQLite ingest before start\n  --dev             Run Vite dev server instead of production preview\n  --production      Force production build+preview even on Windows\n  --foreground      Run server in foreground instead of detached background\n  -h, --help        Show help`;
 }
 
 function readDashboardDomain(root = PIDEX_ROOT) {
@@ -98,6 +99,13 @@ export function dashboardSpawnOptions(extra = {}) {
   return { windowsHide: true, ...extra };
 }
 
+export function applyPlatformDefaults(opts, platform = process.platform) {
+  if (platform === 'win32' && !opts.production && !opts.dev) {
+    return { ...opts, dev: true, build: false };
+  }
+  return opts;
+}
+
 function runChecked(invocation, args, options = {}) {
   const proc = spawnSync(invocation.command, [...invocation.baseArgs, ...args], dashboardSpawnOptions({ cwd: DASHBOARD_ROOT, stdio: 'inherit', shell: Boolean(invocation.shell), ...options }));
   if (proc.status !== 0) process.exit(proc.status || 1);
@@ -125,6 +133,7 @@ export async function main(argv = process.argv.slice(2)) {
   try { opts = parseDashboardStartArgs(argv); } catch (error) { console.error(error.message || String(error)); console.error(usage()); process.exit(2); }
   if (opts.help) { console.log(usage()); return; }
   if (!opts.domain) opts.domain = process.env.PIDEX_DASHBOARD_DOMAIN || readDashboardDomain();
+  opts = applyPlatformDefaults(opts);
 
   const log = path.join(os.tmpdir(), `pidex-dashboard-${opts.port}.log`);
   const pidFile = path.join(DASHBOARD_ROOT, `.dashboard-${opts.port}.pid`);
@@ -153,7 +162,9 @@ export async function main(argv = process.argv.slice(2)) {
     }
   }
 
-  if (!opts.dev && opts.build) {
+  if (opts.dev) {
+    console.log('==> Starting dashboard in dev mode');
+  } else if (opts.build) {
     console.log('==> Building dashboard');
     runChecked(vite, ['build']);
   }

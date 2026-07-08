@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dashboardSpawnOptions, findNodeBinUpwards, findPackageBinUpwards, parseDashboardStartArgs, resolveViteInvocation } from './start.mjs';
+import { applyPlatformDefaults, dashboardSpawnOptions, findNodeBinUpwards, findPackageBinUpwards, parseDashboardStartArgs, resolveViteInvocation } from './start.mjs';
 
 test('parseDashboardStartArgs supports cross-platform dashboard launcher flags', () => {
   const parsed = parseDashboardStartArgs(['--host', '0.0.0.0', '--port', '18888', '--domain', 'pidex.local', '--no-build', '--no-ingest', '--dev', '--foreground', '--public-read', '--public-write']);
@@ -13,9 +13,23 @@ test('parseDashboardStartArgs supports cross-platform dashboard launcher flags',
   assert.equal(parsed.build, false);
   assert.equal(parsed.ingest, false);
   assert.equal(parsed.dev, true);
+  assert.equal(parsed.production, false);
   assert.equal(parsed.foreground, true);
   assert.equal(parsed.publicRead, true);
   assert.equal(parsed.publicWrite, true);
+});
+
+test('Windows defaults to dev server to avoid production build console window churn', () => {
+  const opts = applyPlatformDefaults(parseDashboardStartArgs([]), 'win32');
+  assert.equal(opts.dev, true);
+  assert.equal(opts.build, false);
+});
+
+test('Windows production override keeps build and preview mode', () => {
+  const opts = applyPlatformDefaults(parseDashboardStartArgs(['--production']), 'win32');
+  assert.equal(opts.production, true);
+  assert.equal(opts.dev, false);
+  assert.equal(opts.build, true);
 });
 
 test('findNodeBinUpwards locates Windows cmd shims without requiring Bash', () => {
