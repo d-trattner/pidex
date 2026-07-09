@@ -5,8 +5,10 @@ param(
   [Parameter(Mandatory = $true)] [string]$ProjectId,
   [string]$RemoteUrl = "",
   [string]$PidexRoot = $(if ($env:PIDEX_ROOT) { $env:PIDEX_ROOT } else { Join-Path $HOME "pidex" }),
-  [string]$Host = "",
-  [string]$Path = "",
+  [Alias("Host")]
+  [string]$GitHost = "",
+  [Alias("Path")]
+  [string]$RepoPath = "",
   [switch]$KeepTempSecret
 )
 
@@ -43,7 +45,7 @@ $PidexRoot = [System.IO.Path]::GetFullPath($PidexRoot)
 $CredentialsScript = Join-Path $PidexRoot "modules\pidex\project-pipeline\scripts\project-pipeline\credentials.mjs"
 if (-not (Test-Path -LiteralPath $CredentialsScript -PathType Leaf)) { Fail "PIDEX credentials helper not found: $CredentialsScript" }
 
-$Query = ConvertTo-CredentialQuery $RemoteUrl $Host $Path
+$Query = ConvertTo-CredentialQuery $RemoteUrl $GitHost $RepoPath
 $InputText = "protocol=$($Query.Protocol)`nhost=$($Query.Host)`n"
 if ($Query.Path) { $InputText += "path=$($Query.Path)`n" }
 $InputText += "`n"
