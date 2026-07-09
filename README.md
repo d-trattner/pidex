@@ -63,6 +63,7 @@ Linux / WSL2 recommended prerequisites:
 Windows prerequisites for the experimental PowerShell bootstrap:
 
 - Git for Windows, including Git Bash for Bash-backed validation commands
+- For native Windows `/pidex`/`/pd` host-direct work that uses Pi's Bash-backed command tool: a normal WSL2 Linux distribution with `/bin/bash` available as the default WSL distro. Docker Desktop's internal `docker-desktop` WSL distro is not sufficient. Validate with `wsl -e /bin/bash -lc "echo bash-ok"`.
 - Node.js `>=22.12.0`
 - npm (for Pi/npm bootstrap)
 - pnpm `10.33.0` (Corepack may provide it, or install standalone with `npm install -g pnpm@10.33.0`)

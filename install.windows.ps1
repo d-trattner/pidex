@@ -68,6 +68,25 @@ function Get-PythonCommand {
   return $null
 }
 
+function Test-WslDefaultBash {
+  $Wsl = Get-CommandPath @("wsl.exe", "wsl")
+  if (-not $Wsl) {
+    return @{ Available = $false; Ok = $false; Message = "wsl.exe not found" }
+  }
+  $Output = @()
+  try {
+    $Output = & $Wsl -e /bin/bash -lc "echo bash-ok" 2>&1
+    $Exit = $LASTEXITCODE
+  } catch {
+    return @{ Available = $true; Ok = $false; Message = $_.Exception.Message }
+  }
+  $Text = ($Output | Out-String).Trim()
+  if ($Exit -eq 0 -and $Text -match "bash-ok") {
+    return @{ Available = $true; Ok = $true; Message = $Text }
+  }
+  return @{ Available = $true; Ok = $false; Message = $(if ($Text) { $Text } else { "wsl exited with code $Exit" }) }
+}
+
 function Assert-SafeRepoUrl([string]$Value) {
   if (-not $Value) { Fail "RepoUrl must not be empty" }
   if ($Value.StartsWith('-')) { Fail "RepoUrl must not start with '-': $Value" }
@@ -182,6 +201,11 @@ $GitBash = Find-GitBash
 if (-not $GitBash) {
   Fail "Missing Bash required by Pi on Windows. Install Git for Windows: https://git-scm.com/download/win"
 }
+$WslBash = Test-WslDefaultBash
+if (-not $WslBash.Ok) {
+  $WslHint = 'Missing default WSL /bin/bash required for native Windows host-direct Pi command execution. Docker Desktop''s internal WSL distro is not sufficient. Install/set a normal WSL distro, then retry: wsl --install -d Ubuntu-24.04; wsl --set-default Ubuntu-24.04; wsl -e /bin/bash -lc "echo bash-ok". Current WSL check: '
+  Fail ($WslHint + $WslBash.Message)
+}
 Assert-SafeRepoUrl $RepoUrl
 Assert-SafeBranchName $Branch $Git
 $NodeVersion = Assert-NodeVersion $Node
@@ -199,6 +223,7 @@ if ($Python) {
 }
 Write-Host "pi:     $Pi"
 Write-Host "bash:   $GitBash"
+Write-Host "wsl:    default /bin/bash ok"
 
 $GitBashDir = Split-Path -Parent $GitBash
 $PathParts = @($env:Path -split ';' | Where-Object { $_ })

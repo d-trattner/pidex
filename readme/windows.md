@@ -11,7 +11,7 @@ Windows compatibility is under active validation. This page is intentionally con
 | Linux | Supported/currently tested | Canonical PIDEX path. Use the existing `install.sh`, `dashboard/start.sh` or cross-platform `node dashboard/start.mjs`, and validation commands. |
 | WSL2 | Safest Windows recommendation for full pipelines for now | Expected to be closest to the Linux path, but still needs explicit PIDEX smoke evidence before being called fully supported. |
 | Windows + Git Bash | Experimental / under analysis | Pi documents a Git Bash-based Windows path. PIDEX still needs validation of delegated pipeline behavior, hooks, and broader path handling before support is claimed. Git Bash can satisfy Bash-backed validation commands such as `pnpm run check`. |
-| Native PowerShell / CMD | Experimental, partially validated | `install.windows.ps1`, cross-platform `node dashboard/start.mjs`, Bash-backed `pnpm run check`, Docker sandbox helper smoke, and real `/pd` Project Pipeline runs with managed preview approval and browser-smoke evidence have passed with Docker Desktop Linux containers. Full native Windows pipeline support is not claimed yet. |
+| Native PowerShell / CMD | Experimental, partially validated | `install.windows.ps1`, cross-platform `node dashboard/start.mjs`, Bash-backed `pnpm run check`, Docker sandbox helper smoke, and real `/pd` Project Pipeline runs with managed preview approval and browser-smoke evidence have passed with Docker Desktop Linux containers. Host-direct `/pidex`/`/pd` work that relies on Pi's Bash-backed command tool also needs a normal default WSL2 distro with `/bin/bash`; Docker Desktop's internal WSL distro is not enough. Full native Windows pipeline support is not claimed yet. |
 
 ## Platform separation rule
 
@@ -52,6 +52,31 @@ The audit reports:
 - known unsupported or risky Windows entrypoints
 
 The audit is informational. Missing tools or risky entrypoints are reported as findings; the script does not install anything, modify configuration, or start PIDEX services.
+
+## Required Bash/WSL check for host-direct Pi tools
+
+For native Windows host-direct pipeline work, Pi command execution may route through WSL and require `/bin/bash` before it can invoke any shell command, even `cmd.exe` or PowerShell. A Windows machine with only Docker Desktop's internal `docker-desktop` WSL distribution can fail with:
+
+```text
+execvpe(/bin/bash) failed: No such file or directory
+```
+
+Validate the prerequisite from PowerShell:
+
+```powershell
+wsl -l -v
+wsl -e /bin/bash -lc "echo bash-ok"
+```
+
+Expected: a normal distro such as `Ubuntu-24.04` or `Debian` is the default and the second command prints `bash-ok`. If the default is `docker-desktop`, install/set a normal distro:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+wsl --set-default Ubuntu-24.04
+wsl -e /bin/bash -lc "echo bash-ok"
+```
+
+This is separate from Docker Desktop. Docker Desktop can run Linux containers for Project Pipeline, but it does not provide a general `/bin/bash` environment for Pi's host command tool.
 
 ## Known risky or unsupported areas on Windows
 
