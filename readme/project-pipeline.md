@@ -85,6 +85,20 @@ This copies selected allowlisted files into the per-project Docker secrets volum
 
 Current security model: the Project Sandbox protects the host from project code; it does not protect copied credentials from code running inside that trusted project container.
 
+### Windows Git Credential Manager bridge
+
+Windows GitHub credentials usually live in Windows Credential Manager via Git Credential Manager, not as a normal file that Docker can mount. For private GitHub remotes or container-side fetch/push, use the Windows-owned GCM bridge after the Project Sandbox exists:
+
+```powershell
+.\scripts\windows\project-pipeline-git-gcm-bridge.ps1 `
+  -ProjectId <project-id> `
+  -RemoteUrl https://github.com/<owner>/<repo>.git
+```
+
+The bridge asks Windows Git/GCM for the existing HTTPS credential, writes a temporary `.git-credentials` file under `<pidex-root>\state\secrets\git`, copies it into the per-project Docker secrets volume as `/pidex-secrets/git/.git-credentials`, configures the container Git credential helper to use that file, then deletes the temporary host file unless `-KeepTempSecret` is supplied. It does not print the token.
+
+If GCM is not already signed in for the remote, `git credential fill` may prompt or trigger browser sign-in. SSH remotes are not handled by this bridge; use the existing explicit SSH key credential flow instead.
+
 ## Artifacts and archive
 
 After a Project Pipeline run, host-visible artifacts are under:

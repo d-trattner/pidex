@@ -144,7 +144,7 @@
         "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/credentials.mjs"],
         "passthrough": true,
         "passthrough_policy": {
-          "allowed_patterns": ["^(copy-git|copy-pi|copy-provider|status|reset)$", "^--(pidex-root|project-id|ssh-key|known-hosts|gitconfig|pi-auth|pi-settings|pi-models|codex-auth|codex-config|gemini-oauth|gemini-settings)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+          "allowed_patterns": ["^(copy-git|copy-pi|copy-provider|status|reset)$", "^--(pidex-root|project-id|ssh-key|known-hosts|gitconfig|git-credentials|pi-auth|pi-settings|pi-models|codex-auth|codex-config|gemini-oauth|gemini-settings)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
         }
       }
     },

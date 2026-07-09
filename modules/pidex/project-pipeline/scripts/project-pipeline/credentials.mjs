@@ -79,6 +79,7 @@ export function credentialDest(kind, source) {
   if (kind === 'ssh-key') return `/pidex-secrets/git/.ssh/${base}`;
   if (kind === 'known-hosts') return '/pidex-secrets/git/.ssh/known_hosts';
   if (kind === 'gitconfig') return '/pidex-secrets/git/.gitconfig';
+  if (kind === 'git-credentials') return '/pidex-secrets/git/.git-credentials';
   if (kind === 'pi-auth') return '/pidex-secrets/pi/agent/auth.json';
   if (kind === 'pi-settings') return '/pidex-secrets/pi/agent/settings.json';
   if (kind === 'pi-models') return '/pidex-secrets/pi/agent/models.json';
@@ -92,7 +93,7 @@ export function credentialDest(kind, source) {
 export const gitCredentialDest = credentialDest;
 
 function credentialMode(kind) {
-  return kind.endsWith('-auth') || kind === 'gemini-oauth' || kind === 'ssh-key' ? '600' : '644';
+  return kind.endsWith('-auth') || kind === 'gemini-oauth' || kind === 'ssh-key' || kind === 'git-credentials' ? '600' : '644';
 }
 
 function credentialGroup(kind) {
@@ -114,6 +115,9 @@ export function buildCredentialCopyOps(record, entries) {
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'chmod', '700', dir]);
     ops.push(['exec-input', credentialInputSource(entry.kind, source), 'exec', '-i', '--user', 'node', record.docker.container_name, 'sh', '-c', 'cat > "$1" && chmod "$2" "$1"', 'sh', dest, credentialMode(entry.kind)]);
     inventory.push({ kind: entry.kind, group: credentialGroup(entry.kind), source_label: redactPath(source), destination: dest, fingerprint: `sha256:${fingerprintFile(source)}`, copied_at: new Date().toISOString() });
+  }
+  if (entries.some((entry) => entry.kind === 'git-credentials')) {
+    ops.push(['exec', '--user', 'node', record.docker.container_name, 'git', 'config', '--global', 'credential.helper', 'store --file=/pidex-secrets/git/.git-credentials']);
   }
   if (entries.some((entry) => entry.kind.startsWith('pi-'))) {
     ops.push(['exec', '--user', 'node', record.docker.container_name, 'mkdir', '-p', '/pidex-home/.pi']);
@@ -180,6 +184,7 @@ export function parseArgs(argv) {
     else if (arg === '--ssh-key') out.entries.push({ kind: 'ssh-key', source: argv[++i] });
     else if (arg === '--known-hosts') out.entries.push({ kind: 'known-hosts', source: argv[++i] });
     else if (arg === '--gitconfig') out.entries.push({ kind: 'gitconfig', source: argv[++i] });
+    else if (arg === '--git-credentials') out.entries.push({ kind: 'git-credentials', source: argv[++i] });
     else if (arg === '--pi-auth') out.entries.push({ kind: 'pi-auth', source: argv[++i] });
     else if (arg === '--pi-settings') out.entries.push({ kind: 'pi-settings', source: argv[++i] });
     else if (arg === '--pi-models') out.entries.push({ kind: 'pi-models', source: argv[++i] });
@@ -195,7 +200,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: credentials.mjs <copy-git|copy-pi|copy-provider|status|reset> --pidex-root PATH --project-id ID [--acknowledge-trusted-persistent-container --ssh-key FILE --pi-auth FILE --codex-auth FILE] --json'; }
+function usage() { return 'Usage: credentials.mjs <copy-git|copy-pi|copy-provider|status|reset> --pidex-root PATH --project-id ID [--acknowledge-trusted-persistent-container --ssh-key FILE --known-hosts FILE --gitconfig FILE --git-credentials FILE --pi-auth FILE --codex-auth FILE] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

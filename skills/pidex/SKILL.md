@@ -213,8 +213,9 @@ If `project-pipeline` is selected during the new-project interview, do not resea
 1. create/initialize the host project directory metadata as usual;
 2. save/use `project-pipeline` as the per-project mode for that project;
 3. before the first child agent, ask explicit consent to copy Pi/provider credentials into the trusted persistent Docker Project Sandbox if credentials are not already configured;
-4. start the Project Pipeline orchestrator for the confirmed task and project path;
-5. fail closed with no host-direct or hardened-pipeline fallback.
+4. for Windows/private Git remotes, ask whether to configure container Git access with the Windows Git Credential Manager bridge (`scripts/windows/project-pipeline-git-gcm-bridge.ps1`) after the Project Sandbox exists; explain that Windows Credential Manager cannot be mounted directly and tokens must never be printed or written to artifacts/wiki;
+5. start the Project Pipeline orchestrator for the confirmed task and project path;
+6. fail closed with no host-direct or hardened-pipeline fallback.
 
 Project Pipeline command contract for deterministic handoff when the extension has not already intercepted the run:
 
@@ -234,6 +235,14 @@ node <pidex-root>/scripts/modules/run-check.mjs \
 ```
 
 When the user approves copying Pi credentials into the trusted persistent sandbox, include the explicit credential args supported by the helper and `--acknowledge-trusted-persistent-container`; otherwise do not copy credentials. If a credential-missing failure occurs, ask once for explicit consent and retry with credential copy; do not let an avoidable missing-credential planner failure happen when status already shows credentials missing.
+
+Project Pipeline Git credential onboarding: if the project has a private HTTPS Git remote on Windows and the container needs fetch/push, recommend the Windows GCM bridge:
+
+```powershell
+.\scripts\windows\project-pipeline-git-gcm-bridge.ps1 -ProjectId <project-id> -RemoteUrl https://github.com/<owner>/<repo>.git
+```
+
+This asks Windows Git Credential Manager for an existing credential, copies a generated `.git-credentials` file into `/pidex-secrets/git/.git-credentials`, configures container Git to use it, and deletes the temporary host secret by default. Never paste, echo, log, or store the token in `agents.output/**` or `wiki/**`; record only configured/verified status.
 
 Project Pipeline source layout policy: inside the container, `/workspace` is the project source root. Files/directories requested at the project root belong directly under `/workspace`, not under a nested host path, Windows drive-letter path, copied project-name directory, or duplicate project directory. When validating output, inspect `/workspace` as the root first; nested project directories are a layout defect to fix, not the expected location.
 

@@ -97,6 +97,18 @@ test('buildCredentialCopyOps passes hostile destination filenames as positional 
   assert.equal(JSON.stringify(op).includes('$(touch pwn)`echo bad`'), true, 'hostile filename is data argument only');
 });
 
+test('buildCredentialCopyOps supports HTTPS git credential store file', () => {
+  const root = tmp();
+  const gitCreds = path.join(root, 'github.git-credentials');
+  write(gitCreds, 'https://user:token@github.com\n');
+  const record = createProjectRecord({ project_id: 'pp-creds-gcm123', name: 'demo' });
+  const result = buildCredentialCopyOps(record, [{ kind: 'git-credentials', source: gitCreds }]);
+  assert.equal(result.ops.some((op) => op[0] === 'exec-input' && op[1] === gitCreds && op.includes('/pidex-secrets/git/.git-credentials') && op.includes('600')), true);
+  assert.equal(result.ops.some((op) => op[0] === 'exec' && op.includes('git') && op.includes('credential.helper') && op.includes('store --file=/pidex-secrets/git/.git-credentials')), true);
+  assert.equal(result.inventory[0].kind, 'git-credentials');
+  assert.equal(JSON.stringify(result.inventory).includes('token'), false);
+});
+
 test('validateCredentialCommand constrains named copy commands to matching credential groups', () => {
   assert.throws(() => validateCredentialCommand({ command: 'copy-git', entries: [{ kind: 'pi-auth' }] }), /copy-git/);
   assert.throws(() => validateCredentialCommand({ command: 'copy-pi', entries: [{ kind: 'codex-auth' }] }), /copy-pi/);
