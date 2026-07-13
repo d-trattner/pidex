@@ -53,5 +53,6 @@ test('importLocalProject copies accepted files to container workspace and update
   assert.equal(calls.some((args) => String(args).includes('.env')), false);
   const loaded = loadProjectRecord(root, 'pp-import-abc123');
   assert.equal(loaded.source.kind, 'host-path');
+  assert.equal(loaded.control_project_path, source);
   assert.equal(loaded.source.files_copied, 2);
 });

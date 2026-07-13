@@ -94,6 +94,7 @@ export function importLocalProject(options = {}) {
     runner(['cp', source, `${record.docker.container_name}:/workspace/${file.path}`]);
     copied.push(file);
   }
+  record.control_project_path ||= collected.project;
   record.source = { kind: 'host-path', ref: collected.project, imported_at: new Date().toISOString(), files_copied: copied.length, files_skipped: collected.skipped.length };
   record.status = 'ready';
   const file = saveProjectRecord(pidexRoot, record);

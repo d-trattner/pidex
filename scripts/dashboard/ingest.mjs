@@ -132,7 +132,24 @@ function parseArgs(argv) {
 
 function utcFromTsMs(ms) { return new Date(ms).toISOString(); }
 function safeHash(value) { return crypto.createHash('sha256').update(value, 'utf8').digest('hex'); }
-function canonicalPath(value) { return path.resolve(String(value).replace(/^~(?=$|[\\/])/, os.homedir())); }
+function isWindowsAbsolutePath(value) {
+  const candidate = String(value || '').trim();
+  return !path.posix.isAbsolute(candidate) && path.win32.isAbsolute(candidate);
+}
+function isAbsoluteAnyPlatform(value) {
+  const candidate = String(value || '').trim();
+  return path.isAbsolute(candidate) || isWindowsAbsolutePath(candidate);
+}
+function canonicalPath(value) {
+  const expanded = String(value).replace(/^~(?=$|[\\/])/, os.homedir());
+  if (path.isAbsolute(expanded)) return path.resolve(expanded);
+  if (isWindowsAbsolutePath(expanded)) return path.win32.normalize(expanded);
+  return path.resolve(expanded);
+}
+function basenameAnyPlatform(value) {
+  const candidate = String(value || '');
+  return isWindowsAbsolutePath(candidate) ? path.win32.basename(candidate) : path.basename(candidate);
+}
 function pathExists(p) { try { return existsSync(p); } catch { return false; } }
 function readText(p) { return readFileSync(p, 'utf8'); }
 function parseBool(value, defaultValue = false) { return value == null ? defaultValue : ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase()); }
@@ -155,22 +172,22 @@ function dbConnect(dbPath) {
 
 function projectId(db, projectPath) {
   const p = canonicalPath(projectPath);
-  const name = path.basename(p) || p.replaceAll('/', '-').replaceAll('\\', '-');
+  const name = basenameAnyPlatform(p) || p.replaceAll('/', '-').replaceAll('\\', '-');
   db.prepare('INSERT OR IGNORE INTO projects(path, name) VALUES (?, ?)').run(p, name);
   const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(p);
   return Number(row.id);
 }
 function registerProject(db, projectPath, name) {
   const p = canonicalPath(projectPath);
-  const n = String(name || path.basename(p) || p).trim() || p;
+  const n = String(name || basenameAnyPlatform(p) || p).trim() || p;
   db.prepare('INSERT OR IGNORE INTO projects(path, name) VALUES (?, ?)').run(p, n);
-  db.prepare('UPDATE projects SET name = ? WHERE path = ? AND (name IS NULL OR name = ? OR name = ?)').run(n, p, path.basename(p), p);
+  db.prepare('UPDATE projects SET name = ? WHERE path = ? AND (name IS NULL OR name = ? OR name = ?)').run(n, p, basenameAnyPlatform(p), p);
   const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(p);
   return Number(row.id);
 }
 function updateProjectDisplayName(db, projectPath, name) {
   const p = canonicalPath(projectPath);
-  const n = String(name || path.basename(p) || p).trim() || p;
+  const n = String(name || basenameAnyPlatform(p) || p).trim() || p;
   db.prepare('UPDATE projects SET name = ? WHERE path = ?').run(n, p);
 }
 
@@ -355,19 +372,57 @@ function projectPipelineRegistryRoot() {
 function projectPipelineArchiveRoot(projectId) {
   return path.join(STATE_DIR, 'project-archives', String(projectId || ''));
 }
+const FILESYSTEM_SOURCE_KINDS = new Set(['host-path', 'local']);
+function filesystemSourcePath(source) {
+  const ref = String(source?.ref || '').trim();
+  return FILESYSTEM_SOURCE_KINDS.has(String(source?.kind || '')) && isAbsoluteAnyPlatform(ref) ? ref : '';
+}
+function previousFilesystemSourcePath(source) {
+  let previous = source?.previous;
+  for (let depth = 0; previous && depth < 8; depth++) {
+    const candidate = filesystemSourcePath(previous);
+    if (candidate) return candidate;
+    previous = previous.previous;
+  }
+  return '';
+}
 function registryProjectPath(record) {
-  const sourceRef = String(record?.source?.ref || '').trim();
-  if (sourceRef) return sourceRef;
+  const controlPath = String(record?.control_project_path || '').trim();
+  if (isAbsoluteAnyPlatform(controlPath)) return controlPath;
+  const sourcePath = filesystemSourcePath(record?.source);
+  if (sourcePath) return sourcePath;
+  const previousPath = previousFilesystemSourcePath(record?.source);
+  if (previousPath) return previousPath;
   const archivePath = String(record?.archive?.path || '').trim();
-  if (archivePath) return archivePath;
+  if (isAbsoluteAnyPlatform(archivePath)) return archivePath;
   if (record?.project_id) return projectPipelineArchiveRoot(record.project_id);
   return '';
+}
+function legacyWorkspaceProjectPaths(record) {
+  const source = record?.source;
+  const ref = String(source?.ref || '').trim();
+  if (source?.kind !== 'container-workspace' || !ref || isAbsoluteAnyPlatform(ref)) return [];
+  return [path.resolve(ref)];
 }
 function projectPipelineDisplayName(record, projectPath) {
   const explicit = String(record?.name || '').trim();
   const projectId = String(record?.project_id || '').trim();
   if (explicit && explicit !== projectId && !explicit.startsWith('pp-')) return explicit;
-  return path.basename(canonicalPath(projectPath)) || projectId || 'Project Pipeline project';
+  return basenameAnyPlatform(canonicalPath(projectPath)) || projectId || 'Project Pipeline project';
+}
+function migrateLegacyProject(db, legacyPath, projectPath, projectId) {
+  const legacy = canonicalPath(legacyPath);
+  const canonical = canonicalPath(projectPath);
+  if (legacy === canonical) return;
+  const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(legacy);
+  if (!row) return;
+  const legacyProjectId = Number(row.id);
+  if (!Number.isFinite(legacyProjectId) || legacyProjectId === projectId) return;
+  db.prepare('UPDATE artifacts SET project_id = ? WHERE project_id = ?').run(projectId, legacyProjectId);
+  db.prepare('UPDATE merge_findings SET project_id = ? WHERE project_id = ?').run(projectId, legacyProjectId);
+  db.prepare('UPDATE agent_runs SET project_id = ? WHERE project_id = ?').run(projectId, legacyProjectId);
+  db.prepare('UPDATE pipeline_events SET project_id = ?, project_path = ? WHERE project_id = ?').run(projectId, canonical, legacyProjectId);
+  db.prepare('DELETE FROM projects WHERE id = ?').run(legacyProjectId);
 }
 function cleanupProjectPipelineArchiveProject(db, archivePath, projectId) {
   if (!archivePath) return;
@@ -406,6 +461,7 @@ function ingestProjectPipelineRegistry(db) {
     const displayName = projectPipelineDisplayName(record, projectPath);
     const projectId = registerProject(db, projectPath, displayName);
     updateProjectDisplayName(db, projectPath, displayName);
+    for (const legacyPath of legacyWorkspaceProjectPaths(record)) migrateLegacyProject(db, legacyPath, projectPath, projectId);
     cleanupProjectPipelineArchiveProject(db, archivePath, projectId);
     count++;
   }

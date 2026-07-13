@@ -42,6 +42,9 @@ try {
   const dbPath = path.join(tmp, 'pidex.sqlite');
   const sandboxOnly = path.join(tmp, 'sandbox-only-host-project');
   const sandboxArchive = path.join(state, 'project-archives', 'pp-sandbox-only');
+  const windowsProject = 'C:\\work\\demo';
+  const workspaceRef = 'pidex-project-pp-demo-workspace';
+  const legacyWorkspacePath = path.resolve(workspaceRef);
   mkdirSync(path.join(state, 'metrics', 'tmp-project'), { recursive: true });
   mkdirSync(path.join(state, 'pipeline-events', 'project'), { recursive: true });
   mkdirSync(path.join(state, 'sandbox-projects'), { recursive: true });
@@ -63,6 +66,13 @@ try {
     source: { kind: 'local', ref: sandboxOnly },
     archive: { path: sandboxArchive },
   }, null, 2));
+  writeFileSync(path.join(state, 'sandbox-projects', 'pp-demo.json'), JSON.stringify({
+    schema_version: 2,
+    project_id: 'pp-demo',
+    name: 'pp-demo',
+    mode: 'project-pipeline',
+    source: { kind: 'container-workspace', ref: workspaceRef, previous: { kind: 'host-path', ref: windowsProject } },
+  }, null, 2));
   writeFileSync(path.join(sandboxArchive, 'agents.output', 'parallel-agents', '002-merge.md'), `# Sandbox Archive Merge Summary\n\n| Source | Severity | Classification | Disposition | Summary |\n|---|---|---|---|---|\n| archive-secondary | medium | secondary-only | accepted | archive finding |\n`);
 
   {
@@ -78,7 +88,7 @@ try {
   }
 
   const report = runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
-  assert.equal(report.project_pipeline_registry, 1);
+  assert.equal(report.project_pipeline_registry, 2);
   assert.equal(report.agent_runs, 1);
   assert.equal(report.pipeline_events, 1);
   assert.equal(report.artifacts, 2);
@@ -91,9 +101,40 @@ try {
   assert.equal(count(dbPath, 'merge_findings'), 3);
   assert.equal(value(dbPath, `select name from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 'sandbox-only-host-project');
   assert.equal(value(dbPath, `select count(*) from projects where path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
-  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), ['project', 'sandbox-only-host-project']);
+  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), ['demo', 'project', 'sandbox-only-host-project']);
+  assert.equal(value(dbPath, `select count(*) from projects where path = '${windowsProject.replaceAll("'", "''")}'`), 1);
+  assert.equal(value(dbPath, `select count(*) from projects where path like '%${workspaceRef}%'`), 0);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxOnly.replaceAll("'", "''")}'`), 2);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
+
+  // Simulate a database produced by the old type-blind resolver, including dependent rows.
+  {
+    const db = new DatabaseSync(dbPath);
+    try {
+      db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(legacyWorkspacePath, workspaceRef);
+      const legacyId = db.prepare('SELECT id FROM projects WHERE path = ?').get(legacyWorkspacePath).id;
+      db.prepare('INSERT INTO artifacts(path, project_id, title) VALUES (?, ?, ?)').run(path.join(tmp, 'legacy-artifact.md'), legacyId, 'legacy');
+      db.prepare('INSERT INTO merge_findings(artifact_path, row_index, project_id, summary) VALUES (?, ?, ?, ?)').run(path.join(tmp, 'legacy-artifact.md'), 1, legacyId, 'legacy finding');
+      db.prepare('INSERT INTO agent_runs(source_path, source_line, source_hash, project_id, plan_key) VALUES (?, ?, ?, ?, ?)').run('legacy-metrics.jsonl', 1, 'legacy-agent-hash', legacyId, 'plan-001');
+      db.prepare('INSERT INTO pipeline_events(source_path, source_line, source_hash, timestamp, project_id, project_path, pipeline_id, plan_key, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run('legacy-events.jsonl', 1, 'legacy-event-hash', '2026-01-01T00:02:00Z', legacyId, legacyWorkspacePath, 'legacy-pipeline', 'plan-001', 'pipeline_started');
+    } finally { db.close(); }
+  }
+
+  runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  assert.equal(value(dbPath, `select count(*) from projects where path = '${legacyWorkspacePath.replaceAll("'", "''")}'`), 0);
+  const migratedSelectors = {
+    artifacts: `t.path = '${path.join(tmp, 'legacy-artifact.md').replaceAll("'", "''")}'`,
+    merge_findings: `t.artifact_path = '${path.join(tmp, 'legacy-artifact.md').replaceAll("'", "''")}'`,
+    agent_runs: "t.source_hash = 'legacy-agent-hash'",
+    pipeline_events: "t.pipeline_id = 'legacy-pipeline'",
+  };
+  for (const [table, selector] of Object.entries(migratedSelectors)) {
+    assert.equal(value(dbPath, `select count(*) from ${table} t join projects p on p.id = t.project_id where p.path = '${windowsProject.replaceAll("'", "''")}' and ${selector}`), 1);
+  }
+  assert.equal(value(dbPath, "select project_path from pipeline_events where pipeline_id = 'legacy-pipeline'"), windowsProject);
+  const projectCount = count(dbPath, 'projects');
+  runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  assert.equal(count(dbPath, 'projects'), projectCount);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }
