@@ -9,13 +9,13 @@ Supported agent containers:
 
 ## Config
 
-Config lives at:
+Config resolution order is:
 
-```text
-<pidex-root>/config/parallel-agents.json
-```
+1. `PIDEX_PARALLEL_AGENTS_CONFIG` when set (read-only through PIDEX dashboard save operations)
+2. `<pidex-root>/config/parallel-agents.local.json` when present
+3. `<pidex-root>/config/parallel-agents.json` as the disabled public default
 
-It is disabled by default. Each agent can have up to two provider/model selections. Provider/model choices are discovered from Pi where possible. The dashboard shows all discovered models, but only models whose provider appears authenticated are selectable.
+Dashboard saves target the local operator file unless an environment override is active. It is disabled by default. Each agent can have up to two provider/model selections. Provider/model choices are discovered from Pi where possible. The dashboard shows all discovered models, but only models whose provider appears authenticated are selectable.
 
 Runtime warnings live at:
 
@@ -86,15 +86,15 @@ Parallel lanes are a target capability for every saved PIDEX project mode, but e
 | `hardened-pipeline` | Host source remains canonical. MVP should run secondary review lanes host-side against host artifacts/sandbox evidence; secondary lanes do not apply source changes. |
 | `project-pipeline` | Host orchestrator owns discovery/status/merge, but secondary review lanes run as Project Pipeline child Pi executions inside the Project Sandbox. Source remains container-canonical and archive sync remains `agents.output/**` + `wiki/**`. MVP may execute secondary lanes sequentially; true wall-clock concurrency is an optimization. |
 
-Each trigger with active lanes writes one merge/adjudication artifact under `agents.output/parallel-agents/**`. For Project Pipeline this artifact is written inside `/workspace` and archive-synced.
+Each trigger with successful lanes runs one primary configured adjudicator that reads the primary and secondary artifacts and writes a run-specific merge artifact under `agents.output/parallel-agents/**`. For Project Pipeline the review and adjudication execute inside `/workspace`, use exact assigned paths, and are archive-synced. A route back to correction stops before the next phase starts.
 
 Telemetry for secondary lanes should include `project_mode`, `parallel_lane_id`, `parallel_trigger`, `parallel_role`, and Project Pipeline identifiers when applicable.
 
-Current implementation note: config/status helpers exist and public defaults are disabled. Full automatic execution across all modes is being implemented in slices; `run-lane.mjs` remains a scaffold until the shared lane/merge contract and mode-specific executors are complete.
+Project Pipeline secondary lanes are sequential. They use a bounded pre/post workspace manifest and may change only their assigned artifact. Routing omitted from the final response can be recovered from the exact non-empty assigned artifact without retrying the model. `run-lane.mjs` remains a manual status/test scaffold.
 
 ## Guarantees
 
-- Secondary lane failure does not block the primary PIDEX pipeline.
+- Ordinary provider/unavailability failure remains advisory; a write-fence or adjudication failure blocks Project Pipeline continuation.
 - No usage/cost accounting is added for secondary lanes.
 - Provider credentials/secrets must not be stored in config or state.
 - Specialist agents do not spawn nested parallel lanes automatically.

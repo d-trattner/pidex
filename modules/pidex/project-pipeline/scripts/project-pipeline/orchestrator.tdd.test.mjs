@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildBrowserSmokeVerdictTask, buildPhaseTask, buildProjectPipelineSecondaryLaneTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
+import { buildBrowserSmokeVerdictTask, buildPhaseTask, buildProjectPipelineAdjudicationTask, buildProjectPipelineSecondaryLaneTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 
@@ -116,15 +116,24 @@ test('buildPhaseTask gives validation phases mutation and Fallow instructions', 
 });
 
 test('Project Pipeline secondary lane task is artifact-only and archive-syncable', () => {
-  const lane = { lane_id: 'pidex-critic:deepseek:model', agent: 'pidex-critic', provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model' };
+  const lane = { lane_id: 'pidex-critic:deepseek:model', agent: 'pidex-critic', provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model', project_run_id: 'pprun-secondary-1' };
   const artifact = projectPipelineParallelArtifactPath({ ...lane, trigger: 'after-plan' });
-  assert.equal(artifact, 'agents.output/parallel-agents/pidex-critic.deepseek.model.after-plan.md');
+  assert.equal(artifact, 'agents.output/parallel-agents/pprun-secondary-1-pidex-critic.deepseek.model.after-plan.md');
   const task = buildProjectPipelineSecondaryLaneTask({ lane, trigger: 'after-plan', primary: { context_file: 'agents.output/critiques/primary.md' }, initialTask: 'ship it' });
   assert.match(task, /PIDEX mode: project-pipeline/);
   assert.match(task, /inside the persistent Project Sandbox at \/workspace/);
   assert.match(task, /Write only the assigned artifact path/);
   assert.match(task, /Do not edit source files, config, rules, wiki, project memory/);
   assert.match(task, new RegExp(artifact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('adjudication task requires all review artifacts and gives route authority', () => {
+  const task = buildProjectPipelineAdjudicationTask({ trigger: 'after-plan', primary: { context_file: 'agents.output/critiques/primary.md' }, laneSummaries: [{ context_file: 'agents.output/parallel-agents/secondary.md', ok: true }], nextPhase: 'pidex-implementer', outputPath: 'agents.output/parallel-agents/pprun-merge-after-plan-merge.md' });
+  assert.match(task, /parallel review adjudication/i);
+  assert.match(task, /agents\.output\/critiques\/primary\.md/);
+  assert.match(task, /agents\.output\/parallel-agents\/secondary\.md/);
+  assert.match(task, /route_to: pidex-implementer/);
+  assert.match(task, /route back to pidex-planner or pidex-critic/i);
 });
 
 test('renderProjectPipelineModuleRules returns Project Pipeline QA rules and no implementer rules', () => {
@@ -259,10 +268,13 @@ test('runProjectPipelineOrchestration runs configured secondary lane and merge b
       prompts.push(prompt);
       const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-unknown';
       const secondary = prompt.includes('configured secondary review lane');
-      const context = secondary ? 'agents.output/parallel-agents/pidex-critic.deepseek.model.after-plan.md' : `agents.output/${agent}/artifact.md`;
+      const adjudication = prompt.includes('parallel review adjudication');
+      const assigned = prompt.match(/Exact assigned output artifact: ([^\s]+\.md)/)?.[1];
+      const context = assigned || `agents.output/${agent}/artifact.md`;
       mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
-      writeFileSync(path.join(archiveWorkspace, context), secondary ? '# secondary critic\n' : `# ${agent}\n`);
-      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+      writeFileSync(path.join(archiveWorkspace, context), secondary ? '# secondary critic\nNo blockers.\n' : adjudication ? '# adjudication\nNo blocking findings.\n' : `# ${agent}\n`);
+      const route = adjudication ? 'pidex-implementer' : 'orchestrator';
+      return { status: 0, stdout: `<!-- ROUTING\nroute_to: ${route}\ncontext_file: ${context}\n-->`, stderr: '' };
     }
     return 'ok';
   };
@@ -280,13 +292,73 @@ test('runProjectPipelineOrchestration runs configured secondary lane and merge b
   });
   assert.equal(result.ok, true);
   assert.equal(result.runs.some((run) => run.parallel_role === 'secondary' && run.parallel_lane_id === 'pidex-critic:deepseek:model'), true);
-  assert.equal(result.runs.some((run) => run.parallel_role === 'merge' && run.context_file === 'agents.output/parallel-agents/after-plan-merge.md'), true);
+  const mergeRun = result.runs.find((run) => run.parallel_role === 'merge');
+  assert.match(mergeRun.context_file, /^agents\.output\/parallel-agents\/pprun-.*-after-plan-merge\.md$/);
   assert.equal(prompts.some((prompt) => /configured secondary review lane/.test(prompt)), true);
-  assert.match(prompts.at(-1), /Previous context file in the container: agents\.output\/parallel-agents\/after-plan-merge\.md/);
-  assert.equal(existsSync(path.join(pidexRoot, 'state/project-archives/pp-orch-parallel/agents.output/parallel-agents/after-plan-merge.md')), true);
+  assert.equal(prompts.some((prompt) => /parallel review adjudication/.test(prompt)), true);
+  assert.match(prompts.at(-1), new RegExp(`Previous context file in the container: ${mergeRun.context_file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.equal(existsSync(path.join(pidexRoot, 'state/project-archives/pp-orch-parallel', mergeRun.context_file)), true);
   const metricRows = readJsonlRecursive(path.join(pidexRoot, 'state', 'metrics'));
   assert.equal(metricRows.some((row) => row.parallel_role === 'secondary' && row.parallel_lane_id === 'pidex-critic:deepseek:model'), true);
   assert.equal(metricRows.some((row) => row.parallel_role === 'merge' && row.parallel_trigger === 'after-plan'), true);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('parallel adjudication blocks the next phase when it routes back', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-blocker');
+  const execAgents = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = String(args.at(-1));
+      const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-unknown';
+      execAgents.push(agent);
+      const assigned = prompt.match(/Exact assigned output artifact: ([^\s]+\.md)/)?.[1];
+      const context = assigned || `agents.output/${agent}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), prompt.includes('parallel review adjudication') ? '# Adjudication\nHigh blocker accepted.\n' : '# Review\n');
+      const route = prompt.includes('parallel review adjudication') ? 'pidex-planner' : 'orchestrator';
+      return { status: 0, stdout: `<!-- ROUTING\nroute_to: ${route}\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId: 'pp-orch-blocker', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'], archiveWorkspace, runner, moduleRules: false,
+    parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'pidex-critic:deepseek:model', agent, provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model' }] : [],
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'parallel-review-needs-correction');
+  assert.equal(result.required_route, 'pidex-planner');
+  assert.equal(execAgents.includes('pidex-implementer'), false);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('terminal parallel adjudication requires explicit routing and cannot synthesize continuation', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-terminal-adjudication');
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const prompt = String(args.at(-1));
+      const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-critic';
+      const assigned = prompt.match(/Exact assigned output artifact: ([^\s]+\.md)/)?.[1];
+      const context = assigned || `agents.output/${agent}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), prompt.includes('parallel review adjudication') ? '# Merge without routing\n' : '# Review\n');
+      return { status: 0, stdout: prompt.includes('parallel review adjudication') ? 'Done' : `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId: 'pp-orch-terminal-adjudication', task: 'review only', phases: ['pidex-planner', 'pidex-critic'], archiveWorkspace, runner, moduleRules: false,
+    parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'pidex-critic:deepseek:model', agent, provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model' }] : [],
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'routing-invalid');
+  assert.equal(result.runs.at(-1).parallel_role, 'merge');
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 

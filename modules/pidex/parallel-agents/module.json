@@ -20,7 +20,7 @@
         "args": ["modules/pidex/parallel-agents/scripts/status.mjs"],
         "passthrough": true,
         "passthrough_policy": {
-          "allowed_patterns": ["^(show|eligible|models|warn|success|clear)$", "^--(agent|trigger|lane|message)$", "^--json$", "^[A-Za-z0-9 ._:=@-]+$"]
+          "allowed_patterns": ["^(show|eligible|models|warn|success|clear)$", "^--(agent|trigger|lane|message|type)$", "^--(json|no-telegram)$", "^[A-Za-z0-9 ._:=@-]+$"]
         }
       }
     }

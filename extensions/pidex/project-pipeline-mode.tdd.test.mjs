@@ -511,6 +511,34 @@ console.log(JSON.stringify({ names: [...tools.keys()], result }));
   }
 });
 
+test('pidex_agent direct Project Pipeline call uses run-agent helper and never host fallback', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-agent-helper-'));
+  const helper = path.join(dir, 'run-agent.mjs');
+  writeFileSync(helper, `console.log(JSON.stringify({ ok: true, project_run_id: 'pprun-direct', context_file: 'agents.output/parallel-agents/review.md', archive_context_file: '/archive/review.md', routing_recovered: false, write_fence: { status: 'complete' }, routing: { verdict: 'COMPLETE', route_to: 'orchestrator', reason: 'done', context_file: 'agents.output/parallel-agents/review.md' } }));\n`);
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+const mod = await import('./extensions/pidex/index.ts');
+const tools = new Map();
+mod.default({ on: () => {}, registerCommand: () => {}, registerTool: (tool) => tools.set(tool.name, tool), sendUserMessage: () => {} });
+const tool = tools.get('pidex_agent');
+const result = await tool.execute('call-1', { agent: 'pidex-critic', task: 'review', cwd: process.cwd(), projectId: 'pp-demo', expectedInputPath: 'agents.output/plans/034.md', expectedOutputPath: 'agents.output/parallel-agents/review.md', provider: 'pi', model: 'deepseek/model' }, undefined, undefined, { cwd: process.cwd() });
+console.log(JSON.stringify(result));
+`], { cwd: process.cwd(), env: { ...process.env, PIDEX_PROJECT_PIPELINE_RUN_AGENT_SCRIPT: helper }, encoding: 'utf8' });
+    assert.equal(proc.status, 0, proc.stderr);
+    const parsed = JSON.parse(proc.stdout.trim().split(/\n/).at(-1));
+    assert.equal(parsed.details.no_fallback, true);
+    assert.equal(parsed.details.project_run_id, 'pprun-direct');
+    assert.match(parsed.content[0].text, /complete in \/workspace/);
+    assert.match(parsed.content[0].text, /context_file=agents\.output\/parallel-agents\/review\.md/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('runProjectPipelineAgentTool rejects missing Project Pipeline identity fields', () => {
+  assert.throws(() => mod.runProjectPipelineAgentTool({ agent: 'pidex-critic', task: 'review' }), /require projectId/);
+  assert.throws(() => mod.runProjectPipelineAgentTool({ agent: 'pidex-critic', task: 'review', projectId: 'pp-demo' }), /expectedOutputPath/);
+  assert.throws(() => mod.runProjectPipelineAgentTool({ agent: 'pidex-critic', task: 'review', projectId: 'pp-demo', expectedOutputPath: 'agents.output/x.md' }), /expectedInputPath/);
+});
+
 test('runPdProjectCommand summarizes project runs without raw metadata', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-runs-helper-'));
   const helper = path.join(dir, 'status.mjs');

@@ -1217,7 +1217,7 @@ Parallel implementer lanes are optional, not default. Use them only when the pla
 
 **Parallel pidex_agent safety:** When emitting multiple `pidex_agent` calls in the same assistant turn (parallel implementer lanes, configured secondary review lanes, or post-retro handoffs), pass explicit `provider`, `model`, and `effort` for every secondary call. Do not rely on default routing in same-turn parallel calls. Never force `provider=pi` while leaving a delegate model alias such as `sonnet`/`opus`; if overriding to Pi, use a Pi-qualified model from config defaults (for example `openai-codex/gpt-5.4-mini`).
 
-**Automatic configured parallel secondary review lanes:** PIDEX optional parallel agents are configured in `<pidex-root>/config/parallel-agents.json` and are orchestrator-owned. If global config, the agent container, and a provider/model entry are enabled, the orchestrator MUST automatically launch matching secondary lanes for these triggers unless the user explicitly requested a minimal/cheap/single-lane run:
+**Automatic configured parallel secondary review lanes:** PIDEX optional parallel agents resolve from `PIDEX_PARALLEL_AGENTS_CONFIG`, then `<pidex-root>/config/parallel-agents.local.json`, then the disabled public `<pidex-root>/config/parallel-agents.json` default, and are orchestrator-owned. If global config, the agent container, and a provider/model entry are enabled, the orchestrator MUST automatically launch matching secondary lanes for these triggers unless the user explicitly requested a minimal/cheap/single-lane run:
 - `after-plan` → with the primary `pidex-critic` lane, launch enabled secondary `pidex-critic` lanes.
 - `after-implementation` → with the primary `pidex-code-reviewer` lane, launch enabled secondary `pidex-code-reviewer` lanes.
 
@@ -1225,12 +1225,12 @@ Before spawning `pidex-critic` or `pidex-code-reviewer`, run:
 ```bash
 node <pidex-root>/scripts/modules/run-check.mjs --capability parallel-agents.status --agent orchestrator --phase planning --project <project-root> -- eligible --agent <agent> --trigger <trigger> --json
 ```
-If `.lanes[]` is non-empty, launch the primary lane and every eligible secondary lane as separate visible `pidex_agent` calls in the same assistant turn. `pidex_agent` itself must not spawn nested agents.
+If `.lanes[]` is non-empty in host-direct or hardened-pipeline mode, launch the primary lane and every eligible secondary lane as separate visible `pidex_agent` calls in the same assistant turn. In Project Pipeline mode, do not launch host-visible secondary calls: the Project Pipeline orchestrator runs eligible lanes sequentially inside `/workspace` and performs in-container adjudication. `pidex_agent` itself must not spawn nested agents.
 
 Lane launch rules:
 - Primary: call `pidex_agent` normally using configured primary routing from `<pidex-root>/config/agents.json`.
 - Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `status.mjs eligible`. Use `runner_provider` and `runner_model` when present; these map Pi-auth provider/model IDs like DeepSeek/Minimax to `provider=pi`, `model=<provider>/<model>`. Do not pass unsupported direct providers such as `deepseek` or `minimax` to `pidex_agent`.
-- Each lane must receive a unique expected output path; never let secondaries write the primary artifact.
+- Each lane must receive a unique expected output path; never let secondaries write the primary artifact. Direct Project Pipeline `pidex_agent` calls additionally require `projectId` plus exact `expectedInputPath`/`expectedOutputPath` and never fall back to host execution.
 - Secondary failure is advisory and non-blocking. Record it with `status.mjs warn --lane <lane_id> --message <short reason>` and continue.
 - Secondary success should be recorded with `status.mjs success --lane <lane_id> --message success` after its output/ROUTING is verified.
 

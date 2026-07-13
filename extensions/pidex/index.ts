@@ -176,6 +176,7 @@ const PROJECT_PIPELINE_MODE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_MODE_SCR
 const PROJECT_PIPELINE_RUN_FLOW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_RUN_FLOW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "run-flow.mjs");
 const PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "orchestrator.mjs");
 const PROJECT_PIPELINE_STATUS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "status.mjs");
+const PROJECT_PIPELINE_RUN_AGENT_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_RUN_AGENT_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "run-agent.mjs");
 const PROJECT_PIPELINE_LIFECYCLE_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "lifecycle.mjs");
 const PROJECT_PIPELINE_CREDENTIALS_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_CREDENTIALS_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "credentials.mjs");
 const PROJECT_PIPELINE_PREVIEW_SCRIPT = process.env.PIDEX_PROJECT_PIPELINE_PREVIEW_SCRIPT ?? path.join(PACKAGE_ROOT, "modules", "pidex", "project-pipeline", "scripts", "project-pipeline", "preview.mjs");
@@ -3329,11 +3330,35 @@ const RpAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
 	cwd: Type.Optional(Type.String({ description: "Project working directory. Defaults to current Pi cwd." })),
+	projectId: Type.Optional(Type.String({ description: "Explicit Project Pipeline registry project id. Required for direct project-pipeline agent calls." })),
+	expectedInputPath: Type.Optional(Type.String({ description: "Exact container-relative agents.output/** input artifact for Project Pipeline review calls." })),
+	expectedOutputPath: Type.Optional(Type.String({ description: "Exact container-relative agents.output/** assigned output artifact for Project Pipeline calls." })),
 	provider: Type.Optional(Type.String({ description: "Optional provider override: pi or codex. Defaults to config/agents.json. Use provider=pi for Pi-routed provider/model IDs such as deepseek/... or minimax/...." })),
 	model: Type.Optional(Type.String({ description: "Optional model override. For provider=pi this may be a Pi-routed model ID; for provider=codex it is passed to the Codex CLI." })),
 	effort: Type.Optional(Type.String({ description: "Optional reasoning-effort override. For Codex/Pi-routed Codex models: low/medium/high/xhigh where supported." })),
 	tools: Type.Optional(Type.Array(Type.String(), { description: "Optional Pi tool allowlist override (only used by provider=pi/subagent)." })),
 });
+
+const PROJECT_PIPELINE_REVIEW_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer"]);
+
+export function runProjectPipelineAgentTool(params: any): any {
+	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
+	if (!params?.expectedOutputPath) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
+	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent)) && !params?.expectedInputPath) throw new Error(`Direct Project Pipeline review '${params.agent}' requires expectedInputPath.`);
+	if (!fs.existsSync(PROJECT_PIPELINE_RUN_AGENT_SCRIPT)) throw new Error("Project Pipeline agent helper missing; update the canonical PIDEX runtime.");
+	const args = [PROJECT_PIPELINE_RUN_AGENT_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-id", String(params.projectId), "--agent", String(params.agent), "--task", String(params.task || ""), "--expected-output", String(params.expectedOutputPath), "--json"];
+	if (params.expectedInputPath) args.push("--expected-input", String(params.expectedInputPath));
+	if (params.provider) args.push("--provider", String(params.provider));
+	if (params.model) args.push("--model", String(params.model));
+	if (params.effort) args.push("--effort", String(params.effort));
+	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent))) args.push("--review-write-fence");
+	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 20 * 1024 * 1024 });
+	let result: any;
+	try { result = JSON.parse(proc.stdout || "{}"); }
+	catch { throw new Error(`Project Pipeline agent helper returned invalid JSON (exit=${proc.status ?? 1}); no host fallback was used.`); }
+	if (proc.status !== 0 || result?.ok !== true) throw new Error(`Project Pipeline pidex_agent '${params.agent}' failed: ${result?.error || "agent-run-failed"}${result?.reason ? ` (${String(result.reason).slice(0, 500)})` : ""}; no host fallback was used.`);
+	return result;
+}
 
 export default function runningPi(pi: ExtensionAPI) {
 	pi.on("tool_call", async (event: any, ctx: any) => {
@@ -3584,7 +3609,7 @@ export default function runningPi(pi: ExtensionAPI) {
 		promptGuidelines: [
 			"Use pidex_agent for pidex specialist handoffs such as pidex-planner, pidex-critic, pidex-implementer, pidex-code-reviewer, pidex-qa, pidex-uat, pidex-devops, pidex-wiki-hygienist, pidex-retrospective, and pidex-pi.",
 			"pidex_agent automatically honors <pidex-root>/config/agents.json unless provider/model/effort are explicitly overridden.",
-			"Configured optional parallel agents live in <pidex-root>/config/parallel-agents.json. When enabled, the orchestrator must automatically launch matching pidex-critic after-plan and pidex-code-reviewer after-implementation secondary lanes as separate visible pidex_agent calls with explicit provider/model/effort overrides and unique expected output paths. pidex_agent itself does not spawn nested agents.",
+			"Configured optional parallel agents resolve from PIDEX_PARALLEL_AGENTS_CONFIG, then <pidex-root>/config/parallel-agents.local.json, then the disabled public <pidex-root>/config/parallel-agents.json default. Project Pipeline orchestration owns its in-container secondary lanes; direct project-pipeline pidex_agent calls require projectId plus exact expected input/output paths and never fall back to the host.",
 			"When using pidex_agent, pass complete context in the task, including project cwd, current epic, relevant agents.output paths, expected output file, and required ROUTING behavior. The final ROUTING block must include context_file, not doc. route_to may be an pidex-* agent, user, or orchestrator for deterministic internal follow-up.",
 			"For JS/TS security or QA handoffs, remind pidex-security/pidex-qa to run the relevant Fallow gate or document FALLOW-SKIP.",
 			"Specialists should write full artifacts to files and keep final responses short; pidex_agent will truncate oversized final text and store raw child logs under pidex/state/runs/.",
@@ -3596,6 +3621,14 @@ export default function runningPi(pi: ExtensionAPI) {
 				if (!homeStatus.ok) throw new Error(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before using pidex_agent.` : canonicalHomeMissingMessage());
 				const agentCwd = path.resolve(params.cwd ?? ctx.cwd);
 				const agentProjectMode = runProjectPipelineModeResolver(agentCwd);
+				if (params.projectId || (agentProjectMode.ok && agentProjectMode.mode === "project-pipeline")) {
+					const projectResult = runProjectPipelineAgentTool(params);
+					const routingText = projectResult.routing ? `\n\n<!-- ROUTING\nverdict: ${projectResult.routing.verdict || "COMPLETE"}\nroute_to: ${projectResult.routing.route_to || "orchestrator"}\nreason: ${projectResult.routing.reason || "Project Pipeline agent complete"}\ncontext_file: ${projectResult.context_file}\n-->` : "";
+					return {
+						content: [{ type: "text", text: `Project Pipeline ${params.agent} complete in /workspace. context_file=${projectResult.context_file}${projectResult.routing_recovered ? "; routing recovered from exact artifact" : ""}${routingText}` }],
+						details: { ok: true, projectId: params.projectId, project_run_id: projectResult.project_run_id, context_file: projectResult.context_file, archive_context_file: projectResult.archive_context_file, routing_recovered: projectResult.routing_recovered === true, write_fence: projectResult.write_fence?.status || null, no_fallback: true },
+					};
+				}
 				const sandboxState = resolveSandboxStateForProjectMode(agentProjectMode);
 				if (sandboxState.enabled) {
 					const probe = probeSandboxAvailability();

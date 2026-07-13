@@ -33,8 +33,8 @@ Alias for the PIDEX orchestrator: the host Pi session that coordinates `pidex-*`
 _Avoid_: separate specialist agent, Forge-only term
 
 **Parallel lane**:
-An optional non-blocking secondary agent run configured in `config/parallel-agents.json`.
-_Avoid_: required gate, primary reviewer
+An optional secondary review run resolved from `PIDEX_PARALLEL_AGENTS_CONFIG`, local operator config, then the disabled public `config/parallel-agents.json` default. In Project Pipeline it runs sequentially inside `/workspace`; ordinary provider failure is advisory, while write-fence/adjudication failure blocks continuation.
+_Avoid_: host fallback, unadjudicated reviewer, primary reviewer
 
 **Agent balance tracker**:
 A provider-wide estimate feature that combines user-entered balance snapshots with provider token metrics.

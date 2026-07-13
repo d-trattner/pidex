@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildDockerExecArgs, extractRouting, runProjectPipelineAgent, validateRouting } from './run-agent.mjs';
+import { buildDockerExecArgs, diffWorkspaceManifests, extractRouting, normalizeExpectedArtifactPath, parseArgs, runProjectPipelineAgent, validateRouting } from './run-agent.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-run-agent-')); }
@@ -16,6 +16,36 @@ test('extractRouting and validateRouting accept agents.output context only', () 
   assert.equal(validateRouting(routing).ok, true);
   assert.equal(validateRouting({ context_file: 'README.md' }).ok, false);
   assert.equal(validateRouting({ context_file: 'agents.output/../x.md' }).ok, false);
+  const finalRouting = extractRouting('<!-- ROUTING\nverdict: IN_PROGRESS\nroute_to: orchestrator\ncontext_file: agents.output/draft.md\n-->\ntext\n<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-planner\ncontext_file: agents.output/final.md\n-->');
+  assert.equal(finalRouting.verdict, 'REJECTED');
+  assert.equal(finalRouting.route_to, 'pidex-planner');
+  assert.equal(finalRouting.context_file, 'agents.output/final.md');
+});
+
+test('expected artifact paths are normalized under agents.output only', () => {
+  assert.equal(normalizeExpectedArtifactPath('agents.output/plans/034.md'), 'agents.output/plans/034.md');
+  assert.throws(() => normalizeExpectedArtifactPath('/workspace/agents.output/plans/034.md'), /relative/);
+  assert.throws(() => normalizeExpectedArtifactPath('agents.output/../README.md'), /normalized/);
+  assert.throws(() => normalizeExpectedArtifactPath('wiki/034.md'), /agents.output/);
+  assert.throws(() => normalizeExpectedArtifactPath('agents.output\\plans\\034.md'), /backslashes/);
+});
+
+test('run-agent CLI accepts provider and exact artifact overrides', () => {
+  assert.deepEqual(parseArgs(['--pidex-root', '/tmp/pidex', '--project-id', 'pp-demo', '--agent', 'pidex-critic', '--task', 'review', '--provider', 'pi', '--model', 'deepseek/model', '--effort', 'medium', '--expected-input', 'agents.output/plans/034.md', '--expected-output', 'agents.output/parallel-agents/out.md', '--review-write-fence', '--json']), {
+    json: true,
+    pidexRoot: '/tmp/pidex', projectId: 'pp-demo', agent: 'pidex-critic', task: 'review', providerOverride: 'pi', modelOverride: 'deepseek/model', effortOverride: 'medium', expectedInputPath: 'agents.output/plans/034.md', expectedOutputPath: 'agents.output/parallel-agents/out.md', reviewWriteFence: true,
+  });
+  assert.throws(() => parseArgs(['--agent', 'pidex-critic', '--task', 'review']), /--project-id is required/);
+  assert.throws(() => parseArgs(['--project-id', 'pp-demo', '--task', 'review']), /--agent is required/);
+  assert.throws(() => parseArgs(['--project-id', 'pp-demo', '--agent', 'pidex-critic']), /--task is required/);
+});
+
+test('workspace manifest diff permits only the assigned artifact', () => {
+  const before = { 'src/a.js': 'file:1', 'agents.output/parallel-agents/existing.md': 'file:2' };
+  const after = { ...before, 'agents.output/parallel-agents/assigned.md': 'file:3' };
+  assert.deepEqual(diffWorkspaceManifests(before, after, 'agents.output/parallel-agents/assigned.md').unauthorized_paths, []);
+  const changed = { ...after, 'src/a.js': 'file:changed', 'agents.output/parallel-agents/extra.md': 'file:4' };
+  assert.deepEqual(diffWorkspaceManifests(before, changed, 'agents.output/parallel-agents/assigned.md').unauthorized_paths, ['agents.output/parallel-agents/extra.md', 'src/a.js']);
 });
 
 test('buildDockerExecArgs sets recursion guard env and workspace', () => {
@@ -54,6 +84,136 @@ test('runProjectPipelineAgent returns typed output and records run metadata', ()
   assert.equal(loaded.runs[0].agent, 'pidex-implementer');
   assert.equal(loaded.runs[0].context_file, 'agents.output/implementation/x.md');
   assert.equal(loaded.runs[0].exit_code, 0);
+});
+
+test('runProjectPipelineAgent validates exact input/output and recovers missing final routing without retry', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-exact1');
+  write(path.join(workspace, 'agents.output/plans/034-current.md'), '# Current plan\n');
+  let childRuns = 0;
+  const result = runProjectPipelineAgent({
+    pidexRoot: root,
+    projectId: 'pp-run-exact1',
+    project_run_id: 'pprun-exact',
+    agent: 'pidex-critic',
+    task: 'review exact plan',
+    expectedInputPath: 'agents.output/plans/034-current.md',
+    expectedOutputPath: 'agents.output/parallel-agents/exact-review.md',
+    reviewWriteFence: true,
+    archiveWorkspace: workspace,
+    runner: () => {
+      childRuns += 1;
+      write(path.join(workspace, 'agents.output/parallel-agents/exact-review.md'), '# Review\nNo blockers.\n');
+      return { status: 0, stdout: 'Done', stderr: '' };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.context_file, 'agents.output/parallel-agents/exact-review.md');
+  assert.equal(result.routing_recovered, true);
+  assert.equal(result.routing.route_to, 'orchestrator');
+  assert.equal(childRuns, 1);
+});
+
+test('runProjectPipelineAgent rejects artifact ROUTING to a different path instead of synthesizing success', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-wrong-route');
+  write(path.join(workspace, 'agents.output/plans/034.md'), '# Canonical container plan\n');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root, projectId: 'pp-run-wrong-route', agent: 'pidex-critic', task: 'review',
+    expectedInputPath: 'agents.output/plans/034.md', expectedOutputPath: 'agents.output/parallel-agents/review.md', archiveWorkspace: workspace,
+    runner: () => {
+      write(path.join(workspace, 'agents.output/parallel-agents/review.md'), '# Review\n<!-- ROUTING\nroute_to: orchestrator\ncontext_file: agents.output/parallel-agents/wrong.md\n-->\n');
+      return { status: 0, stdout: 'Done', stderr: '' };
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'routing-invalid');
+  assert.match(result.reason, /mismatch/);
+});
+
+test('explicit adjudication routing can be recovered from the exact assigned artifact', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-explicit-artifact');
+  write(path.join(workspace, 'agents.output/critiques/primary.md'), '# Primary\n');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root, projectId: 'pp-run-explicit-artifact', agent: 'pidex-critic', task: 'adjudicate', requireExplicitRouting: true,
+    expectedInputPath: 'agents.output/critiques/primary.md', expectedOutputPath: 'agents.output/parallel-agents/merge.md', archiveWorkspace: workspace,
+    runner: () => { write(path.join(workspace, 'agents.output/parallel-agents/merge.md'), '# Merge\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: orchestrator\nreason: adjudicated\ncontext_file: agents.output/parallel-agents/merge.md\n-->\n'); return { status: 0, stdout: 'Done', stderr: '' }; },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.routing_recovered, true);
+  assert.equal(result.routing.context_file, 'agents.output/parallel-agents/merge.md');
+});
+
+test('runProjectPipelineAgent can require explicit routing for adjudication', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-explicit-route');
+  write(path.join(workspace, 'agents.output/critiques/primary.md'), '# Primary\n');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root, projectId: 'pp-run-explicit-route', agent: 'pidex-critic', task: 'adjudicate', requireExplicitRouting: true,
+    expectedInputPath: 'agents.output/critiques/primary.md', expectedOutputPath: 'agents.output/parallel-agents/merge.md', archiveWorkspace: workspace,
+    runner: () => { write(path.join(workspace, 'agents.output/parallel-agents/merge.md'), '# Merge without routing\n'); return { status: 0, stdout: 'Done', stderr: '' }; },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'routing-invalid');
+  assert.equal(result.reason, 'routing-missing');
+});
+
+test('exact container artifact identity ignores stale same-number host plan', () => {
+  const root = tmp();
+  const host = tmp();
+  setup(root, 'pp-run-stale-host');
+  write(path.join(host, 'agents.output/plans/034.md'), '# STALE HOST PLAN\n');
+  let childPrompt = '';
+  let outputWritten = false;
+  const result = runProjectPipelineAgent({
+    pidexRoot: root, projectId: 'pp-run-stale-host', agent: 'pidex-critic', task: `Review exact input; host path is untrusted: ${host}`,
+    expectedInputPath: 'agents.output/plans/034-current.md', expectedOutputPath: 'agents.output/parallel-agents/review.md', archiveFromContainer: false,
+    runner: (args) => {
+      if (args.includes('pi')) { childPrompt = String(args.at(-1)); outputWritten = true; return { status: 0, stdout: 'Done', stderr: '' }; }
+      const requested = String(args.at(-1));
+      if (requested === 'agents.output/plans/034-current.md') return { status: 0, stdout: JSON.stringify({ exists: true, nonempty: true, text: '# CANONICAL CONTAINER PLAN\n' }), stderr: '' };
+      if (requested === 'agents.output/parallel-agents/review.md') return { status: 0, stdout: JSON.stringify({ exists: outputWritten, nonempty: outputWritten, text: outputWritten ? '# Review\n' : '' }), stderr: '' };
+      return { status: 1, stdout: '', stderr: 'unexpected docker operation' };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.match(childPrompt, /Exact input artifact\(s\): agents\.output\/plans\/034-current\.md/);
+  assert.doesNotMatch(childPrompt, /agents\.output\/plans\/034\.md/);
+  assert.equal(readFileSync(path.join(host, 'agents.output/plans/034.md'), 'utf8'), '# STALE HOST PLAN\n');
+});
+
+test('runProjectPipelineAgent fails review write fence on an extra artifact', () => {
+  const root = tmp();
+  const workspace = tmp();
+  setup(root, 'pp-run-fence1');
+  write(path.join(workspace, 'agents.output/plans/034.md'), '# Plan\n');
+  const result = runProjectPipelineAgent({
+    pidexRoot: root,
+    projectId: 'pp-run-fence1',
+    agent: 'pidex-critic',
+    task: 'review',
+    expectedInputPath: 'agents.output/plans/034.md',
+    expectedOutputPath: 'agents.output/parallel-agents/review.md',
+    reviewWriteFence: true,
+    archiveWorkspace: workspace,
+    runner: () => {
+      write(path.join(workspace, 'agents.output/parallel-agents/review.md'), '# Review\n');
+      write(path.join(workspace, 'agents.output/parallel-agents/extra.md'), '# Extra\n');
+      return { status: 0, stdout: '<!-- ROUTING\nroute_to: orchestrator\ncontext_file: agents.output/parallel-agents/review.md\n-->', stderr: '' };
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'write-fence-violation');
+  assert.deepEqual(result.write_fence.unauthorized_paths, ['agents.output/parallel-agents/extra.md']);
+  const loaded = loadProjectRecord(root, 'pp-run-fence1');
+  assert.equal(loaded.status, 'ready');
+  assert.equal(loaded.runs.at(-1).archive_sync_status, 'failed');
+  assert.equal(loaded.runs.at(-1).error, 'write-fence-violation');
 });
 
 test('runProjectPipelineAgent can sync archive and then expose archive_context_file', () => {

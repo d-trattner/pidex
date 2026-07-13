@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const script = path.join(root, 'modules/pidex/parallel-agents/scripts/status.mjs');
 
-function run(tmpRoot, args, ok = true) {
-  const cp = spawnSync(process.execPath, [script, '--root', tmpRoot, ...args], { encoding: 'utf8' });
+function run(tmpRoot, args, ok = true, env = {}) {
+  const cp = spawnSync(process.execPath, [script, '--root', tmpRoot, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
   if (ok) assert.equal(cp.status, 0, cp.stderr || cp.stdout);
   else assert.notEqual(cp.status, 0);
   return cp.stdout ? JSON.parse(cp.stdout) : null;
@@ -65,6 +65,14 @@ try {
   const saveResult = run(tmp, ['save-config', '--config-json', JSON.stringify(config)]);
   assert.equal(saveResult.config_path, path.join(tmp, 'config', 'parallel-agents.local.json'));
   assert.equal(existsSync(path.join(tmp, 'config', 'parallel-agents.local.json')), true);
+
+  const overridePath = path.join(tmp, 'operator-override.json');
+  writeFileSync(overridePath, JSON.stringify({ enabled: true, agents: {} }), 'utf8');
+  const overrideStatus = run(tmp, ['show'], true, { PIDEX_PARALLEL_AGENTS_CONFIG: overridePath });
+  assert.equal(overrideStatus.config_path, overridePath);
+  assert.equal(overrideStatus.config_source, 'environment');
+  assert.equal(overrideStatus.config_writable, false);
+  run(tmp, ['save-config', '--config-json', JSON.stringify(config)], false, { PIDEX_PARALLEL_AGENTS_CONFIG: overridePath });
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

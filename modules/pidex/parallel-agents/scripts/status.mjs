@@ -14,11 +14,16 @@ const TOKEN_RE = /([A-Za-z0-9_-]{4})[A-Za-z0-9_.\/+=:-]{16,}([A-Za-z0-9_-]{4})/g
 
 function now() { return new Date().toISOString(); }
 function rootFromScript() { return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'); }
-function configPath(root, forWrite = false) {
-  if (process.env.PIDEX_PARALLEL_AGENTS_CONFIG) return path.resolve(process.env.PIDEX_PARALLEL_AGENTS_CONFIG);
+function configResolution(root) {
+  if (process.env.PIDEX_PARALLEL_AGENTS_CONFIG) return { path: path.resolve(process.env.PIDEX_PARALLEL_AGENTS_CONFIG), source: 'environment', writable: false };
   const local = path.join(root, 'config', 'parallel-agents.local.json');
-  if (forWrite || existsSync(local)) return local;
-  return path.join(root, 'config', 'parallel-agents.json');
+  if (existsSync(local)) return { path: local, source: 'local', writable: true };
+  return { path: path.join(root, 'config', 'parallel-agents.json'), source: 'public-default', writable: false };
+}
+function configPath(root, forWrite = false) {
+  const resolution = configResolution(root);
+  if (forWrite && resolution.source !== 'environment') return path.join(root, 'config', 'parallel-agents.local.json');
+  return resolution.path;
 }
 function paths(root, forWrite = false) { return [configPath(root, forWrite), path.join(root, 'state', 'parallel-agents', 'status.json'), path.join(root, 'state', 'telegram', 'parallel-agent-warnings.json')]; }
 function loadJson(file, fallback) { try { return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : fallback; } catch { return fallback; } }
@@ -72,7 +77,8 @@ function mergeStatus(root) {
     const pms = (a.provider_models || []).map((pm) => { const lid = laneId(agent, pm.provider, pm.model); const st = lanesState[lid] || {}; return { ...pm, lane_id: lid, last_attempt_at: st.last_attempt_at, last_success_at: st.last_success_at, last_failure_at: st.last_failure_at, last_status: st.last_status, last_message: st.last_message, warning_active: Boolean(st.warning_active || false), warning_type: st.warning_type, telegram_notified_at: st.telegram_notified_at }; });
     agents.push({ ...a, agent, provider_models: pms });
   }
-  return { ok: errors.length === 0 && existsSync(configPath), errors, config_path: configPath, state_path: statePath, enabled: cfg.enabled, updated_at: state.updated_at, agents, warnings };
+  const resolution = configResolution(root);
+  return { ok: errors.length === 0 && existsSync(configPath), errors, config_path: configPath, config_source: resolution.source, config_writable: resolution.writable, state_path: statePath, enabled: cfg.enabled, updated_at: state.updated_at, agents, warnings };
 }
 function eligibleLanes(root, agent = null, trigger = null) {
   const status = mergeStatus(root); const lanes = []; const direct = new Set(['pi', 'codex']);
@@ -131,7 +137,7 @@ async function main() {
   else if (cmd === 'config') { const [cfg, errors] = loadConfig(root); const [configPath] = paths(root); out = { ok: !errors.length && existsSync(configPath), errors, config: cfg }; code = out.ok ? 0 : 1; }
   else if (cmd === 'models') out = modelOptions(root);
   else if (cmd === 'eligible') { out = eligibleLanes(root, argValue(args, '--agent', null), argValue(args, '--trigger', null)); code = out.ok ? 0 : 1; }
-  else if (cmd === 'save-config') { const rawArg = argValue(args, '--config-json'); const raw = String(rawArg || '').startsWith('@') ? readFileSync(String(rawArg).slice(1), 'utf8') : rawArg; const [cfg, errors] = normalizeConfig(JSON.parse(raw)); if (errors.length) { console.error(JSON.stringify({ ok: false, errors })); process.exit(2); } writeJson(paths(root, true)[0], cfg); out = { ok: true, config_path: paths(root, true)[0] }; }
+  else if (cmd === 'save-config') { if (configResolution(root).source === 'environment') { console.error(JSON.stringify({ ok: false, error: 'environment override is read-only; edit PIDEX_PARALLEL_AGENTS_CONFIG directly or unset it' })); process.exit(2); } const rawArg = argValue(args, '--config-json'); const raw = String(rawArg || '').startsWith('@') ? readFileSync(String(rawArg).slice(1), 'utf8') : rawArg; const [cfg, errors] = normalizeConfig(JSON.parse(raw)); if (errors.length) { console.error(JSON.stringify({ ok: false, errors })); process.exit(2); } writeJson(paths(root, true)[0], cfg); out = { ok: true, config_path: paths(root, true)[0] }; }
   else if (cmd === 'classify') out = { ok: true, type: classifyMsg(argValue(args, '--message', '')) };
   else if (cmd === 'warn') { const type = argValue(args, '--type') || classifyMsg(argValue(args, '--message', '')); if (!WARNING_TYPES.has(type)) { console.error(`invalid warning type: ${type}`); process.exit(2); } updateLane(root, argValue(args, '--lane'), type, argValue(args, '--message', ''), type, args.includes('--no-telegram')); out = { ok: true, state_path: paths(root)[1] }; }
   else if (cmd === 'success') { updateLane(root, argValue(args, '--lane'), 'success', argValue(args, '--message', 'success')); out = { ok: true }; }
