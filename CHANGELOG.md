@@ -9,7 +9,8 @@
 - Changed dashboard background canvas layers to static rendering and disabled hidden-tab query refetching to preserve the colorful background without continuous motion.
 - Fixed dashboard Project Pipeline ingest to overwrite stale technical `pp-...` project display names with the source folder basename on subsequent ingest.
 - Fixed dashboard ingestion treating `container-workspace` Docker volume refs as filesystem projects; stable control/previous host paths now preserve logical identity, and stale phantom rows plus dependent metrics, events, artifacts, and findings are transactionally merged into the canonical project.
-- Stopped no-argument dashboard ingest from registering PIDEX itself and its internal `dashboard/` directory as user projects; stale empty internal entries are pruned while entries with real historical data remain protected.
+- Stopped no-argument and dashboard auto-ingest from registering PIDEX itself and its internal `dashboard/` directory as user projects; both internal paths are excluded from the project selector even when historical rows contain dependent data.
+- Added bounded vertical scrolling to the desktop project selector so every project remains reachable when the list exceeds the available menu or viewport height.
 - Fixed dashboard server PIDEX-root resolution for native Windows in-process startup so usage/profile/quality/modules/parallel-agent APIs read the actual `$HOME\pidex` checkout instead of resolving paths relative to the caller's current directory.
 - Improved dashboard Project Pipeline display names so records whose registry name is the technical `pp-...` id fall back to the source folder basename, while preserving explicit friendly names.
 - Fixed dashboard parallel-agent API routes to use the module-owned `modules/pidex/parallel-agents/scripts/status.mjs` helper instead of the retired legacy `scripts/parallel-agents/status.mjs` path.

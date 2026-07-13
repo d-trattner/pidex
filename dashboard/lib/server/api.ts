@@ -12,6 +12,7 @@ import { listAnalysis } from './analysis';
 import { URLSearchParams } from 'node:url';
 import { paginateTokenBuckets } from './token-pagination';
 import { summarizeModelQualityRows } from './model-quality';
+import { DASHBOARD_ROOT, PIDEX_ROOT } from './paths';
 
 export type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
 export interface JsonObject {
@@ -45,7 +46,9 @@ export async function listProjects(): Promise<Array<{ name: string; path: string
      FROM projects p
      WHERE p.path NOT LIKE '/tmp/%'
        AND p.name NOT LIKE '%smoke%'
+       AND p.path NOT IN (?, ?)
      ORDER BY p.name COLLATE NOCASE ASC`,
+    [PIDEX_ROOT, DASHBOARD_ROOT],
   );
 }
 

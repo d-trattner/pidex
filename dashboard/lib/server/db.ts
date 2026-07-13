@@ -55,8 +55,6 @@ function refreshDashboardDataIfNeeded(): void {
       INGEST_SCRIPT,
       '--db',
       DB_PATH,
-      '--project',
-      path.resolve(DASHBOARD_DIR, '..'),
     ], {
       encoding: 'utf-8',
       stdio: ['ignore', 'ignore', 'ignore'],

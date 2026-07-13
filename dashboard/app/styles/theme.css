@@ -921,6 +921,12 @@ body.modal-open {
   display: grid;
   gap: 6px;
   padding: 7px;
+  max-height: min(350px, calc(100dvh - 78px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 245, 255, 0.58) rgba(255, 255, 255, 0.08);
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: none;
