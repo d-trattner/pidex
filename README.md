@@ -195,7 +195,7 @@ Project session memory:
 - `templates/` – artifact/checklist templates
 - `extensions/pidex/` – Pi extension entrypoint (`pidex_agent`)
 - `config/agents.json` – default agent routing configuration
-- `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark variants
+- `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark and GPT-5.6 role-routing variants
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `pidex.analysis-metrics-history` module – analytics, metrics, history helpers
 - `pidex.memory-wiki-hygiene` module – wiki hygiene audit/cadence module
@@ -243,7 +243,22 @@ The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and 
 
 ## Provider limits and profiles
 
-PIDEX tracks provider-native Codex quota windows, including Spark/no-Spark profile behavior and automatic no-Spark fallback when Spark is exhausted. See [Provider limits and profiles](readme/provider-limits-and-profiles.md).
+PIDEX tracks provider-native Codex quota windows, including Spark/no-Spark profile behavior and automatic no-Spark fallback when Spark is exhausted.
+
+The current GPT-5.6 presets are:
+
+| Profile | Routing | Recommended use |
+| --- | --- | --- |
+| `5.6-hybrid-balanced` | GPT-5.6 Sol for analysis/planning/review/security, Terra for implementation/QA/operations, Luna for retrospectives | General daily default |
+| `5.6-sol-quality` | GPT-5.6 Sol for every PIDEX role | Selective quality-focused experiments; not the general default |
+
+Switch profiles from the canonical PIDEX checkout:
+
+```bash
+node modules/pidex/provider-governance/scripts/provider-limits/probe.mjs use 5.6-hybrid-balanced
+```
+
+The five-fixture benchmark found `5.6-hybrid-balanced` and `5.5-no-spark-balanced` functionally equivalent on corrected acceptance checks, with Hybrid using fewer handoffs and lower estimated cost. Follow-up UI runs favored GPT-5.5 for speed. Keep Hybrid as the general default, retain GPT-5.5 for UI-heavy comparisons, and use the Sol-only profile selectively. See [Provider limits and profiles](readme/provider-limits-and-profiles.md) and the [benchmark results](wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md).
 
 ## Global Git security hook
 
