@@ -424,6 +424,17 @@ function migrateLegacyProject(db, legacyPath, projectPath, projectId) {
   db.prepare('UPDATE pipeline_events SET project_id = ?, project_path = ? WHERE project_id = ?').run(projectId, canonical, legacyProjectId);
   db.prepare('DELETE FROM projects WHERE id = ?').run(legacyProjectId);
 }
+function cleanupUnusedInternalProjects(db) {
+  for (const internalPath of [ANALYTICS, ROOT]) {
+    const canonical = canonicalPath(internalPath);
+    const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(canonical);
+    if (!row) continue;
+    const projectId = Number(row.id);
+    const hasDependents = ['agent_runs', 'pipeline_events', 'artifacts', 'merge_findings']
+      .some((table) => Number(db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE project_id = ?`).get(projectId)?.count || 0) > 0);
+    if (!hasDependents) db.prepare('DELETE FROM projects WHERE id = ?').run(projectId);
+  }
+}
 function cleanupProjectPipelineArchiveProject(db, archivePath, projectId) {
   if (!archivePath) return;
   const archive = canonicalPath(archivePath);
@@ -475,7 +486,6 @@ function discoverProjects(rawProjects) {
     if (pathExists(p) && !projects.includes(p)) projects.push(p);
   }
   if (!parseBool(process.env.PIDEX_DASHBOARD_INCLUDE_EXTERNAL_PROJECTS, false)) {
-    if (!projects.length) for (const p of [ROOT, ANALYTICS]) if (pathExists(p) && !projects.includes(p)) projects.push(p);
     return projects;
   }
   for (const raw of (process.env.PIDEX_DASHBOARD_EXTERNAL_PROJECTS || '').split(path.delimiter)) {
@@ -545,6 +555,7 @@ function main() {
     projectPipelineRegistryCount = ingestProjectPipelineRegistry(db);
     metricCount = ingestMetrics(db);
     pipelineEventCount = ingestPipelineEvents(db);
+    cleanupUnusedInternalProjects(db);
     [artifactCount, mergeCount] = ingestArtifacts(db, projects);
     db.exec('COMMIT');
   } catch (error) {

@@ -81,6 +81,8 @@ try {
       db.exec('CREATE TABLE projects (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL); CREATE TABLE artifacts (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, project_id INTEGER NOT NULL, plan_key TEXT, role TEXT, model_label TEXT, is_secondary INTEGER NOT NULL DEFAULT 0, has_routing INTEGER NOT NULL DEFAULT 0, verdict TEXT, route_to TEXT, gate TEXT, title TEXT, mtime TEXT, bytes INTEGER, content_hash TEXT); CREATE TABLE merge_findings (id INTEGER PRIMARY KEY, artifact_path TEXT NOT NULL, row_index INTEGER NOT NULL, project_id INTEGER NOT NULL, plan_key TEXT, source TEXT, severity TEXT, classification TEXT, disposition TEXT, summary TEXT);');
       db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(sandboxOnly, 'pp-sandbox-only');
       db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(sandboxArchive, 'Sandbox Only Project archive');
+      db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(root, 'pidex');
+      db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(path.join(root, 'dashboard'), 'dashboard');
       const archivePid = db.prepare('SELECT id FROM projects WHERE path = ?').get(sandboxArchive).id;
       db.prepare('INSERT INTO artifacts(path, project_id, title) VALUES (?, ?, ?)').run(path.join(sandboxArchive, 'agents.output', 'old.md'), archivePid, 'old archive artifact');
       db.prepare('INSERT INTO merge_findings(artifact_path, row_index, project_id, summary) VALUES (?, ?, ?, ?)').run(path.join(sandboxArchive, 'agents.output', 'old.md'), 1, archivePid, 'old finding');
@@ -104,6 +106,7 @@ try {
   assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), ['demo', 'project', 'sandbox-only-host-project']);
   assert.equal(value(dbPath, `select count(*) from projects where path = '${windowsProject.replaceAll("'", "''")}'`), 1);
   assert.equal(value(dbPath, `select count(*) from projects where path like '%${workspaceRef}%'`), 0);
+  assert.equal(value(dbPath, `select count(*) from projects where path in ('${root.replaceAll("'", "''")}', '${path.join(root, 'dashboard').replaceAll("'", "''")}')`), 0);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxOnly.replaceAll("'", "''")}'`), 2);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
 
