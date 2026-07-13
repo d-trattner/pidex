@@ -12,6 +12,7 @@ export interface ProviderLimitRecord {
   limit_name?: string | null;
   metered_feature?: string | null;
   used_percent?: number | null;
+  limit_window_seconds?: number | null;
   usage?: number | null;
   resets_at?: string | null;
   captured_at?: string | null;
@@ -170,7 +171,7 @@ async function readHistory(): Promise<ProviderLimitRecord[]> {
   }
 }
 
-function sanitizeLimitEntry(entry: JsonObject): ProviderLimitRecord {
+export function sanitizeLimitEntry(entry: JsonObject): ProviderLimitRecord {
   const provider = String(entry.provider || '').toLowerCase();
   return {
     provider,
@@ -178,6 +179,7 @@ function sanitizeLimitEntry(entry: JsonObject): ProviderLimitRecord {
     limit_name: asString(entry.limit_name),
     metered_feature: asString(entry.metered_feature),
     used_percent: asNumber(entry.used_percent),
+    limit_window_seconds: asNumber(entry.limit_window_seconds),
     usage: asNumber(entry.usage),
     resets_at: asString(entry.resets_at),
     captured_at: asString(entry.captured_at),

@@ -52,6 +52,12 @@ test('getLimits preserves active/profile data and codex providers', async () => 
   });
 });
 
+test('sanitizeLimitEntry preserves provider window duration metadata', async () => {
+  const mod = await import('./limits.ts');
+  const record = mod.sanitizeLimitEntry({ provider: 'codex', window: 'seven_day', limit_window_seconds: 604800 });
+  assert.equal(record.limit_window_seconds, 604800);
+});
+
 test('getLimits enriches seven_day records with Running-Pi-style forecast', async () => {
   const mod = await import('./limits.ts');
   const now = Date.now();

@@ -92,10 +92,18 @@ function codexAdditionalProviderName(limit) {
   const slug = name.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').replace(/--+/g, '-');
   return `codex-${slug || 'additional'}`;
 }
-function appendCodexRateLimit(out, data, rl, provider, limitName = null, meteredFeature = null) {
-  for (const [source, name] of [[rl.primary_window || {}, 'five_hour'], [rl.secondary_window || {}, 'seven_day']]) {
+function codexWindowName(source, fallback) {
+  const seconds = Number(source?.limit_window_seconds);
+  if (seconds === 18_000) return 'five_hour';
+  if (seconds === 604_800) return 'seven_day';
+  return fallback;
+}
+export function appendCodexRateLimit(out, data, rl, provider, limitName = null, meteredFeature = null) {
+  for (const [source, fallbackName] of [[rl.primary_window, 'five_hour'], [rl.secondary_window, 'seven_day']]) {
+    if (!source || typeof source !== 'object' || Array.isArray(source) || !Object.keys(source).length) continue;
     const resetAt = source.reset_at ? parseTime(source.reset_at) : null;
-    out.push({ provider, window: name, used_percent: source.used_percent, resets_at: resetAt ? resetAt.toISOString() : null, allowed: rl.allowed, limit_reached: rl.limit_reached, plan: data.plan_type, limit_name: limitName, metered_feature: meteredFeature });
+    const seconds = source.limit_window_seconds == null ? null : Number(source.limit_window_seconds);
+    out.push({ provider, window: codexWindowName(source, fallbackName), used_percent: source.used_percent, limit_window_seconds: Number.isFinite(seconds) ? seconds : null, resets_at: resetAt ? resetAt.toISOString() : null, allowed: rl.allowed, limit_reached: rl.limit_reached, plan: data.plan_type, limit_name: limitName, metered_feature: meteredFeature });
   }
 }
 async function probeCodex() {
@@ -247,4 +255,6 @@ async function main() {
   console.log(JSON.stringify(result));
 }
 
-main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+}

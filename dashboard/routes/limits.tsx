@@ -24,6 +24,7 @@ type LimitRecord = {
   limit_name?: string | null;
   metered_feature?: string | null;
   used_percent?: number | null;
+  limit_window_seconds?: number | null;
   usage?: number | null;
   resets_at?: string | null;
   captured_at?: string | null;
