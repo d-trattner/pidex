@@ -2467,6 +2467,7 @@ async function runRpAgent(params: {
 	task: string;
 	cwd: string;
 	model?: string;
+	effort?: string;
 	tools?: string[];
 	timeoutSeconds?: number;
 	sandboxContext?: SandboxRuntimeContext;
@@ -2503,6 +2504,7 @@ async function runRpAgent(params: {
 		];
 		if (shouldDisableChildExtensions(tools, params.sandboxContext)) args.push("--no-extensions");
 		if (model) args.push("--model", model);
+		if (params.effort) args.push("--thinking", params.effort);
 		if (tools && tools.length > 0) args.push("--tools", tools.join(","));
 		args.push(`@${taskFile}`);
 
@@ -2676,6 +2678,7 @@ async function runRpAgent(params: {
 			provider: "pi",
 			model: observedModel,
 			modelRequested: model,
+			effort: params.effort,
 			exitCode: (turnLimitHit || timedOut) && exitCode === 0 ? 1 : exitCode,
 			stderr,
 			finalText,
@@ -2706,6 +2709,7 @@ async function runRpAgent(params: {
 				provider: "pi",
 				modelRequested: model,
 				modelObserved: observedModel,
+				effort: params.effort,
 				agent: params.agent,
 				cwd: params.cwd,
 				startedAt: new Date(startedAt).toISOString(),
@@ -2896,6 +2900,7 @@ async function runConfiguredAgent(params: {
 				task: params.task,
 				cwd: params.cwd,
 				model: piModel,
+				effort: selectedEffort,
 				tools: explicitTools,
 				timeoutSeconds: route.timeout_seconds,
 				sandboxContext: params.sandboxContext,

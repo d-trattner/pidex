@@ -54,6 +54,7 @@
     "public:check": "bash scripts/release/public-readiness.sh",
     "reference:check": "node scripts/release/reference-integrity.mjs",
     "doctor": "bash scripts/doctor.sh",
+    "test:effort-forwarding": "node extensions/pidex/effort-forwarding.tdd.test.mjs",
     "modules:list": "node scripts/modules/list.mjs --json",
     "modules:validate": "node scripts/modules/validate.mjs --project .",
     "modules:context": "node scripts/modules/context.mjs --agent pidex-devops --phase pre-release --project .",
