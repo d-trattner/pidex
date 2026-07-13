@@ -1,10 +1,10 @@
 {
   "$schema": "https://pidex.dev/agents.schema.json",
   "version": "1.3.0",
-  "description": "PIDEX GPT-5.6 hybrid balanced profile: Sol for analysis, architecture, planning, review, roadmap, and security; Terra for implementation, critique, design, devops, QA, UAT, and Pi; Luna for retrospective.",
+  "description": "PIDEX GPT-5.6 Sol quality profile: route all PIDEX roles to GPT-5.6 Sol, with high effort for reasoning-intensive roles.",
   "defaults": {
     "provider": "pi",
-    "model": "openai-codex/gpt-5.6-terra",
+    "model": "openai-codex/gpt-5.6-sol",
     "timeout_seconds": 300
   },
   "agents": {
@@ -28,32 +28,32 @@
     },
     "pidex-critic": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 480,
-      "effort": "high"
+      "effort": "medium"
     },
     "pidex-designer": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 600,
-      "effort": "high",
+      "effort": "medium",
       "condition": "plan_has_ui_scope"
     },
     "pidex-devops": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 1200,
       "effort": "medium"
     },
     "pidex-implementer": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 1800,
       "effort": "high"
     },
     "pidex-pi": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 300,
       "effort": "medium"
     },
@@ -65,13 +65,13 @@
     },
     "pidex-qa": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 1200,
       "effort": "medium"
     },
     "pidex-retrospective": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-luna",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 600,
       "effort": "medium"
     },
@@ -89,7 +89,7 @@
     },
     "pidex-uat": {
       "provider": "pi",
-      "model": "openai-codex/gpt-5.6-terra",
+      "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 600,
       "effort": "medium"
     }
