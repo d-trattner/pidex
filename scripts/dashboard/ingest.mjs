@@ -134,7 +134,7 @@ function utcFromTsMs(ms) { return new Date(ms).toISOString(); }
 function safeHash(value) { return crypto.createHash('sha256').update(value, 'utf8').digest('hex'); }
 function isWindowsAbsolutePath(value) {
   const candidate = String(value || '').trim();
-  return !path.posix.isAbsolute(candidate) && path.win32.isAbsolute(candidate);
+  return /^[a-zA-Z]:[\\/]/.test(candidate) || /^\\\\[^\\/]+[\\/][^\\/]+/.test(candidate);
 }
 function isAbsoluteAnyPlatform(value) {
   const candidate = String(value || '').trim();
@@ -411,7 +411,7 @@ function projectPipelineDisplayName(record, projectPath) {
   return basenameAnyPlatform(canonicalPath(projectPath)) || projectId || 'Project Pipeline project';
 }
 function migrateLegacyProject(db, legacyPath, projectPath, projectId) {
-  const legacy = canonicalPath(legacyPath);
+  const legacy = String(legacyPath);
   const canonical = canonicalPath(projectPath);
   if (legacy === canonical) return;
   const row = db.prepare('SELECT id FROM projects WHERE path = ?').get(legacy);
@@ -423,6 +423,18 @@ function migrateLegacyProject(db, legacyPath, projectPath, projectId) {
   db.prepare('UPDATE agent_runs SET project_id = ? WHERE project_id = ?').run(projectId, legacyProjectId);
   db.prepare('UPDATE pipeline_events SET project_id = ?, project_path = ? WHERE project_id = ?').run(projectId, canonical, legacyProjectId);
   db.prepare('DELETE FROM projects WHERE id = ?').run(legacyProjectId);
+}
+function cleanupLegacyPosixBackslashProjects(db) {
+  if (path.sep !== '/') return;
+  for (const row of db.prepare('SELECT path FROM projects').all()) {
+    const legacy = String(row.path || '');
+    if (!legacy.startsWith('\\') || legacy.startsWith('\\\\')) continue;
+    const candidate = legacy.replaceAll('\\', '/');
+    if (!path.posix.isAbsolute(candidate)) continue;
+    const canonical = canonicalPath(candidate);
+    const canonicalProjectId = registerProject(db, canonical, basenameAnyPlatform(canonical));
+    migrateLegacyProject(db, legacy, canonical, canonicalProjectId);
+  }
 }
 function cleanupUnusedInternalProjects(db) {
   for (const internalPath of [ANALYTICS, ROOT]) {
@@ -555,6 +567,7 @@ function main() {
     projectPipelineRegistryCount = ingestProjectPipelineRegistry(db);
     metricCount = ingestMetrics(db);
     pipelineEventCount = ingestPipelineEvents(db);
+    cleanupLegacyPosixBackslashProjects(db);
     cleanupUnusedInternalProjects(db);
     [artifactCount, mergeCount] = ingestArtifacts(db, projects);
     db.exec('COMMIT');

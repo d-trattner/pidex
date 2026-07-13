@@ -83,6 +83,7 @@ try {
       db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(sandboxArchive, 'Sandbox Only Project archive');
       db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(root, 'pidex');
       db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run(path.join(root, 'dashboard'), 'dashboard');
+      if (path.sep === '/') db.prepare('INSERT INTO projects(path, name) VALUES (?, ?)').run('\\tmp\\legacy-project', '\\tmp\\legacy-project');
       const archivePid = db.prepare('SELECT id FROM projects WHERE path = ?').get(sandboxArchive).id;
       db.prepare('INSERT INTO artifacts(path, project_id, title) VALUES (?, ?, ?)').run(path.join(sandboxArchive, 'agents.output', 'old.md'), archivePid, 'old archive artifact');
       db.prepare('INSERT INTO merge_findings(artifact_path, row_index, project_id, summary) VALUES (?, ?, ?, ?)').run(path.join(sandboxArchive, 'agents.output', 'old.md'), 1, archivePid, 'old finding');
@@ -103,10 +104,14 @@ try {
   assert.equal(count(dbPath, 'merge_findings'), 3);
   assert.equal(value(dbPath, `select name from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 'sandbox-only-host-project');
   assert.equal(value(dbPath, `select count(*) from projects where path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
-  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), ['demo', 'project', 'sandbox-only-host-project']);
+  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), path.sep === '/' ? ['demo', 'legacy-project', 'project', 'sandbox-only-host-project'] : ['demo', 'project', 'sandbox-only-host-project']);
   assert.equal(value(dbPath, `select count(*) from projects where path = '${windowsProject.replaceAll("'", "''")}'`), 1);
   assert.equal(value(dbPath, `select count(*) from projects where path like '%${workspaceRef}%'`), 0);
   assert.equal(value(dbPath, `select count(*) from projects where path in ('${root.replaceAll("'", "''")}', '${path.join(root, 'dashboard').replaceAll("'", "''")}')`), 0);
+  if (path.sep === '/') {
+    assert.equal(value(dbPath, "select count(*) from projects where path = '\\tmp\\legacy-project'"), 0);
+    assert.equal(value(dbPath, "select count(*) from projects where path = '/tmp/legacy-project'"), 1);
+  }
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxOnly.replaceAll("'", "''")}'`), 2);
   assert.equal(value(dbPath, `select count(*) from artifacts a join projects p on p.id = a.project_id where p.path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
 
