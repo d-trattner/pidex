@@ -10,8 +10,8 @@ const args = new Set(process.argv.slice(2));
 const json = args.has('--json');
 
 const scanRoots = ['agents', 'rules', 'skills', 'prompts', 'templates', 'README.md', 'readme'];
-const executablePrefixes = ['scripts/', 'rules/', 'templates/', 'config/', 'agents/', 'skills/', 'prompts/', 'dashboard/', 'pidex/'];
-const generatedOrRuntimePrefixes = ['agents.output/', 'state/', 'logs/', 'dashboard/data/', 'pidex/state/'];
+const executablePrefixes = ['scripts/', 'rules/', 'templates/', 'config/', 'agents/', 'skills/', 'prompts/', 'dashboard/', 'modules/', 'pidex/'];
+const generatedOrRuntimePrefixes = ['agents.output/', 'state/', 'logs/', 'dashboard/data/', 'dashboard/.dashboard-', 'pidex/state/'];
 
 // Known documentation-only placeholders/examples. Keep this small: real stale refs should be fixed, not hidden.
 const allowedMissing = new Set([
@@ -95,7 +95,7 @@ function existingRef(ref) {
 }
 function extractPathTokens(text) {
   const refs = [];
-  const tokenRe = /(?<![A-Za-z0-9_-])(?:<pidex-root>\/|\.\/)?((?:scripts|rules|templates|config|agents|skills|prompts|dashboard|pidex)\/[A-Za-z0-9_./*?{}\[\]@:-]+)/g;
+  const tokenRe = /(?<![A-Za-z0-9_-])(?:<pidex-root>\/|\.\/)?((?:scripts|rules|templates|config|agents|skills|prompts|dashboard|modules|pidex)\/[A-Za-z0-9_./*?{}\[\]@:-]+)/g;
   let m;
   while ((m = tokenRe.exec(text))) refs.push(normalizeRef(m[1]));
   return refs;
