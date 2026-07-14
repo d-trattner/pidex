@@ -8,6 +8,7 @@ const projectPipeline = readFileSync('readme/project-pipeline.md', 'utf8');
 const parallelAgents = readFileSync('readme/parallel-agents.md', 'utf8');
 const browserSmoke = readFileSync('modules/pidex/browser-smoke/README.md', 'utf8');
 const modulesDoc = readFileSync('readme/modules.md', 'utf8');
+const pidexSkill = readFileSync('skills/pidex/SKILL.md', 'utf8');
 
 const modes = ['host-direct', 'hardened-pipeline', 'project-pipeline'];
 const capabilityRows = [
@@ -111,4 +112,16 @@ test('parallel agents docs preserve all-mode boundary contract', () => {
   assert.match(parallelAgents, /Source remains container-canonical/);
   assert.match(parallelAgents, /MVP may execute secondary lanes sequentially/);
   assert.match(parallelAgents, /project_mode.*parallel_lane_id.*parallel_trigger.*parallel_role/s);
+});
+
+test('orchestrator enforces proportional minimal runs and a cumulative loop breaker', () => {
+  assert.match(pidexSkill, /Proportional minimal-run intent \(mandatory\)/);
+  assert.match(pidexSkill, /minimal v1.*MVP.*small.*simple.*cheap.*quick.*single-lane/s);
+  assert.match(pidexSkill, /one authoritative primary critic and one authoritative primary code reviewer/);
+  assert.match(pidexSkill, /new threat tier, acceptance criterion, proof matrix, instrumentation subsystem, or evidence contract is \*\*scope expansion\*\*/);
+  assert.match(pidexSkill, /second rejection at the same gate/);
+  assert.match(pidexSkill, /second residual re-slice at the same gate/);
+  assert.match(pidexSkill, /simplify\/retain the approved contract.*accept and document residual risk.*continue hardened remediation/s);
+  assert.match(pidexSkill, /circuit breaker overrides automatic `route_to: orchestrator`/);
+  assert.match(parallelAgents, /Explicit proportional language.*minimal v1.*MVP.*single-lane.*suppresses these optional generic secondary lanes/s);
 });

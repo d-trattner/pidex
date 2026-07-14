@@ -4,6 +4,8 @@ PIDEX saves one explicit execution mode per project. The mode controls where age
 
 Parity means differences are intentional, documented, and tested. It does **not** mean every feature must run in every mode.
 
+Execution mode and assurance depth are separate. An explicit `minimal`, `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` request activates proportional orchestration in every mode: optional generic secondary reviews are skipped, and reviewers cannot silently turn a new threat tier or evidence contract into binding scope. At the second rejection or second residual re-slice at the same gate—or immediately on contract/threat-model expansion—the orchestrator stops and asks the user to simplify, accept documented residual risk, or explicitly continue hardened remediation.
+
 ## Mode summary
 
 | Mode | Source of truth | Execution model | Best fit |

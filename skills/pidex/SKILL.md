@@ -1217,7 +1217,15 @@ Parallel implementer lanes are optional, not default. Use them only when the pla
 
 **Parallel pidex_agent safety:** When emitting multiple `pidex_agent` calls in the same assistant turn (parallel implementer lanes, configured secondary review lanes, or post-retro handoffs), pass explicit `provider`, `model`, and `effort` for every secondary call. Do not rely on default routing in same-turn parallel calls. Never force `provider=pi` while leaving a delegate model alias such as `sonnet`/`opus`; if overriding to Pi, use a Pi-qualified model from config defaults (for example `openai-codex/gpt-5.4-mini`).
 
-**Automatic configured parallel secondary review lanes:** PIDEX optional parallel agents resolve from `PIDEX_PARALLEL_AGENTS_CONFIG`, then `<pidex-root>/config/parallel-agents.local.json`, then the disabled public `<pidex-root>/config/parallel-agents.json` default, and are orchestrator-owned. If global config, the agent container, and a provider/model entry are enabled, the orchestrator MUST automatically launch matching secondary lanes for these triggers unless the user explicitly requested a minimal/cheap/single-lane run:
+**Proportional minimal-run intent (mandatory):** Treat an explicit user description such as `minimal`, `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` as a request for a proportional minimal run unless the user also explicitly requests hardened/high-assurance proof. This is a process constraint, not merely a product label. In a proportional minimal run:
+- use one authoritative primary critic and one authoritative primary code reviewer; skip optional generic secondary lanes;
+- keep mandatory security/QA gates required by the approved Execution Profile, but do not silently expand their threat model or evidence depth;
+- a reviewer may identify risks outside the approved plan, but a new threat tier, acceptance criterion, proof matrix, instrumentation subsystem, or evidence contract is **scope expansion**, not an automatically binding remediation;
+- before spawning another planner/implementer for such expansion, route to the user with exactly three choices: simplify/retain the approved contract, accept and document residual risk, or continue as an explicitly hardened remediation with a cost warning.
+
+This proportionality guard applies in every execution mode. `host-direct` still describes execution location; it does not by itself disable valid gates. User-approved hardened/high-assurance work may use secondary lanes and deeper proof.
+
+**Automatic configured parallel secondary review lanes:** PIDEX optional parallel agents resolve from `PIDEX_PARALLEL_AGENTS_CONFIG`, then `<pidex-root>/config/parallel-agents.local.json`, then the disabled public `<pidex-root>/config/parallel-agents.json` default, and are orchestrator-owned. If global config, the agent container, and a provider/model entry are enabled, the orchestrator MUST automatically launch matching secondary lanes for these triggers unless proportional minimal-run intent applies or the user explicitly requested a minimal/cheap/single-lane run:
 - `after-plan` → with the primary `pidex-critic` lane, launch enabled secondary `pidex-critic` lanes.
 - `after-implementation` → with the primary `pidex-code-reviewer` lane, launch enabled secondary `pidex-code-reviewer` lanes.
 
@@ -1261,7 +1269,7 @@ For agents with configured parallel lanes, do **not** send user/Telegram gate no
 
 Initial policy: advisory execution plus mandatory merge summary. Continue when primary approves and no secondary has concrete High/Critical evidence. Route to `pidex-implementer` or ask for primary-reviewer adjudication when a secondary reports High/Critical with concrete file/path/evidence. Record secondary timeout/failure/malformed ROUTING in the merge summary and continue with the primary result during rollout.
 
-Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or the user requested a minimal/cheap/single-lane run. If the skip happens because the user/operator explicitly requested minimal/cheap/single-lane mode, record `OpDecision` with reason `provider-quota-limited`, `operator-approved-risk`, `docs-only`, or `not-applicable` as appropriate. Do not record decisions for lanes that were simply not eligible in config/status output.
+Skip secondary lanes when the primary gate already failed clearly, the diff is docs/changelog/version-only, no product diff exists, or proportional minimal-run intent applies (including explicit `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` wording). If the skip happens because of explicit user/operator minimal-run intent, record `OpDecision` with reason `operator-approved-risk` or `not-applicable` as appropriate. Do not record decisions for lanes that were simply not eligible in config/status output.
 
 Before `pidex-security` or `pidex-qa` on JS/TS scopes, include the Fallow requirement in the brief:
 - `pidex-security`: read `<pidex-root>/rules/pidex-security/fallow-structural-signal.md`; record fallow evidence or `FALLOW-SKIP`.
@@ -1347,7 +1355,15 @@ When an agent rejects, loop back to the upstream agent automatically:
 - **pidex-uat NOT APPROVED** → re-invoke pidex-implementer (implementation gap) or pidex-planner (plan was wrong) based on UAT findings
 - **G9 Preview REJECTED** → load `<pidex-root>/rules/orchestrator/g9-rejection-playwright-repro.md`; capture G9 Rejection Repro Contract; re-invoke pidex-implementer with user feedback and exact repro contract → pidex-code-reviewer → pidex-qa with mandatory live Playwright evidence for the rejected flow → pidex-uat → pidex-devops → post-devops G9 before G4 again only after evidence passes
 
-Backward loops auto-proceed just like forward transitions. Track rejection count per agent per plan. On the 3rd rejection for the same reason, stop and ask the user.
+The first backward transition at a gate may auto-proceed. Apply this cumulative circuit breaker **before every later upstream spawn**:
+
+- Track substantive rejection count per **gate and plan**, regardless of whether each reviewer gives a different or adjacent reason. On the **second rejection at the same gate**, stop before spawning another planner, architect, implementer, or reviewer.
+- Track residual re-slices/partial implementation continuations per **gate and plan**. On the **second residual re-slice at the same gate**, stop even if neither artifact repeats identical wording.
+- If any rejection would expand the approved threat model, acceptance criteria, evidence matrix, or architecture rather than repair a defect inside the approved contract, stop immediately; do not wait for the numeric threshold.
+- Rate-limit aborts and format/stall recovery with no substantive new work do not increment these counters.
+- Reset a gate's counters only after that gate approves or the user explicitly selects a new contract.
+
+When stopped, summarize user-visible progress, elapsed/rework cost when known, and the new obligations. Ask the user to choose exactly one: **(1) simplify/retain the approved contract, (2) accept and document residual risk, or (3) continue hardened remediation with an explicit cost warning**. Record the decision as an `OpDecision` before continuing. This circuit breaker overrides automatic `route_to: orchestrator`, backward auto-proceed, and adjacent-finding churn in every execution mode.
 
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 

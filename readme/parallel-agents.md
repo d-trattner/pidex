@@ -72,6 +72,8 @@ The PIDEX orchestrator checks configured lanes before supported review gates:
 - `after-plan` launches enabled `pidex-critic` secondary lanes for plan review.
 - `after-implementation` launches enabled `pidex-code-reviewer` secondary lanes for implementation review.
 
+Explicit proportional language such as `minimal`, `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` suppresses these optional generic secondary lanes unless the user also explicitly requests hardened/high-assurance proof. Mandatory primary review and profile-required security/QA gates remain.
+
 Each secondary receives explicit lane id, provider, model, effort, trigger, project mode, and assigned artifact path. For Pi-auth providers such as DeepSeek or Minimax, `eligible` emits `runner_provider=pi` and `runner_model=<provider>/<model>` because `pidex_agent` direct provider overrides only support `pi` and `codex`.
 
 Secondary lanes are advisory until the orchestrator writes a merge/adjudication summary. They must write only their assigned `agents.output/**` artifact, must not edit source/config/rules/wiki/memory, and must route back to `orchestrator`.
