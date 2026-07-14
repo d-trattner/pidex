@@ -255,7 +255,7 @@ The current GPT-5.6 presets are:
 Switch profiles from the canonical PIDEX checkout:
 
 ```bash
-node modules/pidex/provider-governance/scripts/provider-limits/probe.mjs use 5.6-hybrid-balanced
+node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project . -- use 5.6-hybrid-balanced
 ```
 
 The five-fixture benchmark found `5.6-hybrid-balanced` and `5.5-no-spark-balanced` functionally equivalent on corrected acceptance checks, with Hybrid using fewer handoffs and lower estimated cost. Follow-up UI runs favored GPT-5.5 for speed. Keep Hybrid as the general default, retain GPT-5.5 for UI-heavy comparisons, and use the Sol-only profile selectively. See [Provider limits and profiles](readme/provider-limits-and-profiles.md) and the [benchmark results](wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md).

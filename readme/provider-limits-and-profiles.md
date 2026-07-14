@@ -66,7 +66,7 @@ List or activate a profile from the canonical checkout:
 
 ```bash
 cd ~/pidex
-node modules/pidex/provider-governance/scripts/provider-limits/probe.mjs use 5.6-hybrid-balanced
+node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project . -- use 5.6-hybrid-balanced
 ```
 
 Activating a profile replaces `config/agents.json` with that complete preset. Commit profile files, but treat `config/agents.json` as the currently selected routing configuration.
