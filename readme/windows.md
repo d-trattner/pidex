@@ -181,7 +181,7 @@ A local friendly domain can also be configured in `$HOME\pidex\config\dashboard.
 
 The launcher is experimental. On Linux it can start detached and prints the local URL. On native Windows it stays attached by default to keep startup predictable and avoid flashing helper console windows.
 
-Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29 and 2026-07-06 from `$HOME\pidex` with Docker Desktop Linux containers and standalone `pnpm@10.33.0`:
+Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29, 2026-07-06, and 2026-07-14 from `$HOME\pidex` with Docker Desktop Linux containers and standalone `pnpm@10.33.0`:
 
 - `pnpm run check` passed from native PowerShell with Git Bash available for Bash-backed checks.
 - `install.windows.ps1` completed and installed the local PIDEX checkout into Pi.
@@ -191,6 +191,7 @@ Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29 and
 - `/pdproject runs`, `/pdproject artifacts`, and confirmed `/pdproject remove` worked.
 - Automatic managed preview gates passed for simple and dashboard-style Vite React TypeScript fixtures: Project Pipeline completed through QA/UAT, preview started from inside the Docker Project Sandbox, localhost URLs were presented for user approval, HTTP 200/content checks passed, and approval/stop flows worked.
 - Windows full `/pd` from home passed for `pidex-win-pd-smoke-2`: QA emitted the canonical Project Pipeline browser-smoke request schema, the host bridge resolved the managed preview URL from the Project Pipeline registry (`http://localhost:42120`), PIDEX-local Playwright returned `BROWSER-SMOKE-PASS`, title/text/selector/url/console checks passed, and screenshot evidence was archived under `browser-smoke/**`.
+- After Initiative 034 was pulled on the native Windows work-PC, the user-confirmed full `project-mirror.tdd.test.mjs` suite passed, including the Windows-only real-junction case. This closes the focused host-project mirror junction/race evidence gap; broader native Windows support remains experimental.
 - Project Pipeline Docker helper calls now guard Git Bash/MSYS path conversion internally, so operators should not need to remember `MSYS_NO_PATHCONV=1` for PIDEX-managed Docker calls.
 - Windows-specific fixes were required for LF shell checkout, Bash path tests, Docker image auto-build, archive path normalization, credential staging through the cache volume, safe Project Pipeline passthrough args, Pi settings sanitization inside Docker, preview port adoption, preview `$PORT` expansion, and Vite default preview command handling.
 

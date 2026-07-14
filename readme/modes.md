@@ -10,7 +10,7 @@ Parity means differences are intentional, documented, and tested. It does **not*
 |---|---|---|---|
 | `host-direct` | Host project checkout | Host Pi orchestrator uses `pidex_agent` specialists directly. | Classic PIDEX workflow and low-friction local work. |
 | `hardened-pipeline` | Host project checkout | Host orchestration remains active, but selected agents run in a temporary Docker sandbox and changes are extracted/applied. | Source-changing work that needs extra host protection while host source remains canonical. |
-| `project-pipeline` | Persistent Docker Project Sandbox `/workspace` | Pi and project source run inside a persistent Docker container; host syncs only artifacts/wiki archive. | Container-first project work, Windows Docker Desktop flows, managed preview, and host browser evidence. |
+| `project-pipeline` | Persistent Docker Project Sandbox `/workspace` | Pi and project source run inside a persistent Docker container; filtered artifacts/wiki publish archive-first and then mirror into the registered host project. | Container-first project work, Windows Docker Desktop flows, managed preview, and host browser evidence. |
 
 ## Capability matrix
 
@@ -33,7 +33,7 @@ Parity means differences are intentional, documented, and tested. It does **not*
 | Browser-smoke install/preflight | Available as PIDEX-local host capability for manual/operator-owned checks | Available as PIDEX-local host capability for manual/operator-owned checks | Available and integrated with Project Pipeline bridge |
 | Browser-smoke automatic request/bridge/verdict loop | Intentionally not automatic; host-direct preview/server ownership stays user/project-owned | Intentionally not automatic; Docker is a temporary programming harness, not the preview owner | Yes for QA/UAT/devops request artifacts |
 | Browser URL source | User/project-owned | User/project-owned | Project Pipeline registry-managed preview URL |
-| Sandbox boundary | None beyond policy/tool guards | Temporary Docker workspace, host source protected until apply | Persistent Docker Project Sandbox, archive-only host sync |
+| Sandbox boundary | None beyond policy/tool guards | Temporary Docker workspace, host source protected until apply | Persistent Docker Project Sandbox; no source export; filtered artifacts/wiki publish archive-first and mirror conflict-safely into the registered host project |
 | Windows evidence | Experimental/general coverage incomplete | Helper smoke coverage; no special regression identified from Project Sandbox work | Focused native Windows Docker Desktop `/pd` + managed preview + browser-smoke pass |
 | Primary management commands | `/pd`, `/pdq`, `/pdwiki`, `/pdmem`, `/pdparallel` | Same host commands plus sandbox evidence | `/pd`, `/pdproject`, archive helpers; host commands should remain simple unless they truly need mode-specific data |
 
@@ -51,7 +51,7 @@ These features are not always part of the source-changing agent path, but they a
 | Dashboard views | Host PIDEX dashboard reads host runtime state, metrics, wiki/context summaries, provider data, and mode summaries | Same host dashboard plus any sandbox events/mode labels that are recorded | Host dashboard surfaces Project Pipeline mode telemetry through summary, runs, pipelines, and quality mode sections |
 | Provider limits / profiles | Host PIDEX provider governance and profile state | Same host provider governance; sandboxed phases may inherit constrained routing | Host PIDEX profile state plus copied in-container Pi/provider config for Project Sandbox execution |
 | History / metrics / recent projects | Host PIDEX metrics/history state records runs, recent projects, and optional `project_mode` | Host PIDEX metrics/history plus sandbox warnings/evidence and optional `project_mode` when emitted | Host PIDEX history plus Project Pipeline registry/archive records; Project Pipeline orchestration emits `project_mode`, archive source, and parallel-lane telemetry |
-| Host safety / project boundary / Git hooks | Host policy guards and optional global Git hook protect host checkout work | Host guards plus temporary Docker boundary before apply/extract | Host orchestrator guards plus Docker Project Sandbox and archive-only host sync; optional Git hook applies to host repos, not container commits by itself |
+| Host safety / project boundary / Git hooks | Host policy guards and optional global Git hook protect host checkout work | Host guards plus temporary Docker boundary before apply/extract | Host orchestrator guards plus Docker Project Sandbox, authoritative filtered archive, and conflict-safe host-project mirror; optional Git hook applies to host repos, not container commits by itself |
 | Package-manager helpers | Detect/build commands against host project package root | Host or sandbox package root depending phase wrapper | In-container `/workspace` package root for Project Sandbox work; host helpers remain PIDEX-runtime utilities unless bridged deliberately |
 | Browser-smoke runtime maintenance | PIDEX-local host Playwright/cache cleanup and preflight | Same host PIDEX runtime maintenance | Same host PIDEX runtime maintenance plus Project Pipeline bridge/archive cleanup considerations |
 | Install / doctor / release readiness | Host PIDEX runtime maintenance, not per-project execution | Same | Same host PIDEX runtime maintenance; Project Sandbox images/volumes are managed separately |
@@ -64,7 +64,7 @@ These features are not always part of the source-changing agent path, but they a
 - Hardened-pipeline managed preview is wanted as a host-project helper, not as proof that the Docker harness owns runtime preview state.
 - Project Pipeline browser-smoke automation is mode-native today because request validation is bound to a registered Project Pipeline archive and managed preview registry URL. Host-direct and hardened-pipeline keep only generic/manual PIDEX-local browser-smoke capability until a separate host-owned preview/process contract is designed.
 - Hardened-pipeline is temporary protection for selected host-project work. It should not become a persistent source-of-truth container.
-- Project Pipeline source code is intentionally not mirrored back to the host automatically. The container is the source of truth for code; filtered `agents.output/**` and `wiki/**` publish archive-first and then mirror into the registered host project.
+- Project Pipeline source is intentionally not mirrored back to the host automatically. The container is the source of truth for code; filtered `agents.output/**` and `wiki/**` publish archive-first and then mirror into the registered host project.
 - Project-specific PIDEX context, wiki, and memory files live in the host project directory regardless of execution mode unless a future feature deliberately changes that contract.
 - Module-scoped rules are part of the PIDEX-wide module system, not Project Pipeline-only. Rules may declare mode scope when behavior is mode-specific, but the module-rule facility itself should remain available to all modes through approved handoff consumers.
 
