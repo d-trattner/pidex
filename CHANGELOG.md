@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-14
+
+Project Pipeline host mirroring, Windows host-direct reliability, proportional orchestration, GPT-5.6 routing, and dashboard identity cleanup:
+
+- Added mandatory archive-first mirroring of filtered Project Pipeline `agents.output/**` and `wiki/**` into every normal `/pd` project's registered host directory, with strict ownership manifests, conflict-safe updates/deletes, root-scoped locking, publication-report binding, bounded no-follow reads, degraded status reporting, and Linux/Windows regression evidence.
+- Hardened Project Pipeline primary/secondary review execution with exact container artifact paths, no host fallback, provider/model/effort forwarding, authoritative final ROUTING recovery, sequential write fences, run-specific artifacts, and in-container adjudication.
+- Added a proportional minimal-run circuit breaker: explicit minimal/MVP/single-lane intent skips optional generic secondary reviews, threat/evidence contract expansion requires user approval, and a second rejection or residual re-slice at the same gate stops automatic churn.
+- Fixed native Windows `/pd` and `/pidex` delegate-auth preflight by invoking Bash with cwd-relative, separately passed script/config arguments; launch/setup failures are now distinct from credential failures and no provider fallback is silent.
+- Added a Windows Git Credential Manager bridge for trusted Project Pipeline containers and documented the WSL Bash requirement for native Windows host-direct command execution.
+- Corrected Codex quota-window classification from API duration metadata and preserved duration evidence through dashboard provider-limit APIs and views.
+- Forwarded configured Pi reasoning effort through direct specialist execution.
 - Added `5.6-hybrid-balanced`, the new general default combining GPT-5.6 Sol for reasoning/review roles, Terra for implementation/operations roles, and Luna for retrospectives.
 - Added the experimental `5.6-sol-quality` all-Sol profile and documented benchmark-based selection guidance, including GPT-5.5's current UI-speed advantage.
 - Updated provider-limit probing to use Pi's `~/.pi/agent/auth.json` Codex OAuth token (`openai-codex.access`) before falling back to Codex CLI auth, plus a redacted `auth-status` check for diagnostics.
