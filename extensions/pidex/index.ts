@@ -1461,27 +1461,28 @@ function formatAgentProgressLabel(agent: string): string {
 	return role || agent;
 }
 
-function formatPiRunnerStartDetails(model: string | undefined): string {
+export function formatPiRunnerStartDetails(model: string | undefined, effort?: string): string {
 	const trimmed = model?.trim();
-	if (!trimmed) return "provider=auto model=auto";
+	const thinking = effort?.trim() || "default";
+	if (!trimmed) return `auto auto ${thinking}`;
 	const slash = trimmed.indexOf("/");
 	if (slash > 0 && slash < trimmed.length - 1) {
-		return `provider=${trimmed.slice(0, slash)} model=${trimmed.slice(slash + 1)}`;
+		return `${trimmed.slice(0, slash)} ${trimmed.slice(slash + 1)} ${thinking}`;
 	}
-	return `provider=auto model=${trimmed}`;
+	return `auto ${trimmed} ${thinking}`;
 }
 
-function formatDelegateStartDetails(provider: string, model: string | undefined): string {
-	return `provider=${provider} model=${model?.trim() || "default"}`;
+export function formatDelegateStartDetails(provider: string, model: string | undefined, effort?: string): string {
+	return `${provider} ${model?.trim() || "default"} ${effort?.trim() || "default"}`;
 }
 
 function formatAgentCompletionLine(result: RpResult): string {
 	const runner = result.provider || "unknown";
 	const modelForDisplay = result.modelRequested ?? result.model;
-	if (runner === "pi") {
-		return `${formatAgentProgressLabel(result.agent)}: pi (${formatPiRunnerStartDetails(modelForDisplay)})`;
-	}
-	return `${formatAgentProgressLabel(result.agent)}: ${runner} (${formatDelegateStartDetails(runner, modelForDisplay)})`;
+	const details = runner === "pi"
+		? formatPiRunnerStartDetails(modelForDisplay, result.effort)
+		: formatDelegateStartDetails(runner, modelForDisplay, result.effort);
+	return `${formatAgentProgressLabel(result.agent)}: ${details}`;
 }
 
 function hasRoutingBlock(text: string): boolean {
@@ -2535,7 +2536,7 @@ async function runRpAgent(params: {
 	const startedAt = Date.now();
 	const agent = loadAgent(params.agent);
 	const model = params.model ?? agent.frontmatter.model;
-	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: starting via pi (${formatPiRunnerStartDetails(model)})...`);
+	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${formatPiRunnerStartDetails(model, params.effort)}`);
 	assertPiModelAllowed(model);
 	const tools = params.tools ?? parseTools(agent.frontmatter.tools);
 	const maxTurns = parsePositiveInt(agent.frontmatter.maxTurns);
@@ -2829,7 +2830,7 @@ async function runCliDelegate(params: {
 	const prompt = buildCliDelegatePrompt(params.agent, agent.body, params.task, provider);
 	await fs.promises.writeFile(promptFile, prompt, { encoding: "utf8", mode: 0o600 });
 
-	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: starting via delegate (${formatDelegateStartDetails(provider, params.model)})...`);
+	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${formatDelegateStartDetails(provider, params.model, params.effort)}`);
 
 	let stderr = "";
 	let timedOut = false;

@@ -13,6 +13,7 @@ Project Pipeline host mirroring, Windows host-direct reliability, proportional o
 - Added a Windows Git Credential Manager bridge for trusted Project Pipeline containers and documented the WSL Bash requirement for native Windows host-direct command execution.
 - Corrected Codex quota-window classification from API duration metadata and preserved duration evidence through dashboard provider-limit APIs and views.
 - Forwarded configured Pi reasoning effort through direct specialist execution.
+- Simplified specialist startup/completion progress to show role, provider, model, and reasoning effort directly (for example, `Critic: openai-codex gpt-5.6-terra high`).
 - Added `5.6-hybrid-balanced`, the new general default combining GPT-5.6 Sol for reasoning/review roles, Terra for implementation/operations roles, and Luna for retrospectives.
 - Added the experimental `5.6-sol-quality` all-Sol profile and documented benchmark-based selection guidance, including GPT-5.5's current UI-speed advantage.
 - Updated provider-limit probing to use Pi's `~/.pi/agent/auth.json` Codex OAuth token (`openai-codex.access`) before falling back to Codex CLI auth, plus a redacted `auth-status` check for diagnostics.
