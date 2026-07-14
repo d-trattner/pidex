@@ -399,6 +399,11 @@ function upsertRecentProject(byCwd: Map<string, RecentPidexProject>, item: Recen
 	if (!previous || String(item.last_ts || "") > String(previous.last_ts || "")) byCwd.set(item.cwd, item);
 }
 
+function isTemporaryProjectDirectory(projectRoot: string): boolean {
+	const relative = path.relative(path.resolve(os.tmpdir()), path.resolve(projectRoot));
+	return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
 export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state")): RecentPidexProject[] {
 	const byCwd = new Map<string, RecentPidexProject>();
 	const historyFile = path.join(stateDir, "history.jsonl");
@@ -408,7 +413,7 @@ export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_
 			try {
 				const row = JSON.parse(line);
 				const cwd = path.resolve(String(row?.cwd || ""));
-				if (!cwd || !fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) continue;
+				if (!cwd || isTemporaryProjectDirectory(cwd) || !fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) continue;
 				upsertRecentProject(byCwd, { cwd, last_ts: String(row?.ts || ""), last_event: row?.event ? String(row.event) : undefined, last_mode: row?.mode ? String(row.mode) : undefined });
 			} catch {
 				// Ignore malformed history rows; project selection is a convenience, not authority.
@@ -423,7 +428,7 @@ export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_
 				const row = JSON.parse(fs.readFileSync(path.join(modeDir, entry.name), "utf8"));
 				const mode = row?.mode ? String(row.mode) : undefined;
 				const cwd = path.resolve(String(row?.project_root || ""));
-				if (!cwd) continue;
+				if (!cwd || isTemporaryProjectDirectory(cwd)) continue;
 				const hostDirExists = fs.existsSync(cwd) && fs.statSync(cwd).isDirectory();
 				if (!hostDirExists && mode !== "project-pipeline") continue;
 				upsertRecentProject(byCwd, { cwd, last_ts: String(row?.decided_at || ""), last_event: "mode-saved", last_mode: mode });

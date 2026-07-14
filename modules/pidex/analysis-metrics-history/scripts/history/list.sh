@@ -17,8 +17,15 @@ while [ $# -gt 0 ]; do
 done
 
 [ -s "$HISTORY_FILE" ] || exit 0
-PROJECTS=$(jq -s --argjson limit "$LIMIT" '
-  map(select(.cwd != null and .cwd != ""))
+TEMP_ROOT="${TMPDIR:-/tmp}"
+TEMP_ROOT="${TEMP_ROOT%/}"
+PROJECTS=$(jq -s --argjson limit "$LIMIT" --arg temp_root "$TEMP_ROOT" '
+  map(select(
+    .cwd != null
+    and .cwd != ""
+    and .cwd != $temp_root
+    and (.cwd | startswith($temp_root + "/") | not)
+  ))
   | sort_by(.cwd)
   | group_by(.cwd)
   | map((max_by(.ts)) as $last | {

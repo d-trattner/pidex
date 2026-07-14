@@ -108,8 +108,9 @@ test('chooseProjectPipelineMode cancel stops without saving or credential prompt
   assert.equal(saveCalled, false);
 });
 
-test('listRecentPidexProjects returns newest unique existing project directories', () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-history-'));
+test('listRecentPidexProjects returns newest unique existing non-temporary project directories', () => {
+  const dir = mkdtempSync(path.join(process.cwd(), '.pidex-history-test-'));
+  const temporaryProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-history-project-'));
   const state = path.join(dir, 'state');
   const olderProject = path.join(dir, 'older');
   const newerProject = path.join(dir, 'newer');
@@ -121,6 +122,7 @@ test('listRecentPidexProjects returns newest unique existing project directories
     JSON.stringify({ cwd: newerProject, ts: '2026-01-03T00:00:00Z', event: 'complete', mode: 'project-pipeline' }),
     JSON.stringify({ cwd: olderProject, ts: '2026-01-04T00:00:00Z', event: 'complete', mode: 'host-direct' }),
     JSON.stringify({ cwd: path.join(dir, 'missing'), ts: '2026-01-05T00:00:00Z', event: 'complete' }),
+    JSON.stringify({ cwd: temporaryProject, ts: '2026-01-06T00:00:00Z', event: 'complete' }),
   ].join('\n'));
   try {
     const recent = mod.listRecentPidexProjects(5, state);
@@ -128,11 +130,13 @@ test('listRecentPidexProjects returns newest unique existing project directories
     assert.equal(recent[0].last_event, 'complete');
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    rmSync(temporaryProject, { recursive: true, force: true });
   }
 });
 
-test('listRecentPidexProjects includes saved project-pipeline modes even when host project dir is sandbox-only', () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-history-modes-'));
+test('listRecentPidexProjects includes saved project-pipeline modes except temporary projects', () => {
+  const dir = mkdtempSync(path.join(process.cwd(), '.pidex-history-modes-test-'));
+  const temporaryProject = path.join(os.tmpdir(), 'pidex-sandbox-only-project');
   const state = path.join(dir, 'state');
   const modeDir = path.join(state, 'project-pipeline-modes');
   const existingHostProject = path.join(dir, 'host-project');
@@ -141,6 +145,7 @@ test('listRecentPidexProjects includes saved project-pipeline modes even when ho
   mkdirSync(existingHostProject);
   writeFileSync(path.join(modeDir, 'host.json'), JSON.stringify({ schema_version: 1, project_root: existingHostProject, mode: 'host-direct', decided_at: '2026-01-01T00:00:00Z' }));
   writeFileSync(path.join(modeDir, 'sandbox.json'), JSON.stringify({ schema_version: 1, project_root: sandboxOnlyProject, mode: 'project-pipeline', decided_at: '2026-01-02T00:00:00Z' }));
+  writeFileSync(path.join(modeDir, 'temporary.json'), JSON.stringify({ schema_version: 1, project_root: temporaryProject, mode: 'project-pipeline', decided_at: '2026-01-04T00:00:00Z' }));
   writeFileSync(path.join(modeDir, 'missing-host.json'), JSON.stringify({ schema_version: 1, project_root: path.join(dir, 'missing-host'), mode: 'host-direct', decided_at: '2026-01-03T00:00:00Z' }));
   try {
     const recent = mod.listRecentPidexProjects(5, state);
@@ -292,7 +297,7 @@ console.log(JSON.stringify({ notifications, sent, selectCalls }));
 });
 
 test('/pd with recent history can still choose new project or different path', () => {
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-recent-new-'));
+  const dir = mkdtempSync(path.join(process.cwd(), '.pidex-pd-recent-new-test-'));
   const state = path.join(dir, 'state');
   const recentRoot = path.join(dir, 'recent-project');
   const homeLike = path.join(dir, 'home');

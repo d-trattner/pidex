@@ -116,7 +116,7 @@ Before every `pidex-*` spawn, use a compact context pack instead of pasting broa
 
 ### Step 0 — Recent projects shortlist
 
-Before asking "which project?", first check whether the extension kickoff already provided `Selected project root: <path>`. If yes, use that project and skip Step 0 and Step 1. Otherwise, check the pidex history log and offer a shortlist of recently-touched **unique project directories**. This saves the user from typing paths they already used.
+Before asking "which project?", first check whether the extension kickoff already provided `Selected project root: <path>`. If yes, use that project and skip Step 0 and Step 1. Otherwise, check the pidex history log and offer a shortlist of recently-touched **unique, non-temporary project directories**. Exclude the system temporary directory and all descendants (for example `/tmp/**`) even if history or a saved mode still references them. This saves the user from typing paths they already used.
 
 ```bash
 node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-list --agent orchestrator --phase planning --project <project-root> -- --limit 5
