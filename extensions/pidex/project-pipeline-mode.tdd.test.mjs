@@ -370,7 +370,9 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
     stdout: JSON.stringify({
       no_fallback: true,
       final_context_file: 'agents.output/plans/demo.md',
-      runs: [{ archive_sync_status: 'complete' }],
+      runs: [{ archive_sync_status: 'complete', project_mirror: { status: 'degraded-host-root-missing', degraded: true, copied: 0, updated: 0, deleted: 0, conflicts: 0 } }],
+      latest_project_mirror_status: 'degraded-host-root-missing',
+      any_mirror_degraded: true,
       run: {
         finalText: 'SECRET-LIKE-LARGE-CHILD-OUTPUT-SHOULD-NOT-BE-IN-UI',
       },
@@ -381,6 +383,8 @@ test('summarizeProjectPipelineRunFlowResult emits concise non-json UI summary', 
   assert.match(summary, /Project Pipeline run-flow complete/);
   assert.match(summary, /agents\.output\/plans\/demo\.md/);
   assert.match(summary, /archive_sync: complete/);
+  assert.match(summary, /project_mirror: degraded-host-root-missing/);
+  assert.match(summary, /archive complete; project mirror degraded/);
   assert.match(summary, /no_fallback: true/);
   assert.doesNotMatch(summary, /SECRET-LIKE/);
   assert.doesNotMatch(summary, /sha256:abc/);

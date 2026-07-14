@@ -8,6 +8,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { syncProjectArchive } from './archive-sync.mjs';
+import { syncProjectMirror } from './project-mirror.mjs';
 
 const CHILD_ENV = 'PIDEX_PROJECT_PIPELINE_CHILD';
 
@@ -247,6 +248,7 @@ export function runProjectPipelineAgent(options = {}) {
   saveProjectRecord(pidexRoot, loaded);
   let archiveSyncReport;
   let archiveContextFile;
+  let project_mirror;
   let copiedArchiveWorkspace;
   if (options.archiveWorkspace || options.archiveFromContainer !== false) {
     copiedArchiveWorkspace = options.archiveWorkspace ? undefined : copyArchiveWorkspaceFromContainer(record, options.archiveCopyRunner || runner);
@@ -275,9 +277,20 @@ export function runProjectPipelineAgent(options = {}) {
       if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
       return { ok: false, exitCode: 1, error: 'archive-context-missing', reason: `routed context file not found in archive: ${routingCheck.context_file}`, finalText, routing, archiveSyncReport };
     }
+    project_mirror = syncProjectMirror({ pidexRoot, projectId: record.project_id, internalDisposable: options.internalDisposable === true });
+    const mirrorRecord = loadProjectRecord(pidexRoot, record.project_id);
+    const mirrorRun = mirrorRecord.runs.find((run) => run.project_run_id === project_run_id) || mirrorRecord.runs.at(-1);
+    const mirrorCounts = { copied: project_mirror.copied, updated: project_mirror.updated, deleted: project_mirror.deleted, conflicts: project_mirror.conflicts };
+    if (mirrorRun) {
+      mirrorRun.project_mirror_status = project_mirror.status;
+      mirrorRun.project_mirror_degraded = project_mirror.degraded === true;
+      mirrorRun.project_mirror_counts = mirrorCounts;
+    }
+    mirrorRecord.project_mirror = { status: project_mirror.status, degraded: project_mirror.degraded === true, counts: mirrorCounts, updated_at: new Date().toISOString() };
+    saveProjectRecord(pidexRoot, mirrorRecord);
     if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
   }
-  return { ok: true, exitCode: 0, finalText, routing, routing_recovered, context_file: routingCheck.context_file, expected_context_file: expectedOutputPath, write_fence, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
+  return { ok: true, exitCode: 0, finalText, routing, routing_recovered, context_file: routingCheck.context_file, expected_context_file: expectedOutputPath, write_fence, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, project_mirror, sync_degraded: project_mirror?.degraded === true, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
 }
 
 function takeArg(argv, index, flag) {

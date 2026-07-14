@@ -463,13 +463,13 @@ export async function choosePidexProjectRoot(ctx: any): Promise<string | undefin
 	return isLikelyPidexProjectDirectory(current) ? current : PIDEX_DEFER_PROJECT_SELECTION;
 }
 
-const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox for the selected project, import/clone source into /workspace, run Pi inside the container, and sync only agents.output/** and wiki/** back to the host archive. No source is mirrored back automatically. Failures do not fall back.";
+const PROJECT_PIPELINE_FIRST_RUN_CONFIRMATION = "Project Pipeline selected. PIDEX will create/open a persistent Docker Project Sandbox for the selected project, import source into /workspace, run Pi inside the container, publish safe agents.output/** and wiki/** to the authoritative archive, and mirror them into the registered host project. Source code is not mirrored back. Mirror degradation is reported explicitly. Failures do not fall back.";
 
 export async function chooseProjectPipelineMode(ctx: any, projectRoot: string, options: { saveMode?: typeof saveProjectPipelineMode } = {}): Promise<ProjectPipelineModeResult | undefined> {
 	const optionMap = new Map<string, ProjectPipelineMode>([
 		["host-direct — run normal PIDEX on the host for this project", "host-direct"],
 		["hardened-pipeline — run normal PIDEX with extra sandbox/runtime hardening", "hardened-pipeline"],
-		["project-pipeline — run inside a persistent Docker Project Sandbox; sync artifacts/wiki only", "project-pipeline"],
+		["project-pipeline — run inside Docker; archive then mirror artifacts/wiki into this project", "project-pipeline"],
 	]);
 	const cancelLabel = "Cancel — do not save a mode";
 	const choice = await ctx.ui.select("Choose PIDEX mode for this existing project. This is saved per project and controls future /pd routing.", [...optionMap.keys(), cancelLabel]);
@@ -494,7 +494,7 @@ export function projectPipelineModeEvidenceLine(result: ProjectPipelineModeResul
 
 export function projectPipelineModeInstructionLine(result: ProjectPipelineModeResult): string {
 	return result.mode === "project-pipeline"
-		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use the project-pipeline.orchestrator facade for end-to-end create/open, source import/clone, selected credential bootstrap, sequential child Pi execution in the container, and archive sync. Host archive sync is limited to agents.output/** and wiki/**; do not mirror source back to the host."
+		? "Project Pipeline mode is explicit and fail-closed: do not fall back to host-direct or hardened-pipeline automatically. Use the project-pipeline.orchestrator facade for end-to-end create/open, source import/clone, selected credential bootstrap, sequential child Pi execution in the container, and archive sync. Safe agents.output/** and wiki/** publish to the authoritative archive and then mirror into the registered host project; do not mirror source code back to the host."
 		: "Project Pipeline mode is not active for this project; existing host-direct/hardened-pipeline behavior remains unchanged.";
 }
 
@@ -565,6 +565,19 @@ export function buildProjectPipelineRunFlowArgs(request: ProjectPipelineRunFlowR
 	return { script: PROJECT_PIPELINE_ORCHESTRATOR_SCRIPT, projectId, args };
 }
 
+function safeProjectMirrorSummary(mirror: any): any {
+	if (!mirror) return undefined;
+	return {
+		status: mirror?.status,
+		degraded: mirror?.degraded === true,
+		copied: Number(mirror?.copied || 0),
+		updated: Number(mirror?.updated || 0),
+		deleted: Number(mirror?.deleted || 0),
+		conflicts: Number(mirror?.conflicts || 0),
+		conflict_paths: Array.isArray(mirror?.conflict_paths) ? mirror.conflict_paths.map(safeProjectMirrorPath).filter(Boolean).slice(0, 20) : [],
+	};
+}
+
 function safeProjectPipelineHelperOutput(rawStdout: string, projectId: string, exitCode: number | null): { stdout: string; error?: string } {
 	try {
 		const parsed = JSON.parse(rawStdout || "{}");
@@ -573,6 +586,8 @@ function safeProjectPipelineHelperOutput(rawStdout: string, projectId: string, e
 			ok: run?.ok === true,
 			context_file: run?.context_file,
 			archive_sync_status: run?.archive_sync_status,
+			project_mirror: safeProjectMirrorSummary(run?.project_mirror),
+			sync_degraded: run?.sync_degraded === true,
 			error: run?.error,
 		})) : undefined;
 		const safe = {
@@ -583,6 +598,8 @@ function safeProjectPipelineHelperOutput(rawStdout: string, projectId: string, e
 			lifecycle: { record: { project_id: parsed?.lifecycle?.record?.project_id ?? projectId } },
 			final_context_file: parsed?.final_context_file,
 			final_archive_context_file: parsed?.final_archive_context_file,
+			latest_project_mirror_status: parsed?.latest_project_mirror_status,
+			any_mirror_degraded: parsed?.any_mirror_degraded === true,
 			runs,
 		};
 		const error = safe.ok ? undefined : `Project Pipeline orchestrator failed closed (no fallback). error=${safe.error ?? "unknown"}${safe.failed_agent ? ` failed_agent=${safe.failed_agent}` : ""} exit=${exitCode}`;
@@ -676,11 +693,15 @@ export function summarizeProjectPipelineRunFlowResult(result: ProjectPipelineRun
 		const finalRun = Array.isArray(parsed?.runs) ? parsed.runs.at(-1) : undefined;
 		const contextFile = parsed?.final_context_file || finalRun?.context_file || parsed?.run?.context_file || parsed?.run?.routing?.context_file || parsed?.archive_context_file;
 		const archiveStatus = finalRun?.archive_sync_status || parsed?.run?.archive_sync_status || (parsed?.run?.archiveSyncReport?.ok === true ? "complete" : undefined);
+		const mirrorStatus = parsed?.latest_project_mirror_status || finalRun?.project_mirror?.status;
+		const syncDegraded = parsed?.any_mirror_degraded === true || finalRun?.project_mirror?.degraded === true;
 		const noFallback = parsed?.no_fallback === true || result.no_fallback === true;
 		return [
 			`Project Pipeline run-flow complete for ${projectId}.`,
 			contextFile ? `context_file: ${contextFile}` : undefined,
 			archiveStatus ? `archive_sync: ${archiveStatus}` : undefined,
+			mirrorStatus ? `project_mirror: ${mirrorStatus}` : undefined,
+			syncDegraded ? "archive complete; project mirror degraded" : undefined,
 			`no_fallback: ${noFallback}`,
 		].filter(Boolean).join(" ");
 	} catch {
@@ -881,11 +902,18 @@ function safeAgentsOutputPath(value: any): string | undefined {
 	return text;
 }
 
+function safeProjectMirrorPath(value: any): string | undefined {
+	const text = String(value || "").replaceAll("\\", "/");
+	if (text.includes("..") || (!text.startsWith("agents.output/") && !text.startsWith("wiki/"))) return undefined;
+	return text;
+}
+
 function summarizeProjectRunLine(projectId: string, run: any, details = false): string {
 	return [
 		`${projectId}: run=${run?.project_run_id ?? "unknown"}`,
 		run?.agent ? `agent=${run.agent}` : undefined,
 		`status=${run?.archive_sync_status ?? "unknown"}`,
+		run?.project_mirror_status ? `mirror=${run.project_mirror_status}${run?.project_mirror_degraded ? ":degraded" : ""}` : undefined,
 		run?.exit_code === undefined ? undefined : `exit=${run.exit_code}`,
 		safeAgentsOutputPath(run?.context_file) ? `context=${safeAgentsOutputPath(run.context_file)}` : undefined,
 		details && run?.archive_context_file ? "archive_context=available" : undefined,
@@ -964,7 +992,8 @@ function summarizeProjectRecords(projects: any[]): string {
 		const dockerHealth = project.docker_health?.container
 			? ` docker=${project.docker_health.container.exists ? project.docker_health.container.status : "missing"}`
 			: "";
-		return `${project.project_id}: status=${project.status ?? "unknown"}${dockerHealth} source=${project.source?.kind ?? "unknown"} credentials(pi=${project.credentials?.pi ?? "unknown"}, git=${project.credentials?.git ?? "unknown"}) runs=${runs}${archive}`;
+		const mirror = project?.project_mirror?.status ? ` mirror=${project.project_mirror.status}${project.project_mirror.degraded ? ":degraded" : ""}` : "";
+		return `${project.project_id}: status=${project.status ?? "unknown"}${dockerHealth} source=${project.source?.kind ?? "unknown"} credentials(pi=${project.credentials?.pi ?? "unknown"}, git=${project.credentials?.git ?? "unknown"}) runs=${runs}${mirror}${archive}`;
 	}).join("\n");
 }
 
@@ -1001,6 +1030,7 @@ function summarizeProjectDiagnose(project: any): string {
 		`credentials: pi=${project?.credentials?.pi || "unknown"} git=${project?.credentials?.git || "unknown"}`,
 		`runs: ${runs.length}`,
 		`archive: ${archiveOk ? "present" : "missing"}${project?.archive?.path ? ` path=${project.archive.path}` : ""}`,
+		`project_mirror: ${project?.project_mirror?.status || "unknown"}${project?.project_mirror?.degraded ? " degraded" : ""}`,
 		`dashboard_db: ${dashboardVisible === undefined ? "missing/not-readable" : dashboardVisible ? "project string present" : "project string not found"}`,
 		"",
 		"No-Bash note: this command uses PIDEX Node helpers and Docker CLI directly. It is intended for native Windows sessions where the Pi bash tool cannot start /bin/bash.",
@@ -3625,8 +3655,8 @@ export default function runningPi(pi: ExtensionAPI) {
 					const projectResult = runProjectPipelineAgentTool(params);
 					const routingText = projectResult.routing ? `\n\n<!-- ROUTING\nverdict: ${projectResult.routing.verdict || "COMPLETE"}\nroute_to: ${projectResult.routing.route_to || "orchestrator"}\nreason: ${projectResult.routing.reason || "Project Pipeline agent complete"}\ncontext_file: ${projectResult.context_file}\n-->` : "";
 					return {
-						content: [{ type: "text", text: `Project Pipeline ${params.agent} complete in /workspace. context_file=${projectResult.context_file}${projectResult.routing_recovered ? "; routing recovered from exact artifact" : ""}${routingText}` }],
-						details: { ok: true, projectId: params.projectId, project_run_id: projectResult.project_run_id, context_file: projectResult.context_file, archive_context_file: projectResult.archive_context_file, routing_recovered: projectResult.routing_recovered === true, write_fence: projectResult.write_fence?.status || null, no_fallback: true },
+						content: [{ type: "text", text: `Project Pipeline ${params.agent} complete in /workspace. context_file=${projectResult.context_file}${projectResult.routing_recovered ? "; routing recovered from exact artifact" : ""}${projectResult.project_mirror?.degraded ? `; archive complete; project mirror degraded (${projectResult.project_mirror.status})` : projectResult.project_mirror?.status ? `; project mirror ${projectResult.project_mirror.status}` : ""}${routingText}` }],
+						details: { ok: true, projectId: params.projectId, project_run_id: projectResult.project_run_id, context_file: projectResult.context_file, archive_context_file: projectResult.archive_context_file, project_mirror: safeProjectMirrorSummary(projectResult.project_mirror), sync_degraded: projectResult.project_mirror?.degraded === true, routing_recovered: projectResult.routing_recovered === true, write_fence: projectResult.write_fence?.status || null, no_fallback: true },
 					};
 				}
 				const sandboxState = resolveSandboxStateForProjectMode(agentProjectMode);

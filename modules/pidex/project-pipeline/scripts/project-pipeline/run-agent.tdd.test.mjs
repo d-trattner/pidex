@@ -239,6 +239,30 @@ test('runProjectPipelineAgent can sync archive and then expose archive_context_f
   assert.equal(loaded.runs[0].archive_context_file, result.archive_context_file);
 });
 
+test('runProjectPipelineAgent mirrors archived artifacts into required host project', () => {
+  const root = tmp();
+  const workspace = tmp();
+  const host = tmp();
+  const record = setup(root, 'pp-run-host-mirror');
+  record.control_project_path = host;
+  record.source = { kind: 'host-path', ref: host };
+  saveProjectRecord(root, record);
+  const result = runProjectPipelineAgent({
+    pidexRoot: root, projectId: 'pp-run-host-mirror', agent: 'pidex-qa', task: 'write report',
+    expectedOutputPath: 'agents.output/qa/report.md', archiveWorkspace: workspace,
+    runner: () => {
+      write(path.join(workspace, 'agents.output/qa/report.md'), '# QA\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: orchestrator\ncontext_file: agents.output/qa/report.md\n-->\n');
+      return { status: 0, stdout: 'Done', stderr: '' };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.project_mirror.status, 'complete');
+  assert.equal(result.project_mirror.degraded, false);
+  assert.equal(existsSync(path.join(host, 'agents.output/qa/report.md')), true);
+  const saved = loadProjectRecord(root, 'pp-run-host-mirror');
+  assert.equal(saved.runs.at(-1).project_mirror_status, 'complete');
+});
+
 test('runProjectPipelineAgent syncs artifacts copied from container by default', () => {
   const root = tmp();
   setup(root, 'pp-run-container1');

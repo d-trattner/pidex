@@ -2,7 +2,7 @@
 
 Project Pipeline is PIDEX's local Docker-backed Project Sandbox mode. It is separate from the existing hardened agent sandbox. For a comparison with `host-direct` and `hardened-pipeline`, see [Project modes](modes.md).
 
-In Project Pipeline mode, the project source lives and runs inside a persistent Docker container/volumes. The host receives only reviewable artifacts from the container archive sync.
+In Project Pipeline mode, the project source lives and runs inside persistent Docker container volumes. Safe reviewable artifacts publish first to the authoritative PIDEX archive, then mirror into the registered host project for every normal `/pd` project.
 
 ## Status
 
@@ -26,7 +26,8 @@ host project path
 → persistent Docker Project Sandbox
 → source imported/cloned into /workspace
 → Pi runs inside the container
-→ only agents.output/** and wiki/** sync back to host archive
+→ safe agents.output/** and wiki/** publish to the authoritative host archive
+→ the validated archive mirrors into the registered host project
 ```
 
 Project source is not mirrored back to the host by PIDEX. If you want source changes outside the container, use Git/PR workflows manually until PR automation is implemented.
@@ -37,6 +38,7 @@ Project source is not mirrored back to the host by PIDEX. If you want source cha
 - Missing mode asks once instead of silently falling back.
 - Project Pipeline failures do not automatically fall back to host-direct or hardened-pipeline.
 - Host archive sync is limited to `agents.output/**` and `wiki/**` with safe-copy filters.
+- Every normal `/pd` Project Pipeline project requires a safe host-project mirror of those filtered trees; missing/unsafe/conflicting roots are reported as degraded, never as fully synchronized.
 - Source files, `.env`, secrets, runtime files, and executable/code-like archive paths are not synced back as artifacts.
 - Pi/provider credentials are copied only from explicit allowlisted files after trusted persistent container acknowledgement.
 - Persistent Docker resources are removed only by explicit confirmed removal.
@@ -101,11 +103,13 @@ If GCM is not already signed in for the remote, `git credential fill` may prompt
 
 ## Artifacts and archive
 
-After a Project Pipeline run, host-visible artifacts are under:
+After a Project Pipeline run, authoritative host-visible evidence is under:
 
 ```text
 ~/pidex/state/project-archives/<project-id>/
 ```
+
+For every normal `/pd` Project Pipeline project, the same filtered `agents.output/**` and `wiki/**` files are also mirrored into the registered project directory. The archive remains authoritative. A strictly schema-, project-, and root-bound PIDEX hash manifest tracks only files previously mirrored by Project Pipeline. Existing independently changed or unowned host files—including changes detected immediately before replacement or deletion—are preserved and reported as conflicts rather than overwritten. A file removed from the archive is deleted from the host mirror only when it is manifest-owned and still matches its last mirrored hash; unowned or host-edited files are never deleted. Mirror reads independently enforce archive file/depth/byte limits and require each source file to match the completed archive publication report while being read through a stable no-follow descriptor. Portable filesystem APIs cannot eliminate the final same-user check/use interval completely; detectable changes fail closed, while hostile same-user kernel/filesystem manipulation is outside the supported threat model.
 
 Expected archive contents:
 
@@ -115,7 +119,7 @@ wiki/**
 archive-sync-report.json
 ```
 
-Do not expect host source files to appear there.
+Do not expect host source files to appear there. Source code is never mirrored back. `/pdproject runs`, `show-run`, `status`, and `diagnose` distinguish archive completion from project-mirror completion or degradation.
 
 ## Manage local Project Sandboxes
 

@@ -26,7 +26,8 @@ MVP status: local Docker workflow complete for the current scope. The validated 
 → import local source or clone Git source into /workspace
 → optionally copy selected Pi/provider credentials after trusted-container acknowledgement
 → run the configured child Pi phase chain in the container with phase-specific role guidance
-→ sync only agents.output/** and wiki/** back to <pidex-root>/state/project-archives/<project-id>/
+→ publish only safe agents.output/** and wiki/** to <pidex-root>/state/project-archives/<project-id>/
+→ mirror that validated archive into the registered host project for normal /pd runs
 ```
 
 The local MVP has been validated with live Docker UAT for direct run-flow execution, `/pd` orchestration, local management commands, credential reset/status, run metadata summaries, safe artifact listing, conservative repair behavior, role-guided sequential orchestration, and managed preview approval flows on Linux and native Windows Docker Desktop. Deferred work includes external Docker hosts, PR automation, and dashboard/archive browsing UX.

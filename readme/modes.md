@@ -21,7 +21,7 @@ Parity means differences are intentional, documented, and tested. It does **not*
 | Specialist phase chain | Host `pidex_agent` handoffs | Host `pidex_agent`; selected agents sandboxed | In-container sequential Project Pipeline orchestrator |
 | Source canonical location | Host checkout | Host checkout | Container `/workspace` |
 | Source changes returned to host | Direct edits | Patch/apply from temporary sandbox after approval | Intentionally not automatic; source remains in Project Sandbox |
-| Artifact location | Host project `agents.output/**`, `wiki/**` | Extracted to host project `agents.output/**`, `wiki/**` | Host archive under `state/project-archives/<project-id>/` |
+| Artifact location | Host project `agents.output/**`, `wiki/**` | Extracted to host project `agents.output/**`, `wiki/**` | Authoritative archive under `state/project-archives/<project-id>/`, then required conflict-safe mirror into the registered host project for normal `/pd` runs |
 | Artifact browsing | Direct files | Direct files plus sandbox evidence | `/pdproject runs`, `show-run`, `artifacts` |
 | Credential model | Host Pi/provider credentials | Host orchestrator credentials; sandbox blocks sensitive host reads | Explicit copied credentials into trusted persistent container secrets volume |
 | Delegate/provider routing | Full configured host delegates | Host delegates where applicable; sandboxed agents use wrapper constraints | In-container Pi uses copied config/credentials |
@@ -64,7 +64,7 @@ These features are not always part of the source-changing agent path, but they a
 - Hardened-pipeline managed preview is wanted as a host-project helper, not as proof that the Docker harness owns runtime preview state.
 - Project Pipeline browser-smoke automation is mode-native today because request validation is bound to a registered Project Pipeline archive and managed preview registry URL. Host-direct and hardened-pipeline keep only generic/manual PIDEX-local browser-smoke capability until a separate host-owned preview/process contract is designed.
 - Hardened-pipeline is temporary protection for selected host-project work. It should not become a persistent source-of-truth container.
-- Project Pipeline source is intentionally not mirrored back to the host automatically. The container is the desired source-of-truth for that mode.
+- Project Pipeline source code is intentionally not mirrored back to the host automatically. The container is the source of truth for code; filtered `agents.output/**` and `wiki/**` publish archive-first and then mirror into the registered host project.
 - Project-specific PIDEX context, wiki, and memory files live in the host project directory regardless of execution mode unless a future feature deliberately changes that contract.
 - Module-scoped rules are part of the PIDEX-wide module system, not Project Pipeline-only. Rules may declare mode scope when behavior is mode-specific, but the module-rule facility itself should remain available to all modes through approved handoff consumers.
 

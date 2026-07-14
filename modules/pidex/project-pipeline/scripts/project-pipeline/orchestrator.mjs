@@ -105,6 +105,19 @@ function looksLikeUiTask(task = '') {
   return /\b(ui|frontend|front-end|browser|page|dashboard|component|css|visual|vite|react|vue|svelte)\b/i.test(String(task));
 }
 
+function summarizeProjectMirror(mirror) {
+  if (!mirror) return undefined;
+  return {
+    status: mirror.status,
+    degraded: mirror.degraded === true,
+    copied: Number(mirror.copied || 0),
+    updated: Number(mirror.updated || 0),
+    deleted: Number(mirror.deleted || 0),
+    conflicts: Number(mirror.conflicts || 0),
+    conflict_paths: Array.isArray(mirror.conflict_paths) ? mirror.conflict_paths.slice(0, 20) : [],
+  };
+}
+
 function summarizeRunForPublicResult(run = {}) {
   return {
     ok: run.ok === true,
@@ -115,6 +128,8 @@ function summarizeRunForPublicResult(run = {}) {
     context_file: run.context_file,
     archive_context_file: run.archive_context_file,
     archive_sync_status: run.archive_sync_status,
+    project_mirror: summarizeProjectMirror(run.project_mirror),
+    sync_degraded: run.project_mirror?.degraded === true,
     project_run_id: run.project_run_id,
   };
 }
@@ -509,7 +524,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
       appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase threw: ${agent}`, metadata: { failed_agent: agent, reason: error.message || String(error), runs } });
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
     }
-    const runSummary = { agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, retry_count: retryCount, error: run.error, reason: run.reason };
+    const runSummary = { agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, project_mirror: summarizeProjectMirror(run.project_mirror), sync_degraded: run.project_mirror?.degraded === true, retry_count: retryCount, error: run.error, reason: run.reason };
     runs.push(runSummary);
     projectPipelineProgress(options, `${agent} ${run.ok ? 'complete' : 'failed'}${run.context_file ? ` context_file=${run.context_file}` : ''}`, { phase: agent, status: run.ok ? 'complete' : 'failed', project_id: projectId });
     appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: runSummary });
@@ -546,7 +561,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
           runner: options.runner,
           archiveCopyRunner: options.runner,
         });
-        const laneSummary = { agent, ok: laneRun.ok, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, routing_recovered: laneRun.routing_recovered === true, write_fence: laneRun.write_fence, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
+        const laneSummary = { agent, ok: laneRun.ok, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, project_mirror: summarizeProjectMirror(laneRun.project_mirror), sync_degraded: laneRun.project_mirror?.degraded === true, routing_recovered: laneRun.routing_recovered === true, write_fence: laneRun.write_fence, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
         laneSummaries.push(laneSummary);
         runs.push(laneSummary);
         projectPipelineProgress(options, `secondary ${agent} lane ${lane.lane_id || 'unknown'} ${laneRun.ok ? 'complete' : 'failed'}`, { phase: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, status: laneRun.ok ? 'complete' : 'failed', project_id: projectId });
@@ -578,7 +593,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
           runner: options.runner,
           archiveCopyRunner: options.runner,
         });
-        const mergeSummary = { agent, ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: merge.project_run_id, archive_sync_status: merge.archive_sync_status, routing_recovered: merge.routing_recovered === true, write_fence: merge.write_fence, parallel_trigger: parallelTrigger, parallel_role: 'merge', error: merge.error, reason: merge.reason, required_route: merge.routing?.route_to };
+        const mergeSummary = { agent, ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: merge.project_run_id, archive_sync_status: merge.archive_sync_status, project_mirror: summarizeProjectMirror(merge.project_mirror), sync_degraded: merge.project_mirror?.degraded === true, routing_recovered: merge.routing_recovered === true, write_fence: merge.write_fence, parallel_trigger: parallelTrigger, parallel_role: 'merge', error: merge.error, reason: merge.reason, required_route: merge.routing?.route_to };
         runs.push(mergeSummary);
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: mergeSummary, source: 'parallel_agents_merge' });
         if (!merge.ok) {
@@ -601,7 +616,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
         runSummary.browser_smoke_results = sandboxResults;
         const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
         const verdictRun = runAgentOnce(verdictTask);
-        const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
+        const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
         runs.push(verdictSummary);
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
         if (!verdictRun.ok) {
@@ -613,8 +628,10 @@ export async function runProjectPipelineOrchestration(options = {}) {
     }
   }
   appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_completed', status: 'complete', metadata: { runs } });
-  projectPipelineProgress(options, `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId });
-  return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, no_fallback: true };
+  const anyMirrorDegraded = runs.some((item) => item.project_mirror?.degraded === true);
+  const latestProjectMirrorStatus = runs.at(-1)?.project_mirror?.status;
+  projectPipelineProgress(options, anyMirrorDegraded ? `Project Pipeline complete ${projectId}; archive complete; project mirror degraded` : `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId, any_mirror_degraded: anyMirrorDegraded, latest_project_mirror_status: latestProjectMirrorStatus });
+  return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, latest_project_mirror_status: latestProjectMirrorStatus, any_mirror_degraded: anyMirrorDegraded, no_fallback: true };
 }
 
 export function parseArgs(argv) {

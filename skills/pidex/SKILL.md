@@ -47,7 +47,7 @@ PIDEX resolves and saves an explicit mode per project:
 
 - `host-direct`: the host Pi session is the orchestrator and specialist handoffs use the `pidex_agent` tool registered by the package extension.
 - `hardened-pipeline`: selected source-changing work may use temporary Docker hardening while host source remains canonical.
-- `project-pipeline`: `/pd` runs through a persistent Docker Project Sandbox where project source and Pi run inside the container; only `agents.output/**` and `wiki/**` sync back to the host archive.
+- `project-pipeline`: `/pd` runs through a persistent Docker Project Sandbox where project source and Pi run inside the container; safe `agents.output/**` and `wiki/**` publish to the authoritative host archive and then mirror into the registered host project.
 
 If no mode is saved and UI is available, `/pd` asks once, saves the choice, and continues the same task. Project Pipeline is explicit and fail-closed: failures do not fall back to `host-direct` or `hardened-pipeline`.
 
@@ -199,7 +199,7 @@ Use the saved per-project PIDEX mode. For existing projects, the extension usual
 
 - `host-direct` — run PIDEX directly in this checkout.
 - `hardened-pipeline` — use temporary Docker hardening for selected source-changing agent work while host source remains canonical.
-- `project-pipeline` — import/open this project in a persistent Docker Project Sandbox, run Pi inside the container, and sync only `agents.output/**` and `wiki/**` back to the host archive.
+- `project-pipeline` — import/open this project in a persistent Docker Project Sandbox, run Pi inside the container, publish safe `agents.output/**` and `wiki/**` to the authoritative archive, and mirror them into the registered host project.
 
 For fresh/new projects, the extension may intentionally defer project and mode selection to this orchestrator because the project path does not exist yet. After the user confirms the new project path and epic, ask for the per-project mode before spawning agents.
 
@@ -246,7 +246,7 @@ This asks Windows Git Credential Manager for an existing credential, copies a ge
 
 Project Pipeline source layout policy: inside the container, `/workspace` is the project source root. Files/directories requested at the project root belong directly under `/workspace`, not under a nested host path, Windows drive-letter path, copied project-name directory, or duplicate project directory. When validating output, inspect `/workspace` as the root first; nested project directories are a layout defect to fix, not the expected location.
 
-Project Pipeline source sync policy: generated source files remain inside the Docker Project Sandbox. Only `agents.output/**` and `wiki/**` sync back to the host archive. If the user asks for source files on the host after completion, phrase it as an optional **manual export/copy from sandbox to host project path**, outside normal archive sync; never imply automatic source mirroring.
+Project Pipeline source sync policy: generated source-code files remain inside the Docker Project Sandbox. Safe `agents.output/**` and `wiki/**` publish to the authoritative archive and then mirror into the registered host project for every normal `/pd` run. If the user asks for source-code files on the host after completion, phrase that as an optional **manual export/copy from sandbox to host project path**, outside artifact/wiki mirroring; never imply automatic source-code mirroring.
 
 If the user asks for background mode, explain that background/Telegram scripts are scaffolded but not parity-complete yet, and ask whether to continue in the selected direct/session mode instead.
 

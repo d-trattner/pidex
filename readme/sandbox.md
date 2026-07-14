@@ -3,7 +3,7 @@
 PIDEX includes Docker-backed sandboxing in two related but separate tracks:
 
 - **hardened agent sandbox** (`hardened-pipeline`): optional internal execution hardening for selected source-changing pipeline steps, with host source remaining canonical.
-- **Project Pipeline** (`project-pipeline`): persistent Docker Project Sandbox where project source and Pi run inside the container, with only safe artifacts/wiki synced back to host archive.
+- **Project Pipeline** (`project-pipeline`): persistent Docker Project Sandbox where project source and Pi run inside the container; safe artifacts/wiki publish to the authoritative host archive and then mirror into the registered host project.
 
 This page focuses on the hardened agent sandbox. See [Project Pipeline](project-pipeline.md) for the persistent project workflow.
 

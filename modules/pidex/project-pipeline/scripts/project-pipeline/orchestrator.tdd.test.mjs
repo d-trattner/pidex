@@ -240,6 +240,9 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   assert.equal(result.ok, true);
   assert.deepEqual(execAgents, ['pidex-planner', 'pidex-critic', 'pidex-qa']);
   assert.equal(result.runs.length, 3);
+  assert.equal(result.any_mirror_degraded, true);
+  assert.equal(result.latest_project_mirror_status, 'degraded-host-root-missing');
+  assert.equal(result.runs.every((run) => run.project_mirror?.degraded === true), true);
   assert.equal(result.final_context_file, 'agents.output/pidex-qa/artifact.md');
   assert.match(result.final_archive_context_file.replace(/\\/g, '/'), /state\/project-archives\/pp-orch-test\/agents\.output\/pidex-qa\/artifact\.md$/);
   const loaded = loadProjectRecord(pidexRoot, 'pp-orch-test');

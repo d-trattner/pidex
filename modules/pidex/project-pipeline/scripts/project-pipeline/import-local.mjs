@@ -6,6 +6,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
+import { seedProjectMirrorImportBaseline } from './project-mirror.mjs';
 
 const BLOCKED_NAMES = new Set(['.git', 'node_modules', 'agents.output', '.fallow', '.ssh', '.aws', '.config', 'secrets', 'credentials']);
 const BLOCKED_EXT = new Set(['.env', '.pem', '.key', '.p12', '.pfx']);
@@ -98,7 +99,8 @@ export function importLocalProject(options = {}) {
   record.source = { kind: 'host-path', ref: collected.project, imported_at: new Date().toISOString(), files_copied: copied.length, files_skipped: collected.skipped.length };
   record.status = 'ready';
   const file = saveProjectRecord(pidexRoot, record);
-  return { ok: true, record, registry_file: file, copied, skipped: collected.skipped };
+  const mirrorBaseline = seedProjectMirrorImportBaseline({ pidexRoot, projectId: record.project_id, hostRoot: collected.project, files: copied });
+  return { ok: true, record, registry_file: file, copied, skipped: collected.skipped, mirror_baseline: mirrorBaseline };
 }
 
 export function parseArgs(argv) {
