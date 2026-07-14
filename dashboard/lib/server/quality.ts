@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { URLSearchParams } from 'node:url';
 
-import { PIDEX_ROOT } from './paths';
+import { PIDEX_ROOT } from './paths.ts';
 
 type AnyRecord = Record<string, any>;
 
