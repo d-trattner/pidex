@@ -2464,13 +2464,37 @@ function runRpAudit(cwd: string, options: RpAuditOptions): {
 	return { reportPath, summary, rows: rows.length };
 }
 
-async function runDelegateAuthPreflight(timeoutMs = 15000): Promise<{ ok: boolean; output: string }> {
-	if (!fs.existsSync(CHECK_AUTH_SCRIPT)) return { ok: true, output: "" };
+export type DelegateAuthFailureKind = "launch" | "authentication";
+export type DelegateAuthPreflightResult = { ok: boolean; output: string; failureKind?: DelegateAuthFailureKind };
+
+export function delegateAuthInvocationSpec(pidexRoot: string, configPath: string, platform = process.platform): { command: string; args: string[]; cwd: string } {
+	const pathApi = platform === "win32" ? path.win32 : path.posix;
+	const cwd = pathApi.resolve(pidexRoot);
+	const scriptPath = pathApi.join(cwd, "scripts", "delegate", "check-auth.sh");
+	const asBashArgument = (file: string): string => {
+		const absolute = pathApi.isAbsolute(file) ? pathApi.resolve(file) : pathApi.resolve(cwd, file);
+		const relative = pathApi.relative(cwd, absolute);
+		const selected = relative && !pathApi.isAbsolute(relative) ? relative : absolute;
+		return selected.replaceAll("\\", "/");
+	};
+	return { command: "bash", args: [asBashArgument(scriptPath), "--config", asBashArgument(configPath)], cwd };
+}
+
+export function classifyDelegateAuthFailure(exitCode: number, output: string, timedOut = false, launchError = false): DelegateAuthFailureKind | undefined {
+	if (!timedOut && !launchError && exitCode === 0) return undefined;
+	if (timedOut || launchError || exitCode === 126 || exitCode === 127 || /no such file|not found|cannot execute|config file not found/i.test(output)) return "launch";
+	return "authentication";
+}
+
+async function runDelegateAuthPreflight(timeoutMs = 15000): Promise<DelegateAuthPreflightResult> {
+	if (!fs.existsSync(CHECK_AUTH_SCRIPT)) return { ok: false, failureKind: "launch", output: "Delegate auth preflight launch/setup failed: checker script is missing." };
+	const invocation = delegateAuthInvocationSpec(PACKAGE_ROOT, CONFIG_PATH);
 	let output = "";
 	let timedOut = false;
+	let launchError = false;
 	const exitCode = await new Promise<number>((resolve) => {
-		const proc = spawn("bash", [CHECK_AUTH_SCRIPT, "--config", CONFIG_PATH], {
-			cwd: PACKAGE_ROOT,
+		const proc = spawn(invocation.command, invocation.args, {
+			cwd: invocation.cwd,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 		const timer = setTimeout(() => {
@@ -2482,15 +2506,18 @@ async function runDelegateAuthPreflight(timeoutMs = 15000): Promise<{ ok: boolea
 		proc.stderr.on("data", (data) => (output = appendTail(output, data.toString(), 16 * 1024)));
 		proc.on("close", (code) => {
 			clearTimeout(timer);
-			resolve(code ?? 0);
+			resolve(code ?? 1);
 		});
-		proc.on("error", () => {
+		proc.on("error", (error) => {
 			clearTimeout(timer);
+			launchError = true;
+			output = appendTail(output, `\nDelegate auth preflight launch/setup failed: ${error.message}`, 16 * 1024);
 			resolve(1);
 		});
 	});
-	if (timedOut) output = appendTail(output, "\nDelegate auth preflight timed out.", 16 * 1024);
-	return { ok: exitCode === 0 && !timedOut, output: output.trim() };
+	if (timedOut) output = appendTail(output, "\nDelegate auth preflight launch/setup timed out; authentication was not checked.", 16 * 1024);
+	const failureKind = classifyDelegateAuthFailure(exitCode, output, timedOut, launchError);
+	return { ok: !failureKind, output: output.trim(), ...(failureKind ? { failureKind } : {}) };
 }
 
 async function runRpAgent(params: {
@@ -3474,7 +3501,7 @@ export default function runningPi(pi: ExtensionAPI) {
 				return;
 			}
 		}
-		const authPreflight = deferProjectSelection ? { ok: true, output: "" } : await runDelegateAuthPreflight();
+		const authPreflight: DelegateAuthPreflightResult = deferProjectSelection ? { ok: true, output: "" } : await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
 		const sandboxState = resolveSandboxStateForProjectMode(deferProjectSelection ? undefined : projectPipelineMode);
 		const sandboxProbe = sandboxState.enabled ? probeSandboxAvailability() : { ok: true, summary: sandboxEvidenceLine(sandboxState) };
@@ -3483,7 +3510,9 @@ export default function runningPi(pi: ExtensionAPI) {
 			return;
 		}
 		if (!authPreflight.ok) {
-			ctx.ui.notify("pidex delegate auth preflight failed; see injected instructions", "error");
+			ctx.ui.notify(authPreflight.failureKind === "launch"
+				? "pidex delegate auth checker could not be launched; authentication was not checked"
+				: "pidex delegate authentication check ran and failed; see injected instructions", "error");
 		} else if (authPreflight.output) {
 			ctx.ui.notify("pidex delegate auth preflight OK", "info");
 		}
@@ -3508,7 +3537,9 @@ export default function runningPi(pi: ExtensionAPI) {
 				? "Delegate auth preflight is deferred until after project selection; do not start delegated agents before resolving project/mode and auth readiness."
 				: authPreflight.ok
 					? "Delegate auth preflight passed for configured non-Pi providers."
-					: `Delegate auth preflight failed. Do not start delegated agents until this is resolved, or explicitly override those agents to provider=pi. Output:\n${authPreflight.output}`,
+					: authPreflight.failureKind === "launch"
+						? `Delegate auth checker launch/setup failed; authentication was not checked. Do not start delegated agents or silently fall back to another provider. Fix the launcher, or explicitly override selected agents to provider=pi. Output:\n${authPreflight.output}`
+						: `Delegate authentication check ran and credentials/tooling failed. Do not start delegated agents or silently fall back to another provider. Resolve authentication, or explicitly override selected agents to provider=pi. Output:\n${authPreflight.output}`,
 			task ? `Initial user task: ${task}` : "Initial user task: not provided; begin by asking which project and what deliverable.",
 		].join("\n\n");
 		ctx.ui.notify(deferProjectSelection ? "Starting PIDEX new-project interview" : `Starting pidex orchestrator (${projectPipelineMode?.mode ?? "host-direct"})`, "info");

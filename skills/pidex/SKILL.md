@@ -67,8 +67,10 @@ In `host-direct` mode:
 Before invoking the first delegated non-Pi agent, ensure delegate auth preflight is green. `/pidex` and `/pd` run this automatically, but if continuing manually use:
 
 ```bash
-bash <pidex-root>/scripts/delegate/check-auth.sh --config <pidex-root>/config/agents.json
+cd "<pidex-root>" && bash scripts/delegate/check-auth.sh --config config/agents.json
 ```
+
+The extension uses the same cwd-relative, separately argv-quoted invocation. Do not interpolate native Windows backslash paths into a Bash command string. A checker launch/setup failure means authentication was not tested and must remain distinct from a checker that ran and reported invalid credentials/tooling; neither case permits silent provider fallback.
 
 If auth/setup fails, stop and ask the user to fix auth or explicitly override affected agents to `provider=pi`. Do not silently fall back on auth/setup failure.
 

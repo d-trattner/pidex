@@ -194,6 +194,7 @@ Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29, 20
 - After Initiative 034 was pulled on the native Windows work-PC, the user-confirmed full `project-mirror.tdd.test.mjs` suite passed, including the Windows-only real-junction case. This closes the focused host-project mirror junction/race evidence gap; broader native Windows support remains experimental.
 - Project Pipeline Docker helper calls now guard Git Bash/MSYS path conversion internally, so operators should not need to remember `MSYS_NO_PATHCONV=1` for PIDEX-managed Docker calls.
 - Windows-specific fixes were required for LF shell checkout, Bash path tests, Docker image auto-build, archive path normalization, credential staging through the cache volume, safe Project Pipeline passthrough args, Pi settings sanitization inside Docker, preview port adoption, preview `$PORT` expansion, and Vite default preview command handling.
+- `/pd` and `/pidex` delegate-auth preflight invokes `check-auth.sh` from the PIDEX root with cwd-relative script/config argv entries. This avoids Bash consuming native Windows backslashes and preserves spaces/non-ASCII path components. Launch/setup failure is reported separately from a checker that ran and rejected credentials; neither silently selects another provider.
 
 ## Recommended Windows approach today
 
