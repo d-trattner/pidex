@@ -1231,7 +1231,7 @@ Optional early agents:
 
 Parallel implementer lanes are optional, not default. Use them only when the plan has explicit spawn/lane markers and slice independence is clear. Otherwise use sequential implementer spawns following the plan's `Spawn` annotations.
 
-**Parallel pidex_agent safety:** When emitting multiple `pidex_agent` calls in the same assistant turn (parallel implementer lanes, configured secondary review lanes, or post-retro handoffs), pass explicit `provider`, `model`, and `effort` for every secondary call. Do not rely on default routing in same-turn parallel calls. Never force `provider=pi` while leaving a delegate model alias such as `sonnet`/`opus`; if overriding to Pi, use a Pi-qualified model from config defaults (for example `openai-codex/gpt-5.4-mini`).
+**Parallel pidex_agent safety:** For host-direct and hardened-pipeline calls, primary calls omit route fields. Configured secondary calls pass exact `laneId` plus exact `trigger`; `pidex_agent` resolves runner provider, model, and effort from eligible-lane status. Never construct or substitute provider/model/effort fields after a failure. Project Pipeline keeps its separate in-container route path.
 
 **Proportional minimal-run intent (mandatory):** Treat an explicit user description such as `minimal`, `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` as a request for a proportional minimal run unless the user also explicitly requests hardened/high-assurance proof. This is a process constraint, not merely a product label. In a proportional minimal run:
 - use one authoritative primary critic and one authoritative primary code reviewer; skip optional generic secondary lanes;
@@ -1253,7 +1253,7 @@ If `.lanes[]` is non-empty in host-direct or hardened-pipeline mode, launch the 
 
 Lane launch rules:
 - Primary: call `pidex_agent` normally using configured primary routing from `<pidex-root>/config/agents.json`.
-- Secondary: call the same `agent` with explicit `provider`, `model`, and `effort` from `status.mjs eligible`. Use `runner_provider` and `runner_model` when present; these map Pi-auth provider/model IDs like DeepSeek/Minimax to `provider=pi`, `model=<provider>/<model>`. Do not pass unsupported direct providers such as `deepseek` or `minimax` to `pidex_agent`.
+- Secondary: call the same `agent` with exact `laneId` and `trigger` from `status.mjs eligible`. Do not pass provider, model, or effort; `pidex_agent` resolves the eligible lane's runner route before spawn.
 - Each lane must receive a unique expected output path; never let secondaries write the primary artifact. Direct Project Pipeline `pidex_agent` calls additionally require `projectId` plus exact `expectedInputPath`/`expectedOutputPath` and never fall back to host execution.
 - Secondary failure is advisory and non-blocking. Record it with `status.mjs warn --lane <lane_id> --message <short reason>` and continue.
 - Secondary success should be recorded with `status.mjs success --lane <lane_id> --message success` after its output/ROUTING is verified.
@@ -1383,7 +1383,7 @@ When stopped, summarize user-visible progress, elapsed/rework cost when known, a
 
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 
-Check the retrospective doc for these sections and invoke the corresponding agents. Run in parallel if multiple apply. For parallel post-retro handoffs, apply **Parallel pidex_agent safety** above: pass explicit provider/model/effort from config for each handoff.
+Check retrospective doc sections and invoke corresponding agents. Run in parallel if multiple apply. Post-retro handoffs are primary calls: omit provider/model/effort so each resolves its configured route.
 
 - **"Planning Insights"** → invoke pidex-planner to capture learnings in wiki (`concepts/` or `decisions/`)
 - **"Project Improvement Findings"** → invoke pidex-roadmap to evaluate as future epics/backlog

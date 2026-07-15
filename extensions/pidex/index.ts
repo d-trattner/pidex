@@ -46,6 +46,7 @@ type RpResult = {
 	cacheWriteTokens?: number;
 	costUsdEstimate?: number;
 	metricsFile?: string;
+	routeSource?: string;
 	setupError?: boolean;
 	timedOut?: boolean;
 	aborted?: boolean;
@@ -59,6 +60,22 @@ type ParallelSecondaryRoute = {
 	effort?: string;
 	label?: string;
 	timeout_seconds?: number;
+};
+
+type EligibleParallelLane = {
+	lane_id?: string;
+	agent?: string;
+	trigger?: string;
+	runner_provider?: string;
+	runner_model?: string;
+	effort?: string;
+	timeout_seconds?: number;
+};
+
+type HostAgentRoute = AgentRoute & {
+	provider: string;
+	timeoutSeconds?: number;
+	routeSource: string;
 };
 
 type AgentRoute = {
@@ -298,6 +315,45 @@ function resolveRoute(config: RoutingConfig, agentName: string): AgentRoute {
 	return {
 		...(config.defaults ?? {}),
 		...(config.agents?.[agentName] ?? {}),
+	};
+}
+
+type HostAgentRequest = { agent: string; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string };
+
+export function validateHostAgentRequestShape(params: HostAgentRequest): { secondary: boolean } {
+	const hasManualRoute = params.provider !== undefined || params.model !== undefined || params.effort !== undefined;
+	if (params.laneId === undefined) {
+		if (hasManualRoute) throw new Error("Host pidex_agent primary calls reject caller-supplied provider, model, or effort.");
+		if (params.trigger !== undefined) throw new Error("Host pidex_agent primary calls cannot include a secondary trigger.");
+		return { secondary: false };
+	}
+	if (typeof params.laneId !== "string" || !params.laneId.trim()) throw new Error("Host pidex_agent secondary calls require a non-empty laneId.");
+	if (hasManualRoute) throw new Error("Host pidex_agent secondary calls cannot include provider, model, or effort with laneId.");
+	if (typeof params.trigger !== "string" || !params.trigger.trim()) throw new Error("Host pidex_agent secondary calls require trigger with laneId.");
+	return { secondary: true };
+}
+
+export function resolveHostAgentRoute(
+	params: HostAgentRequest,
+	config: RoutingConfig,
+	eligibleLanes: EligibleParallelLane[],
+): HostAgentRoute {
+	const request = validateHostAgentRequestShape(params);
+	if (!request.secondary) {
+		const route = resolveRoute(config, params.agent);
+		return { ...route, provider: normalizeProvider(route.provider), timeoutSeconds: route.timeout_seconds, routeSource: "configured-primary" };
+	}
+	const lane = eligibleLanes.find((candidate) => candidate.lane_id === params.laneId && candidate.agent === params.agent && candidate.trigger === params.trigger);
+	if (!lane?.runner_provider) throw new Error(`Host pidex_agent lane '${params.laneId}' is not eligible for agent '${params.agent}' and trigger '${params.trigger}'.`);
+	const route = resolveRoute(config, params.agent);
+	return {
+		...route,
+		provider: normalizeProvider(lane.runner_provider),
+		model: lane.runner_model,
+		effort: lane.effort,
+		timeout_seconds: lane.timeout_seconds,
+		timeoutSeconds: lane.timeout_seconds,
+		routeSource: `configured-secondary:${params.laneId}`,
 	};
 }
 
@@ -1384,6 +1440,7 @@ async function runSandboxedConfiguredAgent(params: {
 	agent: string;
 	task: string;
 	cwd: string;
+	route?: HostAgentRoute;
 	providerOverride?: string;
 	modelOverride?: string;
 	effortOverride?: string;
@@ -1497,6 +1554,10 @@ export function formatPiRunnerStartDetails(model: string | undefined, effort?: s
 
 export function formatDelegateStartDetails(provider: string, model: string | undefined, effort?: string): string {
 	return `${provider} ${model?.trim() || "default"} ${effort?.trim() || "default"}`;
+}
+
+export function formatConfiguredRouteStartDetails(routeSource: string, provider: string, model?: string, effort?: string): string {
+	return `${routeSource} → ${provider} / ${model?.trim() || "default"} / ${effort?.trim() || "default"}`;
 }
 
 function formatAgentCompletionLine(result: RpResult): string {
@@ -2230,6 +2291,7 @@ function recordAgentMetric(result: RpResult, cwd: string, task: string): string 
 			session_dir: result.sessionDir,
 			tool_count: result.toolCount,
 			setup_error: result.setupError,
+			route_source: result.routeSource,
 			source: "pidex_agent",
 		};
 		fs.appendFileSync(file, `${JSON.stringify(record)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -2552,6 +2614,7 @@ async function runRpAgent(params: {
 	effort?: string;
 	tools?: string[];
 	timeoutSeconds?: number;
+	routeSource?: string;
 	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
@@ -2780,6 +2843,7 @@ async function runRpAgent(params: {
 			cacheReadTokens: cacheReadTokens || undefined,
 			cacheWriteTokens: cacheWriteTokens || undefined,
 			costUsdEstimate: observedCost || undefined,
+			routeSource: params.routeSource,
 			timedOut,
 			aborted,
 			turnLimitHit,
@@ -2792,6 +2856,7 @@ async function runRpAgent(params: {
 				modelRequested: model,
 				modelObserved: observedModel,
 				effort: params.effort,
+				route_source: params.routeSource,
 				agent: params.agent,
 				cwd: params.cwd,
 				startedAt: new Date(startedAt).toISOString(),
@@ -2938,6 +3003,7 @@ async function runConfiguredAgent(params: {
 	agent: string;
 	task: string;
 	cwd: string;
+	route?: HostAgentRoute;
 	providerOverride?: string;
 	modelOverride?: string;
 	effortOverride?: string;
@@ -2948,8 +3014,12 @@ async function runConfiguredAgent(params: {
 }): Promise<RpResult> {
 	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: resolving route...`);
 	const config = loadRoutingConfig();
-	const route = resolveRoute(config, params.agent);
+	const route: AgentRoute & { routeSource: string } = params.route
+		? { ...params.route, timeout_seconds: params.route.timeoutSeconds ?? params.route.timeout_seconds }
+		: { ...resolveRoute(config, params.agent), routeSource: "configured-primary" };
 	const provider = normalizeProvider(params.providerOverride ?? route.provider);
+	const timeoutSeconds = route.timeout_seconds;
+	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${formatConfiguredRouteStartDetails(route.routeSource, provider, route.model, route.effort)}`);
 	const explicitTools = normalizeToolList(params.tools);
 	const delegateTools = TOOL_FORWARDING_AGENTS.has(params.agent) ? explicitTools ?? route.tools : route.tools;
 
@@ -2984,7 +3054,8 @@ async function runConfiguredAgent(params: {
 				model: piModel,
 				effort: selectedEffort,
 				tools: explicitTools,
-				timeoutSeconds: route.timeout_seconds,
+				timeoutSeconds,
+				routeSource: route.routeSource,
 				sandboxContext: params.sandboxContext,
 				signal: params.signal,
 				onUpdate: params.onUpdate,
@@ -2998,7 +3069,7 @@ async function runConfiguredAgent(params: {
 			provider: selectedProvider,
 			model: selectedModel,
 			effort: selectedEffort,
-			timeoutSeconds: route.timeout_seconds,
+			timeoutSeconds,
 			permissionMode: route.permission_mode,
 			delegateTools: delegateTools,
 			allowedTools: route.allowed_tools,
@@ -3024,7 +3095,7 @@ async function runConfiguredAgent(params: {
 	const fallbackDisabled = !fallbackProviderRaw || ["none", "off", "disabled", "false"].includes(fallbackProviderRaw);
 	const configuredFallback = normalizeProvider(config.fallback?.on_error);
 	const fallbackProvider = fallbackDisabled ? "" : (configuredFallback === "pi" || configuredFallback === "codex" ? configuredFallback : "pi");
-	if (shouldFallback && !result.setupError && fallbackProvider && fallbackProvider !== provider && !params.providerOverride) {
+	if (shouldFallback && !result.setupError && fallbackProvider && fallbackProvider !== provider && !params.providerOverride && !params.route) {
 		params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} failed${missingRouting ? " (missing ROUTING)" : ""}; falling back to ${fallbackProvider}.`);
 		result = await runProvider(fallbackProvider, provider);
 	}
@@ -3034,6 +3105,7 @@ async function runConfiguredAgent(params: {
 			"Delegate setup/auth error: not falling back to Pi because setup failures should be fixed before the pipeline continues.",
 		];
 	}
+	result.routeSource = route.routeSource;
 	result.metricsFile = recordAgentMetric(result, params.cwd, params.task);
 	const operatorEventFile = recordOperatorEvents(result, params.cwd, params.task);
 	if (operatorEventFile) {
@@ -3407,6 +3479,62 @@ const PidexProjectParams = Type.Object({
 	runId: Type.Optional(Type.String({ description: "Project Pipeline run id. Required for show-run." })),
 });
 
+type HostAgentBoundaryOptions = {
+	agentCwd: string;
+	agentProjectMode?: ProjectPipelineModeResult;
+	signal?: AbortSignal;
+	onUpdate?: (text: string) => void;
+	loadEligibleLanes?: (params: HostAgentRequest) => EligibleParallelLane[];
+	loadConfig?: () => RoutingConfig;
+	resolveSandboxState?: () => Pick<SandboxState, "enabled">;
+	probeSandbox?: () => { ok: boolean; summary: string };
+	runConfigured?: typeof runConfiguredAgent;
+	runSandboxed?: typeof runSandboxedConfiguredAgent;
+};
+
+export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
+	const request = validateHostAgentRequestShape(params);
+	const eligibleLanes = request.secondary
+		? (options.loadEligibleLanes ?? ((requestParams) => {
+			const statusScript = path.join(PACKAGE_ROOT, "modules", "pidex", "parallel-agents", "scripts", "status.mjs");
+			const status = spawnSync(process.execPath, [statusScript, "--root", PACKAGE_ROOT, "eligible", "--agent", String(requestParams.agent), "--trigger", String(requestParams.trigger), "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 10_000 });
+			if (status.status !== 0) throw new Error("Host pidex_agent could not resolve configured parallel lanes before spawn.");
+			try {
+				const parsed = JSON.parse(status.stdout || "{}");
+				return Array.isArray(parsed?.lanes) ? parsed.lanes : [];
+			} catch {
+				throw new Error("Host pidex_agent received invalid configured parallel lane data before spawn.");
+			}
+		}))(params)
+		: [];
+	const route = resolveHostAgentRoute(params, (options.loadConfig ?? loadRoutingConfig)(), eligibleLanes);
+	const sandboxState = (options.resolveSandboxState ?? (() => resolveSandboxStateForProjectMode(options.agentProjectMode)))();
+	if (sandboxState.enabled) {
+		const probe = (options.probeSandbox ?? probeSandboxAvailability)();
+		if (!probe.ok) throw new Error(`PIDEX sandbox is enabled but unavailable: ${probe.summary}`);
+	}
+	const sandboxTaskPrefix = sandboxState.enabled ? [
+		"SANDBOX ACTIVE: hardened-pipeline is enabled for this PIDEX run.",
+		"Sandbox is internal hardening; preserve normal specialist behavior and ROUTING.",
+		"Do not ask the user mid-run for sandbox configuration. If sandbox evidence cannot be produced, fail with an actionable reason.",
+		"Use sandbox runtime helpers for project commands when relevant. Do not read env/secret/runtime paths. Do not write host project paths outside the assigned workspace.",
+		"Include sandbox evidence or SANDBOX-SKIP in your artifact.",
+		"",
+	].join("\n") : "";
+	const runParams = {
+		agent: params.agent,
+		task: `${sandboxTaskPrefix}${params.task}`,
+		cwd: options.agentCwd,
+		route,
+		tools: params.tools,
+		signal: options.signal,
+		onUpdate: options.onUpdate,
+	};
+	return sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
+		? await (options.runSandboxed ?? runSandboxedConfiguredAgent)(runParams)
+		: await (options.runConfigured ?? runConfiguredAgent)(runParams);
+}
+
 const RpAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
@@ -3414,9 +3542,11 @@ const RpAgentParams = Type.Object({
 	projectId: Type.Optional(Type.String({ description: "Explicit Project Pipeline registry project id. Required for direct project-pipeline agent calls." })),
 	expectedInputPath: Type.Optional(Type.String({ description: "Exact container-relative agents.output/** input artifact for Project Pipeline review calls." })),
 	expectedOutputPath: Type.Optional(Type.String({ description: "Exact container-relative agents.output/** assigned output artifact for Project Pipeline calls." })),
-	provider: Type.Optional(Type.String({ description: "Optional provider override: pi or codex. Defaults to config/agents.json. Use provider=pi for Pi-routed provider/model IDs such as deepseek/... or minimax/...." })),
-	model: Type.Optional(Type.String({ description: "Optional model override. For provider=pi this may be a Pi-routed model ID; for provider=codex it is passed to the Codex CLI." })),
-	effort: Type.Optional(Type.String({ description: "Optional reasoning-effort override. For Codex/Pi-routed Codex models: low/medium/high/xhigh where supported." })),
+	laneId: Type.Optional(Type.String({ description: "Configured secondary lane identity. Requires exact trigger; resolves runner route from eligible parallel-lane status." })),
+	trigger: Type.Optional(Type.String({ description: "Configured secondary lane trigger. Required with laneId." })),
+	provider: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
+	model: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
+	effort: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	tools: Type.Optional(Type.Array(Type.String(), { description: "Optional Pi tool allowlist override (only used by provider=pi/subagent)." })),
 });
 
@@ -3696,8 +3826,9 @@ export default function runningPi(pi: ExtensionAPI) {
 		promptSnippet: "Run a bundled pidex-* specialist agent using pidex provider routing from config/agents.json.",
 		promptGuidelines: [
 			"Use pidex_agent for pidex specialist handoffs such as pidex-planner, pidex-critic, pidex-implementer, pidex-code-reviewer, pidex-qa, pidex-uat, pidex-devops, pidex-wiki-hygienist, pidex-retrospective, and pidex-pi.",
-			"pidex_agent automatically honors <pidex-root>/config/agents.json unless provider/model/effort are explicitly overridden.",
-			"Configured optional parallel agents resolve from PIDEX_PARALLEL_AGENTS_CONFIG, then <pidex-root>/config/parallel-agents.local.json, then the disabled public <pidex-root>/config/parallel-agents.json default. Project Pipeline orchestration owns its in-container secondary lanes; direct project-pipeline pidex_agent calls require projectId plus exact expected input/output paths and never fall back to the host.",
+			"Host-direct and hardened-pipeline primary calls use config/agents.json only. Never pass provider, model, or effort.",
+			"Host secondary calls require exact laneId plus trigger. PIDEX resolves runner provider, model, and effort from currently eligible parallel-lane status; never construct route fields.",
+			"Configured optional parallel agents resolve from PIDEX_PARALLEL_AGENTS_CONFIG, then <pidex-root>/config/parallel-agents.local.json, then the disabled public <pidex-root>/config/parallel-agents.json default. Project Pipeline orchestration owns its separate in-container path; direct project-pipeline pidex_agent calls require projectId plus exact expected input/output paths and never fall back to the host.",
 			"When using pidex_agent, pass complete context in the task, including project cwd, current epic, relevant agents.output paths, expected output file, and required ROUTING behavior. The final ROUTING block must include context_file, not doc. route_to may be an pidex-* agent, user, or orchestrator for deterministic internal follow-up.",
 			"For JS/TS security or QA handoffs, remind pidex-security/pidex-qa to run the relevant Fallow gate or document FALLOW-SKIP.",
 			"Specialists should write full artifacts to files and keep final responses short; pidex_agent will truncate oversized final text and store raw child logs under pidex/state/runs/.",
@@ -3717,33 +3848,12 @@ export default function runningPi(pi: ExtensionAPI) {
 						details: { ok: true, projectId: params.projectId, project_run_id: projectResult.project_run_id, context_file: projectResult.context_file, archive_context_file: projectResult.archive_context_file, project_mirror: safeProjectMirrorSummary(projectResult.project_mirror), sync_degraded: projectResult.project_mirror?.degraded === true, routing_recovered: projectResult.routing_recovered === true, write_fence: projectResult.write_fence?.status || null, no_fallback: true },
 					};
 				}
-				const sandboxState = resolveSandboxStateForProjectMode(agentProjectMode);
-				if (sandboxState.enabled) {
-					const probe = probeSandboxAvailability();
-					if (!probe.ok) throw new Error(`PIDEX sandbox is enabled but unavailable: ${probe.summary}`);
-				}
-				const sandboxTaskPrefix = sandboxState.enabled ? [
-					"SANDBOX ACTIVE: hardened-pipeline is enabled for this PIDEX run.",
-					"Sandbox is internal hardening; preserve normal specialist behavior and ROUTING.",
-					"Do not ask the user mid-run for sandbox configuration. If sandbox evidence cannot be produced, fail with an actionable reason.",
-					"Use sandbox runtime helpers for project commands when relevant. Do not read env/secret/runtime paths. Do not write host project paths outside the assigned workspace.",
-					"Include sandbox evidence or SANDBOX-SKIP in your artifact.",
-					"",
-				].join("\n") : "";
-				const runParams = {
-					agent: params.agent,
-					task: `${sandboxTaskPrefix}${params.task}`,
-					cwd: agentCwd,
-					providerOverride: params.provider,
-					modelOverride: params.model,
-					effortOverride: params.effort,
-					tools: params.tools,
+				const result = await executeHostAgentBoundary(params, {
+					agentCwd,
+					agentProjectMode,
 					signal,
 					onUpdate: (text: string) => onUpdate?.({ content: [{ type: "text", text: clipEnd(text, MAX_UPDATE_CHARS) }], details: {} }),
-				};
-				const result = sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
-					? await runSandboxedConfiguredAgent(runParams)
-					: await runConfiguredAgent(runParams);
+				});
 				const contentText = formatToolContent(result);
 				const missingRouting = !hasRoutingBlock(result.finalText);
 				const invalidContextFile = !missingRouting && !hasValidRoutingContextFile(result.finalText, params.cwd ?? ctx.cwd);

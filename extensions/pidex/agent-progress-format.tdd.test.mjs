@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDelegateStartDetails, formatPiRunnerStartDetails } from './index.ts';
+import { formatConfiguredRouteStartDetails, formatDelegateStartDetails, formatPiRunnerStartDetails } from './index.ts';
 
 test('Pi-routed agent progress shows provider model and thinking effort directly', () => {
   assert.equal(
@@ -19,5 +19,12 @@ test('delegate agent progress includes provider model and thinking effort direct
   assert.equal(
     formatDelegateStartDetails('codex', 'gpt-5.6-terra', 'high'),
     'codex gpt-5.6-terra high',
+  );
+});
+
+test('configured route progress identifies its authoritative route source', () => {
+  assert.equal(
+    formatConfiguredRouteStartDetails('configured-secondary:pidex-critic:deepseek:deepseek-v4-flash', 'pi', 'deepseek/deepseek-v4-flash', 'low'),
+    'configured-secondary:pidex-critic:deepseek:deepseek-v4-flash → pi / deepseek/deepseek-v4-flash / low',
   );
 });
