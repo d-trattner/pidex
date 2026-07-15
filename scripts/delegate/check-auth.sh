@@ -19,6 +19,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if ! command -v node >/dev/null 2>&1; then
+  echo "ERROR: Node.js runtime not found; delegate auth config was not checked" >&2
+  exit 1
+fi
+
 if [ "${#PROVIDERS[@]}" -eq 0 ]; then
   if [ ! -f "$CONFIG_FILE" ]; then
     echo "ERROR: config file not found: $CONFIG_FILE" >&2

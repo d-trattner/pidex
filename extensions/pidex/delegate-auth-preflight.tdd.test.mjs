@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { classifyDelegateAuthFailure, delegateAuthInvocationSpec } from './index.ts';
@@ -44,10 +44,21 @@ test('Bash receives script and config as distinct arguments through paths with s
   assert.deepEqual(run.stdout.trim().split(/\r?\n/), ['<scripts/delegate/check-auth.sh>', '<--config>', '<config/agents custom.json>']);
 });
 
+test('check-auth fails before config parsing when Node.js is unavailable', () => {
+  const script = readFileSync(path.join(process.cwd(), 'scripts', 'delegate', 'check-auth.sh'), 'utf8');
+  const nodeGuard = script.indexOf('command -v node');
+  const configParser = script.indexOf('mapfile -t PROVIDERS');
+  assert.notEqual(nodeGuard, -1);
+  assert.notEqual(configParser, -1);
+  assert.equal(nodeGuard < configParser, true);
+  assert.match(script, /ERROR: Node\.js runtime not found/);
+});
+
 test('launch/setup failures are distinct from credential failures', () => {
   assert.equal(classifyDelegateAuthFailure(0, ''), undefined);
   assert.equal(classifyDelegateAuthFailure(127, 'bash: checker: No such file or directory'), 'launch');
   assert.equal(classifyDelegateAuthFailure(1, 'ERROR: config file not found'), 'launch');
+  assert.equal(classifyDelegateAuthFailure(1, 'ERROR: Node.js runtime not found'), 'launch');
   assert.equal(classifyDelegateAuthFailure(1, 'FAIL codex: no usable tokens'), 'authentication');
   assert.equal(classifyDelegateAuthFailure(1, '', true, false), 'launch');
   assert.equal(classifyDelegateAuthFailure(1, '', false, true), 'launch');
