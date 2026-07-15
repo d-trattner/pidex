@@ -187,6 +187,17 @@ export function createProjectSandbox(options = {}) {
   }
 }
 
+export function setProjectTestClassification(options = {}) {
+  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+  const projectId = safeProjectId(options.projectId);
+  if (typeof options.isTestProject !== 'boolean') throw new Error('--test-project requires true or false');
+  const record = loadProjectRecord(pidexRoot, projectId);
+  const previous = record.is_test_project === true;
+  record.is_test_project = options.isTestProject;
+  const file = saveProjectRecord(pidexRoot, record);
+  return { ok: true, project_id: projectId, previous, is_test_project: record.is_test_project, changed: previous !== record.is_test_project, record, file };
+}
+
 export function openProjectSandbox(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
@@ -259,7 +270,7 @@ export function parseArgs(argv) {
   const out = { json: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === 'create' || arg === 'open' || arg === 'repair' || arg === 'remove') out.command = arg;
+    if (arg === 'create' || arg === 'open' || arg === 'repair' || arg === 'remove' || arg === 'set-test-project') out.command = arg;
     else if (arg === '--pidex-root') out.pidexRoot = argv[++i];
     else if (arg === '--name') out.name = argv[++i];
     else if (arg === '--project-id') out.projectId = argv[++i];
@@ -277,7 +288,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove> --pidex-root PATH [--name NAME|--project-id ID] [--test-project true|false] [--confirm ID] --json'; }
+function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove|set-test-project> --pidex-root PATH [--name NAME|--project-id ID] [--test-project true|false] [--confirm ID] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
@@ -289,6 +300,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     else if (args.command === 'open') result = openProjectSandbox(args);
     else if (args.command === 'repair') result = repairProjectSandbox(args);
     else if (args.command === 'remove') result = removeProjectSandbox(args);
+    else if (args.command === 'set-test-project') result = setProjectTestClassification(args);
     console.log(args.json ? JSON.stringify(result, null, 2) : (result.ok ? 'ok' : result.reason));
     process.exit(result.ok ? 0 : 1);
   } catch (error) {

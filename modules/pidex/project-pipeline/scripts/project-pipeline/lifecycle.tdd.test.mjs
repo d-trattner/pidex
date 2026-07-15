@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { containerCreateArgs, createProjectSandbox, dockerLabels, ensurePreviewContainerPublished, openProjectSandbox, repairProjectSandbox, removeArgs, removeProjectSandbox, volumeCreateArgs } from './lifecycle.mjs';
+import { containerCreateArgs, createProjectSandbox, dockerLabels, ensurePreviewContainerPublished, openProjectSandbox, repairProjectSandbox, removeArgs, removeProjectSandbox, setProjectTestClassification, volumeCreateArgs } from './lifecycle.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 function tmpRoot() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-life-')); }
@@ -67,6 +67,26 @@ test('createProjectSandbox records needs-repair on partial failure', () => {
   const loaded = loadProjectRecord(root, 'pp-demo-fail1');
   assert.equal(loaded.status, 'needs-repair');
   assert.match(loaded.repair.reason, /planned failure/);
+});
+
+test('setProjectTestClassification reclassifies an existing project without Docker mutation', () => {
+  const root = tmpRoot();
+  const record = createProjectRecord({ project_id: 'pp-demo-classify1', name: 'demo' });
+  record.status = 'ready';
+  saveProjectRecord(root, record);
+
+  const classified = setProjectTestClassification({ pidexRoot: root, projectId: 'pp-demo-classify1', isTestProject: true });
+  assert.equal(classified.ok, true);
+  assert.equal(classified.previous, false);
+  assert.equal(classified.is_test_project, true);
+  assert.equal(classified.changed, true);
+  assert.equal(loadProjectRecord(root, 'pp-demo-classify1').is_test_project, true);
+  assert.equal(loadProjectRecord(root, 'pp-demo-classify1').status, 'ready');
+
+  const restored = setProjectTestClassification({ pidexRoot: root, projectId: 'pp-demo-classify1', isTestProject: false });
+  assert.equal(restored.previous, true);
+  assert.equal(restored.is_test_project, false);
+  assert.throws(() => setProjectTestClassification({ pidexRoot: root, projectId: 'pp-demo-classify1' }), /requires true or false/);
 });
 
 test('openProjectSandbox starts existing container and records container-missing on failure', () => {

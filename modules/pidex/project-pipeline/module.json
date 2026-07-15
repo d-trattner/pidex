@@ -90,7 +90,7 @@
         "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/lifecycle.mjs"],
         "passthrough": true,
         "passthrough_policy": {
-          "allowed_patterns": ["^(create|open|repair|remove)$", "^--(pidex-root|name|project-id|image|confirm|test-project)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+          "allowed_patterns": ["^(create|open|repair|remove|set-test-project)$", "^--(pidex-root|name|project-id|image|confirm|test-project)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
         }
       }
     },
