@@ -10,6 +10,9 @@ Project Pipeline host mirroring, Windows host-direct reliability, proportional o
 - Hardened Project Pipeline primary/secondary review execution with exact container artifact paths, no host fallback, provider/model/effort forwarding, authoritative final ROUTING recovery, sequential write fences, run-specific artifacts, and in-container adjudication.
 - Added a proportional minimal-run circuit breaker: explicit minimal/MVP/single-lane intent skips optional generic secondary reviews, threat/evidence contract expansion requires user approval, and a second rejection or residual re-slice at the same gate stops automatic churn.
 - Fixed native Windows `/pd` and `/pidex` delegate-auth preflight by invoking Bash with cwd-relative, separately passed script/config arguments; launch/setup failures are now distinct from credential failures and no provider fallback is silent.
+- Restored bare `/pd` task interviews for saved Project Pipeline projects instead of warning that an initial task argument is required; the in-container run still starts only after the task is confirmed.
+- Avoided repeated Project Pipeline Pi-credential consent prompts by checking the selected project's credential status first; configured projects reuse their persistent credentials, while other states still require an explicit choice.
+- Excluded system-temporary directories such as `/tmp/**` from `/pd` recent-project suggestions sourced from history or saved project modes.
 - Added a Windows Git Credential Manager bridge for trusted Project Pipeline containers and documented the WSL Bash requirement for native Windows host-direct command execution.
 - Corrected Codex quota-window classification from API duration metadata and preserved duration evidence through dashboard provider-limit APIs and views.
 - Forwarded configured Pi reasoning effort through direct specialist execution.

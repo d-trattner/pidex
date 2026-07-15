@@ -66,6 +66,27 @@ test('shouldStartProjectPipelineRunFlow selects only explicit project-pipeline m
   assert.equal(mod.shouldStartProjectPipelineRunFlow({ ok: false, decision_required: true }), false);
 });
 
+test('Project Pipeline credential prompt is skipped when Pi credentials are already configured', async () => {
+  let selectCalls = 0;
+  const result = await mod.maybeCopyProjectPipelinePiCredentials({
+    hasUI: true,
+    ui: { select: async () => { selectCalls += 1; return 'Copy Pi credentials'; } },
+  }, process.cwd(), { credentialsConfigured: () => true });
+  assert.equal(result, false);
+  assert.equal(selectCalls, 0);
+});
+
+test('projectPipelinePiCredentialsConfigured reads configured status without exposing inventory', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-credential-status-'));
+  const helper = path.join(dir, 'credentials.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ ok: true, credentials: { pi: 'configured', inventory: [{ fingerprint: 'secret-metadata' }] } }));\n");
+  try {
+    assert.equal(mod.projectPipelinePiCredentialsConfigured(process.cwd(), { script: helper }), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('hardened sandbox state is gated by resolved per-project mode', () => {
   assert.equal(mod.resolveSandboxStateForProjectMode(undefined).enabled, false);
   assert.match(mod.resolveSandboxStateForProjectMode(undefined).reason, /per-project-mode-unresolved/);
@@ -241,6 +262,58 @@ test('isLikelyPidexProjectDirectory does not treat a child pidex checkout as pro
     mkdirSync(path.join(dir, 'pidex', 'context'), { recursive: true });
     writeFileSync(path.join(dir, 'pidex', 'context', 'CONTEXT.md'), '# Context\n');
     assert.equal(mod.isLikelyPidexProjectDirectory(dir), true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('/pd without a task in a selected Project Pipeline project starts the task interview', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-pd-project-interview-'));
+  const modeHelper = path.join(dir, 'mode.mjs');
+  writeFileSync(path.join(dir, 'package.json'), '{"name":"interview-project"}\n');
+  writeFileSync(modeHelper, "console.log(JSON.stringify({ ok: true, mode: 'project-pipeline', source: 'saved', no_fallback: true }));\n");
+  try {
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+const mod = await import('./extensions/pidex/index.ts');
+const commands = new Map();
+const notifications = [];
+const sent = [];
+let selectCalls = 0;
+mod.default({
+  on: () => {},
+  registerTool: () => {},
+  registerCommand: (name, spec) => commands.set(name, spec),
+  sendUserMessage: (message) => sent.push(message),
+});
+await commands.get('pd').handler('', {
+  cwd: process.env.PIDEX_TEST_PROJECT_ROOT,
+  hasUI: true,
+  ui: {
+    select: async () => { selectCalls += 1; throw new Error('no selection popup expected'); },
+    notify: async (message, level) => notifications.push({ message, level }),
+  },
+});
+console.log(JSON.stringify({ notifications, sent, selectCalls }));
+`], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PIDEX_CHILD: '0',
+        PIDEX_PROJECT_PIPELINE_MODE_SCRIPT: modeHelper,
+        PIDEX_STATE_DIR: path.join(dir, 'state'),
+        PIDEX_TEST_PROJECT_ROOT: dir,
+      },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const parsed = JSON.parse(child.stdout.trim().split(/\n/).at(-1));
+    assert.equal(parsed.selectCalls, 0);
+    assert.equal(parsed.sent.length, 1);
+    assert.match(parsed.sent[0], /Selected project root:/);
+    assert.match(parsed.sent[0], /project-pipeline/);
+    assert.match(parsed.sent[0], /Initial user task: not provided; begin by asking/);
+    assert.doesNotMatch(parsed.notifications.map((item) => item.message).join('\n'), /requires an initial task/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

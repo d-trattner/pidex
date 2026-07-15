@@ -1182,12 +1182,29 @@ export function runPdProjectCommand(parsed: PdProjectCommand, options: { project
 	}
 }
 
-async function maybeCopyProjectPipelinePiCredentials(ctx: any): Promise<boolean | undefined> {
+export function projectPipelinePiCredentialsConfigured(projectRoot: string, options: { script?: string; runner?: typeof spawnSync } = {}): boolean {
+	const script = options.script ?? PROJECT_PIPELINE_CREDENTIALS_SCRIPT;
+	if (!fs.existsSync(script)) return false;
+	const projectId = slugForProjectPipelineId(projectRoot);
+	const runner = options.runner ?? spawnSync;
+	const proc = runner(process.execPath, [script, "status", "--pidex-root", PACKAGE_ROOT, "--project-id", projectId, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
+	if (proc.status !== 0) return false;
+	try {
+		const result = JSON.parse(String(proc.stdout || "{}"));
+		return result.ok === true && result.credentials?.pi === "configured";
+	} catch {
+		return false;
+	}
+}
+
+export async function maybeCopyProjectPipelinePiCredentials(ctx: any, projectRoot: string, options: { credentialsConfigured?: (projectRoot: string) => boolean } = {}): Promise<boolean | undefined> {
 	const unattendedCredentialChoice = process.env.PIDEX_PROJECT_PIPELINE_COPY_PI_CREDENTIALS;
 	if (unattendedCredentialChoice === "1") return true;
 	if (unattendedCredentialChoice === "0") return false;
+	const credentialsConfigured = options.credentialsConfigured ?? projectPipelinePiCredentialsConfigured;
+	if (credentialsConfigured(projectRoot)) return false;
 	if (!ctx.hasUI) return undefined;
-	const choice = await ctx.ui.select("Project Pipeline runs Pi inside the persistent Project Sandbox. Copy host Pi auth/settings into this trusted per-project secrets volume?", ["Copy Pi credentials", "Skip credentials", "Cancel"]);
+	const choice = await ctx.ui.select("Project Pipeline runs Pi inside the persistent Project Sandbox. Pi credentials are not configured for this project. Copy host Pi auth/settings into its trusted per-project secrets volume?", ["Copy Pi credentials", "Skip credentials", "Cancel"]);
 	if (choice === "Cancel") return undefined;
 	return choice === "Copy Pi credentials";
 }
@@ -1202,13 +1219,14 @@ async function startProjectPipelineRunFlow(ctx: any, task: string | undefined): 
 		await ctx.ui.notify("Project Pipeline mode is fail-closed and the direct orchestrator bridge requires an initial task. Re-run /pd with a task description; no host-direct fallback was used.", "warning");
 		return;
 	}
-	const copyPiCredentials = await maybeCopyProjectPipelinePiCredentials(ctx);
+	const projectRoot = ctx.cwd ?? process.cwd();
+	const copyPiCredentials = await maybeCopyProjectPipelinePiCredentials(ctx, projectRoot);
 	if (copyPiCredentials === undefined) {
 		await ctx.ui.notify("Project Pipeline orchestrator cancelled before credential decision; no fallback was used.", "warning");
 		return;
 	}
 	await ctx.ui.notify("Starting Project Pipeline orchestrator in persistent Docker Project Sandbox. Progress will appear here while Docker/Pi child agents run; press Ctrl+C to interrupt.", "info");
-	const result = await runProjectPipelineRunFlowAsync({ projectRoot: ctx.cwd ?? process.cwd(), task: initialTask, copyPiCredentials, acknowledgeTrustedPersistentContainer: copyPiCredentials }, {
+	const result = await runProjectPipelineRunFlowAsync({ projectRoot, task: initialTask, copyPiCredentials, acknowledgeTrustedPersistentContainer: copyPiCredentials }, {
 		onProgress: (message) => { void ctx.ui.notify(`Project Pipeline: ${message}`, "info"); },
 	});
 	if (!result.ok) {
@@ -3502,12 +3520,13 @@ export default function runningPi(pi: ExtensionAPI) {
 				ctx.ui.notify(`PIDEX project mode is required before starting: ${reason}`, "warning");
 				return;
 			}
-			if (shouldStartProjectPipelineRunFlow(projectPipelineMode)) {
+			if (shouldStartProjectPipelineRunFlow(projectPipelineMode) && task) {
 				await startProjectPipelineRunFlow({ ...ctx, cwd: selectedProjectRoot }, task);
 				return;
 			}
 		}
-		const authPreflight: DelegateAuthPreflightResult = deferProjectSelection ? { ok: true, output: "" } : await runDelegateAuthPreflight();
+		const projectPipelineTaskInterview = !deferProjectSelection && shouldStartProjectPipelineRunFlow(projectPipelineMode!) && !task;
+		const authPreflight: DelegateAuthPreflightResult = deferProjectSelection || projectPipelineTaskInterview ? { ok: true, output: "" } : await runDelegateAuthPreflight();
 		const gitHookStatus = getGlobalGitHookStatus();
 		const sandboxState = resolveSandboxStateForProjectMode(deferProjectSelection ? undefined : projectPipelineMode);
 		const sandboxProbe = sandboxState.enabled ? probeSandboxAvailability() : { ok: true, summary: sandboxEvidenceLine(sandboxState) };
@@ -3541,7 +3560,9 @@ export default function runningPi(pi: ExtensionAPI) {
 				: "Sandbox is off by config; do not probe Docker or alter normal /pidex routing for sandbox unless local config enables it.",
 			deferProjectSelection
 				? "Delegate auth preflight is deferred until after project selection; do not start delegated agents before resolving project/mode and auth readiness."
-				: authPreflight.ok
+				: projectPipelineTaskInterview
+					? "Delegate auth preflight is deferred during this Project Pipeline task interview. Confirm the task, then start the fail-closed in-container orchestrator; do not run host delegates."
+					: authPreflight.ok
 					? "Delegate auth preflight passed for configured non-Pi providers."
 					: authPreflight.failureKind === "launch"
 						? `Delegate auth checker launch/setup failed; authentication was not checked. Do not start delegated agents or silently fall back to another provider. Fix the launcher, or explicitly override selected agents to provider=pi. Output:\n${authPreflight.output}`
