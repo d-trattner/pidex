@@ -7,7 +7,7 @@ import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
 import { runProjectPipelineAgent } from './run-agent.mjs';
-import { loadProjectRecord } from './registry.mjs';
+import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 export function parseCredentialEntries(options = {}) {
   const entries = [];
@@ -24,10 +24,14 @@ export function runProjectPipelineFlow(options = {}) {
   if (process.env.PIDEX_PROJECT_PIPELINE_CHILD === '1') return { ok: false, error: 'project-pipeline-recursion-guard' };
   let lifecycle;
   try {
-    loadProjectRecord(pidexRoot, projectId);
+    const existingRecord = loadProjectRecord(pidexRoot, projectId);
+    if (typeof options.isTestProject === 'boolean' && existingRecord.is_test_project !== options.isTestProject) {
+      existingRecord.is_test_project = options.isTestProject;
+      saveProjectRecord(pidexRoot, existingRecord);
+    }
     lifecycle = openProjectSandbox({ pidexRoot, projectId, runner: options.runner });
   } catch {
-    lifecycle = createProjectSandbox({ pidexRoot, projectId, name: options.name || projectId, image: options.image, sourceKind: options.sourceKind || 'empty', sourceRef: options.source || options.url || '', runner: options.runner });
+    lifecycle = createProjectSandbox({ pidexRoot, projectId, name: options.name || projectId, image: options.image, sourceKind: options.sourceKind || 'empty', sourceRef: options.source || options.url || '', isTestProject: options.isTestProject === true, runner: options.runner });
   }
   if (!lifecycle.ok) return { ok: false, error: 'lifecycle-failed', lifecycle, no_fallback: true };
 
@@ -76,6 +80,11 @@ export function parseArgs(argv) {
     else if (arg === '--branch') out.branch = argv[++i];
     else if (arg === '--agent') out.agent = argv[++i];
     else if (arg === '--task') out.task = argv[++i];
+    else if (arg === '--test-project') {
+      const value = String(argv[++i] || '').toLowerCase();
+      if (!['true', 'false'].includes(value)) throw new Error('--test-project requires true or false');
+      out.isTestProject = value === 'true';
+    }
     else if (arg === '--pi-auth') out.credentials['pi-auth'] = argv[++i];
     else if (arg === '--pi-settings') out.credentials['pi-settings'] = argv[++i];
     else if (arg === '--codex-auth') out.credentials['codex-auth'] = argv[++i];
@@ -87,7 +96,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: run-flow.mjs --pidex-root PATH --project-id ID [--source PATH|--url URL] [--pi-auth FILE --acknowledge-trusted-persistent-container] [--agent pidex-* --task TEXT] --json'; }
+function usage() { return 'Usage: run-flow.mjs --pidex-root PATH --project-id ID [--source PATH|--url URL] [--test-project true|false] [--pi-auth FILE --acknowledge-trusted-persistent-container] [--agent pidex-* --task TEXT] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

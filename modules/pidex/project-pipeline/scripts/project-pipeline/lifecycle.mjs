@@ -165,7 +165,7 @@ function runDocker(args, runner) {
 
 export function createProjectSandbox(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
-  const record = createProjectRecord({ name: options.name, project_id: options.projectId, image: options.image || DEFAULT_IMAGE, source_kind: options.sourceKind || 'empty', source_ref: options.sourceRef || '' });
+  const record = createProjectRecord({ name: options.name, project_id: options.projectId, image: options.image || DEFAULT_IMAGE, source_kind: options.sourceKind || 'empty', source_ref: options.sourceRef || '', is_test_project: options.isTestProject === true });
   const d = record.docker;
   const created = [];
   let file = saveProjectRecord(pidexRoot, record);
@@ -265,6 +265,11 @@ export function parseArgs(argv) {
     else if (arg === '--project-id') out.projectId = argv[++i];
     else if (arg === '--image') out.image = argv[++i];
     else if (arg === '--confirm') out.confirm = argv[++i];
+    else if (arg === '--test-project') {
+      const value = String(argv[++i] || '').toLowerCase();
+      if (!['true', 'false'].includes(value)) throw new Error('--test-project requires true or false');
+      out.isTestProject = value === 'true';
+    }
     else if (arg === '--json') out.json = true;
     else if (arg === '--help' || arg === '-h') out.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -272,7 +277,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove> --pidex-root PATH [--name NAME|--project-id ID] [--confirm ID] --json'; }
+function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove> --pidex-root PATH [--name NAME|--project-id ID] [--test-project true|false] [--confirm ID] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

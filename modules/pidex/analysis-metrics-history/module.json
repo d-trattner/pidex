@@ -48,7 +48,7 @@
         "passthrough": true,
         "passthrough_policy": {
           "allowed_patterns": [
-            "^--(project|state-dir|event|source|actor|status|plan|pipeline-id)$",
+            "^--(project|state-dir|event|source|actor|status|plan|pipeline-id|test-project)$",
             "^[A-Za-z0-9 ._:/=@-]+$"
           ],
           "allow_absolute_project_paths": true

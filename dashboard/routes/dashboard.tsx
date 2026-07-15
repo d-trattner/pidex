@@ -3,7 +3,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, Res
 
 import { HelpPopover } from '../components/ui/help-popover';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
-import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type SummaryPayload = {
@@ -62,10 +62,11 @@ function quotaRisk(records: ProviderLimitsPayload['records']): { label: string; 
 function DashboardLayout() {
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
   const scopeLabel = project || 'All projects';
-  const summaryQuery = useDashboardQuery<SummaryPayload>(['dashboard-summary', project], withProjectParam('/api/summary', project));
-  const qualityQuery = useDashboardQuery<QualityLatestPayload>(['dashboard-quality-latest', project], withProjectParam('/api/quality/latest', project));
-  const historyQuery = useDashboardQuery<QualityHistoryPayload>(['dashboard-quality-history', project], withProjectParam('/api/quality/history?limit=12', project));
+  const summaryQuery = useDashboardQuery<SummaryPayload>(['dashboard-summary', project, includeTestProjects], withProjectParam('/api/summary', project, includeTestProjects));
+  const qualityQuery = useDashboardQuery<QualityLatestPayload>(['dashboard-quality-latest', project, includeTestProjects], withProjectParam('/api/quality/latest', project, includeTestProjects));
+  const historyQuery = useDashboardQuery<QualityHistoryPayload>(['dashboard-quality-history', project, includeTestProjects], withProjectParam('/api/quality/history?limit=12', project, includeTestProjects));
   const limitsQuery = useDashboardQuery<ProviderLimitsPayload>(['dashboard-provider-limits'], '/api/provider-limits');
   const loading = summaryQuery.isLoading || qualityQuery.isLoading || historyQuery.isLoading || limitsQuery.isLoading;
   const summary = summaryQuery.data;
@@ -92,7 +93,7 @@ function DashboardLayout() {
           </div>
           <HelpPopover
             title="Dashboard scope"
-            shows="The operational summary for the active project selector. All projects aggregates non-smoke projects; one selected project narrows the data."
+            shows="The operational summary for the active project selector. All projects excludes flagged test projects unless the test-project toggle is enabled; one selected project narrows the data."
             source="Global project selector, /api/summary, /api/quality/latest, /api/quality/history, /api/provider-limits."
             reading="Use this page for the first answer: what changed and what should I do next?"
             improve="Keep project selection correct, refresh stale PDQ reports, and fix high-risk gaps first."
@@ -152,7 +153,7 @@ function DashboardLayout() {
           </article>
 
           <article className="glass-card glass quality-card">
-            <div className="card-heading-row"><h3>Included reports</h3><HelpPopover title="Included reports" shows="Which reports contribute to the active scope." source="/api/quality/latest included_projects." reading="All projects should include non-smoke reports only; selected project should show one report." improve="Refresh stale project PDQ reports or select a specific project for detail." /></div>
+            <div className="card-heading-row"><h3>Included reports</h3><HelpPopover title="Included reports" shows="Which reports contribute to the active scope." source="/api/quality/latest included_projects." reading="All projects follows the explicit test-project toggle; selected project should show one report." improve="Refresh stale project PDQ reports or select a specific project for detail." /></div>
             <div className="quality-list">
               {(included.length ? included : latest ? [{ project: latest.project, trace_gaps: latest.trace_gaps, critical_missing_operators: latest.critical_missing_operators, confidence: latest.confidence, generated_at: latest.generated_at }] : []).slice(0, 8).map((item) => (
                 <div className="quality-list-row" key={`${item.project}-${item.generated_at || ''}`}>

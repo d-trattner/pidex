@@ -42,13 +42,14 @@ function formatNumber(value: unknown): string {
   return n.toLocaleString();
 }
 
-import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 function PipelinesPage() {
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-  const query = useDashboardQuery<PipelineRow[]>(['pipelines', project], withProjectParam('/api/pipelines', project));
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
+  const query = useDashboardQuery<PipelineRow[]>(['pipelines', project, includeTestProjects], withProjectParam('/api/pipelines', project, includeTestProjects));
   const rows = Array.isArray(query.data) ? query.data : [];
   const loading = query.isLoading;
   const error = query.isError ? 'Pipelines could not be loaded.' : '';

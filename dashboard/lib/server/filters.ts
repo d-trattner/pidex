@@ -1,5 +1,7 @@
 import type { URLSearchParams } from 'node:url';
 
+import { DASHBOARD_ROOT, PIDEX_ROOT } from './paths.ts';
+
 export const DB_PROJECT_PLACEHOLDER_VALUES = new Set(['', 'all', 'all-projects', '*']);
 
 export interface ProjectFilter {
@@ -9,14 +11,16 @@ export interface ProjectFilter {
 
 export function parseProjectFilter(params: URLSearchParams): ProjectFilter {
   const project = (params.get('project') || '').trim();
-  if (!project || DB_PROJECT_PLACEHOLDER_VALUES.has(project.toLowerCase())) {
-    return { sql: '', params: [] };
+  if (project && !DB_PROJECT_PLACEHOLDER_VALUES.has(project.toLowerCase())) {
+    return {
+      sql: ' AND (p.name = ? OR p.path = ?)',
+      params: [project, project],
+    };
   }
-
-  return {
-    sql: ' AND (p.name = ? OR p.path = ?)',
-    params: [project, project],
-  };
+  const internalFilter = ' AND p.path NOT IN (?, ?)';
+  const internalParams = [PIDEX_ROOT, DASHBOARD_ROOT];
+  if (parseBool(params.get('include_test_projects'))) return { sql: internalFilter, params: internalParams };
+  return { sql: `${internalFilter} AND COALESCE(p.is_test_project, 0) = 0`, params: internalParams };
 }
 
 export function parseBool(value: string | null, defaultValue = false): boolean {

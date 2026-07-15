@@ -13,7 +13,7 @@ function asSearchString(search: unknown): string {
   return '';
 }
 
-export function withProjectParam(endpoint: string, project: string): string {
+export function withProjectParam(endpoint: string, project: string, includeTestProjects = false): string {
   const [path, rawQuery = ''] = endpoint.split('?');
   const params = new URLSearchParams(rawQuery);
   const cleaned = project.trim();
@@ -22,6 +22,8 @@ export function withProjectParam(endpoint: string, project: string): string {
   } else {
     params.delete('project');
   }
+  if (includeTestProjects) params.set('include_test_projects', 'true');
+  else params.delete('include_test_projects');
   const query = params.toString();
   return query ? `${path}?${query}` : path;
 }
@@ -46,6 +48,24 @@ export function readProjectFromSearch(search: unknown): string {
   const normalized = asSearchString(search);
   const params = new URLSearchParams(normalized.startsWith('?') ? normalized.slice(1) : normalized);
   return (params.get('project') || '').trim();
+}
+
+export function readIncludeTestProjectsFromSearch(search: unknown): boolean {
+  const normalized = asSearchString(search);
+  const params = new URLSearchParams(normalized.startsWith('?') ? normalized.slice(1) : normalized);
+  return ['1', 'true', 'yes', 'on'].includes(String(params.get('include_test_projects') || '').toLowerCase());
+}
+
+export function setIncludeTestProjectsInSearch(search: unknown, include: boolean): string {
+  const normalized = asSearchString(search);
+  const params = new URLSearchParams(normalized.startsWith('?') ? normalized.slice(1) : normalized);
+  if (include) params.set('include_test_projects', 'true');
+  else params.delete('include_test_projects');
+  params.delete('page');
+  params.delete('page_week');
+  params.delete('page_month');
+  const query = params.toString();
+  return query ? `?${query}` : '';
 }
 
 export function readPageForKey(search: unknown, key: string): number {

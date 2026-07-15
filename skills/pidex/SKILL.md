@@ -195,6 +195,12 @@ The user might say any of these:
 4. Store the path. The directory will be created during pipeline execution.
 5. The interview will use the Onboarding flow.
 
+### Test-project declaration check
+
+When the user asks to test, smoke-test, validate, experiment, create a fixture, or create a separate validation project, load and apply `<pidex-root>/rules/orchestrator/test-project-declaration.md` before any project-producing helper or agent runs.
+
+Testing inside the selected real project does not change its classification. If the flow creates a separate fixture/smoke/disposable project identity, the orchestrator must pass `is_test_project=true` through the supported producer interface (`--test-project true` for Project Pipeline creation or pipeline-event emission). If creation intent is ambiguous, ask one narrow clarification. Never edit registry JSON or dashboard SQLite directly and never infer test status from name/path.
+
 ### Step 2 — Execution mode
 
 Use the saved per-project PIDEX mode. For existing projects, the extension usually asks once before this orchestrator flow proceeds:

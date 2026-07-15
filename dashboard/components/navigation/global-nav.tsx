@@ -4,7 +4,7 @@ import type { ReactNode, RefObject } from 'react';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import { Activity, BookOpen, BookOpenCheck, Bot, Boxes, FolderGit2, Gauge, LayoutDashboard, Menu as MenuIcon, Settings, ShieldCheck, X } from 'lucide-react';
 
-import { readProjectFromSearch, setProjectInSearch } from '../../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, setIncludeTestProjectsInSearch, setProjectInSearch } from '../../lib/client/project-query';
 import { PidexLogo } from '../branding/pidex-logo';
 
 export const NAV_LINKS = [
@@ -19,12 +19,12 @@ export const NAV_LINKS = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 
-function useProjects(): string[] {
+function useProjects(includeTestProjects: boolean): string[] {
   const [projects, setProjects] = useState<string[]>([]);
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/projects')
+    fetch(includeTestProjects ? '/api/projects?include_test_projects=true' : '/api/projects')
       .then((res) => res.json())
       .then((json) => {
         if (!mounted) return;
@@ -39,7 +39,7 @@ function useProjects(): string[] {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [includeTestProjects]);
 
   return projects;
 }
@@ -51,7 +51,8 @@ function projectLabel(project: string): string {
 function useProjectSelection(onNavigate?: () => void) {
   const location = useLocation();
   const navigate = useNavigate();
-  const projects = useProjects();
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
+  const projects = useProjects(includeTestProjects);
   const selectedProject = readProjectFromSearch(location.search);
   const choices = ['', ...projects];
 
@@ -61,11 +62,16 @@ function useProjectSelection(onNavigate?: () => void) {
     void navigate({ href: `${location.pathname}${search}` });
   };
 
-  return { choices, selectedProject, selectProject };
+  const toggleTestProjects = () => {
+    const search = setIncludeTestProjectsInSearch(location.search, !includeTestProjects);
+    void navigate({ href: `${location.pathname}${search}` });
+  };
+
+  return { choices, selectedProject, selectProject, includeTestProjects, toggleTestProjects };
 }
 
 function ProjectButtons({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
-  const { choices, selectedProject, selectProject } = useProjectSelection(onNavigate);
+  const { choices, selectedProject, selectProject, includeTestProjects, toggleTestProjects } = useProjectSelection(onNavigate);
 
   return (
     <div className={mobile ? 'mobile-nav-list' : 'project-button-row'} role="list" aria-label="Project selector">
@@ -83,13 +89,21 @@ function ProjectButtons({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           </button>
         );
       })}
+      <button
+        type="button"
+        className={mobile ? `mobile-nav-item project-choice${includeTestProjects ? ' active' : ''}` : `project-pill${includeTestProjects ? ' active' : ''}`}
+        aria-pressed={includeTestProjects}
+        onClick={toggleTestProjects}
+      >
+        Show test projects
+      </button>
     </div>
   );
 }
 
 function DesktopProjectSelect() {
   const [open, setOpen] = useState(false);
-  const { choices, selectedProject, selectProject } = useProjectSelection(() => setOpen(false));
+  const { choices, selectedProject, selectProject, includeTestProjects, toggleTestProjects } = useProjectSelection(() => setOpen(false));
   const label = projectLabel(selectedProject);
 
   return (
@@ -123,6 +137,16 @@ function DesktopProjectSelect() {
             </button>
           );
         })}
+        <button
+          type="button"
+          className={`project-select-option${includeTestProjects ? ' active' : ''}`}
+          role="option"
+          aria-selected={includeTestProjects}
+          tabIndex={open ? 0 : -1}
+          onClick={toggleTestProjects}
+        >
+          Show test projects
+        </button>
       </div>
     </div>
   );
@@ -131,6 +155,7 @@ function DesktopProjectSelect() {
 function NavLinks({ onNavigate, mobile = false }: { onNavigate?: () => void; mobile?: boolean }) {
   const location = useLocation();
   const currentProject = useMemo(() => readProjectFromSearch(location.search), [location.search]);
+  const includeTestProjects = useMemo(() => readIncludeTestProjectsFromSearch(location.search), [location.search]);
   return (
     <nav className={mobile ? 'mobile-nav-list' : 'nav'} aria-label="dashboard navigation">
       {NAV_LINKS.map((item) => {
@@ -140,7 +165,7 @@ function NavLinks({ onNavigate, mobile = false }: { onNavigate?: () => void; mob
           <Link
             key={item.to}
             to={item.to}
-            search={(currentProject ? ({ project: currentProject } as never) : ({} as never))}
+            search={((currentProject || includeTestProjects) ? ({ ...(currentProject ? { project: currentProject } : {}), ...(includeTestProjects ? { include_test_projects: true } : {}) } as never) : ({} as never))}
             className={mobile ? `mobile-nav-item${isActive ? ' active' : ''}` : `pill nav-pill${isActive ? ' active' : ''}`}
             aria-current={isActive ? 'page' : undefined}
             onClick={onNavigate}

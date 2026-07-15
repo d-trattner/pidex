@@ -11,6 +11,7 @@ const modulesDoc = readFileSync('readme/modules.md', 'utf8');
 const pidexSkill = readFileSync('skills/pidex/SKILL.md', 'utf8');
 const conversationRoadmapRule = readFileSync('rules/orchestrator/conversation-to-roadmap-promotion.md', 'utf8');
 const noDirectImplementationRule = readFileSync('rules/orchestrator/no-direct-implementation.md', 'utf8');
+const testProjectDeclarationRule = readFileSync('rules/orchestrator/test-project-declaration.md', 'utf8');
 
 const modes = ['host-direct', 'hardened-pipeline', 'project-pipeline'];
 const capabilityRows = [
@@ -135,6 +136,16 @@ test('orchestrator promotes multi-increment conversations through pidex-roadmap 
   assert.match(conversationRoadmapRule, /standalone urgent task may proceed when it has no dependency impact/);
   assert.match(noDirectImplementationRule, /all canonical roadmap mutations belong to `pidex-roadmap`/);
   assert.match(noDirectImplementationRule, /substitute roadmap draft/);
+});
+
+test('orchestrator distinguishes test activity from separate test-project identity', () => {
+  assert.match(pidexSkill, /test-project-declaration\.md/);
+  assert.match(pidexSkill, /Testing inside the selected real project does not change its classification/);
+  assert.match(pidexSkill, /--test-project true/);
+  assert.match(testProjectDeclarationRule, /The flag classifies project identity, not test activity/);
+  assert.match(testProjectDeclarationRule, /Separate fixture, disposable validation project, experiment, or smoke project/);
+  assert.match(testProjectDeclarationRule, /must not edit registry JSON or dashboard SQLite directly/);
+  assert.match(testProjectDeclarationRule, /Never infer it from project name, path, `\/tmp`/);
 });
 
 test('orchestrator enforces proportional minimal runs and a cumulative loop breaker', () => {

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { AlertTriangle, Bot, Coins, FileStack, GitBranch, Radio, ShieldAlert, Sparkles } from 'lucide-react';
 import { GlassPanel } from '../components/ui/glass-panel';
-import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { MetricTile } from '../components/ui/metric-tile';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
@@ -26,7 +26,8 @@ type SummaryPayload = {
 function DashboardOverviewPage() {
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-  const summaryQuery = useDashboardQuery<SummaryPayload>(['summary', project], withProjectParam('/api/summary', project));
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
+  const summaryQuery = useDashboardQuery<SummaryPayload>(['summary', project, includeTestProjects], withProjectParam('/api/summary', project, includeTestProjects));
   const data = summaryQuery.data ?? null;
   const isLoading = summaryQuery.isLoading;
 

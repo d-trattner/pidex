@@ -90,7 +90,7 @@
         "args": ["modules/pidex/project-pipeline/scripts/project-pipeline/lifecycle.mjs"],
         "passthrough": true,
         "passthrough_policy": {
-          "allowed_patterns": ["^(create|open|repair|remove)$", "^--(pidex-root|name|project-id|image|confirm)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+          "allowed_patterns": ["^(create|open|repair|remove)$", "^--(pidex-root|name|project-id|image|confirm|test-project)$", "^--json$", "^[A-Za-z0-9_.:/@\\ -]+$"]
         }
       }
     },
@@ -201,7 +201,7 @@
           "allow_absolute_project_paths": true,
           "allowed_absolute_roots": ["__PIDEX_ROOT__", "__HOME__/.pi/agent", "__HOME__/.codex"],
           "allowed_value_patterns": { "--task": ["^[\\s\\S]{1,20000}$"] },
-          "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|agent|task|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
+          "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|agent|task|test-project|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ -]+$"]
         }
       }
     },
@@ -222,7 +222,7 @@
           "allow_absolute_project_paths": true,
           "allowed_absolute_roots": ["__PIDEX_ROOT__", "__HOME__/.pi/agent", "__HOME__/.codex"],
           "allowed_value_patterns": { "--task": ["^[\\s\\S]{1,20000}$"] },
-          "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|task|phases|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ ,-]+$"]
+          "allowed_patterns": ["^--(pidex-root|project-id|name|image|source|url|branch|task|phases|test-project|pi-auth|pi-settings|codex-auth)$", "^--(json|acknowledge-trusted-persistent-container)$", "^[A-Za-z0-9_.:/@\\ ,-]+$"]
         }
       }
     },

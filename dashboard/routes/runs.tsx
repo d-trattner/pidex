@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm';
 
 import { GlassPanel } from '../components/ui/glass-panel';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
-import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type RunRow = {
@@ -121,8 +121,9 @@ function RunsPlaceholder() {
   const [modalError, setModalError] = useState('');
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-  const query = useDashboardQuery<RunRow[]>(['runs', project], withProjectParam('/api/runs?limit=20', project));
-  const pipelinesQuery = useDashboardQuery<PipelineRow[]>(['pipelines', project], withProjectParam('/api/pipelines', project));
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
+  const query = useDashboardQuery<RunRow[]>(['runs', project, includeTestProjects], withProjectParam('/api/runs?limit=20', project, includeTestProjects));
+  const pipelinesQuery = useDashboardQuery<PipelineRow[]>(['pipelines', project, includeTestProjects], withProjectParam('/api/pipelines', project, includeTestProjects));
   const runs = Array.isArray(query.data) ? query.data : [];
   const pipelines = Array.isArray(pipelinesQuery.data) ? pipelinesQuery.data : [];
 

@@ -1,7 +1,7 @@
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 
 import { LoadingIndicator } from '../components/ui/loading-indicator';
-import { readPageForKey, readProjectFromSearch, setPageForKey, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readPageForKey, readProjectFromSearch, setPageForKey, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type AgentTokenStat = {
@@ -62,10 +62,11 @@ export function TokensPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const project = readProjectFromSearch(location.search);
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
   const weekPage = readPageForKey(location.search, 'page_week');
   const monthPage = readPageForKey(location.search, 'page_month');
-  const weeklyQuery = useDashboardQuery<TokenPayload>(['tokens', 'week', project, weekPage], withProjectParam(`/api/token-consumption?granularity=week&page=${weekPage}`, project));
-  const monthlyQuery = useDashboardQuery<TokenPayload>(['tokens', 'month', project, monthPage], withProjectParam(`/api/token-consumption?granularity=month&page=${monthPage}`, project));
+  const weeklyQuery = useDashboardQuery<TokenPayload>(['tokens', 'week', project, includeTestProjects, weekPage], withProjectParam(`/api/token-consumption?granularity=week&page=${weekPage}`, project, includeTestProjects));
+  const monthlyQuery = useDashboardQuery<TokenPayload>(['tokens', 'month', project, includeTestProjects, monthPage], withProjectParam(`/api/token-consumption?granularity=month&page=${monthPage}`, project, includeTestProjects));
   const payload = weeklyQuery.data && monthlyQuery.data
     ? {
         agent_stats: weeklyQuery.data.agent_stats,

@@ -70,6 +70,7 @@ export function createProjectRecord(options = {}) {
     project_id: projectId,
     name: String(options.name || projectId),
     mode: 'project-pipeline',
+    is_test_project: options.is_test_project === true,
     target: { kind: 'local' },
     source: { kind: options.source_kind || 'empty', ref: options.source_ref || '', imported_at: options.source_kind ? now : '' },
     docker: { image: options.image || 'pidex/project-node22:local', ...docker },
@@ -90,6 +91,7 @@ export function validateProjectRecord(record) {
   if (record.schema_version !== 1 && record.schema_version !== SCHEMA_VERSION) errors.push(`unsupported schema_version: ${record.schema_version}`);
   try { safeProjectId(record.project_id); } catch (error) { errors.push(error.message); }
   if (record.mode !== 'project-pipeline') errors.push(`invalid mode: ${record.mode}`);
+  if (record.is_test_project != null && typeof record.is_test_project !== 'boolean') errors.push('is_test_project must be boolean');
   if (!record.target || record.target.kind !== 'local') errors.push('local MVP requires target.kind=local');
   if (!record.docker || typeof record.docker !== 'object') errors.push('docker metadata required');
   for (const key of ['container_name', 'workspace_volume', 'secrets_volume', 'cache_volume']) {
@@ -179,6 +181,11 @@ function parseArgs(argv) {
     if (arg === '--pidex-root') out.pidexRoot = argv[++i];
     else if (arg === '--name') out.name = argv[++i];
     else if (arg === '--project-id') out.project_id = argv[++i];
+    else if (arg === '--test-project') {
+      const value = String(argv[++i] || '').toLowerCase();
+      if (!['true', 'false'].includes(value)) throw new Error('--test-project requires true or false');
+      out.is_test_project = value === 'true';
+    }
     else if (arg === '--json') out.json = true;
     else if (arg === '--help' || arg === '-h') out.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -186,14 +193,14 @@ function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: registry.mjs --pidex-root PATH --name NAME [--project-id ID] --json'; }
+function usage() { return 'Usage: registry.mjs --pidex-root PATH --name NAME [--project-id ID] [--test-project true|false] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = parseArgs(process.argv.slice(2));
     if (args.help) { console.log(usage()); process.exit(0); }
     if (!args.pidexRoot) throw new Error('--pidex-root is required');
-    const record = createProjectRecord({ name: args.name, project_id: args.project_id });
+    const record = createProjectRecord({ name: args.name, project_id: args.project_id, is_test_project: args.is_test_project });
     const file = saveProjectRecord(args.pidexRoot, record);
     const output = { ok: true, file, record };
     console.log(args.json ? JSON.stringify(output, null, 2) : file);

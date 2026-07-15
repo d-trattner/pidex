@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const script = path.join(root, 'scripts/dashboard/ingest.mjs');
+const dashboardApiSource = readFileSync(path.join(root, 'dashboard/lib/server/api.ts'), 'utf8');
+assert.doesNotMatch(dashboardApiSource, /name NOT LIKE '%smoke%'|path NOT LIKE '\/tmp\/%'/);
+assert.match(dashboardApiSource, /is_test_project/);
 
 function runIngest(dbPath, projectPath, env = {}) {
   const result = spawnSync(process.execPath, ['--no-warnings', script, '--db', dbPath, '--project', projectPath], {
@@ -55,7 +58,7 @@ try {
     timestamp: '2026-01-01T00:00:00Z', project, plan: '1', project_mode: 'project-pipeline', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.4-mini', input_tokens_estimate: 10, output_tokens_estimate: 20,
   })}\n`);
   writeFileSync(path.join(state, 'pipeline-events', 'project', 'pipe-1.jsonl'), `${JSON.stringify({
-    timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',
+    timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', is_test_project: true, status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',
   })}\n`);
   writeFileSync(path.join(project, 'agents.output', 'parallel-agents', '001-merge.md'), `# Merge Summary\n\n| Source | Severity | Classification | Disposition | Summary |\n|---|---|---|---|---|\n| secondary | high | secondary-only | accepted | smoke finding |\n\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: user\n-->\n`);
   writeFileSync(path.join(state, 'sandbox-projects', 'pp-sandbox-only.json'), JSON.stringify({
@@ -63,13 +66,14 @@ try {
     project_id: 'pp-sandbox-only',
     name: 'pp-sandbox-only',
     mode: 'project-pipeline',
+    is_test_project: true,
     source: { kind: 'local', ref: sandboxOnly },
     archive: { path: sandboxArchive },
   }, null, 2));
   writeFileSync(path.join(state, 'sandbox-projects', 'pp-demo.json'), JSON.stringify({
     schema_version: 2,
     project_id: 'pp-demo',
-    name: 'pp-demo',
+    name: 'smoke-control',
     mode: 'project-pipeline',
     source: { kind: 'container-workspace', ref: workspaceRef, previous: { kind: 'host-path', ref: windowsProject } },
   }, null, 2));
@@ -100,11 +104,14 @@ try {
   assert.equal(count(dbPath, 'pipeline_events'), 1);
   assert.equal(value(dbPath, 'select project_mode from agent_runs'), 'project-pipeline');
   assert.equal(value(dbPath, 'select project_mode from pipeline_events'), 'project-pipeline');
+  assert.equal(value(dbPath, `select is_test_project from projects where path = '${project.replaceAll("'", "''")}'`), 1);
+  assert.equal(value(dbPath, `select is_test_project from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 1);
+  assert.equal(value(dbPath, `select is_test_project from projects where path = '${windowsProject.replaceAll("'", "''")}'`), 0);
   assert.equal(count(dbPath, 'artifacts'), 3);
   assert.equal(count(dbPath, 'merge_findings'), 3);
   assert.equal(value(dbPath, `select name from projects where path = '${sandboxOnly.replaceAll("'", "''")}'`), 'sandbox-only-host-project');
   assert.equal(value(dbPath, `select count(*) from projects where path = '${sandboxArchive.replaceAll("'", "''")}'`), 0);
-  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), path.sep === '/' ? ['demo', 'legacy-project', 'project', 'sandbox-only-host-project'] : ['demo', 'project', 'sandbox-only-host-project']);
+  assert.deepEqual(all(dbPath, 'select name from projects order by name').map((row) => row.name), path.sep === '/' ? ['legacy-project', 'project', 'sandbox-only-host-project', 'smoke-control'] : ['project', 'sandbox-only-host-project', 'smoke-control']);
   assert.equal(value(dbPath, `select count(*) from projects where path = '${windowsProject.replaceAll("'", "''")}'`), 1);
   assert.equal(value(dbPath, `select count(*) from projects where path like '%${workspaceRef}%'`), 0);
   assert.equal(value(dbPath, `select count(*) from projects where path in ('${root.replaceAll("'", "''")}', '${path.join(root, 'dashboard').replaceAll("'", "''")}')`), 0);

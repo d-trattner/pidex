@@ -40,16 +40,17 @@ export function parseSearchParams(search = ''): URLSearchParams {
   return new URLSearchParams(search);
 }
 
-export async function listProjects(): Promise<Array<{ name: string; path: string }>> {
-  return queryRows<{ name: string; path: string }>(
-    `SELECT p.name, p.path
+export async function listProjects(search = ''): Promise<Array<{ name: string; path: string; is_test_project: boolean }>> {
+  const includeTestProjects = parseBool(parseSearchParams(search).get('include_test_projects'));
+  const rows = await queryRows<{ name: string; path: string; is_test_project: boolean | number }>(
+    `SELECT p.name, p.path, COALESCE(p.is_test_project, 0) AS is_test_project
      FROM projects p
-     WHERE p.path NOT LIKE '/tmp/%'
-       AND p.name NOT LIKE '%smoke%'
-       AND p.path NOT IN (?, ?)
+     WHERE p.path NOT IN (?, ?)
+       ${includeTestProjects ? '' : 'AND COALESCE(p.is_test_project, 0) = 0'}
      ORDER BY p.name COLLATE NOCASE ASC`,
     [PIDEX_ROOT, DASHBOARD_ROOT],
   );
+  return rows.map((row) => ({ ...row, is_test_project: Boolean(row.is_test_project) }));
 }
 
 export async function getSummary(search = ''): Promise<DashboardSummary> {

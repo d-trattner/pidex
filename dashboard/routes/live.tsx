@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import remarkGfm from 'remark-gfm';
 
 import { GlassPanel } from '../components/ui/glass-panel';
-import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { MetricTile } from '../components/ui/metric-tile';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
@@ -329,7 +329,8 @@ function LivePage() {
   const [modalError, setModalError] = useState('');
   const location = useLocation();
   const project = readProjectFromSearch(location.search);
-  const liveQuery = useDashboardQuery<LivePayload>(['live', project], withProjectParam('/api/live', project));
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
+  const liveQuery = useDashboardQuery<LivePayload>(['live', project, includeTestProjects], withProjectParam('/api/live', project, includeTestProjects));
   const payload = liveQuery.data ?? null;
   const loading = liveQuery.isLoading;
   const error = liveQuery.isError ? 'Live data could not be loaded.' : '';

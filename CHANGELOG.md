@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added explicit `is_test_project` metadata for Project Pipeline registries and host pipeline events, replacing broad dashboard `/tmp`/`smoke` name heuristics with an additive project read-model flag and an explicit desktop/mobile `Show test projects` toggle; normal test activity inside a user project does not reclassify it.
+
 ## 0.2.1 - 2026-07-15
 
 Roadmap governance follow-up:

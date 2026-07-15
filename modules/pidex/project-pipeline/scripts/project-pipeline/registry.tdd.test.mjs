@@ -19,10 +19,18 @@ test('createProjectRecord produces schema v2 local project metadata and label-sa
   assert.equal(record.schema_version, 2);
   assert.equal(record.project_id, 'pp-cli-notes-abc12345');
   assert.equal(record.mode, 'project-pipeline');
+  assert.equal(record.is_test_project, false);
   assert.equal(record.target.kind, 'local');
   assert.equal(record.status, 'creating');
   assert.deepEqual(validateProjectRecord(record), []);
   assert.equal(record.docker.container_name, 'pidex-project-pp-cli-notes-abc12345');
+});
+
+test('registry accepts an explicit test-project boolean and rejects invalid values', () => {
+  const record = createProjectRecord({ name: 'Smoke Fixture', suffix: 'fixture1', is_test_project: true });
+  assert.equal(record.is_test_project, true);
+  assert.deepEqual(validateProjectRecord(record), []);
+  assert.match(validateProjectRecord({ ...record, is_test_project: 'true' }).join('\n'), /is_test_project must be boolean/);
 });
 
 test('registry save/load uses contained project file and atomic JSON shape', () => {

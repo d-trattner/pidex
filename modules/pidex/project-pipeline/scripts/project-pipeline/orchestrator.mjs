@@ -10,7 +10,7 @@ import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
 import { projectRunId, runProjectPipelineAgent } from './run-agent.mjs';
-import { loadProjectRecord } from './registry.mjs';
+import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
 import { runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
@@ -160,6 +160,7 @@ function appendProjectPipelineTelemetryEvent({ pidexRoot, record, pipelineId, pl
       actor: 'orchestrator',
       message: message || null,
       project_mode: 'project-pipeline',
+      is_test_project: record.is_test_project === true,
       metadata: { project_id: record.project_id, archive_root: record.archive?.path || resolveArchiveRoot({ pidexRoot, projectId: record.project_id }), ...metadata },
       source: 'project_pipeline_orchestrator',
     };
@@ -443,10 +444,14 @@ function ensureSandboxAndSource(options, pidexRoot, projectId) {
   if (!imageReady.ok) return imageReady;
   let lifecycle;
   try {
-    loadProjectRecord(pidexRoot, projectId);
+    const existingRecord = loadProjectRecord(pidexRoot, projectId);
+    if (typeof options.isTestProject === 'boolean' && existingRecord.is_test_project !== options.isTestProject) {
+      existingRecord.is_test_project = options.isTestProject;
+      saveProjectRecord(pidexRoot, existingRecord);
+    }
     lifecycle = openProjectSandbox({ pidexRoot, projectId, runner: options.runner });
   } catch {
-    lifecycle = createProjectSandbox({ pidexRoot, projectId, name: options.name || projectId, image: options.image, sourceKind: options.sourceKind || 'empty', sourceRef: options.source || options.url || '', runner: options.runner });
+    lifecycle = createProjectSandbox({ pidexRoot, projectId, name: options.name || projectId, image: options.image, sourceKind: options.sourceKind || 'empty', sourceRef: options.source || options.url || '', isTestProject: options.isTestProject === true, runner: options.runner });
   }
   if (!lifecycle.ok) return { ok: false, error: 'lifecycle-failed', lifecycle, no_fallback: true };
 
@@ -647,6 +652,11 @@ export function parseArgs(argv) {
     else if (arg === '--branch') out.branch = argv[++i];
     else if (arg === '--task') out.task = argv[++i];
     else if (arg === '--phases') out.phases = argv[++i];
+    else if (arg === '--test-project') {
+      const value = String(argv[++i] || '').toLowerCase();
+      if (!['true', 'false'].includes(value)) throw new Error('--test-project requires true or false');
+      out.isTestProject = value === 'true';
+    }
     else if (arg === '--pi-auth') out.credentials['pi-auth'] = argv[++i];
     else if (arg === '--pi-settings') out.credentials['pi-settings'] = argv[++i];
     else if (arg === '--codex-auth') out.credentials['codex-auth'] = argv[++i];
@@ -659,7 +669,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: orchestrator.mjs --pidex-root PATH --project-id ID [--source PATH|--url URL] --task TEXT [--phases pidex-planner,pidex-critic,...] --json'; }
+function usage() { return 'Usage: orchestrator.mjs --pidex-root PATH --project-id ID [--source PATH|--url URL] [--test-project true|false] --task TEXT [--phases pidex-planner,pidex-critic,...] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

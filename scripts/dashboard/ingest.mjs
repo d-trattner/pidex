@@ -21,7 +21,8 @@ PRAGMA journal_mode=WAL;
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY,
   path TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL
+  name TEXT NOT NULL,
+  is_test_project INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS agent_runs (
   id INTEGER PRIMARY KEY,
@@ -165,6 +166,7 @@ function dbConnect(dbPath) {
   mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+  ensureColumn(db, 'projects', 'is_test_project', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(db, 'agent_runs', 'project_mode', 'TEXT');
   ensureColumn(db, 'pipeline_events', 'project_mode', 'TEXT');
   return db;
@@ -189,6 +191,10 @@ function updateProjectDisplayName(db, projectPath, name) {
   const p = canonicalPath(projectPath);
   const n = String(name || basenameAnyPlatform(p) || p).trim() || p;
   db.prepare('UPDATE projects SET name = ? WHERE path = ?').run(n, p);
+}
+function updateProjectTestFlag(db, projectPath, value) {
+  if (typeof value !== 'boolean') return;
+  db.prepare('UPDATE projects SET is_test_project = ? WHERE path = ?').run(value ? 1 : 0, canonicalPath(projectPath));
 }
 
 function metricProjectFromSlug(slug) {
@@ -282,6 +288,7 @@ function ingestMetrics(db) {
 
 function ingestPipelineEvents(db) {
   let count = 0;
+  const latestTestClassification = new Map();
   const stmt = db.prepare(`INSERT OR REPLACE INTO pipeline_events(
     source_path, source_line, source_hash, timestamp, project_id, project_path,
     project_slug, pipeline_id, plan_key, event_type, project_mode, status, actor, message,
@@ -302,11 +309,18 @@ function ingestPipelineEvents(db) {
       if (!pipelineId || !eventType) continue;
       const metadataJson = rec.metadata == null ? (rec.metadata_json ?? null) : JSON.stringify(rec.metadata);
       const pid = projectId(db, projectPath);
+      if (typeof rec.is_test_project === 'boolean') {
+        const canonical = canonicalPath(projectPath);
+        const order = Date.parse(timestamp) || statSync(file).mtimeMs || 0;
+        const previous = latestTestClassification.get(canonical);
+        if (!previous || order >= previous.order) latestTestClassification.set(canonical, { order, value: rec.is_test_project });
+      }
       stmt.run(String(file), i + 1, safeHash(`${file}:${i + 1}:${line}`), timestamp, pid, String(projectPath), rec.project_slug ?? null,
         pipelineId, normalizePipelinePlanKey(rec.plan_key || rec.plan), eventType, rec.project_mode ?? null, rec.status ?? null, rec.actor ?? null, rec.message ?? null, metadataJson, rec.source ?? null);
       count++;
     }
   }
+  for (const [projectPath, classification] of latestTestClassification) updateProjectTestFlag(db, projectPath, classification.value);
   return count;
 }
 
@@ -422,6 +436,7 @@ function migrateLegacyProject(db, legacyPath, projectPath, projectId) {
   db.prepare('UPDATE merge_findings SET project_id = ? WHERE project_id = ?').run(projectId, legacyProjectId);
   db.prepare('UPDATE agent_runs SET project_id = ? WHERE project_id = ?').run(projectId, legacyProjectId);
   db.prepare('UPDATE pipeline_events SET project_id = ?, project_path = ? WHERE project_id = ?').run(projectId, canonical, legacyProjectId);
+  db.prepare('UPDATE projects SET is_test_project = MAX(is_test_project, COALESCE((SELECT is_test_project FROM projects WHERE id = ?), 0)) WHERE id = ?').run(legacyProjectId, projectId);
   db.prepare('DELETE FROM projects WHERE id = ?').run(legacyProjectId);
 }
 function cleanupLegacyPosixBackslashProjects(db) {
@@ -484,6 +499,7 @@ function ingestProjectPipelineRegistry(db) {
     const displayName = projectPipelineDisplayName(record, projectPath);
     const projectId = registerProject(db, projectPath, displayName);
     updateProjectDisplayName(db, projectPath, displayName);
+    updateProjectTestFlag(db, projectPath, record.is_test_project === true);
     for (const legacyPath of legacyWorkspaceProjectPaths(record)) migrateLegacyProject(db, legacyPath, projectPath, projectId);
     cleanupProjectPipelineArchiveProject(db, archivePath, projectId);
     count++;
@@ -569,6 +585,8 @@ function main() {
     pipelineEventCount = ingestPipelineEvents(db);
     cleanupLegacyPosixBackslashProjects(db);
     cleanupUnusedInternalProjects(db);
+    // Registry metadata is authoritative when event-only or migrated classification disagrees.
+    ingestProjectPipelineRegistry(db);
     [artifactCount, mergeCount] = ingestArtifacts(db, projects);
     db.exec('COMMIT');
   } catch (error) {

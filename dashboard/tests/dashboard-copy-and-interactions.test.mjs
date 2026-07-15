@@ -117,7 +117,7 @@ test('pipelines route guards object-valued fields before rendering cells', async
   assert.match(pipelinesText, /function formatText\(value: unknown\): string/, 'pipelines should normalize unknown text values to render-safe strings');
   assert.match(pipelinesText, /if \(value == null\) return '—';/, 'text formatter should handle nullish values');
   assert.match(pipelinesText, /if \(typeof value === 'object'\) return '—';/, 'text formatter should reject object values');
-  assert.match(pipelinesText, /withProjectParam\('\/api\/pipelines', project\)/, 'pipelines should avoid coercing router search object into endpoint string');
+  assert.match(pipelinesText, /withProjectParam\('\/api\/pipelines', project, includeTestProjects\)/, 'pipelines should avoid coercing router search object into endpoint string');
   assert.match(pipelinesText, /<td>\{formatText\(row\.project\)\}<\/td>/, 'project cell should use safe text formatter');
   assert.match(pipelinesText, /<td>\{formatText\(row\.plan_key\)\}<\/td>/, 'plan key cell should use safe text formatter');
   assert.match(pipelinesText, /key=\{`\$\{formatText\(row\.completed_at\)\}-\$\{formatText\(row\.project\)\}-\$\{formatText\(row\.plan_key\)\}-\$\{index\}`\}/, 'row key should avoid direct object coercion');

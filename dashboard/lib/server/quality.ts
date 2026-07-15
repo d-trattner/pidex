@@ -2,7 +2,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { URLSearchParams } from 'node:url';
 
-import { PIDEX_ROOT } from './paths.ts';
+import { queryRows } from './db.ts';
+import { DASHBOARD_ROOT, PIDEX_ROOT } from './paths.ts';
 
 type AnyRecord = Record<string, any>;
 
@@ -73,10 +74,13 @@ function projectName(projectPath: string): string {
   return path.basename(projectPath || '') || 'unknown';
 }
 
-function isSmokeProject(projectPath: string): boolean {
-  const name = projectName(projectPath).toLowerCase();
-  const normalized = String(projectPath || '').toLowerCase();
-  return name === 'tmp' || name.includes('smoke') || normalized.includes('smoke-project');
+async function testProjectPaths(): Promise<Set<string>> {
+  try {
+    const rows = await queryRows<{ path: string }>('SELECT path FROM projects WHERE COALESCE(is_test_project, 0) = 1');
+    return new Set(rows.map((row) => String(row.path || '')));
+  } catch {
+    return new Set();
+  }
 }
 
 function countBy(rows: AnyRecord[], key: string): Record<string, number> {
@@ -218,11 +222,16 @@ async function loadReports(root: string): Promise<AnyRecord[]> {
   return reports.sort((a, b) => (Date.parse(b.generated_at || '') || b._mtime || 0) - (Date.parse(a.generated_at || '') || a._mtime || 0));
 }
 
-function latestByProject(reports: AnyRecord[], includeSmoke = false): AnyRecord[] {
+function isInternalProjectPath(projectPath: string): boolean {
+  return projectPath === PIDEX_ROOT || projectPath === DASHBOARD_ROOT;
+}
+
+function latestByProject(reports: AnyRecord[], testPaths: Set<string>, includeTestProjects = false): AnyRecord[] {
   const byProject = new Map<string, AnyRecord>();
   for (const report of reports) {
     const key = String(report.project_path || 'unknown');
-    if (!includeSmoke && isSmokeProject(key)) continue;
+    if (isInternalProjectPath(key)) continue;
+    if (!includeTestProjects && testPaths.has(key)) continue;
     if (!byProject.has(key)) byProject.set(key, report);
   }
   return [...byProject.values()];
@@ -273,7 +282,7 @@ function aggregateQualitySummaries(summaries: QualitySummary[], reviewState: Qua
     operator_decisions: summaries.flatMap((item) => item.operator_decisions).slice(0, 80),
     valid_skips: summaries.flatMap((item) => item.valid_skips).slice(0, 80),
     expectation_corrections: summaries.flatMap((item) => item.expectation_corrections).slice(0, 80),
-    comparability: { label: 'aggregate', sample_size: summaries.length, reasons: ['aggregate across latest non-smoke project reports'] },
+    comparability: { label: 'aggregate', sample_size: summaries.length, reasons: ['aggregate across latest non-test project reports'] },
     latest_report: null,
     review_state: reviewState,
     scope: 'aggregate',
@@ -300,8 +309,8 @@ function matchesProject(report: AnyRecord, project: string): boolean {
 
 export async function getQualityProjects(search = '', root = PIDEX_ROOT): Promise<{ ok: true; generated_at: string; projects: QualitySummary[] }> {
   const q = new URLSearchParams(search);
-  const includeSmoke = q.get('include_smoke') === '1';
-  const reports = latestByProject(await loadReports(root), includeSmoke);
+  const includeTestProjects = ['1', 'true'].includes(String(q.get('include_test_projects') || '').toLowerCase());
+  const reports = latestByProject(await loadReports(root), await testProjectPaths(), includeTestProjects);
   const reviewState = await readReviewState(root);
   return { ok: true, generated_at: new Date().toISOString(), projects: reports.map((r) => ({ ...summarizeQualityReport(r, reviewState), scope: 'project' as const })) };
 }
@@ -309,11 +318,11 @@ export async function getQualityProjects(search = '', root = PIDEX_ROOT): Promis
 export async function getQualityLatest(search = '', root = PIDEX_ROOT): Promise<{ ok: true; generated_at: string; latest: QualitySummary | null }> {
   const q = new URLSearchParams(search);
   const project = q.get('project') || '';
-  const includeSmoke = q.get('include_smoke') === '1';
+  const includeTestProjects = ['1', 'true'].includes(String(q.get('include_test_projects') || '').toLowerCase());
   const reports = await loadReports(root);
   const reviewState = await readReviewState(root);
   if (!project.trim()) {
-    const summaries = latestByProject(reports, includeSmoke).map((r) => ({ ...summarizeQualityReport(r, reviewState), scope: 'project' as const }));
+    const summaries = latestByProject(reports, await testProjectPaths(), includeTestProjects).map((r) => ({ ...summarizeQualityReport(r, reviewState), scope: 'project' as const }));
     return { ok: true, generated_at: new Date().toISOString(), latest: summaries.length ? aggregateQualitySummaries(summaries, reviewState) : null };
   }
   const matches = reports.filter((r) => matchesProject(r, project));
@@ -324,7 +333,13 @@ export async function getQualityHistory(search = '', root = PIDEX_ROOT): Promise
   const q = new URLSearchParams(search);
   const project = q.get('project') || '';
   const limit = Math.max(1, Math.min(100, Number.parseInt(q.get('limit') || '20', 10) || 20));
-  const reports = (await loadReports(root)).filter((r) => (project.trim() ? matchesProject(r, project) : !isSmokeProject(String(r.project_path || ''))));
+  const includeTestProjects = ['1', 'true'].includes(String(q.get('include_test_projects') || '').toLowerCase());
+  const testPaths = await testProjectPaths();
+  const reports = (await loadReports(root)).filter((r) => {
+    if (project.trim()) return matchesProject(r, project);
+    const projectPath = String(r.project_path || '');
+    return !isInternalProjectPath(projectPath) && (includeTestProjects || !testPaths.has(projectPath));
+  });
   const reviewState = await readReviewState(root);
   const history = reports.slice(0, limit).map((report) => {
     const summary = summarizeQualityReport(report, reviewState);

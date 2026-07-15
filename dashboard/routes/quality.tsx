@@ -21,7 +21,7 @@ import {
 
 import { HelpPopover } from '../components/ui/help-popover';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
-import { readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
+import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 
 type CompletionRow = {
@@ -180,9 +180,10 @@ function QualityPage() {
   const [refreshState, setRefreshState] = useState<{ status: 'idle' | 'running' | 'success' | 'error'; message: string }>({ status: 'idle', message: '' });
   const [traceFilter, setTraceFilter] = useState<'violated' | 'valid' | 'raw'>('violated');
   const project = readProjectFromSearch(location.search);
-  const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project], withProjectParam('/api/charts/quality', project));
-  const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project], withProjectParam('/api/charts/model-quality', project));
-  const qualityLatestQuery = useDashboardQuery<QualityLatestPayload>(['quality-latest-read-model', project], withProjectParam('/api/quality/latest', project));
+  const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
+  const qualityQuery = useDashboardQuery<QualityPayload>(['quality-chart', project, includeTestProjects], withProjectParam('/api/charts/quality', project, includeTestProjects));
+  const modelQuery = useDashboardQuery<ModelQualityPayload>(['model-quality', project, includeTestProjects], withProjectParam('/api/charts/model-quality', project, includeTestProjects));
+  const qualityLatestQuery = useDashboardQuery<QualityLatestPayload>(['quality-latest-read-model', project, includeTestProjects], withProjectParam('/api/quality/latest', project, includeTestProjects));
   const governorQuery = useDashboardQuery<ContractGovernorPayload>(['quality-contract-governor'], '/api/quality/contract-governor');
   const quality = qualityQuery.data ?? EMPTY_QUALITY;
   const modelQuality = modelQuery.data ?? { models: [] };
@@ -190,7 +191,7 @@ function QualityPage() {
   const governor = governorQuery.data;
   const governorLatest = governor?.runs?.[0];
   const scopeLabel = project || 'All projects';
-  const scopeDescription = project ? `${project} · latest project PDQ report` : 'All projects · aggregate across non-smoke latest reports';
+  const scopeDescription = project ? `${project} · latest project PDQ report` : `All projects · aggregate across ${includeTestProjects ? 'all' : 'non-test'} latest reports`;
   const loading = qualityQuery.isLoading || modelQuery.isLoading || qualityLatestQuery.isLoading;
   const error = qualityQuery.isError || modelQuery.isError || qualityLatestQuery.isError || governorQuery.isError ? 'Quality data could not be loaded.' : '';
 
@@ -315,9 +316,9 @@ function QualityPage() {
     : [];
 
   const refreshPdq = async () => {
-    setRefreshState({ status: 'running', message: project ? `Refreshing PDQ for ${project}…` : 'Refreshing PDQ for all non-smoke projects…' });
+    setRefreshState({ status: 'running', message: project ? `Refreshing PDQ for ${project}…` : `Refreshing PDQ for all ${includeTestProjects ? 'visible' : 'non-test'} projects…` });
     try {
-      const response = await fetch(withProjectParam('/api/quality/refresh', project), { method: 'POST' });
+      const response = await fetch(withProjectParam('/api/quality/refresh', project, includeTestProjects), { method: 'POST' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `Refresh failed (${response.status})`);
       setRefreshState({ status: 'success', message: `Refreshed ${payload.refreshed || 0} report target(s).` });
@@ -337,7 +338,7 @@ function QualityPage() {
           </div>
           <HelpPopover
             title="Quality page scope"
-            shows="Quality metrics for the active global project selector. All projects aggregates non-smoke reports; one selected project shows only that project."
+            shows="Quality metrics for the active global project selector. All projects excludes flagged test projects unless the test-project toggle is enabled; one selected project shows only that project."
             source="Global project selector plus /api/quality/latest, /api/charts/quality, and /api/charts/model-quality."
             reading="Start with trend, current state, top issue, and next action before reading detailed tables."
             improve="Select the right scope, refresh PDQ for stale reports, and reduce critical gaps before optimizing lower-severity signals."

@@ -12,7 +12,7 @@ const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-pipeline-event-'));
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-'));
 try {
   const env = { ...process.env, RUNNING_PI_STATE_DIR: state, PIDEX_AUTO_PDQ: '0' };
-  const started = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--event', 'pipeline_started', '--project-mode', 'hardened-pipeline', '--metadata-json', '{"x":1}'], { encoding: 'utf8', env });
+  const started = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--event', 'pipeline_started', '--project-mode', 'hardened-pipeline', '--test-project', 'true', '--metadata-json', '{"x":1}'], { encoding: 'utf8', env });
   assert.equal(started.status, 0, started.stderr || started.stdout);
   const match = started.stdout.match(/pipeline_id=([^\s]+)/);
   assert.ok(match);
@@ -28,7 +28,13 @@ try {
   assert.equal(rows.length, 2);
   assert.equal(rows[0].plan_key, 'plan-007');
   assert.equal(rows[0].project_mode, 'hardened-pipeline');
+  assert.equal(rows[0].is_test_project, true);
+  assert.equal('is_test_project' in rows[1], false);
   assert.equal(rows[1].event_type, 'pipeline_completed');
+
+  const invalidFlag = spawnSync(process.execPath, [script, '--project', project, '--plan', '8', '--event', 'pipeline_started', '--test-project', 'maybe'], { encoding: 'utf8', env });
+  assert.notEqual(invalidFlag.status, 0);
+  assert.match(invalidFlag.stderr, /requires true or false/);
 
   const orphan = spawnSync(process.execPath, [script, '--project', project, '--plan', '8', '--event', 'pipeline_failed'], { encoding: 'utf8', env });
   assert.notEqual(orphan.status, 0);
