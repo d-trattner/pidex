@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.2.0 - 2026-07-14
+## 0.2.0 - 2026-07-15
 
 Project Pipeline host mirroring, Windows host-direct reliability, proportional orchestration, GPT-5.6 routing, and dashboard identity cleanup:
 
