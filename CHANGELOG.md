@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- Added explicit `is_test_project` metadata for Project Pipeline registries and host pipeline events, replacing broad dashboard `/tmp`/`smoke` name heuristics with an additive project read-model flag and an explicit desktop/mobile `Show test projects` toggle; normal test activity inside a user project does not reclassify it. Existing Project Pipeline entries can be safely reclassified with the Docker-independent `lifecycle.mjs set-test-project` producer command.
+## 0.2.2 - 2026-07-15
+
+Explicit test-project classification:
+
+- Added explicit `is_test_project` metadata for Project Pipeline registries and host pipeline events, replacing broad dashboard `/tmp`/`smoke` name heuristics with an additive project read-model flag and an explicit desktop/mobile `Show test projects` toggle; normal test activity inside a user project does not reclassify it.
+- Added the Docker-independent `lifecycle.mjs set-test-project` producer command for safely reclassifying existing Project Pipeline entries.
 
 ## 0.2.1 - 2026-07-15
 
