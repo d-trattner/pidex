@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-07-15
+
+Roadmap governance follow-up:
+
 - Added mandatory conversation-to-roadmap promotion before task classification: multi-increment analyses, parity matrices, audits, and design discussions must be reconciled with the canonical roadmap and delegated to `pidex-roadmap` for user-reviewed candidate entries before architect/planner routing; the orchestrator is explicitly forbidden from writing roadmap drafts itself.
 
 ## 0.2.0 - 2026-07-15
