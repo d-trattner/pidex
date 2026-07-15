@@ -37,6 +37,8 @@ Before `pidex-implementer` has run, the orchestrator must not:
 - create feature files;
 - fix bugs directly;
 - commit implementation changes;
+- create, edit, append to, or replace `agents.output/roadmap/product-roadmap.md`; all canonical roadmap mutations belong to `pidex-roadmap`;
+- create a substitute roadmap draft instead of invoking `pidex-roadmap`;
 - treat a tiny/simple task as permission to skip specialists.
 
 ## Fallback exception

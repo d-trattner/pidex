@@ -975,9 +975,17 @@ Example epic:
 
 ---
 
+### Step 7.5 — Conversation-to-roadmap promotion
+
+Before task classification or any `pidex-architect` / `pidex-planner` spawn, load and apply `<pidex-root>/rules/orchestrator/conversation-to-roadmap-promotion.md`.
+
+If the discussion or a source artifact produced multiple credible delivery increments with dependencies, shared target, or implied order, check whether semantically equivalent entries exist in the canonical roadmap. Missing increments are planning candidates, not roadmap commitments. Proactively recommend invoking `pidex-roadmap` and ask once for approval before selecting an implementation epic.
+
+The orchestrator must not create, edit, append to, or substitute for `agents.output/roadmap/product-roadmap.md`. On approval it must invoke `pidex-roadmap` with a compact context pack and mandatory source artifacts. `pidex-roadmap` is the sole roadmap-writing authority. Present its update for user review; do not route candidate entries to architect/planner until accepted and implementation-ready.
+
 ### Step 8 — Task classification (decides the opening agent)
 
-Before starting the pipeline, classify the task to decide whether `pidex-architect` runs BEFORE `pidex-planner` (architecture-first), whether a specialist maintenance agent opens directly, or whether `pidex-planner` opens directly.
+Only after Step 7.5 is resolved, classify the task to decide whether `pidex-architect` runs BEFORE `pidex-planner` (architecture-first), whether a specialist maintenance agent opens directly, or whether `pidex-planner` opens directly.
 
 **Why this matters:** Horizontal-slicing plan failures (Plan-014-pattern) often trace back to structural decisions that pidex-planner made without architectural context — monorepo layouts, migration ordering, dependency boundaries. Running pidex-architect first produces an ADR that constrains the plan before it exists, eliminating a class of rejection loops.
 

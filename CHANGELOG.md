@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added mandatory conversation-to-roadmap promotion before task classification: multi-increment analyses, parity matrices, audits, and design discussions must be reconciled with the canonical roadmap and delegated to `pidex-roadmap` for user-reviewed candidate entries before architect/planner routing; the orchestrator is explicitly forbidden from writing roadmap drafts itself.
+
 ## 0.2.0 - 2026-07-15
 
 Project Pipeline host mirroring, Windows host-direct reliability, proportional orchestration, GPT-5.6 routing, and dashboard identity cleanup:

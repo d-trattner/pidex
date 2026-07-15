@@ -9,6 +9,8 @@ const parallelAgents = readFileSync('readme/parallel-agents.md', 'utf8');
 const browserSmoke = readFileSync('modules/pidex/browser-smoke/README.md', 'utf8');
 const modulesDoc = readFileSync('readme/modules.md', 'utf8');
 const pidexSkill = readFileSync('skills/pidex/SKILL.md', 'utf8');
+const conversationRoadmapRule = readFileSync('rules/orchestrator/conversation-to-roadmap-promotion.md', 'utf8');
+const noDirectImplementationRule = readFileSync('rules/orchestrator/no-direct-implementation.md', 'utf8');
 
 const modes = ['host-direct', 'hardened-pipeline', 'project-pipeline'];
 const capabilityRows = [
@@ -112,6 +114,27 @@ test('parallel agents docs preserve all-mode boundary contract', () => {
   assert.match(parallelAgents, /Source remains container-canonical/);
   assert.match(parallelAgents, /MVP may execute secondary lanes sequentially/);
   assert.match(parallelAgents, /project_mode.*parallel_lane_id.*parallel_trigger.*parallel_role/s);
+});
+
+test('orchestrator promotes multi-increment conversations through pidex-roadmap before planning', () => {
+  const promotionStep = pidexSkill.indexOf('### Step 7.5 — Conversation-to-roadmap promotion');
+  const classificationStep = pidexSkill.indexOf('### Step 8 — Task classification');
+  assert.notEqual(promotionStep, -1);
+  assert.equal(promotionStep < classificationStep, true);
+  assert.match(pidexSkill, /conversation-to-roadmap-promotion\.md/);
+  assert.match(conversationRoadmapRule, /two or more confirmed or credible future delivery increments/);
+  assert.match(conversationRoadmapRule, /A single small follow-up does not trigger this rule/);
+  assert.match(conversationRoadmapRule, /reconcile semantically equivalent entries before proposing changes/);
+  assert.match(conversationRoadmapRule, /continue without duplication/);
+  assert.match(conversationRoadmapRule, /before task classification, `pidex-architect`, `pidex-planner`, or any implementation route/);
+  assert.match(conversationRoadmapRule, /`pidex-roadmap` is the sole roadmap-writing authority/);
+  assert.match(conversationRoadmapRule, /must never create, edit, rewrite, or append to the canonical roadmap/);
+  assert.match(conversationRoadmapRule, /must not produce a substitute roadmap draft/);
+  assert.match(conversationRoadmapRule, /Present the `pidex-roadmap`-produced update to the user for review/);
+  assert.match(conversationRoadmapRule, /must not take over roadmap writing as fallback/);
+  assert.match(conversationRoadmapRule, /standalone urgent task may proceed when it has no dependency impact/);
+  assert.match(noDirectImplementationRule, /all canonical roadmap mutations belong to `pidex-roadmap`/);
+  assert.match(noDirectImplementationRule, /substitute roadmap draft/);
 });
 
 test('orchestrator enforces proportional minimal runs and a cumulative loop breaker', () => {
