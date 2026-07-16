@@ -3413,6 +3413,9 @@ export function inspectProjectBoundaryToolCall(event: any, ctx: any): { block: b
 		const command = String(event?.input?.command || "");
 		if (!command) return undefined;
 		const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
+		if (/\bgit\b[^;&|]*\badd\b[^;&|]*(?:^|\s)(?:-f|--force)(?:\s|$)/i.test(compact)) {
+			return { block: true, reason: "PIDEX blocks git add -f/--force in parent and child sessions. Ignored runtime state must remain uncommitted." };
+		}
 		const highRisk = [
 			/\bgit\s+config\s+--global\b/i,
 			/\b(?:npm|pnpm|yarn)\s+config\s+set\b/i,
@@ -3453,9 +3456,12 @@ export function inspectSandboxToolCall(event: any, ctx: any): { block: boolean; 
 	return undefined;
 }
 
-function inspectBashForGitHookRisk(command: string): { block?: string; warn?: string } | undefined {
+export function inspectBashForGitHookRisk(command: string): { block?: string; warn?: string } | undefined {
 	const compact = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
 	if (!compact) return undefined;
+	if (/\bgit\b[^;&|]*\badd\b[^;&|]*(?:^|\s)(?:-f|--force)(?:\s|$)/i.test(compact)) {
+		return { block: "PIDEX blocks git add -f/--force. Ignored runtime state must remain uncommitted; change ignore policy for genuine source files instead." };
+	}
 	if (/\bgit\b[\s\S]*\bcommit\b[\s\S]*(--no-verify|--no-gpg-sign)/.test(compact)) {
 		return { block: "PIDEX blocks git commit bypass flags (--no-verify/--no-gpg-sign). Remove the flag and let the security hook run." };
 	}

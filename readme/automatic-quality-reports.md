@@ -36,7 +36,7 @@ If the disabled-by-default contract governor is locally enabled, auto-PDQ can al
 
 - `state/quality/` is runtime state.
 - `agents.output/quality/` is generated operator-facing output.
-- Generated `agents.output/quality/pdq-*.md` reports must not be committed. Preserve durable conclusions in `wiki/` or `pidex/state/` where appropriate.
+- Generated `agents.output/quality/pdq-*.md` reports and `pidex/state/**` must not be committed. Preserve durable conclusions in `wiki/**` where appropriate.
 
 ## Contract-backed findings
 

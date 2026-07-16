@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Made `agents.output/**`, `state/**`, and `pidex/state/**` unconditionally local runtime state: wiki hygiene no longer offers audit state for commit, and Pi blocks `git add -f`/`--force` across parent and child sessions even where Windows has no global Git hook.
+
 ## 0.2.2 - 2026-07-15
 
 Explicit test-project classification:

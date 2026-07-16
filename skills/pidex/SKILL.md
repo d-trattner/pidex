@@ -60,7 +60,7 @@ In `host-direct` mode:
 - `pidex_agent` records per-agent metrics under `<pidex-root>/state/metrics/`.
 - For plan-id allocation, use the next available numeric plan id from `<project-root>/agents.output/**` and document the selected id in the plan/brief. Do not increment `.next-id` ad hoc unless a future helper is present in the installed package.
 - Specialist final responses must stay short: write full artifacts to files, then return only status, output paths, next route, concise evidence, and the ROUTING block.
-- Generated `agents.output/**` artifacts are runtime/operator outputs and must never be committed. Do not stage them, do not use `git add -f` for them, and do not suggest them as commit candidates. Commit durable wiki/project metadata instead (for example `wiki/**` or `pidex/state/wiki-hygiene.json` when appropriate).
+- Generated `agents.output/**`, `state/**`, and `pidex/state/**` artifacts are runtime/operator outputs and must never be committed. Do not stage them, do not use `git add -f` for them, and do not suggest them as commit candidates. Durable conclusions belong under `wiki/**` or another explicitly source-controlled project documentation path. Commit only in the active user project's Git worktree; while working on another project, never create a commit in the PIDEX runtime checkout.
 - Gates are asked in the Pi session. Do not use Telegram reply handling unless the user explicitly asks for the scaffolded background mode.
 - Optional notify-only Telegram is allowed in direct mode: use `<pidex-root>/scripts/telegram/notify.sh --optional` to alert the user that Pi needs attention and when the pipeline reaches terminal completion/failure/abort. This sends information only, no buttons, no replies, no `pending-gate.json`.
 
@@ -633,7 +633,7 @@ printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n'
 echo 0 > <project-path>/agents.output/.next-id
 ```
 
-If `.gitignore` already exists, append only missing entries. `agents.output/**` must remain ignored/uncommitted; `pidex/state/wiki-hygiene.json` and other durable `pidex/` metadata may be committed when explicitly appropriate.
+If `.gitignore` already exists, append only missing entries. `agents.output/**`, `state/**`, and `pidex/state/**` must remain ignored/uncommitted. Durable `pidex/context/**`, `pidex/rules/**`, `pidex/config/**`, and `pidex/prompts/**` may be committed when appropriate, but runtime state never is.
 
 Do NOT scaffold the project code (package.json, tsconfig, etc.) — that is the lead's job as part of the epic. The orchestrator only creates the directory, initializes `pidex/context/CONTEXT.md`, initializes agents.output, and ensures `.gitignore` protects generated PIDEX artifacts. Do not copy agent files; bundled agents are invoked through `pidex_agent`.
 
@@ -1036,7 +1036,7 @@ This is a wiki hygiene / project memory maintenance task.
 Do not run /pdwiki or memory-wiki-hygiene.check capability from the orchestrator before invoking the specialist.
 Invoke pidex-wiki-hygienist as the opening agent and instruct it to run the deterministic read-only audit itself:
 node <pidex-root>/scripts/modules/run-check.mjs --capability memory-wiki-hygiene.check --agent pidex-wiki-hygienist --phase maintenance --project <project-root>
-pidex-wiki-hygienist MUST start read-only, run the audit, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only. If the user asked to execute/apply hygiene, pidex-wiki-hygienist must create a separate execution report at <project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md and must not overwrite the deterministic audit report. After audit/report-only wiki hygiene completes, provide a useful brief (score, counts, top findings, report path, state path, whether wiki content changed) and ask whether to commit the hygiene state. Suggested commit files must include <project-root>/pidex/state/wiki-hygiene.json only for audit-only runs; never suggest committing agents.output/**.
+pidex-wiki-hygienist MUST start read-only, run the audit, write a prioritized report/cleanup plan, and MUST NOT mutate <project-root>/pidex/** except the deterministic local audit state file <project-root>/pidex/state/wiki-hygiene.json. It must not create agents.wiki.*. It must not mutate wiki files unless the user approves an explicit apply plan; future apply scope is <project-root>/wiki/** only. If the user asked to execute/apply hygiene, pidex-wiki-hygienist must create a separate execution report at <project-root>/agents.output/wiki-hygiene/<timestamp>-execution-report.md and must not overwrite the deterministic audit report. After audit/report-only wiki hygiene completes, provide a useful brief (score, counts, top findings, report path, local state path, whether wiki content changed). Never ask to commit or force-add the hygiene state; `pidex/state/**` and `agents.output/**` remain local runtime artifacts.
 Canonical wiki path is <project-root>/wiki/.
 ```
 
@@ -1074,7 +1074,7 @@ printf '\n# PIDEX / agent runtime artifacts\nagents.output/\n.wiki-migration/\n'
 echo 0 > <project-path>/agents.output/.next-id
 ```
 
-If `.gitignore` already exists, append only missing entries. `agents.output/**` must remain ignored/uncommitted; durable `pidex/` metadata is not ignored by default.
+If `.gitignore` already exists, append only missing entries. `agents.output/**`, `state/**`, and `pidex/state/**` must remain ignored/uncommitted; other durable `pidex/` metadata is not ignored by default.
 
 Do not copy agent files into the project. Use bundled agents from `<pidex-root>/agents/` through `pidex_agent`. Then `cd` into the project (or pass the project path as `cwd` to every `pidex_agent` call).
 
@@ -1206,7 +1206,7 @@ If uncertain, ignore the skip and run the conservative default route. Never skip
 
 | Step | Agent / Gate | Route rule |
 |---|---|---|
-| 0W | `pidex-wiki-hygienist` | Specialist opening route for wiki hygiene / project memory maintenance. Orchestrator must not run `/pdwiki` or the hygiene script itself for this route; it invokes `pidex-wiki-hygienist`, and the specialist runs the deterministic audit. Wiki hygiene must never mutate `<project-root>/pidex/**` except audit/cadence state at `<project-root>/pidex/state/wiki-hygiene.json`. Audit/report-only runs must end with a brief and ask whether to commit the hygiene state. If user approves commit, orchestrator owns the commit: stage `pidex/state/wiki-hygiene.json` (use `git add -f pidex/state/wiki-hygiene.json` if ignored), never stage `agents.output/**`, then commit with a `chore(wiki): record hygiene audit`-style message. `COMPLETE` routes to user or orchestrator; cleanup implementation is not automatic. |
+| 0W | `pidex-wiki-hygienist` | Specialist opening route for wiki hygiene / project memory maintenance. Orchestrator must not run `/pdwiki` or the hygiene script itself for this route; it invokes `pidex-wiki-hygienist`, and the specialist runs the deterministic audit. Wiki hygiene must never mutate `<project-root>/pidex/**` except local audit/cadence state at `<project-root>/pidex/state/wiki-hygiene.json`. Audit/report-only runs end with a brief but must never offer, stage, force-add, or commit `pidex/state/**` or `agents.output/**`. Durable approved wiki changes belong under `<project-root>/wiki/**`. `COMPLETE` routes to user or orchestrator; cleanup implementation is not automatic. |
 | 1 | `pidex-planner` | Epic → implementation-ready plan. `COMPLETE` routes to `pidex-critic`; `BLOCKED` routes to `pidex-analyst`, `pidex-architect`, or user depending on reason. |
 | 2 | `pidex-critic` | `APPROVED*` + UI-heavy/frontend scope → `pidex-designer` unless approved profile explicitly permits skip; `APPROVED*` + no UI or approved designer skip → `pidex-implementer`; `REJECTED` → `pidex-planner` (G1). If designer is intentionally skipped, record `OpDecision` for the skipped review/design step with reason `no-ui-change`, `not-applicable`, or `already-covered` as appropriate. |
 | 2.5 | `pidex-designer` | UI plans only. `APPROVED*` → `pidex-implementer`; `REJECTED` → `pidex-planner`. |

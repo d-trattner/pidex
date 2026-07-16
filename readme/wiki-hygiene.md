@@ -80,7 +80,7 @@ Terminal pipeline events can update:
 
 The audit and cadence helpers may update only that single PIDEX metadata file. Audit records `last_hygiene_at`, report paths, status, and resets the run counter. Automatic cadence must never apply changes. When the counter reaches the configured threshold, run `/pdwiki` to create a fresh report.
 
-Audit/report-only orchestrated runs should be performed by `pidex-wiki-hygienist`, not by the orchestrator directly. The specialist should finish with a brief: score, severity counts, top findings, report path, state path updated, and whether wiki content changed. Hygiene reports under `agents.output/**` are generated artifacts and must not be committed. The orchestrator should relay the brief and ask whether to commit the hygiene state file, listing `pidex/state/wiki-hygiene.json` as the audit-only commit candidate. If the user approves, the orchestrator stages that exact file and commits it; use `git add -f pidex/state/wiki-hygiene.json` if `pidex/state/` is ignored. If a future apply mode mutates `wiki/**`, ask about committing those wiki changes too.
+Audit/report-only orchestrated runs should be performed by `pidex-wiki-hygienist`, not by the orchestrator directly. The specialist should finish with a brief: score, severity counts, top findings, report path, local state path updated, and whether wiki content changed. Hygiene reports under `agents.output/**` and audit state under `pidex/state/**` are generated local artifacts and must not be committed or force-added. Audit-only runs do not ask a commit question. If a future approved apply mode mutates durable `wiki/**`, only those wiki changes may be offered for commit.
 
 Project-specific PIDEX agent rules live in:
 
