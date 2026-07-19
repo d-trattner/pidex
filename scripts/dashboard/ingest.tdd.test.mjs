@@ -58,7 +58,9 @@ try {
     timestamp: '2026-01-01T00:00:00Z', project, plan: '1', project_mode: 'project-pipeline', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.4-mini', input_tokens_estimate: 10, output_tokens_estimate: 20,
   })}\n`);
   writeFileSync(path.join(state, 'pipeline-events', 'project', 'pipe-1.jsonl'), `${JSON.stringify({
-    timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', is_test_project: true, status: 'running', actor: 'orchestrator', metadata: { smoke: true }, source: 'test',
+    timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', is_test_project: true, status: 'running', actor: 'orchestrator', metadata: { canonical_tbr: 'TBR-0123456789ab' }, source: 'test',
+  })}\n${JSON.stringify({
+    timestamp: '2026-01-01T00:01:01Z', project_path: project, pipeline_id: 'pipe-legacy', plan_key: '1', event_type: 'review_outcome', project_mode: 'project-pipeline', metadata_json: '{"historical_alias":"opaque-tbr-payload"}', source: 'test',
   })}\n`);
   writeFileSync(path.join(project, 'agents.output', 'parallel-agents', '001-merge.md'), `# Merge Summary\n\n| Source | Severity | Classification | Disposition | Summary |\n|---|---|---|---|---|\n| secondary | high | secondary-only | accepted | smoke finding |\n\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: user\n-->\n`);
   writeFileSync(path.join(state, 'sandbox-projects', 'pp-sandbox-only.json'), JSON.stringify({
@@ -97,11 +99,15 @@ try {
   const report = runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
   assert.equal(report.project_pipeline_registry, 2);
   assert.equal(report.agent_runs, 1);
-  assert.equal(report.pipeline_events, 1);
+  assert.equal(report.pipeline_events, 2);
   assert.equal(report.artifacts, 2);
   assert.equal(report.merge_findings, 2);
   assert.equal(count(dbPath, 'agent_runs'), 1);
-  assert.equal(count(dbPath, 'pipeline_events'), 1);
+  assert.equal(count(dbPath, 'pipeline_events'), 2);
+  assert.deepEqual(all(dbPath, "select pipeline_id, metadata_json from pipeline_events where pipeline_id in ('pipe-1', 'pipe-legacy') order by pipeline_id").map((row) => ({ ...row })), [
+    { pipeline_id: 'pipe-1', metadata_json: '{"canonical_tbr":"TBR-0123456789ab"}' },
+    { pipeline_id: 'pipe-legacy', metadata_json: '{"historical_alias":"opaque-tbr-payload"}' },
+  ], 'canonical and historical metadata_json stay opaque byte-exact payloads');
   assert.equal(value(dbPath, 'select project_mode from agent_runs'), 'project-pipeline');
   assert.equal(value(dbPath, 'select project_mode from pipeline_events'), 'project-pipeline');
   assert.equal(value(dbPath, `select is_test_project from projects where path = '${project.replaceAll("'", "''")}'`), 1);

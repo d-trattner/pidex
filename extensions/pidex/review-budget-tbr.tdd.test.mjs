@@ -8,6 +8,7 @@ import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
 import { reserveReviewStart, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
 import '../../scripts/quality/tbr.tdd.test.mjs';
+import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
