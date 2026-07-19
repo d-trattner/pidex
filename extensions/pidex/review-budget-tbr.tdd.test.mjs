@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary } from './index.ts';
@@ -48,6 +49,61 @@ try {
   await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'ordinary planning' }, hostOptions);
   assert.equal(hostChildren, 2, 'bare non-review calls remain compatible');
 } finally { rmSync(hostState, { recursive: true, force: true }); rmSync(hostProject, { recursive: true, force: true }); }
+
+const lifecycleState = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-state-'));
+const lifecycleProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-project-'));
+const lifecycleBase = path.join(lifecycleState, 'pipeline-events', path.basename(lifecycleProject));
+const lifecyclePipeline = 'family-real-host';
+const lifecycleContext = path.join(lifecycleProject, 'agents.output', 'implementation', '038-real-host-review-lifecycle.md');
+const lifecycleAttempt = (family, gate, mode) => `attempt-${createHash('sha256').update(`${family}|${gate}|${mode}`).digest('hex').slice(0, 16)}`;
+let lifecycleChildren = 0;
+try {
+  mkdirSync(lifecycleBase, { recursive: true });
+  mkdirSync(path.dirname(lifecycleContext), { recursive: true });
+  writeFileSync(path.join(lifecycleBase, 'plan-038.current'), lifecyclePipeline);
+  writeFileSync(lifecycleContext, '# context\n');
+  const lifecycleOptions = {
+    agentCwd: lifecycleProject,
+    reviewLifecycle: { stateDir: lifecycleState, pipelineId: 'ignored-for-derived-identity' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => {
+      lifecycleChildren += 1;
+      params.onProcessStarted?.();
+      const verdict = params.agent === 'pidex-implementer' ? 'COMPLETE' : lifecycleChildren === 1 ? 'REJECTED' : 'APPROVED';
+      const route = params.agent === 'pidex-implementer' ? 'pidex-code-reviewer' : 'pidex-implementer';
+      return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: `<!-- ROUTING\nverdict: ${verdict}\nroute_to: ${route}\ncontext_file: agents.output/implementation/038-real-host-review-lifecycle.md\n-->`, stderr: '' };
+    },
+  };
+  const initial = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 initial review' }, lifecycleOptions);
+  assert.match(initial.finalText, /REJECTED/);
+  const correction = await executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 038 correction' }, lifecycleOptions);
+  assert.match(correction.finalText, /COMPLETE/);
+  const review1 = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 review1' }, lifecycleOptions);
+  assert.match(review1.finalText, /APPROVED/);
+  assert.equal(lifecycleChildren, 3, 'omitted tuples must derive one normal rejection/correction/review chain');
+  const lifecycleRows = readFileSync(path.join(lifecycleBase, `${lifecyclePipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(lifecycleRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome', 'start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome', 'start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
+  assert.deepEqual(lifecycleRows.filter((row) => row.event_type === 'review_outcome').map((row) => row.metadata.outcome), ['CHANGES_REQUESTED', 'READY_FOR_REVIEW', 'APPROVED']);
+  const rowsBeforeRejects = lifecycleRows.length;
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 partial', planId: 'plan-038' }, lifecycleOptions), /REVIEW_IDENTITY_INVALID/);
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 wrong owner' }, lifecycleOptions), /REVIEW_IDENTITY_INVALID/);
+  assert.equal(readFileSync(path.join(lifecycleBase, `${lifecyclePipeline}.jsonl`), 'utf8').trim().split('\n').length, rowsBeforeRejects, 'partial and unmatched identity must append nothing');
+
+  const resumePipeline = 'family-resume-host';
+  writeFileSync(path.join(lifecycleBase, 'plan-038.current'), resumePipeline);
+  const resumeIdentity = { runFamilyId: resumePipeline, planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: lifecycleAttempt(resumePipeline, 'code-review', 'initial') };
+  assert.equal(reserveReviewStart({ stateDir: lifecycleState, project: lifecycleProject, pipelineId: resumePipeline, identity: resumeIdentity, start: () => 'first-child' }).status, 'accepted');
+  const childrenBeforeResume = lifecycleChildren;
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 resumed review' }, lifecycleOptions), /REVIEW_DISPATCH_RESUMED/);
+  assert.equal(lifecycleChildren, childrenBeforeResume, 'accepted retry must not run a duplicate child');
+  const returnedIdentity = { ...resumeIdentity, runFamilyId: 'family-returned-host', attemptId: lifecycleAttempt('family-returned-host', 'code-review', 'initial') };
+  writeFileSync(path.join(lifecycleBase, 'plan-038.current'), returnedIdentity.runFamilyId);
+  assert.equal(reserveReviewStart({ stateDir: lifecycleState, project: lifecycleProject, pipelineId: returnedIdentity.runFamilyId, identity: returnedIdentity, start: () => 'returned-child' }).status, 'accepted');
+  writeFileSync(path.join(lifecycleBase, `${returnedIdentity.runFamilyId}.jsonl`), `${JSON.stringify({ event_type: 'spawn_returned', metadata: returnedIdentity })}\n`, { flag: 'a' });
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 returned-only review' }, lifecycleOptions), /SPAWN_RETURNED_UNCERTAIN/);
+  assert.equal(lifecycleChildren, childrenBeforeResume, 'returned-only retry must not run a child');
+} finally { rmSync(lifecycleState, { recursive: true, force: true }); rmSync(lifecycleProject, { recursive: true, force: true }); }
 
 const immediateFinding = { findingId: 'F-2', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Deferred finding', shortDescription: 'New finding deferred.', originEpic: 'initiative-038', reviewArtifact: 'agents.output/code-review/038.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot reject.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
 const rejected = validateReviewOutcome({ verdict: 'REJECTED', findings: [
@@ -142,5 +198,21 @@ try {
   assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_DISPATCH_RESUMED/);
   assert.equal(ppChildren, 1, 'duplicate Project Pipeline delivery must create zero second child');
 } finally { rmSync(ppState, { recursive: true, force: true }); rmSync(ppProject, { recursive: true, force: true }); }
+
+const ppCompletionState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-completion-state-'));
+const ppCompletionProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-completion-project-'));
+const ppCompletionPipeline = 'family-pp-completion';
+try {
+  const ppCompletionBase = path.join(ppCompletionState, 'pipeline-events', path.basename(ppCompletionProject));
+  const ppCompletionContext = path.join(ppCompletionProject, 'agents.output', 'code-review', '038.md');
+  mkdirSync(path.dirname(ppCompletionContext), { recursive: true });
+  mkdirSync(ppCompletionBase, { recursive: true });
+  writeFileSync(path.join(ppCompletionBase, 'plan-038.current'), ppCompletionPipeline);
+  writeFileSync(ppCompletionContext, '# review\n');
+  const ppResult = executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 direct review' }, { stateDir: ppCompletionState, pipelineId: 'ignored-for-derived-identity', project: ppCompletionProject }, () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' }));
+  assert.match(ppResult.finalText, /APPROVED/);
+  const ppRows = readFileSync(path.join(ppCompletionBase, `${ppCompletionPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(ppRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
+} finally { rmSync(ppCompletionState, { recursive: true, force: true }); rmSync(ppCompletionProject, { recursive: true, force: true }); }
 
 console.log('review budget TBR tests passed');
