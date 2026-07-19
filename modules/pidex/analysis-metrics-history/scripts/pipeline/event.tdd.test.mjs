@@ -5,6 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
+import { reserveReviewStart } from './event.mjs';
+
+const tuple = { runFamilyId: 'family-001', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-001' };
+assert.deepEqual(validateReviewIdentity(tuple), { ok: true, value: tuple });
+assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'other' }).ok, false);
+assert.deepEqual(foldReviewHistory([], tuple), { status: 'allowed', nextMode: 'initial' });
+assert.deepEqual(foldReviewHistory([{ event_type: 'start_reserved', metadata: tuple }], tuple), { status: 'resume_reserved', nextMode: 'initial' });
+assert.equal(foldReviewHistory([{ event_type: 'start_reserved', metadata: tuple }, { event_type: 'spawn_entered', metadata: tuple }], tuple).status, 'uncertain');
+assert.equal(foldReviewHistory([{ event_type: 'start_reserved', metadata: tuple }, { event_type: 'start_reserved', metadata: { ...tuple, attemptId: 'attempt-002' } }], tuple).status, 'denied');
+assert.deepEqual(foldReviewHistory([{ event_type: 'review_outcome', metadata: { ...tuple, verdict: 'APPROVED' } }], tuple), { status: 'terminal', terminal: 'accepted' });
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const script = path.join(root, 'modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs');
@@ -39,6 +50,17 @@ try {
   const orphan = spawnSync(process.execPath, [script, '--project', project, '--plan', '8', '--event', 'pipeline_failed'], { encoding: 'utf8', env });
   assert.notEqual(orphan.status, 0);
   assert.match(orphan.stderr, /no active pipeline id/);
+
+  const reviewStart = reserveReviewStart({ stateDir: state, project, pipelineId, identity: tuple, start: () => 'child-started' });
+  assert.equal(reviewStart.status, 'accepted');
+  const duplicateStart = reserveReviewStart({ stateDir: state, project, pipelineId, identity: tuple, start: () => { throw new Error('duplicate must not start'); } });
+  assert.equal(duplicateStart.status, 'resumed');
+  const reviewRows = readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.runFamilyId === tuple.runFamilyId);
+  assert.deepEqual(reviewRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted']);
+  assert.equal(existsSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${tuple.runFamilyId}.lock`)), false);
+
+  const conflicting = reserveReviewStart({ stateDir: state, project, pipelineId, identity: { ...tuple, attemptId: 'attempt-002' }, start: () => { throw new Error('conflict must not start'); } });
+  assert.equal(conflicting.status, 'denied');
 } finally {
   rmSync(state, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
