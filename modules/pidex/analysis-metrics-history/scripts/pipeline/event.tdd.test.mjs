@@ -11,6 +11,7 @@ import { recordReviewCompletion, reserveReviewStart } from './event.mjs';
 const tuple = { runFamilyId: 'family-001', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-001' };
 assert.deepEqual(validateReviewIdentity(tuple), { ok: true, value: tuple });
 assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'other' }).ok, false);
+assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'security-review' }).ok, false);
 assert.equal(validateReviewIdentity({ ...tuple, runFamilyId: 'x'.repeat(81) }).ok, false);
 assert.deepEqual(foldReviewHistory([], tuple), { status: 'allowed', nextMode: 'initial' });
 assert.deepEqual(foldReviewHistory([{ event_type: 'start_reserved', metadata: tuple }], tuple), { status: 'resume_reserved', nextMode: 'initial' });

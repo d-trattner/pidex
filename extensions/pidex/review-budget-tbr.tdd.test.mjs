@@ -30,6 +30,8 @@ const hostOptions = {
 try {
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'review' }, hostOptions), /REVIEW_IDENTITY_INVALID/);
   assert.equal(hostChildren, 0);
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-security', task: 'unsupported review', ...identity, reviewGate: 'security-review' }, hostOptions), /REVIEW_IDENTITY_INVALID/);
+  assert.equal(hostChildren, 0, 'unsupported host gate must create zero children');
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'correction', reviewMode: 'correction1' }, hostOptions), /REVIEW_IDENTITY_INVALID/);
   assert.equal(hostChildren, 0);
   const hosted = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'review', ...identity }, hostOptions);
@@ -124,6 +126,8 @@ const ppLifecycle = { stateDir: ppState, pipelineId: 'pp-pipeline', project: ppP
 try {
   assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer' }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_IDENTITY_INVALID/);
   assert.equal(ppChildren, 0);
+  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-security', ...identity, reviewGate: 'security-review' }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_IDENTITY_INVALID/);
+  assert.equal(ppChildren, 0, 'unsupported Project Pipeline gate must create zero children');
   assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-implementer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_DISPATCH_DENIED/);
   assert.equal(ppChildren, 0);
   assert.equal(executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), 'child');

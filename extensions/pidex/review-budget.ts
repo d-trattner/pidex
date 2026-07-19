@@ -2,7 +2,7 @@ const MODES = ['initial', 'correction1', 'review1', 'correction2', 'review2'];
 const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const PLAN = /^plan-\d{1,3}$/;
-const GATES = new Set(['critic', 'code-review', 'security', 'qa', 'security-review']);
+const GATES = new Set(['critic', 'code-review', 'security', 'qa']);
 const VERDICTS = {
   critic: { APPROVED: 'APPROVED', APPROVED_WITH_COMMENTS: 'APPROVED', REJECTED: 'CHANGES_REQUESTED' },
   'code-review': { APPROVED: 'APPROVED', APPROVED_WITH_COMMENTS: 'APPROVED', REJECTED: 'CHANGES_REQUESTED' },
