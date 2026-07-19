@@ -577,7 +577,7 @@ const result = await tool.execute('call-1', { command: 'status', projectId: 'pp-
 console.log(JSON.stringify({ names: [...tools.keys()], result }));
 `], {
       cwd: process.cwd(),
-      env: { ...process.env, PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
+      env: { ...process.env, PIDEX_CHILD: '0', PIDEX_PROJECT_PIPELINE_STATUS_SCRIPT: helper },
       encoding: 'utf8'
     });
     assert.equal(proc.status, 0, proc.stderr);
@@ -603,9 +603,9 @@ const mod = await import('./extensions/pidex/index.ts');
 const tools = new Map();
 mod.default({ on: () => {}, registerCommand: () => {}, registerTool: (tool) => tools.set(tool.name, tool), sendUserMessage: () => {} });
 const tool = tools.get('pidex_agent');
-const result = await tool.execute('call-1', { agent: 'pidex-critic', task: 'review', cwd: process.cwd(), projectId: 'pp-demo', expectedInputPath: 'agents.output/plans/034.md', expectedOutputPath: 'agents.output/parallel-agents/review.md', provider: 'pi', model: 'deepseek/model' }, undefined, undefined, { cwd: process.cwd() });
+const result = await tool.execute('call-1', { agent: 'pidex-planner', task: 'plan', cwd: process.cwd(), projectId: 'pp-demo', expectedOutputPath: 'agents.output/parallel-agents/review.md', provider: 'pi', model: 'deepseek/model' }, undefined, undefined, { cwd: process.cwd() });
 console.log(JSON.stringify(result));
-`], { cwd: process.cwd(), env: { ...process.env, PIDEX_PROJECT_PIPELINE_RUN_AGENT_SCRIPT: helper }, encoding: 'utf8' });
+`], { cwd: process.cwd(), env: { ...process.env, PIDEX_CHILD: '0', PIDEX_PROJECT_PIPELINE_RUN_AGENT_SCRIPT: helper }, encoding: 'utf8' });
     assert.equal(proc.status, 0, proc.stderr);
     const parsed = JSON.parse(proc.stdout.trim().split(/\n/).at(-1));
     assert.equal(parsed.details.no_fallback, true);

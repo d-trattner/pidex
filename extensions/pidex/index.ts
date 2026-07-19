@@ -3525,15 +3525,15 @@ const CORRECTION_OWNERS = new Set(["pidex-planner", "pidex-implementer"]);
 const REVIEW_GATES = ["critic", "code-review", "security", "qa"];
 const REVIEW_MODES = ["initial", "correction1", "review1", "correction2", "review2"];
 
-function reviewDispatchFor(agent: string, identity: Record<string, unknown>, task = "", secondary = false) {
-	return !secondary && (REVIEWER_AGENTS.has(agent) || (CORRECTION_OWNERS.has(agent) && (Object.values(identity).some((value) => value !== undefined) || extractPlanId(task) !== "unknown-plan")));
+function reviewDispatchFor(agent: string, identity: Record<string, unknown>, _task = "", secondary = false) {
+	return !secondary && (REVIEWER_AGENTS.has(agent) || (CORRECTION_OWNERS.has(agent) && Object.values(identity).some((value) => value !== undefined)));
 }
 
 function derivedAttemptId(runFamilyId: string, reviewGate: string, reviewMode: string): string {
 	return `attempt-${createHash("sha256").update(`${runFamilyId}|${reviewGate}|${reviewMode}`).digest("hex").slice(0, 16)}`;
 }
 
-function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipelineId: string }, project: string): { identity: Record<string, string>; pipelineId: string } {
+function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipelineId: string }, project: string): { identity: Record<string, string>; pipelineId: string } | undefined {
 	const supplied = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
 	if (Object.values(supplied).some((value) => value !== undefined)) {
 		if (!validateReviewIdentity(supplied).ok) throw new Error("REVIEW_IDENTITY_INVALID");
@@ -3541,7 +3541,7 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		return { identity: supplied as Record<string, string>, pipelineId: lifecycle.pipelineId };
 	}
 	const planId = normalizePlanKey(extractPlanId(String(params?.task || "")));
-	const base = path.join(lifecycle.stateDir, "pipeline-events", path.basename(path.resolve(project)));
+	const base = path.join(lifecycle.stateDir, "pipeline-events", safePathSegment(path.basename(path.resolve(project))));
 	const current = path.join(base, `${planId}.current`);
 	let pipelineId = "";
 	let rows: any[] = [];
@@ -3557,17 +3557,66 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 			const state = foldReviewHistory(rows, identity);
 			return ["allowed", "resume_reserved", "spawn_accepted"].includes(state.status) || (state.status === "uncertain" && rows.some((row) => ["runFamilyId", "planId", "reviewGate", "reviewMode", "attemptId"].every((key) => row?.metadata?.[key] === identity[key])));
 		});
-	if (candidates.length !== 1) throw new Error("REVIEW_IDENTITY_INVALID");
-	return { identity: candidates[0], pipelineId };
+	if (candidates.length > 1) throw new Error("REVIEW_IDENTITY_INVALID");
+	return candidates.length === 1 ? { identity: candidates[0], pipelineId } : undefined;
 }
 
-function completeReviewDispatch(agent: string, identity: Record<string, string>, result: any, lifecycle: { stateDir: string; pipelineId: string; project: string }, cwd: string): any {
-	if (!result || result.exitCode !== 0) throw new Error("REVIEW_CHILD_FAILED");
+function isRelativeAgentsOutputPath(value: unknown): value is string {
+	if (typeof value !== "string" || !value || path.isAbsolute(value) || path.win32.isAbsolute(value) || value.includes("\\")) return false;
+	return path.posix.normalize(value) === value && /^agents\.output\/.+/.test(value);
+}
+
+function isStrictDescendant(parent: string, child: string): boolean {
+	const relative = path.relative(parent, child);
+	return Boolean(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function canonicalExistingPath(root: string, relative: string, regularFile = false): string | undefined {
+	try {
+		const canonicalRoot = fs.realpathSync.native(root);
+		const candidate = path.resolve(canonicalRoot, relative);
+		if (!isStrictDescendant(canonicalRoot, candidate)) return undefined;
+		let current = canonicalRoot;
+		for (const part of path.relative(canonicalRoot, candidate).split(path.sep)) {
+			current = path.join(current, part);
+			if (fs.lstatSync(current).isSymbolicLink()) return undefined;
+		}
+		const canonical = fs.realpathSync.native(candidate);
+		return canonical === candidate && (!regularFile || fs.statSync(canonical).isFile()) ? canonical : undefined;
+	} catch { return undefined; }
+}
+
+function isHostReviewContext(project: string, contextFile: unknown): boolean {
+	if (!isRelativeAgentsOutputPath(contextFile)) return false;
+	try {
+		const canonicalProject = fs.realpathSync.native(project);
+		const agentsOutput = canonicalExistingPath(canonicalProject, "agents.output");
+		const context = canonicalExistingPath(canonicalProject, contextFile, true);
+		return Boolean(agentsOutput && fs.statSync(agentsOutput).isDirectory() && context && isStrictDescendant(agentsOutput, context));
+	} catch { return false; }
+}
+
+function isDirectReviewContext(params: any, result: any, lifecycle: { stateDir: string }, expectedContextFile: string, contextFile: unknown): boolean {
+	if (!isRelativeAgentsOutputPath(expectedContextFile) || contextFile !== expectedContextFile || result.context_file !== expectedContextFile || result.archive_sync_status !== "complete" || typeof result.archive_context_file !== "string" || typeof params?.projectId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(params.projectId)) return false;
+	try {
+		const canonicalState = fs.realpathSync.native(lifecycle.stateDir);
+		const expectedArchive = canonicalExistingPath(canonicalState, path.join("project-archives", params.projectId, ...expectedContextFile.split("/")), true);
+		const suppliedArchive = path.resolve(result.archive_context_file);
+		if (!expectedArchive || !isStrictDescendant(canonicalState, suppliedArchive)) return false;
+		return canonicalExistingPath(canonicalState, path.relative(canonicalState, suppliedArchive), true) === expectedArchive;
+	} catch { return false; }
+}
+
+function completeReviewDispatch(agent: string, identity: Record<string, string>, result: any, lifecycle: { stateDir: string; pipelineId: string; project: string }, cwd: string, expectedContextFile?: string, params?: any): any {
+	if (!result || (result.exitCode ?? (result.ok === true ? 0 : 1)) !== 0) throw new Error("REVIEW_CHILD_FAILED");
 	const routing = extractRoutingBlock(String(result.finalText || ""));
-	const verdict = extractRoutingField(routing, "verdict");
-	const routeTo = extractRoutingField(routing, "route_to");
-	const localContext = hasValidRoutingContextFile(String(result.finalText || ""), cwd) || (typeof result.archive_context_file === "string" && fs.existsSync(result.archive_context_file));
-	if (!routing || !verdict || !routeTo || !localContext) throw new Error("REVIEW_ROUTING_INVALID");
+	const verdict = extractRoutingField(routing, "verdict") ?? result.routing?.verdict;
+	const routeTo = extractRoutingField(routing, "route_to") ?? result.routing?.route_to;
+	const contextFile = extractRoutingField(routing, "context_file") ?? result.routing?.context_file;
+	const localContext = expectedContextFile
+		? isDirectReviewContext(params, result, lifecycle, expectedContextFile, contextFile)
+		: isHostReviewContext(cwd, contextFile);
+	if ((!routing && !result.routing) || !verdict || !routeTo || !localContext) throw new Error("REVIEW_ROUTING_INVALID");
 	const outcome = identity.reviewMode.startsWith("correction")
 		? verdict === "COMPLETE" && routeTo === ({ critic: "pidex-critic", "code-review": "pidex-code-reviewer", security: "pidex-security", qa: "pidex-qa" }[identity.reviewGate]) ? "READY_FOR_REVIEW" : null
 		: normalizeReviewVerdict(identity.reviewGate, verdict);
@@ -3580,9 +3629,15 @@ function completeReviewDispatch(agent: string, identity: Record<string, string>,
 export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
 	const request = validateHostAgentRequestShape(params);
 	const suppliedIdentity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
-	const reviewDispatch = reviewDispatchFor(params.agent, suppliedIdentity, params.task, request.secondary);
+	let reviewDispatch = reviewDispatchFor(params.agent, suppliedIdentity, params.task, request.secondary);
 	const configuredLifecycle = options.reviewLifecycle ?? { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${path.basename(options.agentCwd)}-${params.planId}` };
-	const resolvedReview = reviewDispatch ? resolveReviewIdentity(params, configuredLifecycle, options.agentCwd) : undefined;
+	let resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined;
+	if (!request.secondary && CORRECTION_OWNERS.has(params.agent) && !Object.values(suppliedIdentity).some((value) => value !== undefined) && extractPlanId(params.task) !== "unknown-plan") {
+		resolvedReview = resolveReviewIdentity(params, configuredLifecycle, options.agentCwd);
+		reviewDispatch = Boolean(resolvedReview);
+	}
+	if (reviewDispatch && !resolvedReview) resolvedReview = resolveReviewIdentity(params, configuredLifecycle, options.agentCwd);
+	if (reviewDispatch && !resolvedReview) throw new Error("REVIEW_IDENTITY_INVALID");
 	const identity = resolvedReview?.identity ?? suppliedIdentity;
 	const eligibleLanes = request.secondary
 		? (options.loadEligibleLanes ?? ((requestParams) => {
@@ -3627,7 +3682,7 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
 	const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted }) });
 	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
-	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd);
+	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params);
 }
 
 const RpAgentParams = Type.Object({
@@ -3656,24 +3711,36 @@ type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; pr
 
 export function executeProjectPipelineReviewBoundary(params: any, lifecycle: ProjectPipelineReviewLifecycle, start: () => any): any {
 	const suppliedIdentity = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
-	if (!reviewDispatchFor(String(params?.agent || ""), suppliedIdentity, String(params?.task || ""))) return start();
-	const resolvedReview = resolveReviewIdentity(params, lifecycle, lifecycle.project);
+	let reviewDispatch = reviewDispatchFor(String(params?.agent || ""), suppliedIdentity, String(params?.task || ""));
+	let resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined;
+	if (CORRECTION_OWNERS.has(String(params?.agent || "")) && !Object.values(suppliedIdentity).some((value) => value !== undefined) && extractPlanId(String(params?.task || "")) !== "unknown-plan") {
+		resolvedReview = resolveReviewIdentity(params, lifecycle, lifecycle.project);
+		reviewDispatch = Boolean(resolvedReview);
+	}
+	if (!reviewDispatch) return start();
+	resolvedReview ??= resolveReviewIdentity(params, lifecycle, lifecycle.project);
+	if (!resolvedReview) throw new Error("REVIEW_IDENTITY_INVALID");
 	const identity = resolvedReview.identity;
 	const effectiveLifecycle = { ...lifecycle, pipelineId: resolvedReview.pipelineId };
 	const reservation = reserveReviewStart({ ...effectiveLifecycle, identity, start });
 	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
-	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project);
+	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params);
+}
+
+function validateProjectPipelineAgentParams(params: any): void {
+	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
+	if (!isRelativeAgentsOutputPath(params?.expectedOutputPath)) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
+	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent)) && !isRelativeAgentsOutputPath(params?.expectedInputPath)) throw new Error(`Direct Project Pipeline review '${params.agent}' requires expectedInputPath.`);
 }
 
 export function runProjectPipelineAgentTool(params: any): any {
+	validateProjectPipelineAgentParams(params);
 	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${params?.projectId || "project"}-${params?.planId || "plan"}`, project: path.resolve(params?.cwd || PACKAGE_ROOT) };
 	return executeProjectPipelineReviewBoundary(params, lifecycle, () => runProjectPipelineAgentToolUnchecked(params));
 }
 
 function runProjectPipelineAgentToolUnchecked(params: any): any {
-	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
-	if (!params?.expectedOutputPath) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
-	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent)) && !params?.expectedInputPath) throw new Error(`Direct Project Pipeline review '${params.agent}' requires expectedInputPath.`);
+	validateProjectPipelineAgentParams(params);
 	if (!fs.existsSync(PROJECT_PIPELINE_RUN_AGENT_SCRIPT)) throw new Error("Project Pipeline agent helper missing; update the canonical PIDEX runtime.");
 	const args = [PROJECT_PIPELINE_RUN_AGENT_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-id", String(params.projectId), "--agent", String(params.agent), "--task", String(params.task || ""), "--expected-output", String(params.expectedOutputPath), "--json"];
 	if (params.expectedInputPath) args.push("--expected-input", String(params.expectedInputPath));

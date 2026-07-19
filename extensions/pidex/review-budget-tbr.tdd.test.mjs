@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -221,5 +221,126 @@ try {
   const ppRows = readFileSync(path.join(ppCompletionBase, `${ppCompletionPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   assert.deepEqual(ppRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
 } finally { rmSync(ppCompletionState, { recursive: true, force: true }); rmSync(ppCompletionProject, { recursive: true, force: true }); }
+
+const correctionOwnerState = mkdtempSync(path.join(os.tmpdir(), 'pidex-correction-owner-state-'));
+const correctionOwnerProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-correction-owner-project-'));
+let correctionOwnerChildren = 0;
+try {
+  const base = path.join(correctionOwnerState, 'pipeline-events', path.basename(correctionOwnerProject));
+  mkdirSync(base, { recursive: true });
+  writeFileSync(path.join(base, 'plan-038.current'), 'family-owner');
+  const options = {
+    agentCwd: correctionOwnerProject,
+    reviewLifecycle: { stateDir: correctionOwnerState, pipelineId: 'ignored' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => {
+      correctionOwnerChildren += 1;
+      params.onProcessStarted?.();
+      return params.agent === 'pidex-planner'
+        ? { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-critic\ncontext_file: agents.output/planning/038.md\n-->', stderr: '' }
+        : { agent: params.agent, provider: 'pi', exitCode: 0, finalText: 'ordinary result', stderr: '' };
+    },
+  };
+  await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'Plan 038 ordinary planning' }, options);
+  await executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 038 ordinary implementation' }, options);
+  assert.equal(correctionOwnerChildren, 2, 'zero-pending correction owners must remain ordinary calls');
+
+  mkdirSync(path.join(correctionOwnerProject, 'agents.output', 'planning'), { recursive: true });
+  writeFileSync(path.join(correctionOwnerProject, 'agents.output', 'planning', '038.md'), '# planner context\n');
+  const start = (gate) => reserveReviewStart({ stateDir: correctionOwnerState, project: correctionOwnerProject, pipelineId: 'family-owner', identity: { runFamilyId: 'family-owner', planId: 'plan-038', reviewGate: gate, reviewMode: 'initial', attemptId: lifecycleAttempt('family-owner', gate, 'initial') }, start: () => 'seed' });
+  const critic = { runFamilyId: 'family-owner', planId: 'plan-038', reviewGate: 'critic', reviewMode: 'initial', attemptId: lifecycleAttempt('family-owner', 'critic', 'initial') };
+  assert.equal(start('critic').status, 'accepted');
+  assert.equal(recordReviewCompletion({ stateDir: correctionOwnerState, project: correctionOwnerProject, pipelineId: 'family-owner', identity: critic, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
+  await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'Plan 038 tracked correction' }, options);
+  assert.equal(correctionOwnerChildren, 3, 'one pending planner correction must remain lifecycle tracked');
+  for (const gate of ['code-review', 'security']) {
+    const current = { runFamilyId: 'family-owner', planId: 'plan-038', reviewGate: gate, reviewMode: 'initial', attemptId: lifecycleAttempt('family-owner', gate, 'initial') };
+    assert.equal(start(gate).status, 'accepted');
+    assert.equal(recordReviewCompletion({ stateDir: correctionOwnerState, project: correctionOwnerProject, pipelineId: 'family-owner', identity: current, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
+  }
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 038 ambiguous correction' }, options), /REVIEW_IDENTITY_INVALID/);
+  assert.equal(correctionOwnerChildren, 3, 'multiple pending corrections must create zero children');
+} finally { rmSync(correctionOwnerState, { recursive: true, force: true }); rmSync(correctionOwnerProject, { recursive: true, force: true }); }
+
+const slugState = mkdtempSync(path.join(os.tmpdir(), 'pidex-slug-state-'));
+const slugRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-slug-root-'));
+const slugProject = path.join(slugRoot, 'Project With Space!');
+try {
+  mkdirSync(slugProject);
+  const base = path.join(slugState, 'pipeline-events', 'Project-With-Space');
+  const context = path.join(slugProject, 'agents.output', 'code-review', '038.md');
+  mkdirSync(path.dirname(context), { recursive: true });
+  mkdirSync(base, { recursive: true });
+  writeFileSync(path.join(base, 'plan-038.current'), 'family-slug');
+  writeFileSync(context, '# context\n');
+  const result = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 review' }, {
+    agentCwd: slugProject,
+    reviewLifecycle: { stateDir: slugState, pipelineId: 'ignored' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => { params.onProcessStarted?.(); return { agent: 'pidex-code-reviewer', provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->', stderr: '' }; },
+  });
+  assert.match(result.finalText, /APPROVED/);
+} finally { rmSync(slugState, { recursive: true, force: true }); rmSync(slugRoot, { recursive: true, force: true }); }
+
+const artifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-artifact-state-'));
+const artifactProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-artifact-project-'));
+const foreignContext = path.join(mkdtempSync(path.join(os.tmpdir(), 'pidex-foreign-context-')), 'review.md');
+writeFileSync(foreignContext, '# foreign\n');
+try {
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
+    agentCwd: artifactProject,
+    reviewLifecycle: { stateDir: artifactState, pipelineId: 'artifact-pipeline' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => { params.onProcessStarted?.(); return { agent: 'pidex-code-reviewer', provider: 'pi', exitCode: 0, finalText: `<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: ${foreignContext}\n-->`, stderr: '' }; },
+  }), /REVIEW_ROUTING_INVALID/);
+} finally { rmSync(artifactState, { recursive: true, force: true }); rmSync(artifactProject, { recursive: true, force: true }); rmSync(path.dirname(foreignContext), { recursive: true, force: true }); }
+
+const symlinkArtifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-symlink-artifact-state-'));
+const symlinkArtifactProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-symlink-artifact-project-'));
+const symlinkArtifactForeign = mkdtempSync(path.join(os.tmpdir(), 'pidex-symlink-artifact-foreign-'));
+try {
+  writeFileSync(path.join(symlinkArtifactForeign, 'review.md'), '# foreign\n');
+  mkdirSync(path.join(symlinkArtifactProject, 'agents.output'), { recursive: true });
+  symlinkSync(symlinkArtifactForeign, path.join(symlinkArtifactProject, 'agents.output', 'link'), 'dir');
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
+    agentCwd: symlinkArtifactProject,
+    reviewLifecycle: { stateDir: symlinkArtifactState, pipelineId: 'symlink-artifact' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => { params.onProcessStarted?.(); return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/link/review.md\n-->', stderr: '' }; },
+  }), /REVIEW_ROUTING_INVALID/);
+} finally { rmSync(symlinkArtifactState, { recursive: true, force: true }); rmSync(symlinkArtifactProject, { recursive: true, force: true }); rmSync(symlinkArtifactForeign, { recursive: true, force: true }); }
+
+const directArtifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-direct-artifact-state-'));
+const directArtifactProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-direct-artifact-project-'));
+const directExpected = 'agents.output/code-review/038.md';
+const directProjectId = 'pp-direct-artifact';
+const directArchive = path.join(directArtifactState, 'project-archives', directProjectId, directExpected);
+const directResult = (overrides = {}) => ({ exitCode: 0, archive_sync_status: 'complete', context_file: directExpected, archive_context_file: directArchive, routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: directExpected }, ...overrides });
+const directParams = { agent: 'pidex-code-reviewer', ...identity, projectId: directProjectId, expectedOutputPath: directExpected };
+try {
+  mkdirSync(path.dirname(directArchive), { recursive: true });
+  writeFileSync(directArchive, '# archive\n');
+  const result = executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-artifact', project: directArtifactProject }, () => directResult());
+  assert.equal(result.context_file, directExpected, 'direct reviewer accepts only exact canonical archived context');
+
+  const foreignArchive = path.join(directArtifactProject, 'foreign.md');
+  writeFileSync(foreignArchive, '# foreign\n');
+  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-foreign', project: directArtifactProject }, () => directResult({ archive_context_file: foreignArchive })), /REVIEW_ROUTING_INVALID/);
+
+  const archiveForeign = path.join(directArtifactProject, 'archive-foreign.md');
+  writeFileSync(archiveForeign, '# archive foreign\n');
+  rmSync(directArchive);
+  symlinkSync(archiveForeign, directArchive, 'file');
+  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-symlink', project: directArtifactProject }, () => directResult()), /REVIEW_ROUTING_INVALID/);
+  rmSync(directArchive);
+  writeFileSync(directArchive, '# archive\n');
+
+  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-returned-mismatch', project: directArtifactProject }, () => directResult({ context_file: 'agents.output/code-review/other.md' })), /REVIEW_ROUTING_INVALID/);
+  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-routing-mismatch', project: directArtifactProject }, () => directResult({ routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/other.md' } })), /REVIEW_ROUTING_INVALID/);
+} finally { rmSync(directArtifactState, { recursive: true, force: true }); rmSync(directArtifactProject, { recursive: true, force: true }); }
 
 console.log('review budget TBR tests passed');
