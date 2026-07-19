@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, rmdirSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, rmdirSync, rmSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -50,49 +50,115 @@ function appendReviewEvent(stream, event_type, metadata) {
   } finally { closeSync(fd); }
 }
 
-function takeReviewLock(lock) {
-  try { mkdirSync(lock, { mode: 0o700 }); return true; } catch (error) { if (error?.code === 'EEXIST') return false; throw error; }
+function processStart(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+    return fields[19] || null;
+  } catch { return null; }
 }
 
-function releaseReviewLock(lock) { rmdirSync(lock); }
+function lockOwner(identity) { return { pid: process.pid, processStart: processStart(process.pid), identity }; }
+function validLockOwner(value) {
+  return value && Number.isInteger(value.pid) && value.pid > 0 && typeof value.processStart === 'string' && value.processStart.length > 0 && value.processStart.length <= 128 && validateReviewIdentity(value.identity).ok;
+}
+function sameTuple(left, right) { return left.runFamilyId === right.runFamilyId && left.planId === right.planId && left.reviewGate === right.reviewGate && left.reviewMode === right.reviewMode && left.attemptId === right.attemptId; }
+function ownerProvenDead(owner) {
+  try { process.kill(owner.pid, 0); } catch (error) { return error?.code === 'ESRCH'; }
+  const currentStart = processStart(owner.pid);
+  return Boolean(currentStart && currentStart !== owner.processStart);
+}
+function writeLockOwner(lock, identity) {
+  const owner = lockOwner(identity);
+  if (!owner.processStart) throw new Error('process start identity unavailable');
+  const file = path.join(lock, 'owner.json');
+  writeFileSync(file, JSON.stringify(owner), { mode: 0o600 });
+  const fd = openSync(file, 'r');
+  try { fsyncSync(fd); } finally { closeSync(fd); }
+}
+function sleep(milliseconds) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds); }
+function takeReviewLock(lock, identity) {
+  const deadline = Date.now() + 500;
+  while (true) {
+    try { mkdirSync(lock, { mode: 0o700 }); writeLockOwner(lock, identity); return { held: true }; }
+    catch (error) {
+      if (error?.code !== 'EEXIST') { try { rmSync(lock, { recursive: true, force: true }); } catch {} throw error; }
+      let owner;
+      try { owner = JSON.parse(readFileSync(path.join(lock, 'owner.json'), 'utf8')); } catch { return { held: false, code: 'REVIEW_LOCK_UNCERTAIN' }; }
+      if (!validLockOwner(owner)) return { held: false, code: 'REVIEW_LOCK_UNCERTAIN' };
+      if (ownerProvenDead(owner)) { try { rmSync(lock, { recursive: true, force: false }); continue; } catch { return { held: false, code: 'REVIEW_LOCK_UNCERTAIN' }; } }
+      if (!sameTuple(owner.identity, identity) || Date.now() >= deadline) return { held: false, code: 'REVIEW_LOCK_UNAVAILABLE' };
+      sleep(10);
+    }
+  }
+}
+function releaseReviewLock(lock) { unlinkSync(path.join(lock, 'owner.json')); rmdirSync(lock); return true; }
 
 export function reserveReviewStart({ stateDir, project, pipelineId, identity, start }) {
-  if (!validateReviewIdentity(identity).ok) return { status: 'denied' };
+  if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return { status: 'denied' };
   let locations;
   try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); mkdirSync(locations.base, { recursive: true }); } catch { return { status: 'denied' }; }
-  if (typeof start !== 'function') return { status: 'denied' };
-  if (!takeReviewLock(locations.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_UNAVAILABLE' };
+  const lock = takeReviewLock(locations.lock, identity);
+  if (!lock.held) return { status: 'unavailable', code: lock.code };
   let result;
   try {
-    result = foldReviewHistory(readReviewRows(locations.stream), identity);
-    if (result.status === 'denied' || result.status === 'uncertain' || result.status === 'terminal') return result.status === 'terminal' ? { status: 'resumed', terminal: result.terminal } : result;
-    if (result.status === 'spawn_accepted') return { status: 'resumed' };
-    if (result.status === 'allowed') appendReviewEvent(locations.stream, 'start_reserved', identity);
+    const state = foldReviewHistory(readReviewRows(locations.stream), identity);
+    if (state.status === 'denied' || state.status === 'uncertain') result = state;
+    else if (state.status === 'terminal') result = { status: 'resumed', terminal: state.terminal };
+    else if (state.status === 'spawn_accepted') result = { status: 'resumed' };
+    else {
+      if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(locations.stream, 'start_reserved', identity);
+      appendReviewEvent(locations.stream, 'spawn_entered', identity);
+      const started = start();
+      if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
+      appendReviewEvent(locations.stream, 'spawn_accepted', identity);
+      result = { status: 'accepted', started };
+    }
+  } catch { result = { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }; }
+  try { releaseReviewLock(locations.lock); } catch { return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }; }
+  return result;
+}
+
+export function reserveReviewStartAsync({ stateDir, project, pipelineId, identity, start }) {
+  if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return Promise.resolve({ status: 'denied' });
+  let locations;
+  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); mkdirSync(locations.base, { recursive: true }); } catch { return Promise.resolve({ status: 'denied' }); }
+  const lock = takeReviewLock(locations.lock, identity);
+  if (!lock.held) return Promise.resolve({ status: 'unavailable', code: lock.code });
+  try {
+    const state = foldReviewHistory(readReviewRows(locations.stream), identity);
+    if (state.status === 'denied' || state.status === 'uncertain') { releaseReviewLock(locations.lock); return Promise.resolve(state); }
+    if (state.status === 'terminal' || state.status === 'spawn_accepted') { releaseReviewLock(locations.lock); return Promise.resolve({ status: 'resumed', ...(state.status === 'terminal' ? { terminal: state.terminal } : {}) }); }
+    if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(locations.stream, 'start_reserved', identity);
     appendReviewEvent(locations.stream, 'spawn_entered', identity);
-    const started = start();
-    if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
-    appendReviewEvent(locations.stream, 'spawn_accepted', identity);
-    return { status: 'accepted', started };
-  } catch (error) {
-    return { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' };
-  } finally {
-    try { releaseReviewLock(locations.lock); } catch { result = { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }; }
-  }
+    return new Promise((resolve) => {
+      let child; let signalled = false; let finished = false;
+      const finish = (result) => { if (finished) return; finished = true; try { releaseReviewLock(locations.lock); } catch { resolve({ status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }); return; } resolve(result); };
+      const processStarted = () => { signalled = true; try { appendReviewEvent(locations.stream, 'spawn_accepted', identity); if (child !== undefined) finish({ status: 'accepted', started: child }); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
+      try {
+        child = start(processStarted);
+        if (signalled && !finished) finish({ status: 'accepted', started: child });
+        Promise.resolve(child).catch(() => { if (!signalled) finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); });
+      } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); }
+    });
+  } catch { try { releaseReviewLock(locations.lock); } catch {} return Promise.resolve({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); }
 }
 
 export function recordReviewCompletion({ stateDir, project, pipelineId, identity, outcome }) {
   let locations;
   if (!validateReviewIdentity(identity).ok || !allowedCompletionOutcome(identity, outcome)) return { status: 'denied' };
   try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); } catch { return { status: 'denied' }; }
-  if (!takeReviewLock(locations.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_UNAVAILABLE' };
+  const lock = takeReviewLock(locations.lock, identity);
+  if (!lock.held) return { status: 'unavailable', code: lock.code };
+  let result;
   try {
     const state = foldReviewHistory(readReviewRows(locations.stream), identity);
-    if (state.status === 'terminal') return state.terminal === outcome ? { status: 'resumed' } : { status: 'denied' };
-    if (state.status !== 'spawn_accepted') return state.status === 'uncertain' ? state : { status: 'denied' };
-    appendReviewEvent(locations.stream, 'spawn_returned', identity);
-    appendReviewEvent(locations.stream, 'review_outcome', { ...identity, outcome });
-    return { status: outcome };
-  } catch { return { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }; } finally { try { releaseReviewLock(locations.lock); } catch {} }
+    if (state.status === 'terminal') result = state.terminal === outcome ? { status: 'resumed' } : { status: 'denied' };
+    else if (state.status !== 'spawn_accepted') result = state.status === 'uncertain' ? state : { status: 'denied' };
+    else { appendReviewEvent(locations.stream, 'spawn_returned', identity); appendReviewEvent(locations.stream, 'review_outcome', { ...identity, outcome }); result = { status: outcome }; }
+  } catch { result = { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }; }
+  try { releaseReviewLock(locations.lock); } catch { return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }; }
+  return result;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

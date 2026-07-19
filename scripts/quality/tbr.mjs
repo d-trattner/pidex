@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
@@ -29,17 +29,52 @@ export function validateReviewOutcome(outcome) {
 function itemFor(identity, finding) {
   const stable = `TBR-${createHash('sha256').update([identity.planId, identity.runFamilyId, identity.reviewGate, finding.findingId].join('\0')).digest('hex').slice(0, 12)}`;
   const title = String(finding.title || finding.findingId).slice(0, 120);
-  return { stableTbrId: stable, status: 'open', title, shortDescription: String(finding.shortDescription || 'Deferred review finding.').slice(0, 500), originPlan: identity.planId, originRun: identity.runFamilyId, originGate: identity.reviewGate, findingClass: finding.class, proposedSeverity: finding.severity, reproductionState: finding.reproductionState, blockingScope: 'none', releaseRecommendation: ['Critical', 'Security'].includes(finding.severity) ? 'hold' : 'none', sourceFindingId: finding.findingId };
+  return { stableTbrId: stable, status: 'open', title, shortDescription: String(finding.shortDescription || 'Deferred review finding.').slice(0, 500), originPlan: identity.planId, originRun: identity.runFamilyId, originGate: identity.reviewGate, findingClass: finding.class, proposedSeverity: finding.severity, reproductionState: finding.reproductionState, blockingScope: 'none', releaseRecommendation: ['Critical', 'Security'].includes(finding.severity) ? 'hold' : 'none', sourceFindingId: finding.findingId, createdAt: new Date().toISOString() };
+}
+function parseItem(file, name) {
+  const match = name.match(/^(TBR-[a-f0-9]{12})-([a-z0-9-]{1,60})\.md$/);
+  if (!match) return null;
+  const text = readFileSync(file, 'utf8');
+  const frontmatter = text.match(/^---\n([\s\S]*?)\n---\n/);
+  if (!frontmatter) throw new Error('invalid canonical item');
+  const item = {};
+  for (const line of frontmatter[1].split('\n')) { const separator = line.indexOf(': '); if (separator > 0) item[line.slice(0, separator)] = line.slice(separator + 2); }
+  if (item.stableTbrId !== match[1]) throw new Error('stable ID filename mismatch');
+  return { ...item, file: name };
+}
+function readCanonicalItems(dir) {
+  const found = new Map();
+  for (const name of readdirSync(dir).sort()) {
+    const item = parseItem(path.join(dir, name), name);
+    if (!item) continue;
+    if (found.has(item.stableTbrId)) throw new Error('stable ID collision');
+    found.set(item.stableTbrId, item);
+  }
+  return found;
+}
+function atomicWrite(file, text) { const temporary = `${file}.${process.pid}.tmp`; writeFileSync(temporary, text, { mode: 0o600 }); renameSync(temporary, file); }
+function renderIndex(items) {
+  const rows = [...items].sort((left, right) => left.stableTbrId.localeCompare(right.stableTbrId)).map((item) => `| ${item.stableTbrId} | ${item.status} | ${item.title} | ${item.findingClass} | ${item.proposedSeverity} | ${item.originPlan} | ${item.originGate} |`).join('\n');
+  return `# TBR Archive\n\n| ID | Status | Title | Class | Severity | Plan | Gate |\n|---|---|---|---|---|---|---|\n${rows}\n`;
 }
 export function writeTbr({ root, identity, findings }) {
   if (!root || !identity || !Array.isArray(findings)) return { ok: false, code: 'TBR_INVALID' };
   try {
-    const items = findings.map((finding) => itemFor(identity, finding));
+    const requested = findings.map((finding) => itemFor(identity, finding));
     const dir = path.join(root, 'wiki', 'tbr', 'items'); mkdirSync(dir, { recursive: true });
-    let created = false;
-    for (const item of items) { const file = path.join(dir, `${item.stableTbrId}-${slug(item.title)}.md`); if (!existsSync(file)) { writeFileSync(file, `---\n${Object.entries(item).map(([k,v]) => `${k}: ${v}`).join('\n')}\n---\n\n${item.shortDescription}\n`, { mode: 0o600 }); created = true; } }
-    const index = path.join(root, 'wiki', 'tbr', 'index.md'); const rows = items.map((item) => `| ${item.stableTbrId} | open | ${item.title} | ${item.findingClass} | ${item.proposedSeverity} | ${item.originPlan} | ${item.originGate} |`).sort();
-    writeFileSync(index, `# TBR Archive\n\n| ID | Status | Title | Class | Severity | Plan | Gate |\n|---|---|---|---|---|---|---|\n${rows.join('\n')}\n`, { mode: 0o600 });
+    const canonical = readCanonicalItems(dir); let created = false; const items = [];
+    for (const candidate of requested) {
+      const existing = canonical.get(candidate.stableTbrId);
+      if (existing) {
+        for (const field of ['stableTbrId', 'originPlan', 'originRun', 'originGate', 'sourceFindingId']) if (existing[field] !== candidate[field]) throw new Error('immutable stable ID mismatch');
+        items.push(existing);
+        continue;
+      }
+      const file = `${candidate.stableTbrId}-${slug(candidate.title)}.md`;
+      atomicWrite(path.join(dir, file), `---\n${Object.entries(candidate).map(([key, value]) => `${key}: ${value}`).join('\n')}\n---\n\n${candidate.shortDescription}\n`);
+      const stored = { ...candidate, file }; canonical.set(candidate.stableTbrId, stored); items.push(stored); created = true;
+    }
+    atomicWrite(path.join(root, 'wiki', 'tbr', 'index.md'), renderIndex(canonical.values()));
     return { ok: true, created, items };
   } catch { return { ok: false, code: 'TBR_WRITE_FAILED' }; }
 }

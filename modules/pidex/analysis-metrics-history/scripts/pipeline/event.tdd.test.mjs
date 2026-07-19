@@ -78,6 +78,25 @@ try {
   writeFileSync(jsonl, `${JSON.stringify({ event_type: 'start_reserved', metadata: enteredTuple })}\n${JSON.stringify({ event_type: 'spawn_entered', metadata: enteredTuple })}\n`, { flag: 'a' });
   assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: enteredTuple, start: () => { throw new Error('uncertain must not start'); } }).status, 'uncertain');
 
+  const deadLockTuple = { ...tuple, runFamilyId: 'family-dead-lock', attemptId: 'attempt-dead-lock' };
+  const deadLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${deadLockTuple.runFamilyId}.lock`);
+  mkdirSync(deadLock);
+  writeFileSync(path.join(deadLock, 'owner.json'), JSON.stringify({ pid: 99999999, processStart: 'dead', identity: deadLockTuple }));
+  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: deadLockTuple, start: () => 'recovered-after-owner-death' }).status, 'accepted');
+  const malformedLockTuple = { ...tuple, runFamilyId: 'family-malformed-lock', attemptId: 'attempt-malformed-lock' };
+  const malformedLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${malformedLockTuple.runFamilyId}.lock`);
+  mkdirSync(malformedLock);
+  writeFileSync(path.join(malformedLock, 'owner.json'), '{not-json');
+  assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: malformedLockTuple, start: () => 'must-not-start' }), { status: 'unavailable', code: 'REVIEW_LOCK_UNCERTAIN' });
+  rmSync(malformedLock, { recursive: true, force: true });
+  const releaseTuple = { ...tuple, runFamilyId: 'family-release-lock', attemptId: 'attempt-release-lock' };
+  assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: releaseTuple, start: () => {
+    const lock = path.join(state, 'pipeline-events', path.basename(project), `.review-${releaseTuple.runFamilyId}.lock`);
+    rmSync(lock, { recursive: true, force: true });
+    writeFileSync(lock, 'release-blocked');
+    return 'started';
+  } }), { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' });
+  rmSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${releaseTuple.runFamilyId}.lock`));
   const lockTuple = { ...tuple, runFamilyId: 'family-lock', attemptId: 'attempt-lock' };
   let lockSeenDuringStart = false;
   const lockProof = reserveReviewStart({ stateDir: state, project, pipelineId, identity: lockTuple, start: () => {
@@ -120,7 +139,7 @@ try {
   assert.equal(winnerResult.code, 0, winnerResult.error);
   assert.equal(loser.code, 0, loser.error);
   assert.equal(JSON.parse(winnerResult.output).status, 'accepted');
-  assert.equal(JSON.parse(loser.output).status, 'unavailable');
+  assert.equal(JSON.parse(loser.output).status, 'resumed');
   rmSync(contentionState, { recursive: true, force: true });
   rmSync(contentionProject, { recursive: true, force: true });
 } finally {

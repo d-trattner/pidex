@@ -8,7 +8,8 @@ import { createGzip, gunzipSync } from "node:zlib";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { validateReviewIdentity } from "./review-budget.ts";
+import { reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
+import { reserveReviewStartAsync } from "../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs";
 
 type AgentFrontmatter = {
 	name?: string;
@@ -2631,6 +2632,7 @@ async function runRpAgent(params: {
 	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
+	onProcessStarted?: () => void;
 }): Promise<RpResult> {
 	const startedAt = Date.now();
 	const agent = loadAgent(params.agent);
@@ -2769,6 +2771,7 @@ async function runRpAgent(params: {
 					PI_SKIP_VERSION_CHECK: "1",
 				},
 			});
+			params.onProcessStarted?.();
 			const timeoutMs = params.timeoutSeconds ? Math.max(1, params.timeoutSeconds) * 1000 : undefined;
 			const timeoutTimer = timeoutMs ? setTimeout(() => {
 				timedOut = true;
@@ -2915,6 +2918,7 @@ async function runCliDelegate(params: {
 	dangerouslySkipPermissions?: boolean;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
+	onProcessStarted?: () => void;
 }): Promise<RpResult> {
 	const startedAt = Date.now();
 	const agent = loadAgent(params.agent);
@@ -2957,6 +2961,7 @@ async function runCliDelegate(params: {
 					DANGEROUSLY_SKIP_PERMISSIONS: params.dangerouslySkipPermissions ? "1" : "",
 				},
 			});
+			params.onProcessStarted?.();
 			const timer = setTimeout(() => {
 				timedOut = true;
 				proc.kill("SIGTERM");
@@ -3024,6 +3029,7 @@ async function runConfiguredAgent(params: {
 	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
+	onProcessStarted?: () => void;
 }): Promise<RpResult> {
 	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: resolving route...`);
 	const config = loadRoutingConfig();
@@ -3072,6 +3078,7 @@ async function runConfiguredAgent(params: {
 				sandboxContext: params.sandboxContext,
 				signal: params.signal,
 				onUpdate: params.onUpdate,
+				onProcessStarted: params.onProcessStarted,
 			});
 			return { ...result, fallbackFrom };
 		}
@@ -3091,6 +3098,7 @@ async function runConfiguredAgent(params: {
 			dangerouslySkipPermissions: route.dangerously_skip_permissions,
 			signal: params.signal,
 			onUpdate: params.onUpdate,
+			onProcessStarted: params.onProcessStarted,
 		});
 		return { ...result, fallbackFrom };
 	};
@@ -3509,16 +3517,18 @@ type HostAgentBoundaryOptions = {
 	probeSandbox?: () => { ok: boolean; summary: string };
 	runConfigured?: typeof runConfiguredAgent;
 	runSandboxed?: typeof runSandboxedConfiguredAgent;
+	reviewLifecycle?: { stateDir: string; pipelineId: string };
 };
 
 export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
+	const request = validateHostAgentRequestShape(params);
 	const identity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
 	const reviewFieldsPresent = Object.values(identity).some((value) => value !== undefined);
-	if (reviewFieldsPresent) {
-		const admission = admitReviewDispatch(params.agent, identity, { status: "allowed" });
-		if (!admission.allowed) throw new Error(admission.code || "REVIEW_DISPATCH_DENIED");
-	}
-	const request = validateHostAgentRequestShape(params);
+	const reviewers = new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa"]);
+	const correctionOwners = new Set(["pidex-planner", "pidex-implementer"]);
+	const reviewDispatch = !request.secondary && (reviewers.has(params.agent) || (reviewFieldsPresent && correctionOwners.has(params.agent)));
+	if (reviewDispatch && !validateReviewIdentity(identity).ok) throw new Error("REVIEW_IDENTITY_INVALID");
+	if (reviewDispatch && !reviewAgentMatches(params.agent, identity)) throw new Error("REVIEW_DISPATCH_DENIED");
 	const eligibleLanes = request.secondary
 		? (options.loadEligibleLanes ?? ((requestParams) => {
 			const statusScript = path.join(PACKAGE_ROOT, "modules", "pidex", "parallel-agents", "scripts", "status.mjs");
@@ -3555,9 +3565,14 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 		signal: options.signal,
 		onUpdate: options.onUpdate,
 	};
-	return sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
-		? await (options.runSandboxed ?? runSandboxedConfiguredAgent)(runParams)
-		: await (options.runConfigured ?? runConfiguredAgent)(runParams);
+	const runner = sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
+		? (options.runSandboxed ?? runSandboxedConfiguredAgent)
+		: (options.runConfigured ?? runConfiguredAgent);
+	if (!reviewDispatch) return await runner(runParams);
+	const lifecycle = options.reviewLifecycle ?? { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${path.basename(options.agentCwd)}-${params.planId}` };
+	const reservation = await reserveReviewStartAsync({ ...lifecycle, project: options.agentCwd, identity, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted }) });
+	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
+	return await reservation.started;
 }
 
 const RpAgentParams = Type.Object({

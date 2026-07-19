@@ -16,6 +16,12 @@ export function validateReviewIdentity(value) {
   return identity ? { ok: true, value } : { ok: false, code: 'REVIEW_IDENTITY_INVALID' };
 }
 
+export function reviewAgentMatches(agent, identity) {
+  if (!validateReviewIdentity(identity).ok) return false;
+  if (identity.reviewMode.startsWith('correction')) return agent === (identity.reviewGate === 'critic' ? 'pidex-planner' : 'pidex-implementer');
+  return agent === ({ critic: 'pidex-critic', 'code-review': 'pidex-code-reviewer', security: 'pidex-security', qa: 'pidex-qa' })[identity.reviewGate];
+}
+
 function sameIdentity(left, right) {
   return left.runFamilyId === right.runFamilyId && left.planId === right.planId && left.reviewGate === right.reviewGate && left.reviewMode === right.reviewMode && left.attemptId === right.attemptId;
 }
