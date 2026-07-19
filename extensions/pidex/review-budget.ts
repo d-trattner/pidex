@@ -3,6 +3,13 @@ const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted'
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const PLAN = /^plan-\d{1,3}$/;
 const GATES = new Set(['critic', 'code-review', 'security', 'qa', 'security-review']);
+const VERDICTS = {
+  critic: { APPROVED: 'APPROVED', APPROVED_WITH_COMMENTS: 'APPROVED', REJECTED: 'CHANGES_REQUESTED' },
+  'code-review': { APPROVED: 'APPROVED', APPROVED_WITH_COMMENTS: 'APPROVED', REJECTED: 'CHANGES_REQUESTED' },
+  security: { APPROVED: 'APPROVED', APPROVED_WITH_CONTROLS: 'CHANGES_REQUESTED', REJECTED: 'CHANGES_REQUESTED' },
+  qa: { COMPLETE: 'APPROVED', FAILED: 'CHANGES_REQUESTED' },
+};
+const CANONICAL_OUTCOMES = new Set(['APPROVED', 'accepted', 'CHANGES_REQUESTED', 'READY_FOR_REVIEW', 'SUBMITTED', 'closed']);
 
 function identityFrom(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -30,10 +37,15 @@ function sameFamily(left, right) {
   return left.runFamilyId === right.runFamilyId && left.planId === right.planId && left.reviewGate === right.reviewGate;
 }
 
-function outcomeOf(metadata) {
+export function normalizeReviewVerdict(gate, verdict) {
+  if (!GATES.has(gate) || typeof verdict !== 'string') return null;
+  return VERDICTS[gate]?.[verdict] || null;
+}
+
+function outcomeOf(metadata, gate) {
   if (!metadata || typeof metadata !== 'object') return null;
-  if (typeof metadata.outcome === 'string' && !('verdict' in metadata)) return metadata.outcome;
-  if (typeof metadata.verdict === 'string' && !('outcome' in metadata)) return metadata.verdict;
+  if (typeof metadata.outcome === 'string' && !('verdict' in metadata)) return CANONICAL_OUTCOMES.has(metadata.outcome) ? metadata.outcome : null;
+  if (typeof metadata.verdict === 'string' && !('outcome' in metadata)) return normalizeReviewVerdict(gate, metadata.verdict);
   return null;
 }
 
@@ -51,7 +63,7 @@ function denied() { return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' };
 
 export function allowedCompletionOutcome(identity, outcome) {
   if (!validateReviewIdentity(identity).ok || typeof outcome !== 'string') return false;
-  return Boolean(nextAfter(identity.reviewMode, outcome));
+  return Boolean(nextAfter(identity.reviewMode, CANONICAL_OUTCOMES.has(outcome) ? outcome : normalizeReviewVerdict(identity.reviewGate, outcome)));
 }
 
 export function foldReviewHistory(rows, requested) {
@@ -61,12 +73,13 @@ export function foldReviewHistory(rows, requested) {
     if (!row || typeof row !== 'object' || Array.isArray(row) || !row.metadata || row.metadata.runFamilyId !== requested.runFamilyId) continue;
     if (!EVENT_TYPES.has(row.event_type)) return denied();
     const identity = identityFrom(row.metadata);
-    if (!identity || !sameFamily(identity, requested)) return denied();
+    if (!identity || identity.planId !== requested.planId) return denied();
+    if (identity.reviewGate !== requested.reviewGate) continue;
     reviewRows.push({ event_type: row.event_type, metadata: row.metadata, identity });
   }
   if (!reviewRows.length) return requested.reviewMode === 'initial' ? { status: 'allowed', nextMode: 'initial' } : denied();
   if (reviewRows.length === 1 && reviewRows[0].event_type === 'review_outcome' && sameIdentity(reviewRows[0].identity, requested)) {
-    const terminal = nextAfter(requested.reviewMode, outcomeOf(reviewRows[0].metadata));
+    const terminal = nextAfter(requested.reviewMode, outcomeOf(reviewRows[0].metadata, requested.reviewGate));
     if (terminal?.terminal) return { status: 'terminal', terminal: terminal.terminal };
   }
   for (let left = 0; left < reviewRows.length; left++) {
@@ -95,12 +108,11 @@ export function foldReviewHistory(rows, requested) {
     const types = canonical.map((event) => event.event_type);
     const expectedPrefix = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome'];
     if (types.some((type, position) => type !== expectedPrefix[position])) return denied();
-    if (active.reviewMode !== requested.reviewMode && !sameFamily(active, requested)) return denied();
     if (types.length === 1) return sameIdentity(active, requested) ? { status: 'resume_reserved', nextMode: expectedMode } : denied();
     if (types.length === 2) return { status: 'uncertain', code: 'SPAWN_ENTERED_UNCERTAIN' };
     if (types.length === 3) return sameIdentity(active, requested) ? { status: 'spawn_accepted', nextMode: expectedMode } : denied();
     if (types.length === 4) return { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' };
-    const next = nextAfter(active.reviewMode, outcomeOf(canonical[4].metadata));
+    const next = nextAfter(active.reviewMode, outcomeOf(canonical[4].metadata, active.reviewGate));
     if (!next) return denied();
     if (next.terminal) {
       if (index !== reviewRows.length) return denied();

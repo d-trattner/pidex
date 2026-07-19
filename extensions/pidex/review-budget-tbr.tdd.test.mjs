@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { admitReviewDispatch, executeHostAgentBoundary } from './index.ts';
+import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary } from './index.ts';
+import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
 import { reserveReviewStart, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
 
@@ -44,15 +45,15 @@ try {
   assert.equal(hostChildren, 2, 'bare non-review calls remain compatible');
 } finally { rmSync(hostState, { recursive: true, force: true }); rmSync(hostProject, { recursive: true, force: true }); }
 
-const rejected = validateReviewOutcome({ verdict: 'CHANGES_REQUESTED', findings: [
+const rejected = validateReviewOutcome({ verdict: 'REJECTED', findings: [
   { id: 'F-1', relation: 'existing', class: 'Product', reproduced: true, causal: true, severity: 'High' },
   { id: 'F-2', relation: 'new', class: 'Product', reproduced: true, causal: true, severity: 'High' },
-] });
+] }, identity.reviewGate);
 assert.equal(rejected.ok, true);
 assert.deepEqual(rejected.value.active.map((item) => item.id), ['F-1']);
 assert.deepEqual(rejected.value.immediateTbr.map((item) => item.id), ['F-2']);
-assert.equal(validateReviewOutcome({ verdict: 'CHANGES_REQUESTED', findings: [{ id: 'F-3', relation: 'fix-induced', class: 'SharedContract', reproduced: true, causal: true, severity: 'Critical' }] }).value.active.length, 1);
-assert.equal(validateReviewOutcome({ verdict: 'CHANGES_REQUESTED', findings: [{ id: 'F-4', relation: 'fix-induced', class: 'Product', reproduced: false, causal: true, severity: 'Critical' }] }).ok, false);
+assert.equal(validateReviewOutcome({ verdict: 'REJECTED', findings: [{ id: 'F-3', relation: 'fix-induced', class: 'SharedContract', reproduced: true, causal: true, severity: 'Critical' }] }, identity.reviewGate).value.active.length, 1);
+assert.equal(validateReviewOutcome({ verdict: 'REJECTED', findings: [{ id: 'F-4', relation: 'fix-induced', class: 'Product', reproduced: false, causal: true, severity: 'Critical' }] }, identity.reviewGate).ok, false);
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-'));
 try {
@@ -81,12 +82,54 @@ try {
     }
     const review2 = { ...identity, reviewMode: 'review2', attemptId: 'attempt-review2' };
     assert.equal(reserveReviewStart({ stateDir: eventsRoot, project, pipelineId, identity: review2, start: () => 'started' }).status, 'accepted');
-    const closed = closeReviewWithTbr({ root, identity: review2, outcome: { verdict: 'CHANGES_REQUESTED', findings: rejected.value.active }, write: writeTbr, complete: (outcome) => recordReviewCompletion({ stateDir: eventsRoot, project, pipelineId, identity: review2, outcome }) });
+    const closed = closeReviewWithTbr({ root, identity: review2, outcome: { verdict: 'REJECTED', findings: rejected.value.active }, write: writeTbr, complete: (outcome) => recordReviewCompletion({ stateDir: eventsRoot, project, pipelineId, identity: review2, outcome }) });
     assert.equal(closed.status, 'CLOSED_WITH_TBR');
   } finally { rmSync(eventsRoot, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }); }
-  const failed = closeReviewWithTbr({ root, identity, outcome: { verdict: 'CHANGES_REQUESTED', findings: rejected.value.active }, write: () => ({ ok: false }) });
+  const failed = closeReviewWithTbr({ root, identity, outcome: { verdict: 'REJECTED', findings: rejected.value.active }, write: () => ({ ok: false }) });
   assert.deepEqual(failed, { status: 'TBR_WRITE_BLOCKED' });
-  assert.equal(closeReviewWithTbr({ root, identity, outcome: { verdict: 'COMPLETE', findings: [{ id: 'F-prose', relation: 'new', class: 'Product', reproduced: true, causal: true, severity: 'Critical' }] }, write: writeTbr }).status, 'accepted');
+  assert.equal(closeReviewWithTbr({ root, identity, outcome: { verdict: 'APPROVED', findings: [{ id: 'F-prose', relation: 'new', class: 'Product', reproduced: true, causal: true, severity: 'Critical' }] }, write: writeTbr }).status, 'accepted');
 } finally { rmSync(root, { recursive: true, force: true }); }
+
+const gateVerdicts = {
+  critic: { accepted: ['APPROVED', 'APPROVED_WITH_COMMENTS'], rejected: ['REJECTED'] },
+  'code-review': { accepted: ['APPROVED', 'APPROVED_WITH_COMMENTS'], rejected: ['REJECTED'] },
+  security: { accepted: ['APPROVED'], rejected: ['APPROVED_WITH_CONTROLS', 'REJECTED'] },
+  qa: { accepted: ['COMPLETE'], rejected: ['FAILED'] },
+};
+for (const [gate, verdicts] of Object.entries(gateVerdicts)) {
+  for (const verdict of verdicts.accepted) {
+    assert.equal(normalizeReviewVerdict(gate, verdict), 'APPROVED');
+    assert.equal(validateReviewOutcome({ verdict, findings: [] }, gate).ok, true);
+  }
+  for (const verdict of verdicts.rejected) {
+    assert.equal(normalizeReviewVerdict(gate, verdict), 'CHANGES_REQUESTED');
+    assert.equal(validateReviewOutcome({ verdict, findings: [{ findingId: 'F-gate', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High' }] }, gate).value.verdict, 'CHANGES_REQUESTED');
+  }
+  for (const otherGate of Object.keys(gateVerdicts)) for (const verdict of [...gateVerdicts[otherGate].accepted, ...gateVerdicts[otherGate].rejected]) {
+    if (![...verdicts.accepted, ...verdicts.rejected].includes(verdict)) assert.equal(normalizeReviewVerdict(gate, verdict), null);
+  }
+  assert.equal(normalizeReviewVerdict(gate, 'APPROVED '), null);
+}
+
+const historyRow = (event_type, metadata) => ({ event_type, metadata });
+const otherGateRows = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned'].map((event_type) => historyRow(event_type, { ...identity, reviewGate: 'critic', attemptId: 'critic-1' }));
+otherGateRows.push(historyRow('review_outcome', { ...identity, reviewGate: 'critic', attemptId: 'critic-1', outcome: 'APPROVED' }));
+assert.deepEqual(foldReviewHistory(otherGateRows, identity), { status: 'allowed', nextMode: 'initial' });
+assert.deepEqual(foldReviewHistory([...otherGateRows, historyRow('not-an-event', { ...identity })], identity), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
+
+const ppState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-review-state-'));
+const ppProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-review-project-'));
+let ppChildren = 0;
+const ppLifecycle = { stateDir: ppState, pipelineId: 'pp-pipeline', project: ppProject };
+try {
+  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer' }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_IDENTITY_INVALID/);
+  assert.equal(ppChildren, 0);
+  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-implementer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_DISPATCH_DENIED/);
+  assert.equal(ppChildren, 0);
+  assert.equal(executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), 'child');
+  assert.equal(ppChildren, 1);
+  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_DISPATCH_RESUMED/);
+  assert.equal(ppChildren, 1, 'duplicate Project Pipeline delivery must create zero second child');
+} finally { rmSync(ppState, { recursive: true, force: true }); rmSync(ppProject, { recursive: true, force: true }); }
 
 console.log('review budget TBR tests passed');

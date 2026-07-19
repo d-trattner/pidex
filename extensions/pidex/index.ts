@@ -9,7 +9,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
-import { reserveReviewStartAsync } from "../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs";
+import { reserveReviewStart, reserveReviewStartAsync } from "../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs";
 
 type AgentFrontmatter = {
 	name?: string;
@@ -3520,13 +3520,17 @@ type HostAgentBoundaryOptions = {
 	reviewLifecycle?: { stateDir: string; pipelineId: string };
 };
 
+const REVIEWER_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa"]);
+const CORRECTION_OWNERS = new Set(["pidex-planner", "pidex-implementer"]);
+
+function reviewDispatchFor(agent: string, identity: Record<string, unknown>, secondary = false) {
+	return !secondary && (REVIEWER_AGENTS.has(agent) || (Object.values(identity).some((value) => value !== undefined) && CORRECTION_OWNERS.has(agent)));
+}
+
 export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
 	const request = validateHostAgentRequestShape(params);
 	const identity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
-	const reviewFieldsPresent = Object.values(identity).some((value) => value !== undefined);
-	const reviewers = new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa"]);
-	const correctionOwners = new Set(["pidex-planner", "pidex-implementer"]);
-	const reviewDispatch = !request.secondary && (reviewers.has(params.agent) || (reviewFieldsPresent && correctionOwners.has(params.agent)));
+	const reviewDispatch = reviewDispatchFor(params.agent, identity, request.secondary);
 	if (reviewDispatch && !validateReviewIdentity(identity).ok) throw new Error("REVIEW_IDENTITY_INVALID");
 	if (reviewDispatch && !reviewAgentMatches(params.agent, identity)) throw new Error("REVIEW_DISPATCH_DENIED");
 	const eligibleLanes = request.secondary
@@ -3597,7 +3601,24 @@ const RpAgentParams = Type.Object({
 
 const PROJECT_PIPELINE_REVIEW_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer"]);
 
+type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; project: string };
+
+export function executeProjectPipelineReviewBoundary(params: any, lifecycle: ProjectPipelineReviewLifecycle, start: () => any): any {
+	const identity = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
+	if (!reviewDispatchFor(String(params?.agent || ""), identity)) return start();
+	if (!validateReviewIdentity(identity).ok) throw new Error("REVIEW_IDENTITY_INVALID");
+	if (!reviewAgentMatches(String(params.agent), identity)) throw new Error("REVIEW_DISPATCH_DENIED");
+	const reservation = reserveReviewStart({ ...lifecycle, identity, start });
+	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
+	return reservation.started;
+}
+
 export function runProjectPipelineAgentTool(params: any): any {
+	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${params?.projectId || "project"}-${params?.planId || "plan"}`, project: path.resolve(params?.cwd || PACKAGE_ROOT) };
+	return executeProjectPipelineReviewBoundary(params, lifecycle, () => runProjectPipelineAgentToolUnchecked(params));
+}
+
+function runProjectPipelineAgentToolUnchecked(params: any): any {
 	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
 	if (!params?.expectedOutputPath) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
 	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent)) && !params?.expectedInputPath) throw new Error(`Direct Project Pipeline review '${params.agent}' requires expectedInputPath.`);

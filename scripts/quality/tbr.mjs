@@ -2,17 +2,18 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { normalizeReviewVerdict } from '../../extensions/pidex/review-budget.ts';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const CLASSES = new Set(['Product', 'SharedContract', 'Evidence', 'Process', 'SideEffect']);
 const SEVERITIES = new Set(['Critical', 'Security', 'High', 'Medium', 'Low', 'Info']);
 const RELATIONS = new Set(['assigned', 'existing', 'new', 'fix_induced', 'fix-induced']);
-const VERDICTS = new Set(['APPROVED', 'APPROVED_WITH_COMMENTS', 'APPROVED_WITH_CONTROLS', 'COMPLETE', 'REJECTED', 'FAILED', 'CHANGES_REQUESTED']);
 function safe(value, limit) { return typeof value === 'string' && value.length > 0 && value.length <= limit && !/[\0\r\n]/.test(value) && !path.isAbsolute(value) && !value.split('/').includes('..'); }
 function slug(value) { return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'finding'; }
 function canonicalRelation(value) { return value === 'existing' ? 'assigned' : value === 'fix-induced' ? 'fix_induced' : value; }
-export function validateReviewOutcome(outcome) {
-  if (!outcome || typeof outcome !== 'object' || !VERDICTS.has(outcome.verdict) || !Array.isArray(outcome.findings) || outcome.findings.length > 20) return { ok: false, code: 'REVIEW_OUTCOME_INVALID' };
+export function validateReviewOutcome(outcome, reviewGate) {
+  const verdict = normalizeReviewVerdict(reviewGate, outcome?.verdict);
+  if (!outcome || typeof outcome !== 'object' || !verdict || !Array.isArray(outcome.findings) || outcome.findings.length > 20) return { ok: false, code: 'REVIEW_OUTCOME_INVALID' };
   const ids = new Set(), active = [], immediateTbr = [];
   for (const finding of outcome.findings) {
     const id = finding?.findingId ?? finding?.id, relation = canonicalRelation(finding?.relation);
@@ -23,8 +24,8 @@ export function validateReviewOutcome(outcome) {
     const item = { ...finding, id, findingId: id, relation, reproductionState: reproduced ? 'reproduced' : finding?.reproductionState || 'not_tested', causedByCorrection: causal };
     if (relation === 'assigned' || (relation === 'fix_induced' && ['Product', 'SharedContract'].includes(item.class) && reproduced && causal && ['Critical', 'Security'].includes(item.severity))) active.push(item); else immediateTbr.push(item);
   }
-  if (['REJECTED', 'FAILED', 'CHANGES_REQUESTED'].includes(outcome.verdict) && !active.length && !immediateTbr.length) return { ok: false, code: 'REVIEW_REJECTION_EMPTY' };
-  return { ok: true, value: { verdict: outcome.verdict, active, immediateTbr } };
+  if (verdict === 'CHANGES_REQUESTED' && !active.length) return { ok: false, code: 'REVIEW_REJECTION_EMPTY' };
+  return { ok: true, value: { verdict, active, immediateTbr } };
 }
 function itemFor(identity, finding) {
   const stable = `TBR-${createHash('sha256').update([identity.planId, identity.runFamilyId, identity.reviewGate, finding.findingId].join('\0')).digest('hex').slice(0, 12)}`;
@@ -79,8 +80,8 @@ export function writeTbr({ root, identity, findings }) {
   } catch { return { ok: false, code: 'TBR_WRITE_FAILED' }; }
 }
 export function closeReviewWithTbr({ root, identity, outcome, write = writeTbr, complete }) {
-  if (outcome?.verdict === 'COMPLETE') return { status: 'accepted' };
-  const checked = validateReviewOutcome(outcome); if (!checked.ok) return { status: 'TBR_WRITE_BLOCKED' };
+  if (normalizeReviewVerdict(identity?.reviewGate, outcome?.verdict) === 'APPROVED') return { status: 'accepted' };
+  const checked = validateReviewOutcome(outcome, identity?.reviewGate); if (!checked.ok) return { status: 'TBR_WRITE_BLOCKED' };
   const written = write({ root, identity, findings: [...checked.value.active, ...checked.value.immediateTbr] });
   if (!written?.ok) return { status: 'TBR_WRITE_BLOCKED' };
   if (typeof complete === 'function' && complete('closed')?.status !== 'closed') return { status: 'TBR_WRITE_BLOCKED' };
