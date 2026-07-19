@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, rmdirSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
 
 function rootFromScript() { return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..'); }
 function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unknown'; }
@@ -22,6 +23,78 @@ function parse(argv) {
 }
 function runOptional(command, args, options) { try { const cp = spawnSync(command, args, options); if (cp.stdout?.trim()) console.log(cp.stdout.trim()); if (cp.status !== 0 && (cp.stderr || cp.stdout)) console.error((cp.stderr || cp.stdout).trim()); } catch (error) { console.error(`${path.basename(args[0] || command)} failed: ${error instanceof Error ? error.message : String(error)}`); } }
 
+function reviewPaths({ stateDir, project, pipelineId, identity }) {
+  if (!stateDir || !project || !/^[a-zA-Z0-9._-]{1,160}$/.test(String(pipelineId || '')) || !identity?.runFamilyId) throw new Error('invalid review lifecycle location');
+  const base = path.join(stateDir, 'pipeline-events', slug(path.basename(path.resolve(project))));
+  return { base, stream: path.join(base, `${pipelineId}.jsonl`), lock: path.join(base, `.review-${identity.runFamilyId}.lock`) };
+}
+
+function readReviewRows(stream) {
+  const text = readFileSync(stream, 'utf8');
+  if (!text.trim()) return [];
+  return text.trim().split('\n').map((line) => JSON.parse(line));
+}
+
+function appendReviewEvent(stream, event_type, metadata) {
+  const payload = Buffer.from(`${JSON.stringify({ timestamp: new Date().toISOString(), event_type, metadata })}\n`);
+  const fd = openSync(stream, 'a');
+  try {
+    let offset = 0;
+    while (offset < payload.length) {
+      const written = writeSync(fd, payload, offset, payload.length - offset);
+      if (!Number.isInteger(written) || written <= 0) throw new Error('review lifecycle short write');
+      offset += written;
+    }
+    fsyncSync(fd);
+  } finally { closeSync(fd); }
+}
+
+function takeReviewLock(lock) {
+  try { mkdirSync(lock, { mode: 0o700 }); return true; } catch (error) { if (error?.code === 'EEXIST') return false; throw error; }
+}
+
+function releaseReviewLock(lock) { rmdirSync(lock); }
+
+export function reserveReviewStart({ stateDir, project, pipelineId, identity, start }) {
+  if (!validateReviewIdentity(identity).ok) return { status: 'denied' };
+  let locations;
+  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); } catch { return { status: 'denied' }; }
+  if (typeof start !== 'function') return { status: 'denied' };
+  if (!takeReviewLock(locations.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_UNAVAILABLE' };
+  let result;
+  try {
+    result = foldReviewHistory(readReviewRows(locations.stream), identity);
+    if (result.status === 'denied' || result.status === 'uncertain' || result.status === 'terminal') return result.status === 'terminal' ? { status: 'resumed', terminal: result.terminal } : result;
+    if (result.status === 'spawn_accepted') return { status: 'resumed' };
+    if (result.status === 'allowed') appendReviewEvent(locations.stream, 'start_reserved', identity);
+    appendReviewEvent(locations.stream, 'spawn_entered', identity);
+    const started = start();
+    if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
+    appendReviewEvent(locations.stream, 'spawn_accepted', identity);
+    return { status: 'accepted', started };
+  } catch (error) {
+    return { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' };
+  } finally {
+    try { releaseReviewLock(locations.lock); } catch { result = { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }; }
+  }
+}
+
+export function recordReviewCompletion({ stateDir, project, pipelineId, identity, outcome }) {
+  let locations;
+  if (!validateReviewIdentity(identity).ok || !['accepted', 'closed'].includes(outcome)) return { status: 'denied' };
+  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); } catch { return { status: 'denied' }; }
+  if (!takeReviewLock(locations.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_UNAVAILABLE' };
+  try {
+    const state = foldReviewHistory(readReviewRows(locations.stream), identity);
+    if (state.status === 'terminal') return state.terminal === outcome ? { status: 'resumed' } : { status: 'denied' };
+    if (state.status !== 'spawn_accepted') return state.status === 'uncertain' ? state : { status: 'denied' };
+    appendReviewEvent(locations.stream, 'spawn_returned', identity);
+    appendReviewEvent(locations.stream, 'review_outcome', { ...identity, outcome });
+    return { status: outcome };
+  } catch { return { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }; } finally { try { releaseReviewLock(locations.lock); } catch {} }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
 const args = parse(process.argv.slice(2));
 const projectPath = path.resolve(args.project.replace(/^~(?=$|[\\/])/, process.env.HOME || ''));
 const projectSlug = args.projectSlug || path.basename(projectPath) || slug(projectPath);
@@ -68,4 +141,5 @@ if (terminalEvents.has(args.event) && process.env.PIDEX_PIPELINE_EVENT_RUN_OPTIO
   }
   const hygiene = path.join(args.root, 'scripts', 'wiki', 'hygiene.mjs');
   if (existsSync(hygiene)) runOptional(process.execPath, [hygiene, 'cadence', '--project', projectPath, '--plan', planKey, '--pipeline-id', pipelineId, '--terminal-event', args.event], { cwd: args.root, encoding: 'utf8', timeout: Number(process.env.PIDEX_WIKI_HYGIENE_CADENCE_TIMEOUT_SECONDS || 30) * 1000 });
+}
 }
