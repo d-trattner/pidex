@@ -87,12 +87,16 @@ try {
     }
     const review2 = { ...identity, reviewMode: 'review2', attemptId: 'attempt-review2' };
     assert.equal(reserveReviewStart({ stateDir: eventsRoot, project, pipelineId, identity: review2, start: () => 'started' }).status, 'accepted');
-    const closed = closeReviewWithTbr({ root, identity: review2, outcome: { verdict: 'REJECTED', findings: rejected.value.active }, write: writeTbr, complete: (outcome) => recordReviewCompletion({ stateDir: eventsRoot, project, pipelineId, identity: review2, outcome }) });
+    // CR-038-05: terminal active findings carry canonical archive evidence before close.
+    const terminalActive = { ...rejected.value.active[0], title: 'Terminal assigned finding', shortDescription: 'Assigned finding needs archive proof before terminal close.', originEpic: 'initiative-038', reviewArtifact: 'agents.output/code-review/038.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'Terminal close preserves active finding evidence.', nextAnalysisOrDisconfirmingTest: 'Read terminal archive item.' };
+    const closed = closeReviewWithTbr({ root, identity: review2, outcome: { verdict: 'REJECTED', findings: [terminalActive] }, write: writeTbr, complete: (outcome) => recordReviewCompletion({ stateDir: eventsRoot, project, pipelineId, identity: review2, outcome }) });
     assert.equal(closed.status, 'CLOSED_WITH_TBR');
+    assert.match(readdirSync(path.join(root, 'wiki/tbr/items')).map((name) => readFileSync(path.join(root, 'wiki/tbr/items', name), 'utf8')).join(''), /^sourceFindingId: F-1$/m);
   } finally { rmSync(eventsRoot, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }); }
   const failed = closeReviewWithTbr({ root, identity, outcome: { verdict: 'REJECTED', findings: rejected.value.active }, write: () => ({ ok: false }) });
   assert.deepEqual(failed, { status: 'TBR_WRITE_BLOCKED' });
-  assert.equal(closeReviewWithTbr({ root, identity, outcome: { verdict: 'APPROVED', findings: [{ id: 'F-prose', relation: 'new', class: 'Product', reproduced: true, causal: true, severity: 'Critical' }] }, write: writeTbr }).status, 'accepted');
+  // CR-038-01: approved outcomes must pass exact future schema before acceptance.
+  assert.deepEqual(closeReviewWithTbr({ root, identity, outcome: { verdict: 'APPROVED', findings: [{ id: 'F-prose', relation: 'new', class: 'Product', reproduced: true, causal: true, severity: 'Critical' }] }, write: writeTbr }), { status: 'TBR_WRITE_BLOCKED' });
 } finally { rmSync(root, { recursive: true, force: true }); }
 
 const gateVerdicts = {
