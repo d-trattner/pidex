@@ -7,6 +7,7 @@ import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineRe
 import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
 import { reserveReviewStart, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
+import '../../scripts/quality/tbr.tdd.test.mjs';
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
@@ -47,15 +48,16 @@ try {
   assert.equal(hostChildren, 2, 'bare non-review calls remain compatible');
 } finally { rmSync(hostState, { recursive: true, force: true }); rmSync(hostProject, { recursive: true, force: true }); }
 
+const immediateFinding = { findingId: 'F-2', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Deferred finding', shortDescription: 'New finding deferred.', originEpic: 'initiative-038', reviewArtifact: 'agents.output/code-review/038.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot reject.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
 const rejected = validateReviewOutcome({ verdict: 'REJECTED', findings: [
-  { id: 'F-1', relation: 'existing', class: 'Product', reproduced: true, causal: true, severity: 'High' },
-  { id: 'F-2', relation: 'new', class: 'Product', reproduced: true, causal: true, severity: 'High' },
+  { findingId: 'F-1', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: true, severity: 'High', disposition: 'active' },
+  immediateFinding,
 ] }, identity.reviewGate);
 assert.equal(rejected.ok, true);
-assert.deepEqual(rejected.value.active.map((item) => item.id), ['F-1']);
-assert.deepEqual(rejected.value.immediateTbr.map((item) => item.id), ['F-2']);
-assert.equal(validateReviewOutcome({ verdict: 'REJECTED', findings: [{ id: 'F-3', relation: 'fix-induced', class: 'SharedContract', reproduced: true, causal: true, severity: 'Critical' }] }, identity.reviewGate).value.active.length, 1);
-assert.equal(validateReviewOutcome({ verdict: 'REJECTED', findings: [{ id: 'F-4', relation: 'fix-induced', class: 'Product', reproduced: false, causal: true, severity: 'Critical' }] }, identity.reviewGate).ok, false);
+assert.deepEqual(rejected.value.active.map((item) => item.findingId), ['F-1']);
+assert.deepEqual(rejected.value.immediateTbr.map((item) => item.findingId), ['F-2']);
+assert.equal(validateReviewOutcome({ verdict: 'REJECTED', findings: [{ findingId: 'F-3', relation: 'fix_induced', class: 'SharedContract', reproductionState: 'reproduced', causedByCorrection: true, severity: 'Critical', disposition: 'active' }] }, identity.reviewGate).value.active.length, 1);
+assert.equal(validateReviewOutcome({ verdict: 'REJECTED', findings: [{ ...immediateFinding, findingId: 'F-4', relation: 'fix_induced', causedByCorrection: true, severity: 'Critical', reproductionState: 'not_reproduced' }] }, identity.reviewGate).ok, false);
 
 const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-'));
 try {
@@ -63,15 +65,15 @@ try {
   assert.equal(first.ok, true);
   const duplicate = writeTbr({ root, identity, findings: rejected.value.immediateTbr });
   assert.equal(duplicate.created, false);
-  const secondFinding = { ...rejected.value.immediateTbr[0], findingId: 'F-3', id: 'F-3', title: 'Second finding' };
+  const secondFinding = { ...rejected.value.immediateTbr[0], findingId: 'F-3', title: 'Second finding' };
   assert.equal(writeTbr({ root, identity, findings: [secondFinding] }).ok, true);
   assert.equal(writeTbr({ root, identity, findings: [{ ...rejected.value.immediateTbr[0], title: 'Renamed finding' }] }).ok, true);
   const itemFiles = readdirSync(path.join(root, 'wiki/tbr/items')).sort();
   assert.equal(itemFiles.length, 2, 'stable ID lookup must ignore retry slug changes');
   const index = readFileSync(path.join(root, 'wiki/tbr/index.md'), 'utf8');
-  assert.match(index, /F-2/);
+  assert.match(index, /Deferred finding/);
   assert.match(index, /Second finding/);
-  assert.ok(index.indexOf('Second finding') < index.indexOf('F-2') || index.indexOf('F-2') < index.indexOf('Second finding'));
+  assert.ok(index.indexOf('Second finding') < index.indexOf('Deferred finding') || index.indexOf('Deferred finding') < index.indexOf('Second finding'));
   assert.match(index, /TBR-/);
   const eventsRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-events-'));
   const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-project-'));
@@ -105,7 +107,7 @@ for (const [gate, verdicts] of Object.entries(gateVerdicts)) {
   }
   for (const verdict of verdicts.rejected) {
     assert.equal(normalizeReviewVerdict(gate, verdict), 'CHANGES_REQUESTED');
-    assert.equal(validateReviewOutcome({ verdict, findings: [{ findingId: 'F-gate', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High' }] }, gate).value.verdict, 'CHANGES_REQUESTED');
+    assert.equal(validateReviewOutcome({ verdict, findings: [{ findingId: 'F-gate', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'active' }] }, gate).value.verdict, 'CHANGES_REQUESTED');
   }
   for (const otherGate of Object.keys(gateVerdicts)) for (const verdict of [...gateVerdicts[otherGate].accepted, ...gateVerdicts[otherGate].rejected]) {
     if (![...verdicts.accepted, ...verdicts.rejected].includes(verdict)) assert.equal(normalizeReviewVerdict(gate, verdict), null);

@@ -7,25 +7,31 @@ import { normalizeReviewVerdict } from '../../extensions/pidex/review-budget.ts'
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const CLASSES = new Set(['Product', 'SharedContract', 'Evidence', 'Process', 'SideEffect']);
 const SEVERITIES = new Set(['Critical', 'Security', 'High', 'Medium', 'Low', 'Info']);
-const RELATIONS = new Set(['assigned', 'existing', 'new', 'fix_induced', 'fix-induced']);
+const RELATIONS = new Set(['assigned', 'new', 'fix_induced']);
+const REPRODUCTION = new Set(['reproduced', 'causal', 'not_reproduced', 'not_tested']);
+const FINDING_KEYS = new Set(['findingId', 'relation', 'class', 'reproductionState', 'causedByCorrection', 'severity', 'disposition']);
+const ARCHIVE_KEYS = new Set([...FINDING_KEYS, 'title', 'shortDescription', 'originEpic', 'reviewArtifact', 'affectedIdentifiers', 'deferredReason', 'nextAnalysisOrDisconfirmingTest']);
 function safe(value, limit) { return typeof value === 'string' && value.length > 0 && value.length <= limit && !/[\0\r\n]/.test(value) && !path.isAbsolute(value) && !value.split('/').includes('..'); }
 function slug(value) { return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'finding'; }
-function canonicalRelation(value) { return value === 'existing' ? 'assigned' : value === 'fix-induced' ? 'fix_induced' : value; }
+function exactKeys(value, allowed) { return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((key) => allowed.has(key)) && [...allowed].every((key) => key in value); }
+function archiveFields(finding) { return safe(finding.title, 120) && safe(finding.shortDescription, 500) && safe(finding.originEpic, 80) && safe(finding.reviewArtifact, 240) && Array.isArray(finding.affectedIdentifiers) && finding.affectedIdentifiers.length <= 20 && finding.affectedIdentifiers.every((item) => safe(item, 160)) && safe(finding.deferredReason, 500) && safe(finding.nextAnalysisOrDisconfirmingTest, 500); }
 export function validateReviewOutcome(outcome, reviewGate) {
   const verdict = normalizeReviewVerdict(reviewGate, outcome?.verdict);
   if (!outcome || typeof outcome !== 'object' || !verdict || !Array.isArray(outcome.findings) || outcome.findings.length > 20) return { ok: false, code: 'REVIEW_OUTCOME_INVALID' };
   const ids = new Set(), active = [], immediateTbr = [];
   for (const finding of outcome.findings) {
-    const id = finding?.findingId ?? finding?.id, relation = canonicalRelation(finding?.relation);
-    const reproduced = finding?.reproductionState === 'reproduced' || finding?.reproduced === true;
-    const causal = finding?.causedByCorrection === true || finding?.causal === true;
-    if (!safe(id, 80) || ids.has(id) || !RELATIONS.has(finding?.relation) || !CLASSES.has(finding?.class) || !SEVERITIES.has(finding?.severity) || typeof causal !== 'boolean' || !['reproduced', 'causal', 'not_reproduced', 'not_tested', undefined].includes(finding?.reproductionState) || typeof finding?.reproduced === 'boolean' && !reproduced) return { ok: false, code: 'REVIEW_FINDING_INVALID' };
-    ids.add(id);
-    const item = { ...finding, id, findingId: id, relation, reproductionState: reproduced ? 'reproduced' : finding?.reproductionState || 'not_tested', causedByCorrection: causal };
-    if (relation === 'assigned' || (relation === 'fix_induced' && ['Product', 'SharedContract'].includes(item.class) && reproduced && causal && ['Critical', 'Security'].includes(item.severity))) active.push(item); else immediateTbr.push(item);
+    const isActive = finding?.relation === 'assigned' || (finding?.relation === 'fix_induced' && ['Product', 'SharedContract'].includes(finding?.class) && finding?.reproductionState === 'reproduced' && finding?.causedByCorrection === true && ['Critical', 'Security'].includes(finding?.severity));
+    const keys = isActive ? FINDING_KEYS : ARCHIVE_KEYS;
+    if (!exactKeys(finding, keys) || !safe(finding.findingId, 80) || ids.has(finding.findingId) || !RELATIONS.has(finding.relation) || !CLASSES.has(finding.class) || !REPRODUCTION.has(finding.reproductionState) || typeof finding.causedByCorrection !== 'boolean' || !SEVERITIES.has(finding.severity) || finding.disposition !== (isActive ? 'active' : 'tbr_immediate') || (!isActive && !archiveFields(finding))) return { ok: false, code: 'REVIEW_FINDING_INVALID' };
+    ids.add(finding.findingId);
+    (isActive ? active : immediateTbr).push(finding);
   }
   if (verdict === 'CHANGES_REQUESTED' && !active.length) return { ok: false, code: 'REVIEW_REJECTION_EMPTY' };
   return { ok: true, value: { verdict, active, immediateTbr } };
+}
+export function renderTbrItem(item) {
+  const fields = ['stableTbrId', 'status', 'title', 'findingClass', 'proposedSeverity', 'reproductionState', 'blockingScope', 'releaseRecommendation', 'originEpic', 'originPlan', 'originRun', 'originGate', 'sourceFindingId', 'reviewArtifact', 'createdAt'];
+  return `---\n${fields.map((key) => `${key}: ${item[key]}`).join('\n')}\naffectedIdentifiers:\n${item.affectedIdentifiers.map((value) => `  - ${value}`).join('\n')}\n---\n\n## Short description\n\n${item.shortDescription}\n\n## Deferred reason\n\n${item.deferredReason}\n\n## Smallest future analysis or disconfirming test\n\n${item.nextAnalysisOrDisconfirmingTest}\n\n## Navigation\n\n- Archive: [[../index]]\n`;
 }
 function itemFor(identity, finding) {
   const stable = `TBR-${createHash('sha256').update([identity.planId, identity.runFamilyId, identity.reviewGate, finding.findingId].join('\0')).digest('hex').slice(0, 12)}`;
