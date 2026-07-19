@@ -1381,6 +1381,10 @@ The first backward transition at a gate may auto-proceed. Apply this cumulative 
 
 When stopped, summarize user-visible progress, elapsed/rework cost when known, and the new obligations. Ask the user to choose exactly one: **(1) simplify/retain the approved contract, (2) accept and document residual risk, or (3) continue hardened remediation with an explicit cost warning**. Record the decision as an `OpDecision` before continuing. This circuit breaker overrides automatic `route_to: orchestrator`, backward auto-proceed, and adjacent-finding churn in every execution mode.
 
+### Review budget override
+
+For a declared review-budget run, use its durable lifecycle fold instead: initial review → correction1 → review1 → correction2 → review2. First and second structured rejections continue automatically. Third structured rejection writes TBR records first, then closes `CLOSED_WITH_TBR`; no user gate, correction3, or review4. New unrelated findings are immediate TBR only. User alone may select a TBR ID for promotion.
+
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 
 Check retrospective doc sections and invoke corresponding agents. Run in parallel if multiple apply. Post-retro handoffs are primary calls: omit provider/model/effort so each resolves its configured route.

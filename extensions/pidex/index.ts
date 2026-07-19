@@ -8,6 +8,7 @@ import { createGzip, gunzipSync } from "node:zlib";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { validateReviewIdentity } from "./review-budget.ts";
 
 type AgentFrontmatter = {
 	name?: string;
@@ -318,7 +319,7 @@ function resolveRoute(config: RoutingConfig, agentName: string): AgentRoute {
 	};
 }
 
-type HostAgentRequest = { agent: string; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string };
+type HostAgentRequest = { agent: string; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string; runFamilyId?: string; planId?: string; reviewGate?: string; reviewMode?: string; attemptId?: string };
 
 export function validateHostAgentRequestShape(params: HostAgentRequest): { secondary: boolean } {
 	const hasManualRoute = params.provider !== undefined || params.model !== undefined || params.effort !== undefined;
@@ -2013,6 +2014,18 @@ function recordPreflightSkeleton(cwd: string, task: string | undefined, authOk: 
 	});
 }
 
+export function admitReviewDispatch(agent: string, identity: unknown, folded: { status?: string } = {}): { allowed: boolean; code?: string } {
+	const reviewers = new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa"]);
+	const review = validateReviewIdentity(identity);
+	if (!review.ok) return reviewers.has(agent) ? { allowed: false, code: "REVIEW_IDENTITY_INVALID" } : { allowed: true };
+	const mode = (identity as any).reviewMode;
+	const expected = mode.startsWith("correction")
+		? new Set([(identity as any).reviewGate === "critic" ? "pidex-planner" : "pidex-implementer"])
+		: new Set([{ critic: "pidex-critic", "code-review": "pidex-code-reviewer", security: "pidex-security", qa: "pidex-qa" }[(identity as any).reviewGate] as string]);
+	if (!expected.has(agent) || !["allowed", "resume_reserved"].includes(String(folded.status))) return { allowed: false, code: "REVIEW_DISPATCH_DENIED" };
+	return { allowed: true };
+}
+
 function isReviewAgent(agent: string): boolean {
 	return new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa", "pidex-uat"]).has(agent);
 }
@@ -3499,6 +3512,12 @@ type HostAgentBoundaryOptions = {
 };
 
 export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
+	const identity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
+	const reviewFieldsPresent = Object.values(identity).some((value) => value !== undefined);
+	if (reviewFieldsPresent) {
+		const admission = admitReviewDispatch(params.agent, identity, { status: "allowed" });
+		if (!admission.allowed) throw new Error(admission.code || "REVIEW_DISPATCH_DENIED");
+	}
 	const request = validateHostAgentRequestShape(params);
 	const eligibleLanes = request.secondary
 		? (options.loadEligibleLanes ?? ((requestParams) => {
@@ -3554,6 +3573,11 @@ const RpAgentParams = Type.Object({
 	model: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	effort: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	tools: Type.Optional(Type.Array(Type.String(), { description: "Optional Pi tool allowlist override (only used by provider=pi/subagent)." })),
+	runFamilyId: Type.Optional(Type.String()),
+	planId: Type.Optional(Type.String()),
+	reviewGate: Type.Optional(Type.String()),
+	reviewMode: Type.Optional(Type.String()),
+	attemptId: Type.Optional(Type.String()),
 });
 
 const PROJECT_PIPELINE_REVIEW_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer"]);

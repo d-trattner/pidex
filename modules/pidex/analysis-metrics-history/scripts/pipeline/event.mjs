@@ -4,7 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
+import { allowedCompletionOutcome, foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
 
 function rootFromScript() { return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..'); }
 function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unknown'; }
@@ -30,6 +30,7 @@ function reviewPaths({ stateDir, project, pipelineId, identity }) {
 }
 
 function readReviewRows(stream) {
+  if (!existsSync(stream)) return [];
   const text = readFileSync(stream, 'utf8');
   if (!text.trim()) return [];
   return text.trim().split('\n').map((line) => JSON.parse(line));
@@ -58,7 +59,7 @@ function releaseReviewLock(lock) { rmdirSync(lock); }
 export function reserveReviewStart({ stateDir, project, pipelineId, identity, start }) {
   if (!validateReviewIdentity(identity).ok) return { status: 'denied' };
   let locations;
-  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); } catch { return { status: 'denied' }; }
+  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); mkdirSync(locations.base, { recursive: true }); } catch { return { status: 'denied' }; }
   if (typeof start !== 'function') return { status: 'denied' };
   if (!takeReviewLock(locations.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_UNAVAILABLE' };
   let result;
@@ -81,7 +82,7 @@ export function reserveReviewStart({ stateDir, project, pipelineId, identity, st
 
 export function recordReviewCompletion({ stateDir, project, pipelineId, identity, outcome }) {
   let locations;
-  if (!validateReviewIdentity(identity).ok || !['accepted', 'closed'].includes(outcome)) return { status: 'denied' };
+  if (!validateReviewIdentity(identity).ok || !allowedCompletionOutcome(identity, outcome)) return { status: 'denied' };
   try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); } catch { return { status: 'denied' }; }
   if (!takeReviewLock(locations.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_UNAVAILABLE' };
   try {

@@ -61,6 +61,10 @@ After user approval:
 
 If `pidex-roadmap` fails, stalls, or produces no valid canonical update, retry the specialist or route to the user. The orchestrator must not take over roadmap writing as fallback.
 
+## TBR selection
+
+A TBR promotion requires explicit user selection of exact `TBR-<id>` values. Create roadmap candidate/Interview entry first; retain source item as promoted tombstone. Never auto-analyze, promote, plan, or start work from archive presence.
+
 ## Guardrails
 
 - Do not wait for the user to ask whether a roadmap exists.

@@ -74,6 +74,10 @@ D) Stop here
 
 When follow-ups do exist, still include an option that lets the user inspect the next existing roadmap epic before committing to work.
 
+## TBR closeout
+
+For `wiki/tbr/index.md`, show at most a few relevant open IDs as optional candidates. Never treat age, severity, or reviewer source as promotion authority. Offer: analyze selected ID, promote selected ID to roadmap candidate, or leave archive unchanged.
+
 ## Important
 
 - Do not create a new epic without user confirmation.

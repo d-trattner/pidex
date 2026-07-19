@@ -2,7 +2,7 @@ const MODES = ['initial', 'correction1', 'review1', 'correction2', 'review2'];
 const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const PLAN = /^plan-\d{1,3}$/;
-const GATES = new Set(['code-review', 'security-review']);
+const GATES = new Set(['critic', 'code-review', 'security', 'qa', 'security-review']);
 
 function identityFrom(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -32,17 +32,21 @@ function outcomeOf(metadata) {
 }
 
 function nextAfter(mode, outcome) {
-  if (['APPROVED', 'accepted'].includes(outcome)) return { terminal: 'accepted' };
-  if (['CLOSED', 'REJECTED', 'closed'].includes(outcome)) return { terminal: 'closed' };
+  if (['APPROVED', 'accepted'].includes(outcome) && ['initial', 'review1', 'review2'].includes(mode)) return { terminal: 'accepted' };
+  if (outcome === 'closed' && mode === 'review2') return { terminal: 'closed' };
   if (outcome === 'CHANGES_REQUESTED' && mode === 'initial') return { nextMode: 'correction1' };
   if (outcome === 'CHANGES_REQUESTED' && mode === 'review1') return { nextMode: 'correction2' };
   if (['READY_FOR_REVIEW', 'SUBMITTED'].includes(outcome) && mode === 'correction1') return { nextMode: 'review1' };
   if (['READY_FOR_REVIEW', 'SUBMITTED'].includes(outcome) && mode === 'correction2') return { nextMode: 'review2' };
-  if (outcome === 'CHANGES_REQUESTED' && mode === 'review2') return { terminal: 'closed' };
   return null;
 }
 
 function denied() { return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' }; }
+
+export function allowedCompletionOutcome(identity, outcome) {
+  if (!validateReviewIdentity(identity).ok || typeof outcome !== 'string') return false;
+  return Boolean(nextAfter(identity.reviewMode, outcome));
+}
 
 export function foldReviewHistory(rows, requested) {
   if (!validateReviewIdentity(requested).ok || !Array.isArray(rows)) return denied();

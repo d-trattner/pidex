@@ -92,6 +92,10 @@ try {
   assert.equal(lockSeenDuringStart, true);
   assert.equal(existsSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${lockTuple.runFamilyId}.lock`)), false);
   assert.equal(recordReviewCompletion({ stateDir: state, project, pipelineId, identity: lockTuple, outcome: 'accepted' }).status, 'accepted');
+  const rejectionTuple = { ...tuple, runFamilyId: 'family-reject', attemptId: 'attempt-reject' };
+  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: rejectionTuple, start: () => 'started' }).status, 'accepted');
+  assert.equal(recordReviewCompletion({ stateDir: state, project, pipelineId, identity: rejectionTuple, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
+  assert.deepEqual(foldReviewHistory(readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), { ...rejectionTuple, reviewMode: 'correction1', attemptId: 'attempt-correction-1' }), { status: 'allowed', nextMode: 'correction1' });
   assert.deepEqual(foldReviewHistory(readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), lockTuple), { status: 'terminal', terminal: 'accepted' });
 
   const contentionState = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-contention-'));
