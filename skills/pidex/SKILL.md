@@ -1166,6 +1166,8 @@ pidex_agent(
 
 Provider overrides are exceptional debugging tools only. Prefer config-driven routing.
 
+**Review lifecycle calls:** normal same-parent reviewer/correction handoffs use minimal shape. Do not manually supply tuple fields or edit lifecycle state. Executable host boundary derives one pending identity from plan/current pointer/history; partial, ambiguous, or unmatched identity fails closed. A valid explicit full tuple remains supported; runtime boundary validates final ROUTING, local context, and durable completion before exposing route.
+
 **2. Pipeline sequence**
 
 **Context-pack enforcement:** before each `pidex_agent` call, create a compact manual pack/path list and pass it in the task briefing. Mark `CONTEXT-PACK-MANUAL`. Budget warnings are non-blocking by default.

@@ -22,13 +22,16 @@ assert.equal(admitReviewDispatch('pidex-implementer', { ...identity, reviewMode:
 
 const hostState = mkdtempSync(path.join(os.tmpdir(), 'pidex-host-review-state-'));
 const hostProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-host-review-project-'));
+const hostContext = path.join(hostProject, 'agents.output', 'code-review', '038.md');
+mkdirSync(path.dirname(hostContext), { recursive: true });
+writeFileSync(hostContext, '# review\n');
 let hostChildren = 0;
 const hostOptions = {
   agentCwd: hostProject,
   reviewLifecycle: { stateDir: hostState, pipelineId: 'host-pipeline' },
   loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
   resolveSandboxState: () => ({ enabled: false }),
-  runConfigured: async (params) => { hostChildren += 1; params.onProcessStarted?.(); return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: 'done', stderr: '' }; },
+  runConfigured: async (params) => { hostChildren += 1; params.onProcessStarted?.(); return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->', stderr: '' }; },
 };
 try {
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'review' }, hostOptions), /REVIEW_IDENTITY_INVALID/);
@@ -44,7 +47,7 @@ try {
   assert.match(hostRows, /start_reserved/);
   assert.match(hostRows, /spawn_entered/);
   assert.match(hostRows, /spawn_accepted/);
-  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'duplicate', ...identity }, hostOptions), /REVIEW_DISPATCH_RESUMED/);
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'duplicate', ...identity }, hostOptions), /REVIEW_HISTORY_INVALID/);
   assert.equal(hostChildren, 1, 'duplicate host delivery must create zero second child');
   await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'ordinary planning' }, hostOptions);
   assert.equal(hostChildren, 2, 'bare non-review calls remain compatible');
@@ -186,6 +189,10 @@ const ppState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-review-state-'));
 const ppProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-review-project-'));
 let ppChildren = 0;
 const ppLifecycle = { stateDir: ppState, pipelineId: 'pp-pipeline', project: ppProject };
+const ppContext = path.join(ppProject, 'agents.output', 'code-review', '038.md');
+mkdirSync(path.dirname(ppContext), { recursive: true });
+writeFileSync(ppContext, '# review\n');
+const ppChild = () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' });
 try {
   assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer' }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_IDENTITY_INVALID/);
   assert.equal(ppChildren, 0);
@@ -193,9 +200,9 @@ try {
   assert.equal(ppChildren, 0, 'unsupported Project Pipeline gate must create zero children');
   assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-implementer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_DISPATCH_DENIED/);
   assert.equal(ppChildren, 0);
-  assert.equal(executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), 'child');
+  assert.match(executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return ppChild(); }).finalText, /REJECTED/);
   assert.equal(ppChildren, 1);
-  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_DISPATCH_RESUMED/);
+  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, ppLifecycle, () => { ppChildren += 1; return ppChild(); }), /REVIEW_HISTORY_INVALID/);
   assert.equal(ppChildren, 1, 'duplicate Project Pipeline delivery must create zero second child');
 } finally { rmSync(ppState, { recursive: true, force: true }); rmSync(ppProject, { recursive: true, force: true }); }
 
