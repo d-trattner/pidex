@@ -12,6 +12,7 @@ import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
+const bindCurrent = (stateDir, project, pipelineId) => { const base = path.join(stateDir, 'pipeline-events', path.basename(project)); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, 'plan-038.current'), pipelineId); };
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
 assert.deepEqual(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }), { allowed: true });
 assert.equal(admitReviewDispatch('pidex-implementer', { ...identity, reviewMode: 'initial' }, { status: 'allowed' }).allowed, false);
@@ -25,6 +26,7 @@ const hostProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-host-review-projec
 const hostContext = path.join(hostProject, 'agents.output', 'code-review', '038.md');
 mkdirSync(path.dirname(hostContext), { recursive: true });
 writeFileSync(hostContext, '# review\n');
+bindCurrent(hostState, hostProject, 'host-pipeline');
 let hostChildren = 0;
 const hostOptions = {
   agentCwd: hostProject,
@@ -93,6 +95,7 @@ try {
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 wrong owner' }, lifecycleOptions), /REVIEW_IDENTITY_INVALID/);
   assert.equal(readFileSync(path.join(lifecycleBase, `${lifecyclePipeline}.jsonl`), 'utf8').trim().split('\n').length, rowsBeforeRejects, 'partial and unmatched identity must append nothing');
 
+  rmSync(path.join(lifecycleBase, `${lifecyclePipeline}.jsonl`));
   const resumePipeline = 'family-resume-host';
   writeFileSync(path.join(lifecycleBase, 'plan-038.current'), resumePipeline);
   const resumeIdentity = { runFamilyId: resumePipeline, planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: lifecycleAttempt(resumePipeline, 'code-review', 'initial') };
@@ -100,6 +103,7 @@ try {
   const childrenBeforeResume = lifecycleChildren;
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 resumed review' }, lifecycleOptions), /REVIEW_DISPATCH_RESUMED/);
   assert.equal(lifecycleChildren, childrenBeforeResume, 'accepted retry must not run a duplicate child');
+  rmSync(path.join(lifecycleBase, `${resumePipeline}.jsonl`));
   const returnedIdentity = { ...resumeIdentity, runFamilyId: 'family-returned-host', attemptId: lifecycleAttempt('family-returned-host', 'code-review', 'initial') };
   writeFileSync(path.join(lifecycleBase, 'plan-038.current'), returnedIdentity.runFamilyId);
   assert.equal(reserveReviewStart({ stateDir: lifecycleState, project: lifecycleProject, pipelineId: returnedIdentity.runFamilyId, identity: returnedIdentity, start: () => 'returned-child' }).status, 'accepted');
@@ -138,6 +142,7 @@ try {
   const eventsRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-events-'));
   const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-project-'));
   const pipelineId = 'pipeline-038';
+  bindCurrent(eventsRoot, project, pipelineId);
   try {
     for (const [reviewMode, outcome] of [['initial', 'CHANGES_REQUESTED'], ['correction1', 'READY_FOR_REVIEW'], ['review1', 'CHANGES_REQUESTED'], ['correction2', 'SUBMITTED']] ) {
       const current = { ...identity, reviewMode, attemptId: `attempt-${reviewMode}` };
@@ -192,6 +197,7 @@ const ppLifecycle = { stateDir: ppState, pipelineId: 'pp-pipeline', project: ppP
 const ppContext = path.join(ppProject, 'agents.output', 'code-review', '038.md');
 mkdirSync(path.dirname(ppContext), { recursive: true });
 writeFileSync(ppContext, '# review\n');
+bindCurrent(ppState, ppProject, 'pp-pipeline');
 const ppChild = () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' });
 try {
   assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer' }, ppLifecycle, () => { ppChildren += 1; return 'child'; }), /REVIEW_IDENTITY_INVALID/);
@@ -288,6 +294,7 @@ const artifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-artifact-state-'
 const artifactProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-artifact-project-'));
 const foreignContext = path.join(mkdtempSync(path.join(os.tmpdir(), 'pidex-foreign-context-')), 'review.md');
 writeFileSync(foreignContext, '# foreign\n');
+bindCurrent(artifactState, artifactProject, 'artifact-pipeline');
 try {
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
     agentCwd: artifactProject,
@@ -305,6 +312,7 @@ try {
   writeFileSync(path.join(symlinkArtifactForeign, 'review.md'), '# foreign\n');
   mkdirSync(path.join(symlinkArtifactProject, 'agents.output'), { recursive: true });
   symlinkSync(symlinkArtifactForeign, path.join(symlinkArtifactProject, 'agents.output', 'link'), 'dir');
+  bindCurrent(symlinkArtifactState, symlinkArtifactProject, 'symlink-artifact');
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
     agentCwd: symlinkArtifactProject,
     reviewLifecycle: { stateDir: symlinkArtifactState, pipelineId: 'symlink-artifact' },
@@ -321,26 +329,93 @@ const directProjectId = 'pp-direct-artifact';
 const directArchive = path.join(directArtifactState, 'project-archives', directProjectId, directExpected);
 const directResult = (overrides = {}) => ({ exitCode: 0, archive_sync_status: 'complete', context_file: directExpected, archive_context_file: directArchive, routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: directExpected }, ...overrides });
 const directParams = { agent: 'pidex-code-reviewer', ...identity, projectId: directProjectId, expectedOutputPath: directExpected };
+const resetDirectRoot = (pipelineId) => { const base = path.join(directArtifactState, 'pipeline-events', path.basename(directArtifactProject)); mkdirSync(base, { recursive: true }); for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name)); bindCurrent(directArtifactState, directArtifactProject, pipelineId); };
 try {
   mkdirSync(path.dirname(directArchive), { recursive: true });
   writeFileSync(directArchive, '# archive\n');
+  resetDirectRoot('direct-artifact');
   const result = executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-artifact', project: directArtifactProject }, () => directResult());
   assert.equal(result.context_file, directExpected, 'direct reviewer accepts only exact canonical archived context');
 
   const foreignArchive = path.join(directArtifactProject, 'foreign.md');
   writeFileSync(foreignArchive, '# foreign\n');
+  resetDirectRoot('direct-foreign');
   assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-foreign', project: directArtifactProject }, () => directResult({ archive_context_file: foreignArchive })), /REVIEW_ROUTING_INVALID/);
 
   const archiveForeign = path.join(directArtifactProject, 'archive-foreign.md');
   writeFileSync(archiveForeign, '# archive foreign\n');
   rmSync(directArchive);
   symlinkSync(archiveForeign, directArchive, 'file');
+  resetDirectRoot('direct-symlink');
   assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-symlink', project: directArtifactProject }, () => directResult()), /REVIEW_ROUTING_INVALID/);
   rmSync(directArchive);
   writeFileSync(directArchive, '# archive\n');
 
+  resetDirectRoot('direct-returned-mismatch');
   assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-returned-mismatch', project: directArtifactProject }, () => directResult({ context_file: 'agents.output/code-review/other.md' })), /REVIEW_ROUTING_INVALID/);
+  resetDirectRoot('direct-routing-mismatch');
   assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-routing-mismatch', project: directArtifactProject }, () => directResult({ routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/other.md' } })), /REVIEW_ROUTING_INVALID/);
 } finally { rmSync(directArtifactState, { recursive: true, force: true }); rmSync(directArtifactProject, { recursive: true, force: true }); }
+
+const aggregateState = mkdtempSync(path.join(os.tmpdir(), 'pidex-aggregate-review-state-'));
+const aggregateProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-aggregate-review-project-'));
+try {
+  const base = path.join(aggregateState, 'pipeline-events', path.basename(aggregateProject));
+  const rootPipeline = 'root-038';
+  const rootStream = path.join(base, `${rootPipeline}.jsonl`);
+  const tuple = (family, mode) => ({ runFamilyId: family, planId: 'plan-038', reviewGate: 'code-review', reviewMode: mode, attemptId: `attempt-${family}-${mode}` });
+  mkdirSync(base, { recursive: true });
+  writeFileSync(path.join(base, 'plan-038.current'), rootPipeline);
+  const start = (current, pipelineId = 'caller-selected-stream') => reserveReviewStart({ stateDir: aggregateState, project: aggregateProject, pipelineId, identity: current, start: () => 'child' });
+  const finish = (current, outcome) => recordReviewCompletion({ stateDir: aggregateState, project: aggregateProject, pipelineId: 'caller-selected-stream', identity: current, outcome });
+
+  const initial = tuple('family-a', 'initial');
+  assert.equal(start(initial).status, 'accepted', 'explicit tuple must bind pointed root, not caller stream');
+  assert.equal(finish(initial, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
+  const correction1 = tuple('family-b', 'correction1');
+  assert.equal(start(correction1).status, 'accepted');
+  assert.equal(finish(correction1, 'READY_FOR_REVIEW').status, 'READY_FOR_REVIEW');
+  const review1 = tuple('family-c', 'review1');
+  assert.equal(start(review1).status, 'accepted');
+  assert.equal(finish(review1, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
+  const correction2 = tuple('family-d', 'correction2');
+  assert.equal(start(correction2).status, 'accepted');
+  assert.equal(finish(correction2, 'SUBMITTED').status, 'SUBMITTED');
+  const review2 = tuple('family-e', 'review2');
+  assert.equal(start(review2).status, 'accepted');
+  assert.deepEqual(finish(review2, 'CHANGES_REQUESTED'), { status: 'TBR_WRITE_BLOCKED' }, 'review2 rejection must remain durable returned uncertainty without TBR write');
+  const rootRows = readFileSync(rootStream, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(rootRows.filter((row) => row.event_type === 'review_outcome').length, 4, 'review2 rejection appends no outcome');
+  assert.deepEqual(foldReviewHistory(rootRows, review2), { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' });
+  assert.equal(start(tuple('family-f', 'initial')).status, 'uncertain', 'returned uncertainty blocks later families');
+  assert.match(readFileSync(rootStream, 'utf8'), /family-a/);
+  assert.doesNotMatch(readFileSync(rootStream, 'utf8'), /caller-selected-stream/);
+
+  const conflictPipeline = 'root-conflict';
+  writeFileSync(path.join(base, 'plan-038.current'), conflictPipeline);
+  writeFileSync(path.join(base, `${conflictPipeline}.jsonl`), '');
+  writeFileSync(path.join(base, 'split-family.jsonl'), `${JSON.stringify(historyRow('start_reserved', tuple('split-family', 'initial')))}\n`);
+  assert.deepEqual(start(tuple('family-new', 'initial')), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' }, 'matching non-root stream is unordered conflict, never merge input');
+
+  const approvalPipeline = 'root-approved';
+  for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name));
+  writeFileSync(path.join(base, 'plan-038.current'), approvalPipeline);
+  writeFileSync(path.join(base, `${approvalPipeline}.jsonl`), '');
+  const approved = tuple('family-approved', 'initial');
+  assert.equal(start(approved).status, 'accepted');
+  assert.equal(finish(approved, 'APPROVED').status, 'APPROVED');
+  assert.equal(start(tuple('family-stale', 'initial')).status, 'resumed', 'approval terminally closes aggregate gate');
+
+  const contentionPipeline = 'root-contention';
+  for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name));
+  writeFileSync(path.join(base, 'plan-038.current'), contentionPipeline);
+  writeFileSync(path.join(base, `${contentionPipeline}.jsonl`), '');
+  const c0 = tuple('contender-a', 'initial'); assert.equal(start(c0).status, 'accepted'); assert.equal(finish(c0, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
+  const c1 = tuple('contender-a', 'correction1'); assert.equal(start(c1).status, 'accepted'); assert.equal(finish(c1, 'READY_FOR_REVIEW').status, 'READY_FOR_REVIEW');
+  const c2 = tuple('contender-a', 'review1'); assert.equal(start(c2).status, 'accepted'); assert.equal(finish(c2, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
+  assert.equal(start(tuple('contender-a', 'correction2')).status, 'accepted');
+  assert.equal(start(tuple('contender-b', 'correction2')).status, 'denied', 'aggregate final slot admits one tuple only');
+  assert.deepEqual(reserveReviewStart({ stateDir: aggregateState, project: path.join(aggregateProject, 'missing'), pipelineId: 'ignored', identity: tuple('bad-canonical', 'initial'), start: () => 'child' }), { status: 'denied', code: 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE' }, 'canonical project failure fails closed');
+} finally { rmSync(aggregateState, { recursive: true, force: true }); rmSync(aggregateProject, { recursive: true, force: true }); }
 
 console.log('review budget TBR tests passed');

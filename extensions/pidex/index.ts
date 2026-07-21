@@ -3541,7 +3541,9 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		return { identity: supplied as Record<string, string>, pipelineId: lifecycle.pipelineId };
 	}
 	const planId = normalizePlanKey(extractPlanId(String(params?.task || "")));
-	const base = path.join(lifecycle.stateDir, "pipeline-events", safePathSegment(path.basename(path.resolve(project))));
+	let canonicalProject: string;
+	try { canonicalProject = fs.realpathSync.native(project); } catch { throw new Error("REVIEW_CANONICAL_PROJECT_UNAVAILABLE"); }
+	const base = path.join(lifecycle.stateDir, "pipeline-events", safePathSegment(path.basename(canonicalProject)));
 	const current = path.join(base, `${planId}.current`);
 	let pipelineId = "";
 	let rows: any[] = [];
@@ -3622,6 +3624,7 @@ function completeReviewDispatch(agent: string, identity: Record<string, string>,
 		: normalizeReviewVerdict(identity.reviewGate, verdict);
 	if (!outcome) throw new Error("REVIEW_OUTCOME_INVALID");
 	const completion = recordReviewCompletion({ ...lifecycle, identity, outcome });
+	if (completion.status === "TBR_WRITE_BLOCKED") throw new Error("TBR_WRITE_BLOCKED");
 	if (completion.status !== outcome && completion.status !== "resumed") throw new Error(completion.code || "REVIEW_COMPLETION_UNAVAILABLE");
 	return result;
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, rmdirSync, rmSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmdirSync, rmSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
@@ -23,10 +23,26 @@ function parse(argv) {
 }
 function runOptional(command, args, options) { try { const cp = spawnSync(command, args, options); if (cp.stdout?.trim()) console.log(cp.stdout.trim()); if (cp.status !== 0 && (cp.stderr || cp.stdout)) console.error((cp.stderr || cp.stdout).trim()); } catch (error) { console.error(`${path.basename(args[0] || command)} failed: ${error instanceof Error ? error.message : String(error)}`); } }
 
-function reviewPaths({ stateDir, project, pipelineId, identity }) {
-  if (!stateDir || !project || !/^[a-zA-Z0-9._-]{1,160}$/.test(String(pipelineId || '')) || !identity?.runFamilyId) throw new Error('invalid review lifecycle location');
-  const base = path.join(stateDir, 'pipeline-events', slug(path.basename(path.resolve(project))));
-  return { base, stream: path.join(base, `${pipelineId}.jsonl`), lock: path.join(base, `.review-${identity.runFamilyId}.lock`) };
+function reviewPaths({ stateDir, project, identity }) {
+  if (!stateDir || !project || !validateReviewIdentity(identity).ok) throw new Error('invalid review lifecycle location');
+  let canonicalProject;
+  try { canonicalProject = realpathSync.native(project); } catch { throw new Error('REVIEW_CANONICAL_PROJECT_UNAVAILABLE'); }
+  const base = path.join(stateDir, 'pipeline-events', slug(path.basename(canonicalProject)));
+  return { base, lock: path.join(base, `.review-${identity.planId}-${identity.reviewGate}.lock`) };
+}
+
+function bindReviewRoot(locations, identity) {
+  try {
+    const pipelineId = readFileSync(path.join(locations.base, `${identity.planId}.current`), 'utf8').trim();
+    if (!/^[a-zA-Z0-9._-]{1,160}$/.test(pipelineId)) return { code: 'REVIEW_HISTORY_INVALID' };
+    const stream = path.join(locations.base, `${pipelineId}.jsonl`);
+    for (const name of readdirSync(locations.base)) {
+      if (!name.endsWith('.jsonl') || name === `${pipelineId}.jsonl`) continue;
+      const rows = readReviewRows(path.join(locations.base, name));
+      if (rows.some((row) => row?.metadata?.planId === identity.planId && row?.metadata?.reviewGate === identity.reviewGate)) return { code: 'REVIEW_HISTORY_INVALID' };
+    }
+    return { stream };
+  } catch { return { code: 'REVIEW_HISTORY_INVALID' }; }
 }
 
 function readReviewRows(stream) {
@@ -97,22 +113,26 @@ function releaseReviewLock(lock) { unlinkSync(path.join(lock, 'owner.json')); rm
 export function reserveReviewStart({ stateDir, project, pipelineId, identity, start }) {
   if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return { status: 'denied' };
   let locations;
-  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); mkdirSync(locations.base, { recursive: true }); } catch { return { status: 'denied' }; }
+  try { locations = reviewPaths({ stateDir, project, identity }); mkdirSync(locations.base, { recursive: true }); } catch (error) { return { status: 'denied', code: error?.message === 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE' ? error.message : undefined }; }
   const lock = takeReviewLock(locations.lock, identity);
   if (!lock.held) return { status: 'unavailable', code: lock.code };
   let result;
   try {
-    const state = foldReviewHistory(readReviewRows(locations.stream), identity);
-    if (state.status === 'denied' || state.status === 'uncertain') result = state;
-    else if (state.status === 'terminal') result = { status: 'resumed', terminal: state.terminal };
-    else if (state.status === 'spawn_accepted') result = { status: 'resumed' };
+    const root = bindReviewRoot(locations, identity);
+    if (root.code) result = { status: 'denied', code: root.code };
     else {
-      if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(locations.stream, 'start_reserved', identity);
-      appendReviewEvent(locations.stream, 'spawn_entered', identity);
-      const started = start();
-      if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
-      appendReviewEvent(locations.stream, 'spawn_accepted', identity);
-      result = { status: 'accepted', started };
+      const state = foldReviewHistory(readReviewRows(root.stream), identity);
+      if (state.status === 'denied' || state.status === 'uncertain') result = state;
+      else if (state.status === 'terminal') result = { status: 'resumed', terminal: state.terminal };
+      else if (state.status === 'spawn_accepted') result = { status: 'resumed' };
+      else {
+        if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(root.stream, 'start_reserved', identity);
+        appendReviewEvent(root.stream, 'spawn_entered', identity);
+        const started = start();
+        if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
+        appendReviewEvent(root.stream, 'spawn_accepted', identity);
+        result = { status: 'accepted', started };
+      }
     }
   } catch { result = { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }; }
   try { releaseReviewLock(locations.lock); } catch { return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }; }
@@ -122,19 +142,21 @@ export function reserveReviewStart({ stateDir, project, pipelineId, identity, st
 export function reserveReviewStartAsync({ stateDir, project, pipelineId, identity, start }) {
   if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return Promise.resolve({ status: 'denied' });
   let locations;
-  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); mkdirSync(locations.base, { recursive: true }); } catch { return Promise.resolve({ status: 'denied' }); }
+  try { locations = reviewPaths({ stateDir, project, identity }); mkdirSync(locations.base, { recursive: true }); } catch (error) { return Promise.resolve({ status: 'denied', code: error?.message === 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE' ? error.message : undefined }); }
   const lock = takeReviewLock(locations.lock, identity);
   if (!lock.held) return Promise.resolve({ status: 'unavailable', code: lock.code });
   try {
-    const state = foldReviewHistory(readReviewRows(locations.stream), identity);
+    const root = bindReviewRoot(locations, identity);
+    if (root.code) { releaseReviewLock(locations.lock); return Promise.resolve({ status: 'denied', code: root.code }); }
+    const state = foldReviewHistory(readReviewRows(root.stream), identity);
     if (state.status === 'denied' || state.status === 'uncertain') { releaseReviewLock(locations.lock); return Promise.resolve(state); }
     if (state.status === 'terminal' || state.status === 'spawn_accepted') { releaseReviewLock(locations.lock); return Promise.resolve({ status: 'resumed', ...(state.status === 'terminal' ? { terminal: state.terminal } : {}) }); }
-    if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(locations.stream, 'start_reserved', identity);
-    appendReviewEvent(locations.stream, 'spawn_entered', identity);
+    if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(root.stream, 'start_reserved', identity);
+    appendReviewEvent(root.stream, 'spawn_entered', identity);
     return new Promise((resolve) => {
       let child; let signalled = false; let finished = false;
       const finish = (result) => { if (finished) return; finished = true; try { releaseReviewLock(locations.lock); } catch { resolve({ status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }); return; } resolve(result); };
-      const processStarted = () => { signalled = true; try { appendReviewEvent(locations.stream, 'spawn_accepted', identity); if (child !== undefined) finish({ status: 'accepted', started: child }); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
+      const processStarted = () => { signalled = true; try { appendReviewEvent(root.stream, 'spawn_accepted', identity); if (child !== undefined) finish({ status: 'accepted', started: child }); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
       try {
         child = start(processStarted);
         if (signalled && !finished) finish({ status: 'accepted', started: child });
@@ -147,15 +169,20 @@ export function reserveReviewStartAsync({ stateDir, project, pipelineId, identit
 export function recordReviewCompletion({ stateDir, project, pipelineId, identity, outcome }) {
   let locations;
   if (!validateReviewIdentity(identity).ok || !allowedCompletionOutcome(identity, outcome)) return { status: 'denied' };
-  try { locations = reviewPaths({ stateDir, project, pipelineId, identity }); } catch { return { status: 'denied' }; }
+  try { locations = reviewPaths({ stateDir, project, identity }); } catch (error) { return { status: 'denied', code: error?.message === 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE' ? error.message : undefined }; }
   const lock = takeReviewLock(locations.lock, identity);
   if (!lock.held) return { status: 'unavailable', code: lock.code };
   let result;
   try {
-    const state = foldReviewHistory(readReviewRows(locations.stream), identity);
-    if (state.status === 'terminal') result = state.terminal === outcome ? { status: 'resumed' } : { status: 'denied' };
-    else if (state.status !== 'spawn_accepted') result = state.status === 'uncertain' ? state : { status: 'denied' };
-    else { appendReviewEvent(locations.stream, 'spawn_returned', identity); appendReviewEvent(locations.stream, 'review_outcome', { ...identity, outcome }); result = { status: outcome }; }
+    const root = bindReviewRoot(locations, identity);
+    if (root.code) result = { status: 'denied', code: root.code };
+    else {
+      const state = foldReviewHistory(readReviewRows(root.stream), identity);
+      if (state.status === 'terminal') result = state.terminal === outcome ? { status: 'resumed' } : { status: 'denied' };
+      else if (state.status !== 'spawn_accepted') result = state.status === 'uncertain' ? state : { status: 'denied' };
+      else if (identity.reviewMode === 'review2' && outcome === 'CHANGES_REQUESTED') { appendReviewEvent(root.stream, 'spawn_returned', identity); result = { status: 'TBR_WRITE_BLOCKED' }; }
+      else { appendReviewEvent(root.stream, 'spawn_returned', identity); appendReviewEvent(root.stream, 'review_outcome', { ...identity, outcome }); result = { status: outcome }; }
+    }
   } catch { result = { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }; }
   try { releaseReviewLock(locations.lock); } catch { return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }; }
   return result;

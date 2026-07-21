@@ -63,18 +63,18 @@ function denied() { return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' };
 
 export function allowedCompletionOutcome(identity, outcome) {
   if (!validateReviewIdentity(identity).ok || typeof outcome !== 'string') return false;
-  return Boolean(nextAfter(identity.reviewMode, CANONICAL_OUTCOMES.has(outcome) ? outcome : normalizeReviewVerdict(identity.reviewGate, outcome)));
+  const normalized = CANONICAL_OUTCOMES.has(outcome) ? outcome : normalizeReviewVerdict(identity.reviewGate, outcome);
+  return normalized === 'CHANGES_REQUESTED' && identity.reviewMode === 'review2' || Boolean(nextAfter(identity.reviewMode, normalized));
 }
 
 export function foldReviewHistory(rows, requested) {
   if (!validateReviewIdentity(requested).ok || !Array.isArray(rows)) return denied();
   const reviewRows = [];
   for (const row of rows) {
-    if (!row || typeof row !== 'object' || Array.isArray(row) || !row.metadata || row.metadata.runFamilyId !== requested.runFamilyId) continue;
+    if (!row || typeof row !== 'object' || Array.isArray(row) || !row.metadata || row.metadata.planId !== requested.planId || row.metadata.reviewGate !== requested.reviewGate) continue;
     if (!EVENT_TYPES.has(row.event_type)) return denied();
     const identity = identityFrom(row.metadata);
-    if (!identity || identity.planId !== requested.planId) return denied();
-    if (identity.reviewGate !== requested.reviewGate) continue;
+    if (!identity) return denied();
     reviewRows.push({ event_type: row.event_type, metadata: row.metadata, identity });
   }
   if (!reviewRows.length) return requested.reviewMode === 'initial' ? { status: 'allowed', nextMode: 'initial' } : denied();
