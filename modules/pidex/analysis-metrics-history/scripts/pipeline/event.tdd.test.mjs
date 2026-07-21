@@ -53,6 +53,11 @@ try {
   assert.notEqual(orphan.status, 0);
   assert.match(orphan.stderr, /no active pipeline id/);
 
+  // Root-only lifecycle authority: explicit pipelineId cannot replace plan current pointer.
+  const reviewCurrent = path.join(state, 'pipeline-events', path.basename(project), `${tuple.planId}.current`);
+  const reviewControl = JSON.stringify({ event_type: 'pipeline_started', pipeline_id: pipelineId, plan_key: tuple.planId });
+  writeFileSync(jsonl, `${reviewControl}\n`, { flag: 'a' });
+  writeFileSync(reviewCurrent, pipelineId);
   const reviewStart = reserveReviewStart({ stateDir: state, project, pipelineId, identity: tuple, start: () => 'child-started' });
   assert.equal(reviewStart.status, 'accepted');
   const duplicateStart = reserveReviewStart({ stateDir: state, project, pipelineId, identity: tuple, start: () => { throw new Error('duplicate must not start'); } });
@@ -60,48 +65,70 @@ try {
   const reviewRows = readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.runFamilyId === tuple.runFamilyId);
   assert.deepEqual(reviewRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted']);
   assert.equal(existsSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${tuple.runFamilyId}.lock`)), false);
+  rmSync(reviewCurrent);
+  assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: { ...tuple, runFamilyId: 'family-missing-pointer', attemptId: 'attempt-missing-pointer' }, start: () => { throw new Error('missing current pointer must not start'); } }), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
+  writeFileSync(reviewCurrent, pipelineId);
+  const mismatchState = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-root-mismatch-'));
+  const mismatchProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-root-mismatch-project-'));
+  try {
+    const mismatchBase = path.join(mismatchState, 'pipeline-events', path.basename(mismatchProject));
+    mkdirSync(mismatchBase, { recursive: true });
+    writeFileSync(path.join(mismatchBase, `${tuple.planId}.current`), 'wrong-plan-root');
+    writeFileSync(path.join(mismatchBase, 'wrong-plan-root.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', pipeline_id: 'wrong-plan-root', plan_key: 'plan-999' })}\n`);
+    assert.deepEqual(reserveReviewStart({ stateDir: mismatchState, project: mismatchProject, pipelineId: 'caller-ignored', identity: { ...tuple, runFamilyId: 'family-wrong-plan', attemptId: 'attempt-wrong-plan' }, start: () => 'wrong plan root must not start' }), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
+    rmSync(path.join(mismatchBase, 'wrong-plan-root.jsonl'));
+    writeFileSync(path.join(mismatchBase, `${tuple.planId}.current`), 'wrong-pipeline-root');
+    writeFileSync(path.join(mismatchBase, 'wrong-pipeline-root.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', pipeline_id: 'different-pipeline', plan_key: tuple.planId })}\n`);
+    assert.deepEqual(reserveReviewStart({ stateDir: mismatchState, project: mismatchProject, pipelineId: 'caller-ignored', identity: { ...tuple, runFamilyId: 'family-wrong-pipeline', attemptId: 'attempt-wrong-pipeline' }, start: () => 'wrong pipeline root must not start' }), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
+  } finally { rmSync(mismatchState, { recursive: true, force: true }); rmSync(mismatchProject, { recursive: true, force: true }); }
 
   const conflicting = reserveReviewStart({ stateDir: state, project, pipelineId, identity: { ...tuple, attemptId: 'attempt-002' }, start: () => { throw new Error('conflict must not start'); } });
   assert.equal(conflicting.status, 'denied');
-  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId: '../escape', identity: tuple, start: () => 'must not start' }).status, 'denied');
-  const unavailableLock = path.join(state, 'pipeline-events', path.basename(project), '.review-family-locked.lock');
+  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId: '../escape', identity: tuple, start: () => 'must not start' }).status, 'resumed');
+  const unavailableLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${tuple.planId}-${tuple.reviewGate}.lock`);
   mkdirSync(unavailableLock);
   assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: { ...tuple, runFamilyId: 'family-locked', attemptId: 'attempt-locked' }, start: () => 'must not start' }).status, 'unavailable');
   rmSync(unavailableLock, { recursive: true, force: true });
   mkdirSync(path.join(state, 'pipeline-events', path.basename(project), 'pipeline-write-failure.jsonl'));
-  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId: 'pipeline-write-failure', identity: { ...tuple, runFamilyId: 'family-write-failure', attemptId: 'attempt-write-failure' }, start: () => 'must not start' }).status, 'unavailable');
+  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId: 'pipeline-write-failure', identity: { ...tuple, runFamilyId: 'family-write-failure', attemptId: 'attempt-write-failure' }, start: () => 'must not start' }).status, 'denied');
+  rmSync(path.join(state, 'pipeline-events', path.basename(project), 'pipeline-write-failure.jsonl'), { recursive: true, force: true });
 
+  writeFileSync(jsonl, `${reviewControl}\n`);
   const reservedTuple = { ...tuple, runFamilyId: 'family-resume', attemptId: 'attempt-resume' };
   writeFileSync(jsonl, `${JSON.stringify({ event_type: 'start_reserved', metadata: reservedTuple })}\n`, { flag: 'a' });
   const resumedReservation = reserveReviewStart({ stateDir: state, project, pipelineId, identity: reservedTuple, start: () => 'resumed-child' });
   assert.equal(resumedReservation.status, 'accepted');
+  writeFileSync(jsonl, `${reviewControl}\n`);
   const enteredTuple = { ...tuple, runFamilyId: 'family-uncertain', attemptId: 'attempt-uncertain' };
   writeFileSync(jsonl, `${JSON.stringify({ event_type: 'start_reserved', metadata: enteredTuple })}\n${JSON.stringify({ event_type: 'spawn_entered', metadata: enteredTuple })}\n`, { flag: 'a' });
   assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: enteredTuple, start: () => { throw new Error('uncertain must not start'); } }).status, 'uncertain');
 
+  writeFileSync(jsonl, `${reviewControl}\n`);
   const deadLockTuple = { ...tuple, runFamilyId: 'family-dead-lock', attemptId: 'attempt-dead-lock' };
-  const deadLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${deadLockTuple.runFamilyId}.lock`);
+  const deadLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${deadLockTuple.planId}-${deadLockTuple.reviewGate}.lock`);
   mkdirSync(deadLock);
   writeFileSync(path.join(deadLock, 'owner.json'), JSON.stringify({ pid: 99999999, processStart: 'dead', identity: deadLockTuple }));
   assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: deadLockTuple, start: () => 'recovered-after-owner-death' }).status, 'accepted');
   const malformedLockTuple = { ...tuple, runFamilyId: 'family-malformed-lock', attemptId: 'attempt-malformed-lock' };
-  const malformedLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${malformedLockTuple.runFamilyId}.lock`);
+  const malformedLock = path.join(state, 'pipeline-events', path.basename(project), `.review-${malformedLockTuple.planId}-${malformedLockTuple.reviewGate}.lock`);
   mkdirSync(malformedLock);
   writeFileSync(path.join(malformedLock, 'owner.json'), '{not-json');
   assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: malformedLockTuple, start: () => 'must-not-start' }), { status: 'unavailable', code: 'REVIEW_LOCK_UNCERTAIN' });
   rmSync(malformedLock, { recursive: true, force: true });
+  writeFileSync(jsonl, `${reviewControl}\n`);
   const releaseTuple = { ...tuple, runFamilyId: 'family-release-lock', attemptId: 'attempt-release-lock' };
   assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: releaseTuple, start: () => {
-    const lock = path.join(state, 'pipeline-events', path.basename(project), `.review-${releaseTuple.runFamilyId}.lock`);
+    const lock = path.join(state, 'pipeline-events', path.basename(project), `.review-${releaseTuple.planId}-${releaseTuple.reviewGate}.lock`);
     rmSync(lock, { recursive: true, force: true });
     writeFileSync(lock, 'release-blocked');
     return 'started';
   } }), { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' });
-  rmSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${releaseTuple.runFamilyId}.lock`));
+  rmSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${releaseTuple.planId}-${releaseTuple.reviewGate}.lock`));
+  writeFileSync(jsonl, `${reviewControl}\n`);
   const lockTuple = { ...tuple, runFamilyId: 'family-lock', attemptId: 'attempt-lock' };
   let lockSeenDuringStart = false;
   const lockProof = reserveReviewStart({ stateDir: state, project, pipelineId, identity: lockTuple, start: () => {
-    const lockPath = path.join(state, 'pipeline-events', path.basename(project), `.review-${lockTuple.runFamilyId}.lock`);
+    const lockPath = path.join(state, 'pipeline-events', path.basename(project), `.review-${lockTuple.planId}-${lockTuple.reviewGate}.lock`);
     lockSeenDuringStart = existsSync(lockPath);
     const currentRows = readFileSync(jsonl, 'utf8');
     assert.match(currentRows, /spawn_entered/);
@@ -110,20 +137,22 @@ try {
   } });
   assert.equal(lockProof.status, 'accepted');
   assert.equal(lockSeenDuringStart, true);
-  assert.equal(existsSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${lockTuple.runFamilyId}.lock`)), false);
+  assert.equal(existsSync(path.join(state, 'pipeline-events', path.basename(project), `.review-${lockTuple.planId}-${lockTuple.reviewGate}.lock`)), false);
   assert.equal(recordReviewCompletion({ stateDir: state, project, pipelineId, identity: lockTuple, outcome: 'accepted' }).status, 'accepted');
+  writeFileSync(jsonl, `${reviewControl}\n`);
   const rejectionTuple = { ...tuple, runFamilyId: 'family-reject', attemptId: 'attempt-reject' };
   assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: rejectionTuple, start: () => 'started' }).status, 'accepted');
   assert.equal(recordReviewCompletion({ stateDir: state, project, pipelineId, identity: rejectionTuple, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
   assert.deepEqual(foldReviewHistory(readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), { ...rejectionTuple, reviewMode: 'correction1', attemptId: 'attempt-correction-1' }), { status: 'allowed', nextMode: 'correction1' });
-  assert.deepEqual(foldReviewHistory(readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), lockTuple), { status: 'terminal', terminal: 'accepted' });
+  assert.deepEqual(foldReviewHistory(readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), lockTuple), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
 
   const contentionState = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-contention-'));
   const contentionProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-contention-project-'));
   const contentionTuple = { ...tuple, runFamilyId: 'family-contention', attemptId: 'attempt-contention' };
   const contentionBase = path.join(contentionState, 'pipeline-events', path.basename(contentionProject));
   mkdirSync(contentionBase, { recursive: true });
-  writeFileSync(path.join(contentionBase, 'pipeline-contention.jsonl'), '');
+  writeFileSync(path.join(contentionBase, 'plan-038.current'), 'pipeline-contention');
+  writeFileSync(path.join(contentionBase, 'pipeline-contention.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', pipeline_id: 'pipeline-contention', plan_key: contentionTuple.planId })}\n`);
   const childSource = `import { reserveReviewStart } from ${JSON.stringify(new URL('./event.mjs', import.meta.url).href)}; import { writeFileSync } from 'node:fs'; const [stateDir, project, pipelineId, identityJson, marker, hold] = process.argv.slice(1); const result = reserveReviewStart({ stateDir, project, pipelineId, identity: JSON.parse(identityJson), start: () => { writeFileSync(marker, 'entered'); if (hold === 'hold') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 350); return 'started'; } }); console.log(JSON.stringify(result));`;
   const spawnContender = (hold) => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--input-type=module', '--eval', childSource, contentionState, contentionProject, 'pipeline-contention', JSON.stringify(contentionTuple), path.join(contentionState, 'entered'), hold], { stdio: ['ignore', 'pipe', 'pipe'] });

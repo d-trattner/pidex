@@ -3030,6 +3030,7 @@ async function runConfiguredAgent(params: {
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
 	onProcessStarted?: () => void;
+	reviewDispatch?: boolean;
 }): Promise<RpResult> {
 	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: resolving route...`);
 	const config = loadRoutingConfig();
@@ -3106,7 +3107,7 @@ async function runConfiguredAgent(params: {
 	let result = await runProvider(provider);
 	let missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
 	let shouldFallback = result.exitCode !== 0 || !result.finalText || missingRouting;
-	if (shouldFallback && !result.setupError && isPiProvider(provider) && !params.providerOverride) {
+	if (shouldFallback && !params.reviewDispatch && !result.setupError && isPiProvider(provider) && !params.providerOverride) {
 		params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} returned invalid completion; retrying once on ${provider}.`);
 		result = await runProvider(provider, provider);
 		missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
@@ -3116,7 +3117,7 @@ async function runConfiguredAgent(params: {
 	const fallbackDisabled = !fallbackProviderRaw || ["none", "off", "disabled", "false"].includes(fallbackProviderRaw);
 	const configuredFallback = normalizeProvider(config.fallback?.on_error);
 	const fallbackProvider = fallbackDisabled ? "" : (configuredFallback === "pi" || configuredFallback === "codex" ? configuredFallback : "pi");
-	if (shouldFallback && !result.setupError && fallbackProvider && fallbackProvider !== provider && !params.providerOverride && !params.route) {
+	if (shouldFallback && !params.reviewDispatch && !result.setupError && fallbackProvider && fallbackProvider !== provider && !params.providerOverride && !params.route) {
 		params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} failed${missingRouting ? " (missing ROUTING)" : ""}; falling back to ${fallbackProvider}.`);
 		result = await runProvider(fallbackProvider, provider);
 	}
@@ -3682,8 +3683,9 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 		? (options.runSandboxed ?? runSandboxedConfiguredAgent)
 		: (options.runConfigured ?? runConfiguredAgent);
 	if (!reviewDispatch) return await runner(runParams);
+	if (options.signal?.aborted) throw new Error("REVIEW_DISPATCH_ABORTED");
 	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
-	const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted }) });
+	const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted, reviewDispatch: true }) });
 	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
 	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params);
 }

@@ -1383,9 +1383,9 @@ The first backward transition at a gate may auto-proceed. Apply this cumulative 
 
 When stopped, summarize user-visible progress, elapsed/rework cost when known, and the new obligations. Ask the user to choose exactly one: **(1) simplify/retain the approved contract, (2) accept and document residual risk, or (3) continue hardened remediation with an explicit cost warning**. Record the decision as an `OpDecision` before continuing. This circuit breaker overrides automatic `route_to: orchestrator`, backward auto-proceed, and adjacent-finding churn in every execution mode.
 
-### Review budget override
+### Lifecycle-tracked review policy
 
-For a declared review-budget run, use its durable lifecycle fold instead: initial review → correction1 → review1 → correction2 → review2. First and second structured rejections continue automatically. Third structured rejection writes TBR records first, then closes `CLOSED_WITH_TBR`; no user gate, correction3, or review4. New unrelated findings are immediate TBR only. User alone may select a TBR ID for promotion.
+Every lifecycle-tracked review uses one executable aggregate policy: initial → correction1 → review1 → correction2 → review2. Maximum three reviewer dispatches and two corrections. Approval closes gate. `review2` rejection remains returned uncertainty (`TBR_WRITE_BLOCKED`), so no correction3, review3, or fourth reviewer. No declared-mode split, legacy second-rejection override, or user choice may raise or reset this budget. Nontracked review guidance remains unchanged.
 
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 

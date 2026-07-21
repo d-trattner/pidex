@@ -36,6 +36,8 @@ function bindReviewRoot(locations, identity) {
     const pipelineId = readFileSync(path.join(locations.base, `${identity.planId}.current`), 'utf8').trim();
     if (!/^[a-zA-Z0-9._-]{1,160}$/.test(pipelineId)) return { code: 'REVIEW_HISTORY_INVALID' };
     const stream = path.join(locations.base, `${pipelineId}.jsonl`);
+    const rootRows = readReviewRows(stream);
+    if (!rootRows.some((row) => row?.event_type === 'pipeline_started' && row?.pipeline_id === pipelineId && row?.plan_key === identity.planId)) return { code: 'REVIEW_HISTORY_INVALID' };
     for (const name of readdirSync(locations.base)) {
       if (!name.endsWith('.jsonl') || name === `${pipelineId}.jsonl`) continue;
       const rows = readReviewRows(path.join(locations.base, name));
@@ -156,7 +158,11 @@ export function reserveReviewStartAsync({ stateDir, project, pipelineId, identit
     return new Promise((resolve) => {
       let child; let signalled = false; let finished = false;
       const finish = (result) => { if (finished) return; finished = true; try { releaseReviewLock(locations.lock); } catch { resolve({ status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }); return; } resolve(result); };
-      const processStarted = () => { signalled = true; try { appendReviewEvent(root.stream, 'spawn_accepted', identity); if (child !== undefined) finish({ status: 'accepted', started: child }); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
+      const processStarted = () => {
+        if (signalled) throw new Error('REVIEW_SPAWN_ACCEPTANCE_DUPLICATE');
+        signalled = true;
+        try { appendReviewEvent(root.stream, 'spawn_accepted', identity); if (child !== undefined) finish({ status: 'accepted', started: child }); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); }
+      };
       try {
         child = start(processStarted);
         if (signalled && !finished) finish({ status: 'accepted', started: child });
