@@ -19,6 +19,7 @@ const root = args['pidex-root'] ? path.resolve(String(args['pidex-root'])) : scr
 const moduleScriptPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/scripts\/[A-Za-z0-9_./-]+/g;
 const modulePathTokenPattern = /modules\/pidex\//;
 const moduleScriptsTokenPattern = /\/scripts\//;
+const stableModuleLibraryPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/lib\/[A-Za-z0-9_./-]+/g;
 const legacyWrapperPattern = /(?:^|[^A-Za-z0-9_./-])scripts\/(?:release|parallel-agents|git-hooks|provider-limits|profile|project-context|project-metadata|wiki|compat|analysis|metrics|history|pipeline)\/[A-Za-z0-9_./-]+/g;
 
 function gitFiles() {
@@ -74,7 +75,8 @@ for (const file of gitFiles()) {
   try { text = readFileSync(abs, 'utf8'); } catch { continue; }
 
   const moduleMatches = [...text.matchAll(moduleScriptPattern)].map((match) => match[0]);
-  const hasConstructedModuleScriptPath = text.split('\n').some((line) => modulePathTokenPattern.test(line) && moduleScriptsTokenPattern.test(line));
+  const constructedPathScanText = text.replaceAll(stableModuleLibraryPattern, '');
+  const hasConstructedModuleScriptPath = modulePathTokenPattern.test(constructedPathScanText) && moduleScriptsTokenPattern.test(constructedPathScanText);
   if (moduleMatches.length || hasConstructedModuleScriptPath) {
     const allowed = isModuleInternal(file) || isCompatibilityWrapper(file, text) || isModuleFramework(file) || isValidationHarness(file) || isExternalEvidenceMarkdown(file);
     if (!allowed) {

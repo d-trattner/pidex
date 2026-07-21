@@ -80,6 +80,12 @@ test('fails caller-zone constructed module implementation path tokens', () => {
   assert.throws(() => runGuard(dir), /constructed modules\/pidex\/\*\/scripts\/\*/);
 });
 
+test('fails caller-zone module implementation path tokens constructed across lines', () => {
+  const dir = fixture();
+  writeTracked(dir, 'tool.mjs', "const root = 'modules/pidex/' + moduleName;\nconst scriptPath = root + '/scripts/tool.mjs';\nconsole.log(scriptPath);\n");
+  assert.throws(() => runGuard(dir), /constructed modules\/pidex\/\*\/scripts\/\* path tokens/);
+});
+
 test('does not combine separate module library and ordinary script path tokens', () => {
   const dir = fixture();
   writeTracked(dir, 'caller.mjs', "import 'modules/pidex/example/lib/stable.mjs';\nimport './scripts/tool.mjs';\n");
