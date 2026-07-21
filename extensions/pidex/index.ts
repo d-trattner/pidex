@@ -3017,6 +3017,27 @@ async function runCliDelegate(params: {
 	}
 }
 
+export async function runConfiguredProviderAttempts(
+	params: { provider: string; fallbackProvider?: string; reviewDispatch?: boolean; signal?: AbortSignal; retrySameProvider?: boolean; fallbackEnabled?: boolean; onSameProviderRetry?: () => void; onConfiguredFallback?: (missingRouting: boolean) => void; },
+	runProvider: (selectedProvider: string, fallbackFrom?: string) => Promise<RpResult>,
+): Promise<RpResult> {
+	if (params.reviewDispatch && params.signal?.aborted) throw new Error("REVIEW_DISPATCH_ABORTED");
+	let result = await runProvider(params.provider);
+	let missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
+	let shouldFallback = result.exitCode !== 0 || !result.finalText || missingRouting;
+	if (shouldFallback && !params.reviewDispatch && !result.setupError && params.retrySameProvider) {
+		params.onSameProviderRetry?.();
+		result = await runProvider(params.provider, params.provider);
+		missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
+		shouldFallback = result.exitCode !== 0 || !result.finalText || missingRouting;
+	}
+	if (shouldFallback && !params.reviewDispatch && !result.setupError && params.fallbackEnabled && params.fallbackProvider && params.fallbackProvider !== params.provider) {
+		params.onConfiguredFallback?.(Boolean(missingRouting));
+		result = await runProvider(params.fallbackProvider, params.provider);
+	}
+	return result;
+}
+
 async function runConfiguredAgent(params: {
 	agent: string;
 	task: string;
@@ -3104,23 +3125,20 @@ async function runConfiguredAgent(params: {
 		return { ...result, fallbackFrom };
 	};
 
-	let result = await runProvider(provider);
-	let missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
-	let shouldFallback = result.exitCode !== 0 || !result.finalText || missingRouting;
-	if (shouldFallback && !params.reviewDispatch && !result.setupError && isPiProvider(provider) && !params.providerOverride) {
-		params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} returned invalid completion; retrying once on ${provider}.`);
-		result = await runProvider(provider, provider);
-		missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
-		shouldFallback = result.exitCode !== 0 || !result.finalText || missingRouting;
-	}
 	const fallbackProviderRaw = config.fallback?.on_error?.trim().toLowerCase();
 	const fallbackDisabled = !fallbackProviderRaw || ["none", "off", "disabled", "false"].includes(fallbackProviderRaw);
 	const configuredFallback = normalizeProvider(config.fallback?.on_error);
 	const fallbackProvider = fallbackDisabled ? "" : (configuredFallback === "pi" || configuredFallback === "codex" ? configuredFallback : "pi");
-	if (shouldFallback && !params.reviewDispatch && !result.setupError && fallbackProvider && fallbackProvider !== provider && !params.providerOverride && !params.route) {
-		params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} failed${missingRouting ? " (missing ROUTING)" : ""}; falling back to ${fallbackProvider}.`);
-		result = await runProvider(fallbackProvider, provider);
-	}
+	const result = await runConfiguredProviderAttempts({
+		provider,
+		fallbackProvider,
+		reviewDispatch: params.reviewDispatch,
+		signal: params.signal,
+		retrySameProvider: isPiProvider(provider) && !params.providerOverride,
+		fallbackEnabled: !fallbackDisabled && !params.providerOverride && !params.route,
+		onSameProviderRetry: () => params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} returned invalid completion; retrying once on ${provider}.`),
+		onConfiguredFallback: (missingRouting) => params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} failed${missingRouting ? " (missing ROUTING)" : ""}; falling back to ${fallbackProvider}.`),
+	}, runProvider);
 	if (result.setupError) {
 		result.warnings = [
 			...(result.warnings ?? []),

@@ -4,14 +4,28 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary } from './index.ts';
+import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, runConfiguredProviderAttempts } from './index.ts';
 import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
-import { reserveReviewStart, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
+import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
 import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
+const invalidCompletion = (overrides = {}) => ({ agent: 'pidex-planner', provider: 'pi', exitCode: 1, finalText: '', stderr: '', ...overrides });
+for (const [label, result] of [['aborted', invalidCompletion({ aborted: true })], ['timedOut', invalidCompletion({ timedOut: true })]]) {
+  const attempts = [];
+  await runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex', reviewDispatch: true, retrySameProvider: true, fallbackEnabled: true }, async (provider, fallbackFrom) => { attempts.push([provider, fallbackFrom]); return result; });
+  assert.deepEqual(attempts, [['pi', undefined]], `${label} review attempts provider once and never falls back`);
+}
+const preAborted = new AbortController();
+preAborted.abort();
+let preAbortedAttempts = 0;
+await assert.rejects(() => runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex', reviewDispatch: true, signal: preAborted.signal, retrySameProvider: true, fallbackEnabled: true }, async () => { preAbortedAttempts += 1; return invalidCompletion(); }), /REVIEW_DISPATCH_ABORTED/);
+assert.equal(preAbortedAttempts, 0, 'pre-aborted review attempts no provider');
+const ordinaryAttempts = [];
+await runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex', retrySameProvider: true, fallbackEnabled: true }, async (provider, fallbackFrom) => { ordinaryAttempts.push([provider, fallbackFrom]); return invalidCompletion({ provider }); });
+assert.deepEqual(ordinaryAttempts, [['pi', undefined], ['pi', 'pi'], ['codex', 'pi']], 'ordinary invalid Pi completion retries Pi then configured fallback');
 const bindCurrent = (stateDir, project, pipelineId) => { const base = path.join(stateDir, 'pipeline-events', path.basename(project)); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, 'plan-038.current'), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', pipeline_id: pipelineId, plan_key: 'plan-038' })}\n`, { flag: 'a' }); };
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
 assert.deepEqual(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }), { allowed: true });
@@ -491,11 +505,26 @@ try {
   const contentionPipeline = 'root-contention';
   for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name));
   bindCurrent(aggregateState, aggregateProject, contentionPipeline);
-  const c0 = tuple('contender-a', 'initial'); assert.equal(start(c0).status, 'accepted'); assert.equal(finish(c0, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
-  const c1 = tuple('contender-a', 'correction1'); assert.equal(start(c1).status, 'accepted'); assert.equal(finish(c1, 'READY_FOR_REVIEW').status, 'READY_FOR_REVIEW');
-  const c2 = tuple('contender-a', 'review1'); assert.equal(start(c2).status, 'accepted'); assert.equal(finish(c2, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
-  assert.equal(start(tuple('contender-a', 'correction2')).status, 'accepted');
-  assert.equal(start(tuple('contender-b', 'correction2')).status, 'denied', 'aggregate final slot admits one tuple only');
+  const c0 = tuple('seed-initial', 'initial'); assert.equal(start(c0).status, 'accepted'); assert.equal(finish(c0, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
+  const c1 = tuple('seed-correction1', 'correction1'); assert.equal(start(c1).status, 'accepted'); assert.equal(finish(c1, 'READY_FOR_REVIEW').status, 'READY_FOR_REVIEW');
+  const c2 = tuple('seed-review1', 'review1'); assert.equal(start(c2).status, 'accepted'); assert.equal(finish(c2, 'CHANGES_REQUESTED').status, 'CHANGES_REQUESTED');
+  let releaseWinner;
+  let winnerAtBarrier;
+  let childStarts = 0;
+  let acceptedStarts = 0;
+  const winner = reserveReviewStartAsync({ stateDir: aggregateState, project: aggregateProject, pipelineId: 'caller-selected-stream', identity: tuple('contender-a', 'correction2'), start: (onProcessStarted) => new Promise((resolve) => { childStarts += 1; winnerAtBarrier = () => { onProcessStarted(); acceptedStarts += 1; resolve('winner-child'); }; }) });
+  while (!winnerAtBarrier) await new Promise((resolve) => queueMicrotask(resolve));
+  const loser = await reserveReviewStartAsync({ stateDir: aggregateState, project: aggregateProject, pipelineId: 'caller-selected-stream', identity: tuple('contender-b', 'correction2'), start: () => { childStarts += 1; return 'must-not-start'; } });
+  releaseWinner = winnerAtBarrier;
+  releaseWinner();
+  const winnerResult = await winner;
+  assert.equal(winnerResult.status, 'accepted');
+  assert.equal(loser.status, 'unavailable', 'distinct-family final-slot loser cannot enter child start');
+  assert.equal(childStarts, 1, 'final-slot race creates exactly one child authority');
+  assert.equal(acceptedStarts, 1, 'final-slot race appends exactly one acceptance authority');
+  const correction2Rows = readFileSync(path.join(base, `${contentionPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.reviewMode === 'correction2');
+  assert.equal(correction2Rows.filter((row) => row.event_type === 'spawn_accepted').length, 1, 'root stream has one durable correction2 acceptance');
+  assert.deepEqual([...new Set(correction2Rows.map((row) => `${row.metadata.runFamilyId}|${row.metadata.attemptId}`))], ['contender-a|attempt-contender-a-correction2'], 'root stream has one durable correction2 tuple');
   assert.deepEqual(reserveReviewStart({ stateDir: aggregateState, project: path.join(aggregateProject, 'missing'), pipelineId: 'ignored', identity: tuple('bad-canonical', 'initial'), start: () => 'child' }), { status: 'denied', code: 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE' }, 'canonical project failure fails closed');
 } finally { rmSync(aggregateState, { recursive: true, force: true }); rmSync(aggregateProject, { recursive: true, force: true }); }
 
