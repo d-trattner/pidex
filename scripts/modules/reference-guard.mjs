@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { lstatSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs, scriptPidexRoot } from './lib.mjs';
 
@@ -22,18 +22,52 @@ const moduleScriptsTokenPattern = /\/scripts\//;
 const stableModuleLibraryPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/lib\/[A-Za-z0-9_./-]+/g;
 const legacyWrapperPattern = /(?:^|[^A-Za-z0-9_./-])scripts\/(?:release|parallel-agents|git-hooks|provider-limits|profile|project-context|project-metadata|wiki|compat|analysis|metrics|history|pipeline)\/[A-Za-z0-9_./-]+/g;
 
+function rawEndsWith(value, suffix) {
+  const bytes = Buffer.from(suffix);
+  return value.length >= bytes.length && value.subarray(-bytes.length).equals(bytes);
+}
+
+function isRawLikelyText(file) {
+  const suffixes = ['.md', '.mdx', '.txt', '.json', '.jsonc', '.mjs', '.js', '.ts', '.tsx', '.sh', '.ps1', '.yml', '.yaml', '.toml', '.html', '.css', '.gitignore'];
+  const names = ['README', 'LICENSE', 'CHANGELOG', 'CONTRIBUTING', 'install.sh', 'uninstall.sh', 'package.json'];
+  return suffixes.some((suffix) => rawEndsWith(file, suffix)) || names.some((name) => rawEndsWith(file, name));
+}
+
+function parseIndexRecord(record, seen, previous) {
+  const separator = record.indexOf(9);
+  if (separator < 1) throw new Error('Malformed git index record');
+  const metadata = record.subarray(0, separator); const fileBytes = record.subarray(separator + 1);
+  if (!fileBytes.length || !metadata.every((byte) => byte < 128)) throw new Error('Malformed git index record');
+  const match = /^(?<mode>[0-7]{6}) (?:[0-9a-f]{40}|[0-9a-f]{64}) 0$/.exec(metadata.toString('ascii'));
+  const key = fileBytes.toString('hex');
+  if (!match || seen.has(key) || (previous && Buffer.compare(previous, fileBytes) >= 0)) throw new Error('Malformed git index record');
+  seen.add(key);
+  try { return { entry: { file: new TextDecoder('utf-8', { fatal: true }).decode(fileBytes), mode: match.groups.mode }, fileBytes }; }
+  catch { if (isRawLikelyText(fileBytes)) throw new Error(`invalid UTF-8 tracked candidate: ${JSON.stringify(fileBytes.toString('hex'))}`); }
+  return { fileBytes };
+}
+
 function gitFiles() {
-  const proc = spawnSync('git', ['ls-files', '--stage', '-z'], { cwd: root, encoding: 'utf8' });
-  if (proc.status !== 0) throw new Error(proc.stderr || 'git ls-files --stage failed');
-  const entries = proc.stdout.split('\0').filter(Boolean).map((record) => {
-    const separator = record.indexOf('\t');
-    if (separator < 0) throw new Error(`Malformed git ls-files --stage record: ${record}`);
-    const [mode, , stage] = record.slice(0, separator).split(' ');
-    const file = record.slice(separator + 1);
-    if (!mode || stage !== '0' || !file) throw new Error(`Malformed git ls-files --stage record: ${record}`);
-    return { file, mode };
-  });
-  return entries.sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
+  const proc = spawnSync('git', ['ls-files', '--stage', '-z'], { cwd: root });
+  if (proc.error || proc.status !== 0 || !Buffer.isBuffer(proc.stdout)) throw new Error('git ls-files --stage failed');
+  const output = proc.stdout;
+  if (!output.length) return [];
+  if (output.at(-1) !== 0) throw new Error('Malformed git index output');
+  const entries = []; const seen = new Set(); let previous; let offset = 0;
+  while (offset < output.length) {
+    const end = output.indexOf(0, offset);
+    if (end === offset) throw new Error('Malformed git index output');
+    const parsed = parseIndexRecord(output.subarray(offset, end), seen, previous);
+    previous = parsed.fileBytes; if (parsed.entry) entries.push(parsed.entry);
+    offset = end + 1;
+  }
+  return entries;
+}
+
+function checkedTrackedPath(file) {
+  const abs = path.resolve(root, file); const relative = path.relative(root, abs);
+  if (path.isAbsolute(file) || file.split(/[\\/]/).includes('..') || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`unsafe tracked path: ${JSON.stringify(file)}`);
+  return abs;
 }
 
 function isLikelyText(file) {
@@ -77,10 +111,12 @@ const moduleViolations = [];
 const legacyWarnings = [];
 for (const { file, mode } of gitFiles()) {
   if (isGeneratedOrBinary(file) || !isLikelyText(file)) continue;
-  const abs = path.join(root, file);
-  if (!existsSync(abs)) continue;
+  const abs = checkedTrackedPath(file);
   let text;
-  try { text = readFileSync(abs, 'utf8'); } catch { continue; }
+  try {
+    if (!lstatSync(abs).isFile()) throw new Error('not regular');
+    text = readFileSync(abs, 'utf8');
+  } catch { throw new Error(`tracked text checkout is not regular: ${JSON.stringify(file)}`); }
 
   const moduleMatches = [...text.matchAll(moduleScriptPattern)].map((match) => match[0]);
   const constructedPathScanText = text.replaceAll(stableModuleLibraryPattern, '');
