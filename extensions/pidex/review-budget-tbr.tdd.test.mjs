@@ -7,7 +7,7 @@ import path from 'node:path';
 import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, runConfiguredProviderAttempts } from './index.ts';
 import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
-import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
+import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
 import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 

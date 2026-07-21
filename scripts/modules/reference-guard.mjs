@@ -6,7 +6,7 @@ import { parseArgs, scriptPidexRoot } from './lib.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 if (args.help) {
-  console.log(`Usage: node scripts/modules/reference-guard.mjs [--mode warn|fail] [--pidex-root <path>]\n\nScans tracked caller files for forbidden hard-coded PIDEX module implementation paths.\nPhysical module script paths belong in module manifests, module internals, thin compatibility wrappers, and tests/fixtures only.`);
+  console.log(`Usage: node scripts/modules/reference-guard.mjs [--mode warn|fail] [--pidex-root <path>]\n\nScans tracked caller files for forbidden hard-coded PIDEX module implementation paths.\nPhysical module script paths belong in module manifests and internals, thin compatibility wrappers, module framework/validation harnesses, or tracked external-evidence Markdown under ext/claude-code-reviews/ and ext/reports/ only.`);
   process.exit(0);
 }
 
@@ -56,6 +56,10 @@ function isValidationHarness(file) {
   return file === 'package.json' || file === 'scripts/release/public-readiness-check.mjs';
 }
 
+function isExternalEvidenceMarkdown(file) {
+  return file.endsWith('.md') && (file.startsWith('ext/claude-code-reviews/') || file.startsWith('ext/reports/'));
+}
+
 function isGeneratedOrBinary(file) {
   return file.startsWith('agents.output/') || file.includes('__pycache__/') || file.endsWith('.pyc') || file.endsWith('dashboard/app/routeTree.gen.ts');
 }
@@ -70,9 +74,9 @@ for (const file of gitFiles()) {
   try { text = readFileSync(abs, 'utf8'); } catch { continue; }
 
   const moduleMatches = [...text.matchAll(moduleScriptPattern)].map((match) => match[0]);
-  const hasConstructedModuleScriptPath = modulePathTokenPattern.test(text) && moduleScriptsTokenPattern.test(text);
+  const hasConstructedModuleScriptPath = text.split('\n').some((line) => modulePathTokenPattern.test(line) && moduleScriptsTokenPattern.test(line));
   if (moduleMatches.length || hasConstructedModuleScriptPath) {
-    const allowed = isModuleInternal(file) || isCompatibilityWrapper(file, text) || isModuleFramework(file) || isValidationHarness(file);
+    const allowed = isModuleInternal(file) || isCompatibilityWrapper(file, text) || isModuleFramework(file) || isValidationHarness(file) || isExternalEvidenceMarkdown(file);
     if (!allowed) {
       const matches = moduleMatches.length ? [...new Set(moduleMatches)] : ['constructed modules/pidex/*/scripts/* path tokens'];
       moduleViolations.push({ file, matches });

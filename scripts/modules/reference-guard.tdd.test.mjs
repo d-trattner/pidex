@@ -42,10 +42,28 @@ test('allows thin compatibility wrapper', () => {
   assert.equal(out.ok, true);
 });
 
-test('fails caller-zone direct module implementation path', () => {
+test('allows exact external evidence Markdown paths', () => {
+  const dir = fixture();
+  writeTracked(dir, 'ext/claude-code-reviews/finding.md', 'Historical reference: modules/pidex/example/scripts/tool.mjs\n');
+  writeTracked(dir, 'ext/reports/incident.md', 'Historical reference: modules/pidex/example/scripts/tool.mjs\n');
+  const out = JSON.parse(runGuard(dir));
+  assert.equal(out.ok, true);
+});
+
+test('fails caller source and non-Markdown or neighboring ext paths', () => {
   const dir = fixture();
   writeTracked(dir, 'README.md', 'Do not run modules/pidex/example/scripts/tool.mjs directly.\n');
-  assert.throws(() => runGuard(dir), /forbidden hard-coded module implementation/);
+  writeTracked(dir, 'extensions/caller.mjs', "import 'modules/pidex/example/scripts/tool.mjs';\n");
+  writeTracked(dir, 'ext/claude-code-reviews/finding.mjs', "import 'modules/pidex/example/scripts/tool.mjs';\n");
+  writeTracked(dir, 'ext/reports/finding.txt', 'Reference: modules/pidex/example/scripts/tool.mjs\n');
+  writeTracked(dir, 'ext/claude-code-review/finding.md', 'Reference: modules/pidex/example/scripts/tool.mjs\n');
+  assert.throws(() => runGuard(dir), (error) => {
+    assert.match(error.message, /forbidden hard-coded module implementation/);
+    for (const file of ['README.md', 'extensions/caller.mjs', 'ext/claude-code-reviews/finding.mjs', 'ext/reports/finding.txt', 'ext/claude-code-review/finding.md']) {
+      assert.match(error.stderr, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+    return true;
+  });
 });
 
 test('warn mode reports but does not fail caller-zone direct module implementation path', () => {
@@ -60,4 +78,11 @@ test('fails caller-zone constructed module implementation path tokens', () => {
   const dir = fixture();
   writeTracked(dir, 'tool.mjs', "const moduleName = 'example';\nconst scriptPath = 'modules/pidex/' + moduleName + '/scripts/tool.mjs';\nconsole.log(scriptPath);\n");
   assert.throws(() => runGuard(dir), /constructed modules\/pidex\/\*\/scripts\/\*/);
+});
+
+test('does not combine separate module library and ordinary script path tokens', () => {
+  const dir = fixture();
+  writeTracked(dir, 'caller.mjs', "import 'modules/pidex/example/lib/stable.mjs';\nimport './scripts/tool.mjs';\n");
+  const out = JSON.parse(runGuard(dir));
+  assert.equal(out.ok, true);
 });

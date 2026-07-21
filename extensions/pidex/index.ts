@@ -9,7 +9,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { foldReviewHistory, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
-import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync } from "../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs";
+import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 
 type AgentFrontmatter = {
 	name?: string;
