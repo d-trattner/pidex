@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -48,6 +48,31 @@ test('allows exact external evidence Markdown paths', () => {
   writeTracked(dir, 'ext/reports/incident.md', 'Historical reference: modules/pidex/example/scripts/tool.mjs\n');
   const out = JSON.parse(runGuard(dir));
   assert.equal(out.ok, true);
+});
+
+test('fails executable Markdown and symlink caller sources in external evidence paths', () => {
+  const dir = fixture();
+  const executableEvidenceFiles = [
+    'ext/claude-code-reviews/executable.md',
+    'ext/reports/executable.md',
+  ];
+  for (const file of executableEvidenceFiles) {
+    writeTracked(dir, file, 'Caller source: modules/pidex/example/scripts/tool.mjs\n');
+    execFileSync('git', ['update-index', '--chmod=+x', '--', file], { cwd: dir });
+  }
+  const symlinkFile = 'ext/reports/symlink.md';
+  writeFileSync(path.join(dir, 'untracked-caller.md'), 'Caller source: modules/pidex/example/scripts/tool.mjs\n');
+  mkdirSync(path.join(dir, 'ext/reports'), { recursive: true });
+  symlinkSync('../../untracked-caller.md', path.join(dir, symlinkFile));
+  execFileSync('git', ['add', symlinkFile], { cwd: dir });
+
+  assert.throws(() => runGuard(dir), (error) => {
+    assert.match(error.message, /forbidden hard-coded module implementation/);
+    for (const file of [...executableEvidenceFiles, symlinkFile]) {
+      assert.match(error.stderr, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    }
+    return true;
+  });
 });
 
 test('fails caller source and non-Markdown or neighboring ext paths', () => {
