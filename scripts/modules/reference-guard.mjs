@@ -64,9 +64,13 @@ function gitFiles() {
   return entries;
 }
 
+function renderPathname(file) {
+  return JSON.stringify(file);
+}
+
 function checkedTrackedPath(file) {
   const abs = path.resolve(root, file); const relative = path.relative(root, abs);
-  if (path.isAbsolute(file) || file.split(/[\\/]/).includes('..') || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`unsafe tracked path: ${JSON.stringify(file)}`);
+  if (path.isAbsolute(file) || file.split(/[\\/]/).includes('..') || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`unsafe tracked path: ${renderPathname(file)}`);
   return abs;
 }
 
@@ -116,7 +120,7 @@ for (const { file, mode } of gitFiles()) {
   try {
     if (!lstatSync(abs).isFile()) throw new Error('not regular');
     text = readFileSync(abs, 'utf8');
-  } catch { throw new Error(`tracked text checkout is not regular: ${JSON.stringify(file)}`); }
+  } catch { throw new Error(`tracked text checkout is not regular: ${renderPathname(file)}`); }
 
   const moduleMatches = [...text.matchAll(moduleScriptPattern)].map((match) => match[0]);
   const constructedPathScanText = text.replaceAll(stableModuleLibraryPattern, '');
@@ -139,13 +143,13 @@ for (const { file, mode } of gitFiles()) {
 
 if (legacyWarnings.length) {
   console.error(`module reference guard: ${legacyWarnings.length} tracked file(s) still mention legacy wrapper paths; treat as compatibility/docs or migrate to capability IDs over time`);
-  for (const item of legacyWarnings.slice(0, 50)) console.error(`warning: ${item.file}: ${item.matches.join(', ')}`);
+  for (const item of legacyWarnings.slice(0, 50)) console.error(`warning: ${renderPathname(item.file)}: ${item.matches.join(', ')}`);
   if (legacyWarnings.length > 50) console.error(`warning: ... ${legacyWarnings.length - 50} more file(s)`);
 }
 
 if (moduleViolations.length) {
   console.error(`module reference guard: forbidden hard-coded module implementation path(s) found`);
-  for (const item of moduleViolations) console.error(`${item.file}: ${item.matches.join(', ')}`);
+  for (const item of moduleViolations) console.error(`${renderPathname(item.file)}: ${item.matches.join(', ')}`);
   if (mode === 'fail') process.exit(1);
 }
 

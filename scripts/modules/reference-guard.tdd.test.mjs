@@ -192,12 +192,13 @@ test('fails decoded traversal, missing checkout paths, and symlinked tracked tex
   assert.throws(() => runGuard(linked), /tracked text checkout is not regular/);
 });
 
-test('escapes control-bearing diagnostic paths and preserves valid UTF-8 Git names deterministically', () => {
+test('escapes real tracked control-bearing violation paths and preserves valid UTF-8 Git names deterministically', () => {
   const dir = fixture();
-  const unsafe = stagedRecord('bad\nname.md');
-  assert.throws(() => runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(unsafe))), (error) => {
-    assert.match(error.stderr, /"bad\\nname.md"/);
-    assert.doesNotMatch(error.stderr, /bad\nname\.md/);
+  const unsafe = 'bad\tname\n.md';
+  writeTracked(dir, unsafe, 'Forbidden: modules/pidex/example/scripts/tool.mjs\n');
+  assert.throws(() => runGuard(dir), (error) => {
+    assert.match(error.stderr, /"bad\\tname\\n\.md": modules\/pidex\/example\/scripts\/tool\.mjs/);
+    assert.doesNotMatch(error.stderr, new RegExp(`${unsafe}: modules/pidex/example/scripts/tool\\.mjs`));
     return true;
   });
 
