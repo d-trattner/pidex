@@ -23,9 +23,17 @@ const stableModuleLibraryPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/lib\/[A-Za-
 const legacyWrapperPattern = /(?:^|[^A-Za-z0-9_./-])scripts\/(?:release|parallel-agents|git-hooks|provider-limits|profile|project-context|project-metadata|wiki|compat|analysis|metrics|history|pipeline)\/[A-Za-z0-9_./-]+/g;
 
 function gitFiles() {
-  const proc = spawnSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' });
-  if (proc.status !== 0) throw new Error(proc.stderr || 'git ls-files failed');
-  return proc.stdout.split('\n').filter(Boolean).sort();
+  const proc = spawnSync('git', ['ls-files', '--stage', '-z'], { cwd: root, encoding: 'utf8' });
+  if (proc.status !== 0) throw new Error(proc.stderr || 'git ls-files --stage failed');
+  const entries = proc.stdout.split('\0').filter(Boolean).map((record) => {
+    const separator = record.indexOf('\t');
+    if (separator < 0) throw new Error(`Malformed git ls-files --stage record: ${record}`);
+    const [mode, , stage] = record.slice(0, separator).split(' ');
+    const file = record.slice(separator + 1);
+    if (!mode || stage !== '0' || !file) throw new Error(`Malformed git ls-files --stage record: ${record}`);
+    return { file, mode };
+  });
+  return entries.sort((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0);
 }
 
 function isLikelyText(file) {
@@ -57,8 +65,8 @@ function isValidationHarness(file) {
   return file === 'package.json' || file === 'scripts/release/public-readiness-check.mjs';
 }
 
-function isExternalEvidenceMarkdown(file) {
-  return file.endsWith('.md') && (file.startsWith('ext/claude-code-reviews/') || file.startsWith('ext/reports/'));
+function isExternalEvidenceMarkdown(file, mode) {
+  return mode === '100644' && file.endsWith('.md') && (file.startsWith('ext/claude-code-reviews/') || file.startsWith('ext/reports/'));
 }
 
 function isGeneratedOrBinary(file) {
@@ -67,7 +75,7 @@ function isGeneratedOrBinary(file) {
 
 const moduleViolations = [];
 const legacyWarnings = [];
-for (const file of gitFiles()) {
+for (const { file, mode } of gitFiles()) {
   if (isGeneratedOrBinary(file) || !isLikelyText(file)) continue;
   const abs = path.join(root, file);
   if (!existsSync(abs)) continue;
@@ -78,7 +86,7 @@ for (const file of gitFiles()) {
   const constructedPathScanText = text.replaceAll(stableModuleLibraryPattern, '');
   const hasConstructedModuleScriptPath = modulePathTokenPattern.test(constructedPathScanText) && moduleScriptsTokenPattern.test(constructedPathScanText);
   if (moduleMatches.length || hasConstructedModuleScriptPath) {
-    const allowed = isModuleInternal(file) || isCompatibilityWrapper(file, text) || isModuleFramework(file) || isValidationHarness(file) || isExternalEvidenceMarkdown(file);
+    const allowed = isModuleInternal(file) || isCompatibilityWrapper(file, text) || isModuleFramework(file) || isValidationHarness(file) || isExternalEvidenceMarkdown(file, mode);
     if (!allowed) {
       const matches = moduleMatches.length ? [...new Set(moduleMatches)] : ['constructed modules/pidex/*/scripts/* path tokens'];
       moduleViolations.push({ file, matches });
