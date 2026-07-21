@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added bounded lifecycle review budgets for Critic, Code Review, Security, and QA: canonical root-stream authority prevents family/slice/remediation resets; each gate has a fixed aggregate review and correction limit; interrupted lifecycle reviews have no retry or fallback.
+- Accepted testserver lifecycle evidence confirms pre-abort dispatches stay at zero and an accepted interrupted review remains one-shot; normal non-review retry/fallback behavior remains unchanged.
+
 - Made `agents.output/**`, `state/**`, and `pidex/state/**` unconditionally local runtime state: wiki hygiene no longer offers audit state for commit, and Pi blocks `git add -f`/`--force` across parent and child sessions even where Windows has no global Git hook.
 
 ## 0.2.2 - 2026-07-15

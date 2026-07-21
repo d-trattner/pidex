@@ -4,7 +4,9 @@ PIDEX saves one explicit execution mode per project. The mode controls where age
 
 Parity means differences are intentional, documented, and tested. It does **not** mean every feature must run in every mode.
 
-Execution mode and assurance depth are separate. An explicit `minimal`, `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` request activates proportional orchestration in every mode: optional generic secondary reviews are skipped, and reviewers cannot silently turn a new threat tier or evidence contract into binding scope. At the second rejection or second residual re-slice at the same gate—or immediately on contract/threat-model expansion—the orchestrator stops and asks the user to simplify, accept documented residual risk, or explicitly continue hardened remediation.
+Execution mode and assurance depth are separate. An explicit `minimal`, `minimal v1`, `MVP`, `small`, `simple`, `cheap`, `quick`, or `single-lane` request activates proportional orchestration in every mode: optional generic secondary reviews are skipped, and reviewers cannot silently turn a new threat tier or evidence contract into binding scope.
+
+Lifecycle-tracked Critic, Code Review, Security, and QA gates use the same executable aggregate review budget in all three modes. A user choice cannot raise it. The legacy second-rejection or residual re-slice prompt breaker may still govern nontracked/minimal work; for lifecycle-tracked reviews, the bounded budget is authoritative. See [Bounded lifecycle review budgets](review-budgets.md).
 
 ## Mode summary
 

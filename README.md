@@ -16,6 +16,8 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary supported path today. Local Docker Project Pipeline is validated for the current MVP on Linux and has focused native Windows Docker Desktop evidence, including automatic managed preview approval flows and host-side browser-smoke checks for Vite React UI fixtures.
 
+Lifecycle-tracked Critic, Code Review, Security, and QA work uses bounded review budgets: a fixed number of review dispatches per project, plan, and gate. The limit prevents review loops without limiting normal planning, implementation, tokens, cost, or time.
+
 The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes Docker-backed sandboxing in two forms: the optional hardened agent sandbox for selected source-changing pipeline work, and the validated local Project Pipeline MVP where project work runs inside a persistent Docker Project Sandbox. Both require the canonical `~/pidex` runtime checkout on Linux/WSL2 or `$HOME\pidex` for the experimental Windows bootstrap.
 
 ## Detailed feature docs
@@ -29,6 +31,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Optional parallel agents](readme/parallel-agents.md)
 - [Docker sandbox](readme/sandbox.md)
 - [Project modes](readme/modes.md)
+- [Bounded lifecycle review budgets](readme/review-budgets.md)
 - [Project Pipeline](readme/project-pipeline.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
