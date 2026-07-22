@@ -102,12 +102,7 @@ Controlled real `/pd` fixture runs produced these practical recommendations:
 - Keep retired GPT-5.4/GPT-5.5 routing as historical benchmark evidence rather than selectable production profiles.
 - Compare profiles per task category and repeat runs before treating small differences as conclusive.
 
-Evidence:
-
-- [`wiki/testing/model-comparison-fixtures/results-2026-07-09.md`](../wiki/testing/model-comparison-fixtures/results-2026-07-09.md)
-- [`wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md`](../wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md)
-- [`wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md`](../wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md)
-- [`wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md`](../wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md)
+Detailed fixture outputs, holdout tables, and routing-decision records remain in the local PIDEX project wiki and are intentionally not included in the public npm package. The profile descriptions and recommendations above are the public release summary.
 
 ## Estimate-only agent balances
 
