@@ -4,6 +4,7 @@
 
 - Added bounded lifecycle review budgets for Critic, Code Review, Security, and QA: canonical root-stream authority prevents family/slice/remediation resets; each gate has a fixed aggregate review and correction limit; interrupted lifecycle reviews have no retry or fallback.
 - Accepted testserver lifecycle evidence confirms pre-abort dispatches stay at zero and an accepted interrupted review remains one-shot; normal non-review retry/fallback behavior remains unchanged.
+- Replaced the legacy GPT-5.4/GPT-5.5 profile catalog with the evidence-selected GPT-5.6 Balanced, Lowcost, and Sol-quality profiles; aligned Sol-quality Security to the validated high effort, and made Spark fallback permit only an exact named counterpart rather than an unrelated profile.
 
 - Made `agents.output/**`, `state/**`, and `pidex/state/**` unconditionally local runtime state: wiki hygiene no longer offers audit state for commit, and Pi blocks `git add -f`/`--force` across parent and child sessions even where Windows has no global Git hook.
 

@@ -137,14 +137,10 @@ function sparkLimitHit(records) {
   }
   return false;
 }
-function nonSparkFallbackProfile(current, profiles) {
-  const noSpark = profiles.filter((p) => p.includes('no-spark'));
-  if (!noSpark.length || noSpark.includes(current)) return null;
+export function nonSparkFallbackProfile(current, profiles) {
+  if (!current.includes('plus-spark')) return null;
   const exact = current.replace('plus-spark', 'no-spark');
-  if (noSpark.includes(exact)) return exact;
-  if (current.startsWith('5.4') && noSpark.includes('5.4-no-spark-balanced')) return '5.4-no-spark-balanced';
-  if (current.startsWith('5.5') && noSpark.includes('5.5-no-spark-balanced')) return '5.5-no-spark-balanced';
-  return noSpark[0];
+  return profiles.includes(exact) ? exact : null;
 }
 function applyRoutingProfile(profile) {
   const source = path.resolve(PROFILES, `${profile}.json`);

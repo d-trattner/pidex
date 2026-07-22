@@ -85,7 +85,7 @@
       "provider": "pi",
       "model": "openai-codex/gpt-5.6-sol",
       "timeout_seconds": 900,
-      "effort": "xhigh"
+      "effort": "high"
     },
     "pidex-uat": {
       "provider": "pi",

@@ -7,7 +7,7 @@ PROBE="$ROOT/modules/pidex/provider-governance/scripts/provider-limits/probe.mjs
 PROFILE="${1:-}"
 
 if [ -z "$PROFILE" ] || [ "$PROFILE" = "-h" ] || [ "$PROFILE" = "--help" ]; then
-  echo "Usage: $0 <codex-optimized|codex-high>"
+  echo "Usage: $0 <profile-name>"
   exit 2
 fi
 

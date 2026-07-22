@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { appendCodexRateLimit } from './probe.mjs';
+import { appendCodexRateLimit, nonSparkFallbackProfile } from './probe.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const script = path.join(root, 'modules/pidex/provider-governance/scripts/provider-limits/probe.mjs');
@@ -33,6 +33,19 @@ appendCodexRateLimit(legacyWindows, {}, {
   secondary_window: { used_percent: 20 },
 }, 'codex');
 assert.deepEqual(legacyWindows.map((record) => record.window), ['five_hour', 'seven_day']);
+
+assert.equal(
+  nonSparkFallbackProfile('future-plus-spark-balanced', ['future-no-spark-balanced']),
+  'future-no-spark-balanced',
+);
+assert.equal(
+  nonSparkFallbackProfile('future-plus-spark-balanced', ['unrelated-no-spark-balanced']),
+  null,
+);
+assert.equal(
+  nonSparkFallbackProfile('5.6-hybrid-balanced', ['unrelated-no-spark-balanced']),
+  null,
+);
 
 // Use the real repo paths for a non-mutating latest smoke. It may write latest.json
 // under PIDEX state, matching the legacy helper behavior.

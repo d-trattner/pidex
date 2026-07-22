@@ -252,7 +252,8 @@ The current GPT-5.6 presets are:
 
 | Profile | Routing | Recommended use |
 | --- | --- | --- |
-| `5.6-hybrid-balanced` | GPT-5.6 Sol for analysis/planning/review/security, Terra for implementation/QA/operations, Luna for retrospectives | General daily default |
+| `5.6-hybrid-balanced` | Evidence-selected GPT-5.6 routing: Sol for quality-critical reasoning/review/design/QA/security, Terra for implementation/operations/UAT/Pi, Luna for retrospectives | General daily default |
+| `5.6-hybrid-lowcost` | Same critical routes, with Terra medium for bounded code review and QA | Explicit token-efficient mode |
 | `5.6-sol-quality` | GPT-5.6 Sol for every PIDEX role | Selective quality-focused experiments; not the general default |
 
 Switch profiles from the canonical PIDEX checkout:
@@ -261,7 +262,7 @@ Switch profiles from the canonical PIDEX checkout:
 node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project . -- use 5.6-hybrid-balanced
 ```
 
-The five-fixture benchmark found `5.6-hybrid-balanced` and `5.5-no-spark-balanced` functionally equivalent on corrected acceptance checks, with Hybrid using fewer handoffs and lower estimated cost. Follow-up UI runs favored GPT-5.5 for speed. Keep Hybrid as the general default, retain GPT-5.5 for UI-heavy comparisons, and use the Sol-only profile selectively. See [Provider limits and profiles](readme/provider-limits-and-profiles.md) and the [benchmark results](wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md).
+The original five-fixture benchmark selected Hybrid as the general default. Initiative 038 then added all-role C1 screening and independent H2 holdouts: Balanced now uses Sol medium for Critic, Sol high for Designer and QA, and Sol high instead of xhigh for Security. Lowcost preserves those critical routes but uses Terra medium for Code Reviewer and QA, where repeated H2 runs showed large token reductions with correct core outcomes. Neither prepared profile uses Spark. See [Provider limits and profiles](readme/provider-limits-and-profiles.md), the [final routing table](wiki/initiatives/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md), and the [Lowcost table](wiki/initiatives/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md).
 
 ## Global Git security hook
 
