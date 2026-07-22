@@ -1385,7 +1385,7 @@ When stopped, summarize user-visible progress, elapsed/rework cost when known, a
 
 ### Lifecycle-tracked review policy
 
-Every lifecycle-tracked review uses one executable aggregate policy: initial → correction1 → review1 → correction2 → review2. Maximum three reviewer dispatches and two corrections. Approval closes gate. `review2` rejection remains returned uncertainty (`TBR_WRITE_BLOCKED`), so no correction3, review3, or fourth reviewer. No declared-mode split, legacy second-rejection override, or user choice may raise or reset this budget. Nontracked review guidance remains unchanged.
+Each lifecycle-tracked review gate has its own executable aggregate policy: `critic`, `code-review`, `security`, and `qa` independently use initial → correction1 → review1 → correction2 → review2. Families, slices, remediations, and hardened choices aggregate within that gate only; a transition, approval, or exhaustion in one gate never consumes, closes, resets, or raises another gate's budget. Maximum three reviewer dispatches and two corrections per gate. Approval closes that gate. `review2` rejection remains returned uncertainty (`TBR_WRITE_BLOCKED`), so no correction3, review3, or fourth reviewer. No declared-mode split, legacy second-rejection override, or user choice may raise or reset a gate's budget. Nontracked review guidance remains unchanged.
 
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 

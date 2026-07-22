@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync,
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, runConfiguredProviderAttempts } from './index.ts';
+import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, normalizePublicReviewIdentity, runConfiguredProviderAttempts } from './index.ts';
 import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
 import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
@@ -12,6 +12,10 @@ import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
+assert.deepEqual(normalizePublicReviewIdentity({ agent: 'pidex-code-reviewer', reviewIdentity: identity }), { agent: 'pidex-code-reviewer', ...identity });
+assert.deepEqual(normalizePublicReviewIdentity({ agent: 'pidex-planner' }), { agent: 'pidex-planner' });
+assert.throws(() => normalizePublicReviewIdentity({ reviewIdentity: { planId: 'plan-038' } }), /REVIEW_IDENTITY_INVALID/);
+assert.throws(() => normalizePublicReviewIdentity({ planId: 'plan-038', reviewIdentity: identity }), /REVIEW_IDENTITY_INVALID/);
 const invalidCompletion = (overrides = {}) => ({ agent: 'pidex-planner', provider: 'pi', exitCode: 1, finalText: '', stderr: '', ...overrides });
 for (const [label, result] of [['aborted', invalidCompletion({ aborted: true })], ['timedOut', invalidCompletion({ timedOut: true })]]) {
   const attempts = [];
@@ -282,10 +286,17 @@ for (const [gate, verdicts] of Object.entries(gateVerdicts)) {
 }
 
 const historyRow = (event_type, metadata) => ({ event_type, metadata });
-const otherGateRows = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned'].map((event_type) => historyRow(event_type, { ...identity, reviewGate: 'critic', attemptId: 'critic-1' }));
-otherGateRows.push(historyRow('review_outcome', { ...identity, reviewGate: 'critic', attemptId: 'critic-1', outcome: 'APPROVED' }));
-assert.deepEqual(foldReviewHistory(otherGateRows, identity), { status: 'allowed', nextMode: 'initial' });
-assert.deepEqual(foldReviewHistory([...otherGateRows, historyRow('not-an-event', { ...identity })], identity), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
+const completedGateMode = (reviewGate, reviewMode, attemptId, outcome) => [
+  ...['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned'].map((event_type) => historyRow(event_type, { ...identity, reviewGate, reviewMode, attemptId })),
+  historyRow('review_outcome', { ...identity, reviewGate, reviewMode, attemptId, outcome }),
+];
+const approvedCriticChain = [
+  ...completedGateMode('critic', 'initial', 'critic-initial', 'CHANGES_REQUESTED'),
+  ...completedGateMode('critic', 'correction1', 'critic-correction1', 'READY_FOR_REVIEW'),
+  ...completedGateMode('critic', 'review1', 'critic-review1', 'APPROVED'),
+];
+assert.deepEqual(foldReviewHistory(approvedCriticChain, identity), { status: 'allowed', nextMode: 'initial' }, 'Critic approval must not consume Code Review initial');
+assert.deepEqual(foldReviewHistory([...approvedCriticChain, historyRow('not-an-event', { ...identity })], identity), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
 
 const ppState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-review-state-'));
 const ppProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-review-project-'));

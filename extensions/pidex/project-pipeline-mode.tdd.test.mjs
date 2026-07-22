@@ -4,8 +4,27 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Check } from 'typebox/value';
 
 const mod = await import('./index.ts');
+
+test('pidex_agent public schema exposes review identity atomically', () => {
+  const schema = mod.PidexAgentParams;
+  const properties = schema.properties;
+  const ordinary = { agent: 'pidex-planner', task: 'plan' };
+  const identity = { runFamilyId: 'family-040', planId: 'plan-040', reviewGate: 'critic', reviewMode: 'initial', attemptId: 'attempt-040' };
+  for (const flat of Object.keys(identity)) assert.equal(flat in properties, false, `public schema must not expose flat ${flat}`);
+  assert.deepEqual([...properties.reviewIdentity.required].sort(), Object.keys(identity).sort());
+  assert.equal(properties.reviewIdentity.additionalProperties, false);
+  assert.equal(schema.additionalProperties, false);
+  assert.equal(Check(schema, ordinary), true);
+  assert.equal(Check(schema, { ...ordinary, reviewIdentity: identity }), true);
+  assert.equal(Check(schema, { ...ordinary, planId: identity.planId }), false);
+  assert.equal(Check(schema, { ...ordinary, ...identity }), false);
+  assert.equal(Check(schema, { ...ordinary, reviewIdentity: identity, planId: identity.planId }), false);
+  assert.equal(Check(schema, { ...ordinary, unexpected: true }), false);
+  assert.deepEqual(mod.normalizePublicReviewIdentity({ projectId: 'pp-demo', reviewIdentity: identity }), { projectId: 'pp-demo', ...identity });
+});
 
 test('projectPipelineModeEvidenceLine reports project-pipeline no-fallback clearly', () => {
   const line = mod.projectPipelineModeEvidenceLine({ ok: true, mode: 'project-pipeline', source: 'saved', no_fallback: true });

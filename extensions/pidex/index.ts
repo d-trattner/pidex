@@ -3708,7 +3708,18 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params);
 }
 
-const RpAgentParams = Type.Object({
+const PUBLIC_REVIEW_IDENTITY_KEYS = ["runFamilyId", "planId", "reviewGate", "reviewMode", "attemptId"].sort();
+
+export function normalizePublicReviewIdentity(params: any): any {
+	if (params?.reviewIdentity === undefined) return params;
+	const flat = Object.fromEntries(PUBLIC_REVIEW_IDENTITY_KEYS.map((key) => [key, params?.[key]]));
+	const nested = params.reviewIdentity;
+	if (Object.values(flat).some((value) => value !== undefined) || !nested || typeof nested !== "object" || Array.isArray(nested) || JSON.stringify(Object.keys(nested).sort()) !== JSON.stringify(PUBLIC_REVIEW_IDENTITY_KEYS) || !validateReviewIdentity(nested).ok) throw new Error("REVIEW_IDENTITY_INVALID");
+	const { reviewIdentity: _reviewIdentity, ...rest } = params;
+	return { ...rest, ...nested };
+}
+
+export const PidexAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
 	cwd: Type.Optional(Type.String({ description: "Project working directory. Defaults to current Pi cwd." })),
@@ -3721,12 +3732,13 @@ const RpAgentParams = Type.Object({
 	model: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	effort: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	tools: Type.Optional(Type.Array(Type.String(), { description: "Optional Pi tool allowlist override (only used by provider=pi/subagent)." })),
-	runFamilyId: Type.Optional(Type.String()),
-	planId: Type.Optional(Type.String()),
-	reviewGate: Type.Optional(Type.String()),
-	reviewMode: Type.Optional(Type.String()),
-	attemptId: Type.Optional(Type.String()),
-});
+	reviewIdentity: Type.Optional(Type.Object({
+		runFamilyId: Type.String(), planId: Type.String(),
+		reviewGate: Type.Union([Type.Literal("critic"), Type.Literal("code-review"), Type.Literal("security"), Type.Literal("qa")]),
+		reviewMode: Type.Union([Type.Literal("initial"), Type.Literal("correction1"), Type.Literal("review1"), Type.Literal("correction2"), Type.Literal("review2")]),
+		attemptId: Type.String(),
+	}, { additionalProperties: false, description: "Advanced explicit review identity. Omit for normal calls; all five fields are required when supplied." })),
+}, { additionalProperties: false });
 
 const PROJECT_PIPELINE_REVIEW_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer"]);
 
@@ -4041,9 +4053,10 @@ export default function runningPi(pi: ExtensionAPI) {
 			"For JS/TS security or QA handoffs, remind pidex-security/pidex-qa to run the relevant Fallow gate or document FALLOW-SKIP.",
 			"Specialists should write full artifacts to files and keep final responses short; pidex_agent will truncate oversized final text and store raw child logs under pidex/state/runs/.",
 		],
-		parameters: RpAgentParams as any,
+		parameters: PidexAgentParams as any,
 		async execute(_toolCallId, params: any, signal, onUpdate, ctx) {
 			try {
+				params = normalizePublicReviewIdentity(params);
 				const homeStatus = canonicalHomeStatus();
 				if (!homeStatus.ok) throw new Error(homeStatus.message?.includes("not a valid") ? `${homeStatus.message}\nMove or repair that directory before using pidex_agent.` : canonicalHomeMissingMessage());
 				const agentCwd = path.resolve(params.cwd ?? ctx.cwd);
