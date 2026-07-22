@@ -106,8 +106,8 @@ Evidence:
 
 - [`wiki/testing/model-comparison-fixtures/results-2026-07-09.md`](../wiki/testing/model-comparison-fixtures/results-2026-07-09.md)
 - [`wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md`](../wiki/testing/model-comparison-fixtures/results-followup-2026-07-10.md)
-- [`wiki/initiatives/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md`](../wiki/initiatives/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md)
-- [`wiki/initiatives/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md`](../wiki/initiatives/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md)
+- [`wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md`](../wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/final-routing-table-2026-07-22.md)
+- [`wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md`](../wiki/completed/038-gpt56-balanced-and-spark-profile-evaluation/lowcost-routing-candidate-2026-07-22.md)
 
 ## Estimate-only agent balances
 
