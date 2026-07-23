@@ -48,6 +48,22 @@ function browserSmokeRequest(projectId, requestId = 'qa-browser-smoke-req') {
   };
 }
 
+test('Project Pipeline telemetry reloads current registry authority and rejects relative host refs', () => {
+  const pidexRoot = tmp();
+  const sourceA = path.join(pidexRoot, 'source-a');
+  const sourceB = path.join(pidexRoot, 'source-b');
+  mkdirSync(sourceA); mkdirSync(sourceB);
+  const record = createProjectRecord({ project_id: 'pp-orch-authority', name: 'authority', source_kind: 'host-path', source_ref: sourceA });
+  record.status = 'ready'; saveProjectRecord(pidexRoot, record);
+  const cached = loadProjectRecord(pidexRoot, 'pp-orch-authority');
+  const updated = loadProjectRecord(pidexRoot, 'pp-orch-authority');
+  updated.source.ref = sourceB; saveProjectRecord(pidexRoot, updated);
+  assert.equal(projectTelemetryRoot(cached, pidexRoot), sourceB, 'cached telemetry record cannot override current registry authority');
+  updated.source.ref = 'relative-source'; saveProjectRecord(pidexRoot, updated);
+  assert.throws(() => projectTelemetryRoot(cached, pidexRoot), /AUTHORITY_INVALID/);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
 test('ensureProjectImage skips Docker preflight for deterministic fake runners', () => {
   assert.deepEqual(ensureProjectImage({ runner: () => 'ok' }), { ok: true, skipped: true });
   assert.deepEqual(ensureProjectImage({ ensureImage: false }), { ok: true, skipped: true });

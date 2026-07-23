@@ -141,7 +141,7 @@ function slug(value) {
 }
 
 export function projectTelemetryRoot(record = {}, pidexRoot) {
-  return resolveProjectPipelineAuthority({ pidexRoot, projectId: record.project_id, record }).projectRoot;
+  return resolveProjectPipelineAuthority({ pidexRoot, projectId: record.project_id }).projectRoot;
 }
 
 function appendProjectPipelineTelemetryEvent({ pidexRoot, record, pipelineId, planKey = 'project-pipeline', eventType, status = '', message = '', metadata = {} }) {

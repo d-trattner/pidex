@@ -110,7 +110,10 @@ try {
   const deadLock = path.join(projectBase, `.review-${deadLockTuple.planId}-${deadLockTuple.reviewGate}.lock`);
   mkdirSync(deadLock);
   writeFileSync(path.join(deadLock, 'owner.json'), JSON.stringify({ pid: 99999999, processStart: 'dead', identity: deadLockTuple }));
-  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: deadLockTuple, start: () => 'recovered-after-owner-death' }).status, 'accepted');
+  let deadLockStarts = 0;
+  assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: deadLockTuple, start: () => { deadLockStarts += 1; return 'must-not-start'; } }), { status: 'unavailable', code: 'REVIEW_LOCK_UNCERTAIN' });
+  assert.equal(deadLockStarts, 0, 'stale lock must fail closed instead of deleting possible successor ownership');
+  rmSync(deadLock, { recursive: true, force: true });
   const malformedLockTuple = { ...tuple, runFamilyId: 'family-malformed-lock', attemptId: 'attempt-malformed-lock' };
   const malformedLock = path.join(projectBase, `.review-${malformedLockTuple.planId}-${malformedLockTuple.reviewGate}.lock`);
   mkdirSync(malformedLock);

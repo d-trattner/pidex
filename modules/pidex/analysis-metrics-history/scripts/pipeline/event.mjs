@@ -112,7 +112,7 @@ function takeLock(lock, key, identity, unavailableCode) {
       if (error?.code !== 'EEXIST') throw error;
       let owner; try { owner = JSON.parse(readFileSync(path.join(lock, 'owner.json'), 'utf8')); } catch { return { held: false, code: uncertainCode }; }
       if (!validOwner(owner, requireIdentity)) return { held: false, code: uncertainCode };
-      if (ownerProvenDead(owner)) { try { rmSync(lock, { recursive: true, force: false }); continue; } catch { return { held: false, code: uncertainCode }; } }
+      if (ownerProvenDead(owner)) return { held: false, code: uncertainCode };
       if (Date.now() >= deadline) return { held: false, code: unavailableCode };
       sleep(10);
     }

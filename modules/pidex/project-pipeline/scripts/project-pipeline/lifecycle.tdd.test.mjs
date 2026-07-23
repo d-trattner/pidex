@@ -28,6 +28,19 @@ test('Project Pipeline authority resolves registered host and archive roots, nev
   archiveRecord.status = 'ready'; archiveRecord.archive.path = archive; saveProjectRecord(root, archiveRecord);
   assert.deepEqual(resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-host' }).projectRoot, host);
   assert.deepEqual(resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-archive' }).projectRoot, archive);
+
+  const currentHost = path.join(root, 'current-host-source');
+  mkdirSync(currentHost);
+  const updated = loadProjectRecord(root, 'pp-authority-host');
+  updated.source.ref = currentHost;
+  saveProjectRecord(root, updated);
+  assert.equal(resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-host', record: hostRecord }).projectRoot, currentHost, 'cached caller record cannot override current registry authority');
+
+  updated.source.ref = 'relative-host-source';
+  saveProjectRecord(root, updated);
+  assert.throws(() => resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-host' }), /AUTHORITY_INVALID/);
+  updated.source.ref = host;
+  saveProjectRecord(root, updated);
   rmSync(host, { recursive: true, force: true });
   assert.throws(() => resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-host' }), /AUTHORITY_UNAVAILABLE/);
 });

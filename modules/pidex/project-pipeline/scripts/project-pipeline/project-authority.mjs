@@ -12,18 +12,20 @@ function canonicalDirectory(value, code) {
 export function resolveProjectPipelineAuthority(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = safeProjectId(options.projectId);
-  const record = options.record || loadProjectRecord(pidexRoot, projectId);
+  const record = loadProjectRecord(pidexRoot, projectId);
   if (record.project_id !== projectId) throw new Error('PROJECT_PIPELINE_AUTHORITY_INVALID');
 
   let declaredRoot;
   let kind;
   if (record.source?.kind === 'host-path') {
-    if (!record.source.ref) throw new Error('PROJECT_PIPELINE_AUTHORITY_UNAVAILABLE');
-    declaredRoot = path.resolve(record.source.ref);
+    if (!record.source.ref || !path.isAbsolute(record.source.ref)) throw new Error('PROJECT_PIPELINE_AUTHORITY_INVALID');
+    declaredRoot = record.source.ref;
     kind = 'host-path';
   } else {
     const expected = resolveArchiveRoot({ pidexRoot, projectId });
-    declaredRoot = path.resolve(record.archive?.path || expected);
+    const registeredArchive = record.archive?.path || expected;
+    if (!path.isAbsolute(registeredArchive)) throw new Error('PROJECT_PIPELINE_AUTHORITY_INVALID');
+    declaredRoot = path.resolve(registeredArchive);
     if (declaredRoot !== expected) throw new Error('PROJECT_PIPELINE_AUTHORITY_INVALID');
     kind = 'archive';
   }
