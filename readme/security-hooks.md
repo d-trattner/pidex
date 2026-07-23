@@ -47,6 +47,10 @@ Docs/tests/fixtures skip the weakest keyword layer to reduce false positives, bu
 
 Doctor reports whether the global hook is active, executable, restorable, and whether scanner smoke tests pass.
 
+## Runtime-state staging protection
+
+Generated PIDEX state under `agents.output/**`, `state/**`, and `pidex/state/**` must remain uncommitted. In Pi sessions, the PIDEX extension blocks `git add -f` and `git add --force` attempts that target those paths before Git runs. This enforcement is platform-independent and does not depend on the optional Bash global hook. Do not treat force-add as an audit-preservation mechanism; preserve durable conclusions in `wiki/**` instead.
+
 ## Bypass limitation
 
 Git itself allows:

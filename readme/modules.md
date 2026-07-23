@@ -245,7 +245,7 @@ Evidence rows use:
 - Treat `scripts/release/public-readiness.sh` as fixed-core public release authority, not a compatibility wrapper and not a module capability.
 - Do not expose raw script paths to agents as the normal execution path.
 - Do not expose physical module implementation script paths from caller zones. Those paths belong in module manifests, module internals, thin compatibility wrappers, and validation fixtures.
-- Run `node scripts/modules/reference-guard.mjs --mode fail --pidex-root "$PWD"` to enforce the hard-coded implementation-path guardrail.
+- Run `node scripts/modules/reference-guard.mjs --mode fail --pidex-root "$PWD"` to enforce the hard-coded implementation-path guardrail. The release boundary parses tracked Git index records fail closed: malformed records, control-bearing diagnostics, and every invalid-UTF-8 tracked pathname are rejected before mode, suffix, or content classification.
 - Do not modularize dashboard host/core as a normal module.
 - Do not move dashboard feature slices until a dashboard contribution/feature-loader design exists.
 - Do not add third-party loading yet.

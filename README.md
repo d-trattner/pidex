@@ -81,7 +81,7 @@ See [Windows status](readme/windows.md) for support boundaries and the PowerShel
 
 ## Install
 
-PIDEX v0.2 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other runtime paths are not supported yet.
+PIDEX v0.3 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other runtime paths are not supported yet.
 
 ### Install modes
 

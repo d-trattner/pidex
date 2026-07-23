@@ -20,6 +20,12 @@ For a plan and gate, `${planId}.current` points to the root stream. That pointed
 
 An explicit tuple cannot select a different stream. PIDEX fails closed with bounded errors when history is missing, malformed, mismatched, or split across streams. Old split-stream histories may fail closed; do not manually repair them.
 
+New lifecycle histories derive a collision-resistant key from the full canonical project path, so unrelated same-basename projects do not share review authority. An existing legacy history is reused only when exactly one active candidate identifies the same canonical project; ambiguity fails closed without migration or merging.
+
+For direct Project Pipeline reviews, the registry-bound host or archive root is authoritative. PIDEX reloads and revalidates that authority after the child returns and before recording completion. A changed, missing, or relative root produces `REVIEW_PROJECT_AUTHORITY_CHANGED` and no completion event.
+
+Existing lifecycle locks are never removed automatically from a stale owner observation. Dead, malformed, or otherwise uncertain ownership fails closed; recovery is an explicit operator concern rather than an opportunity to delete a successor-owned lock.
+
 ## Final rejection and returned uncertainty
 
 After review 2 rejects, PIDEX does not dispatch correction 3, review 3, or a fourth reviewer. If structured TBR serialization is unavailable at that point, PIDEX keeps durable returned uncertainty with `TBR_WRITE_BLOCKED`.
