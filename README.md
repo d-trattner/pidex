@@ -18,6 +18,10 @@ PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary 
 
 Lifecycle-tracked Critic, Code Review, Security, and QA work uses bounded review budgets: a fixed number of review dispatches per project, plan, and gate. The limit prevents review loops without limiting normal planning, implementation, tokens, cost, or time.
 
+PIDEX v0.3 is an evidence-driven reliability release. Controlled test-server fixtures, all-role screening, and independent holdouts selected the current GPT-5.6 catalog: Balanced combines Sol for quality-critical reasoning and review, Terra for implementation and operations, and Luna for retrospectives; Lowcost uses Terra for bounded Code Review and QA where repeated holdouts retained the core outcome with materially lower token use; All-Sol remains selective rather than the default. Spark was tested across the role matrix but was not competitive as a general profile. UAT was its only eligible offload, and one slower role-specific route did not justify a separate profile and fallback lifecycle.
+
+The executable limits were motivated by real-project evidence, not fixture behavior alone. One anonymized project run reached 218 specialist dispatches, 23.86 specialist-hours, 4,870 turns, 11,371 tool calls, and approximately USD 225.76 in estimated specialist cost before manual termination. A fresh real-project acceptance run then completed with one approved initial dispatch per applicable gate, no family-budget reset, no correction loop, and no leaked fixture process. These results are why PIDEX enforces cumulative authority and one-shot tracked review dispatches instead of relying on model restraint or prompt-only circuit breakers.
+
 The main active work is PIDEX’s self-improvement loop: collecting quality evidence from real pipeline runs, improving PDQ reports, and using those signals to decide which rules, prompts, and workflow changes actually help. Quality Rule Learning is now in validation/hardening: PDQ reports include operator contracts, valid operator-decision evidence, trace normalization, dashboard quality views, and a disabled-by-default background contract governor for local expectation corrections. PIDEX also includes Docker-backed sandboxing in two forms: the optional hardened agent sandbox for selected source-changing pipeline work, and the validated local Project Pipeline MVP where project work runs inside a persistent Docker Project Sandbox. Both require the canonical `~/pidex` runtime checkout on Linux/WSL2 or `$HOME\pidex` for the experimental Windows bootstrap.
 
 ## Detailed feature docs
@@ -198,7 +202,7 @@ Project session memory:
 - `templates/` – artifact/checklist templates
 - `extensions/pidex/` – Pi extension entrypoint (`pidex_agent`)
 - `config/agents.json` – default agent routing configuration
-- `config/profiles/*.json` – provider/profile presets, including Spark/no-Spark and GPT-5.6 role-routing variants
+- `config/profiles/*.json` – evidence-selected GPT-5.6 Balanced, Lowcost, and Sol-quality role-routing presets
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `pidex.analysis-metrics-history` module – analytics, metrics, history helpers
 - `pidex.memory-wiki-hygiene` module – wiki hygiene audit/cadence module
@@ -246,7 +250,7 @@ The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and 
 
 ## Provider limits and profiles
 
-PIDEX tracks provider-native Codex quota windows, including Spark/no-Spark profile behavior and automatic no-Spark fallback when Spark is exhausted.
+PIDEX tracks provider-native Codex and Spark quota windows. The current profile catalog does not route to Spark; Spark was benchmarked across the role matrix and deferred after only UAT met the quality gate, which did not justify a separate one-role profile and fallback lifecycle.
 
 The current GPT-5.6 presets are:
 
@@ -262,7 +266,7 @@ Switch profiles from the canonical PIDEX checkout:
 node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project . -- use 5.6-hybrid-balanced
 ```
 
-The original five-fixture benchmark selected Hybrid as the general default. Initiative 038 then added all-role C1 screening and independent H2 holdouts: Balanced now uses Sol medium for Critic, Sol high for Designer and QA, and Sol high instead of xhigh for Security. Lowcost preserves those critical routes but uses Terra medium for Code Reviewer and QA, where repeated H2 runs showed large token reductions with correct core outcomes. Neither prepared profile uses Spark. See [Provider limits and profiles](readme/provider-limits-and-profiles.md) for the public routing summary and selection guidance.
+The original five-fixture benchmark selected Hybrid as the general default. All-role C1 screening and independent H2 holdouts then refined it: Balanced now uses Sol medium for Critic, Sol high for Designer and QA, and Sol high instead of xhigh for Security. Lowcost preserves the critical planning, design, implementation, and security routes but uses Terra medium for Code Reviewer and QA, where repeated holdouts showed large token reductions with correct core outcomes. Spark was tested rather than assumed unsuitable: UAT Spark high was the only eligible offload, while functional, recall, evidence, stability, latency, or operational-complexity results prevented a general Spark profile. See [Provider limits and profiles](readme/provider-limits-and-profiles.md) for the public routing summary and selection guidance.
 
 ## Global Git security hook
 
