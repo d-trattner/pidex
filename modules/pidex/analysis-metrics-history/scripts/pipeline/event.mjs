@@ -99,8 +99,7 @@ function lockOwner(key, identity) { return { pid: process.pid, processStart: pro
 function validOwner(value, requireIdentity) { return value && Number.isInteger(value.pid) && value.pid > 0 && typeof value.processStart === 'string' && value.processStart.length > 0 && value.processStart.length <= 128 && ((typeof value.key === 'string' && value.key.length <= 256) || (requireIdentity && validateReviewIdentity(value.identity).ok)) && (!requireIdentity || validateReviewIdentity(value.identity).ok); }
 function writeLockOwner(lock, key, identity) {
   const owner = lockOwner(key, identity); if (!owner.processStart) throw new Error('process start identity unavailable');
-  const file = path.join(lock, 'owner.json'); writeFileSync(file, JSON.stringify(owner), { mode: 0o600 });
-  const fd = openSync(file, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+  writeNewFileDurable(path.join(lock, 'owner.json'), JSON.stringify(owner), 0o600);
 }
 function takeLock(lock, key, identity, unavailableCode) {
   const deadline = Date.now() + 1000; const requireIdentity = Boolean(identity); const uncertainCode = unavailableCode.replace(/_UNAVAILABLE$/, '_UNCERTAIN');

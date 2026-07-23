@@ -135,6 +135,11 @@ try {
   const lockProof = reserveReviewStart({ stateDir: state, project, pipelineId, identity: lockTuple, start: () => {
     const lockPath = path.join(projectBase, `.review-${lockTuple.planId}-${lockTuple.reviewGate}.lock`);
     lockSeenDuringStart = existsSync(lockPath);
+    const owner = JSON.parse(readFileSync(path.join(lockPath, 'owner.json'), 'utf8'));
+    assert.deepEqual(owner.identity, lockTuple, 'Windows-compatible durable owner write must publish the exact review identity before child start');
+    assert.equal(owner.pid, process.pid);
+    assert.equal(typeof owner.processStart, 'string');
+    assert.ok(owner.processStart.length > 0);
     const currentRows = readFileSync(jsonl, 'utf8');
     assert.match(currentRows, /spawn_entered/);
     assert.doesNotMatch(currentRows, /family-lock[\\s\\S]*spawn_accepted/);

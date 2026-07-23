@@ -158,6 +158,25 @@ try {
   assert.equal(ordinaryProviders, 1, 'ordinary non-review still delegates through configured retry/fallback runner');
 } finally { rmSync(interruptedState, { recursive: true, force: true }); rmSync(interruptedProject, { recursive: true, force: true }); }
 
+const lifecycleIoRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-io-error-'));
+const lifecycleIoProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-io-project-'));
+try {
+  const invalidStateDir = path.join(lifecycleIoRoot, 'state-file');
+  writeFileSync(invalidStateDir, 'not-a-directory');
+  let ioFailureChildren = 0;
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 043 initial review' }, {
+    agentCwd: lifecycleIoProject,
+    reviewLifecycle: { stateDir: invalidStateDir, pipelineId: 'io-failure' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async () => { ioFailureChildren += 1; return reviewResult({ agent: 'pidex-code-reviewer' }); },
+  }), /REVIEW_LIFECYCLE_UNAVAILABLE/);
+  assert.equal(ioFailureChildren, 0, 'lifecycle I/O failure must fail closed before review child dispatch');
+} finally {
+  rmSync(lifecycleIoRoot, { recursive: true, force: true });
+  rmSync(lifecycleIoProject, { recursive: true, force: true });
+}
+
 const lifecycleState = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-state-'));
 const lifecycleProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-project-'));
 const lifecycleBase = eventBase(lifecycleState, lifecycleProject);

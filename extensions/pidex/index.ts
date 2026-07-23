@@ -3566,7 +3566,11 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		const authority = resolvePlanReviewAuthority({ stateDir: lifecycle.stateDir, project, planId });
 		pipelineId = authority.pipelineId;
 		rows = authority.rows;
-	} catch { throw new Error("REVIEW_IDENTITY_INVALID"); }
+	} catch (error) {
+		if (error instanceof Error && error.message === "REVIEW_HISTORY_INVALID") throw new Error("REVIEW_IDENTITY_INVALID");
+		if (error instanceof Error && /^REVIEW_[A-Z0-9_]+$/.test(error.message)) throw error;
+		throw Object.assign(new Error("REVIEW_LIFECYCLE_UNAVAILABLE"), { cause: error });
+	}
 	const candidates = REVIEW_GATES.flatMap((reviewGate) => REVIEW_MODES.map((reviewMode) => ({ runFamilyId: pipelineId, planId, reviewGate, reviewMode, attemptId: derivedAttemptId(pipelineId, reviewGate, reviewMode) })))
 		.filter((identity) => {
 			if (!reviewAgentMatches(String(params?.agent), identity)) return false;
