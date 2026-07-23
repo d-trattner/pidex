@@ -168,13 +168,14 @@ test('accepts SHA-1 and SHA-256 index records', () => {
   assert.equal(out.ok, true);
 });
 
-test('fails invalid UTF-8 text candidates but ignores ordinary invalid UTF-8 binary paths', () => {
+test('fails every invalid UTF-8 tracked pathname before mode suffix or content classification', () => {
   const dir = fixture();
-  const candidate = Buffer.concat([Buffer.from(`100644 ${'a'.repeat(40)} 0\tbad`), Buffer.from([0xff]), Buffer.from('.md\0')]);
-  assert.throws(() => runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(candidate))), /invalid UTF-8 tracked candidate/);
-  const binary = Buffer.concat([Buffer.from(`100644 ${'a'.repeat(40)} 0\tbad`), Buffer.from([0xff]), Buffer.from('.png\0')]);
-  const out = JSON.parse(runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(binary))));
-  assert.equal(out.ok, true);
+  const text = Buffer.concat([Buffer.from(`100644 ${'a'.repeat(40)} 0\tbad`), Buffer.from([0xff]), Buffer.from('.md\0')]);
+  assert.throws(() => runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(text))), /invalid UTF-8 tracked candidate: "626164ff2e6d64"/);
+  const executableBinaryName = Buffer.concat([Buffer.from(`100755 ${'a'.repeat(40)} 0\tbad`), Buffer.from([0xff]), Buffer.from('.png\0')]);
+  assert.throws(() => runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(executableBinaryName))), /invalid UTF-8 tracked candidate: "626164ff2e706e67"/);
+  const nonExecutableBinaryName = Buffer.concat([Buffer.from(`100644 ${'a'.repeat(40)} 0\tbad`), Buffer.from([0xff]), Buffer.from('.bin\0')]);
+  assert.throws(() => runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(nonExecutableBinaryName))), /invalid UTF-8 tracked candidate/);
 });
 
 test('fails decoded traversal, missing checkout paths, and symlinked tracked text without following them', () => {

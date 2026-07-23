@@ -12,6 +12,8 @@ import { copySelectedCredentials } from './credentials.mjs';
 import { projectRunId, runProjectPipelineAgent } from './run-agent.mjs';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
+import { resolveProjectPipelineAuthority } from './project-authority.mjs';
+import { normalizePlan, recordPipelineEvent } from '../../../analysis-metrics-history/lib/review-lifecycle.mjs';
 import { runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
 import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
@@ -138,36 +140,24 @@ function slug(value) {
   return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'unknown';
 }
 
-function projectTelemetryRoot(record = {}, pidexRoot) {
-  const sourceRef = record.source?.kind === 'host-path' && record.source?.ref ? record.source.ref : '';
-  if (sourceRef) return path.resolve(sourceRef);
-  return resolveArchiveRoot({ pidexRoot, projectId: record.project_id || 'unknown-project' });
+export function projectTelemetryRoot(record = {}, pidexRoot) {
+  return resolveProjectPipelineAuthority({ pidexRoot, projectId: record.project_id, record }).projectRoot;
 }
 
 function appendProjectPipelineTelemetryEvent({ pidexRoot, record, pipelineId, planKey = 'project-pipeline', eventType, status = '', message = '', metadata = {} }) {
-  try {
-    const projectRoot = projectTelemetryRoot(record, pidexRoot);
-    const dir = path.join(pidexRoot, 'state', 'pipeline-events', slug(record.project_id || projectRoot));
-    mkdirSync(dir, { recursive: true });
-    const row = {
-      timestamp: new Date().toISOString(),
-      project_path: projectRoot,
-      project_slug: record.project_id || path.basename(projectRoot),
-      pipeline_id: pipelineId,
-      plan_key: planKey,
-      event_type: eventType,
-      status: status || null,
-      actor: 'orchestrator',
-      message: message || null,
-      project_mode: 'project-pipeline',
-      is_test_project: record.is_test_project === true,
-      metadata: { project_id: record.project_id, archive_root: record.archive?.path || resolveArchiveRoot({ pidexRoot, projectId: record.project_id }), ...metadata },
-      source: 'project_pipeline_orchestrator',
-    };
-    writeFileSync(path.join(dir, `${slug(pipelineId)}.jsonl`), `${JSON.stringify(row)}\n`, { encoding: 'utf8', flag: 'a' });
-  } catch {
-    // Best-effort telemetry must never break Project Pipeline execution.
-  }
+  const projectRoot = projectTelemetryRoot(record, pidexRoot);
+  return recordPipelineEvent({
+    stateDir: path.join(pidexRoot, 'state'), project: projectRoot, projectSlug: record.project_id,
+    pipelineId, plan: planKey, event: eventType, status, actor: 'orchestrator', message,
+    projectMode: 'project-pipeline', testProject: record.is_test_project === true,
+    metadata: { project_id: record.project_id, archive_root: record.archive?.path || resolveArchiveRoot({ pidexRoot, projectId: record.project_id }), ...metadata },
+    source: 'project_pipeline_orchestrator',
+  });
+}
+
+function telemetryPlanKey(task) {
+  const match = String(task || '').match(/\bplan[-\s_:]*(\d{1,3})\b/i);
+  return match ? normalizePlan(match[1]) : 'project-pipeline';
 }
 
 function appendProjectPipelineMetric({ pidexRoot, record, pipelineId, planKey = 'project-pipeline', agent, run = {}, source = 'project_pipeline_orchestrator' }) {
@@ -498,7 +488,8 @@ export async function runProjectPipelineOrchestration(options = {}) {
 
   const telemetryRecord = loadProjectRecord(pidexRoot, projectId);
   const telemetryPipelineId = `project-pipeline-${projectId}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
-  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_started', status: 'running', metadata: { phases } });
+  const telemetryPlan = telemetryPlanKey(options.task);
+  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_started', status: 'running', metadata: { phases } });
 
   const runs = [];
   let previous;
@@ -526,7 +517,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
         run = runAgentOnce(retryRoutingTask(task));
       }
     } catch (error) {
-      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase threw: ${agent}`, metadata: { failed_agent: agent, reason: error.message || String(error), runs } });
+      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase threw: ${agent}`, metadata: { failed_agent: agent, reason: error.message || String(error), runs } });
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
     }
     const runSummary = { agent, ok: run.ok, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id, archive_sync_status: run.archive_sync_status, project_mirror: summarizeProjectMirror(run.project_mirror), sync_degraded: run.project_mirror?.degraded === true, retry_count: retryCount, error: run.error, reason: run.reason };
@@ -534,7 +525,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
     projectPipelineProgress(options, `${agent} ${run.ok ? 'complete' : 'failed'}${run.context_file ? ` context_file=${run.context_file}` : ''}`, { phase: agent, status: run.ok ? 'complete' : 'failed', project_id: projectId });
     appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: runSummary });
     if (!run.ok) {
-      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase failed: ${agent}`, metadata: { failed_agent: agent, runs } });
+      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase failed: ${agent}`, metadata: { failed_agent: agent, runs } });
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
     }
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
@@ -572,7 +563,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
         projectPipelineProgress(options, `secondary ${agent} lane ${lane.lane_id || 'unknown'} ${laneRun.ok ? 'complete' : 'failed'}`, { phase: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, status: laneRun.ok ? 'complete' : 'failed', project_id: projectId });
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: laneSummary, source: 'parallel_agents' });
         if (laneRun.error === 'write-fence-violation' || laneRun.error === 'write-fence-manifest-failed') {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review write fence failed: ${lane.lane_id || 'unknown'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, runs } });
+          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review write fence failed: ${lane.lane_id || 'unknown'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, runs } });
           return { ok: false, error: laneRun.error, failed_agent: agent, parallel_lane_id: lane.lane_id, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
         }
       }
@@ -602,11 +593,11 @@ export async function runProjectPipelineOrchestration(options = {}) {
         runs.push(mergeSummary);
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: mergeSummary, source: 'parallel_agents_merge' });
         if (!merge.ok) {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review adjudication failed: ${parallelTrigger}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, runs } });
+          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review adjudication failed: ${parallelTrigger}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, runs } });
           return { ok: false, error: merge.error || 'parallel-adjudication-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
         }
         if (merge.routing?.route_to !== nextPhase) {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'blocked', message: `Parallel review requires correction: ${merge.routing?.route_to || 'orchestrator'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, required_route: merge.routing?.route_to || 'orchestrator', runs } });
+          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'blocked', message: `Parallel review requires correction: ${merge.routing?.route_to || 'orchestrator'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, required_route: merge.routing?.route_to || 'orchestrator', runs } });
           return { ok: false, error: 'parallel-review-needs-correction', required_route: merge.routing?.route_to || 'orchestrator', context_file: merge.context_file, archive_context_file: merge.archive_context_file, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
         }
         previous = { agent, context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: merge.project_run_id };
@@ -625,14 +616,14 @@ export async function runProjectPipelineOrchestration(options = {}) {
         runs.push(verdictSummary);
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
         if (!verdictRun.ok) {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline browser-smoke verdict failed: ${agent}`, metadata: { failed_agent: agent, browser_smoke_results: sandboxResults, runs } });
+          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline browser-smoke verdict failed: ${agent}`, metadata: { failed_agent: agent, browser_smoke_results: sandboxResults, runs } });
           return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
         }
         previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
       }
     }
   }
-  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, eventType: 'pipeline_completed', status: 'complete', metadata: { runs } });
+  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_completed', status: 'complete', metadata: { runs } });
   const anyMirrorDegraded = runs.some((item) => item.project_mirror?.degraded === true);
   const latestProjectMirrorStatus = runs.at(-1)?.project_mirror?.status;
   projectPipelineProgress(options, anyMirrorDegraded ? `Project Pipeline complete ${projectId}; archive complete; project mirror degraded` : `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId, any_mirror_degraded: anyMirrorDegraded, latest_project_mirror_status: latestProjectMirrorStatus });

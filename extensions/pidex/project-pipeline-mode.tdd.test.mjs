@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Check } from 'typebox/value';
 
 const mod = await import('./index.ts');
@@ -631,6 +632,24 @@ console.log(JSON.stringify(result));
     assert.equal(parsed.details.project_run_id, 'pprun-direct');
     assert.match(parsed.content[0].text, /complete in \/workspace/);
     assert.match(parsed.content[0].text, /context_file=agents\.output\/parallel-agents\/review\.md/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Project Pipeline review authority resolves through projectId helper, not caller cwd', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-authority-helper-'));
+  const authority = path.join(dir, 'registered-authority');
+  const caller = path.join(dir, 'caller-cwd');
+  const helper = path.join(dir, 'lifecycle.mjs');
+  mkdirSync(authority); mkdirSync(caller);
+  writeFileSync(helper, `console.log(JSON.stringify({ ok: true, project_id: 'pp-authority', project_root: ${JSON.stringify(authority)}, authority_kind: 'host-path' }));\n`);
+  try {
+    const extensionUrl = pathToFileURL(path.join(process.cwd(), 'extensions/pidex/index.ts')).href;
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+const mod = await import(${JSON.stringify(extensionUrl)});
+console.log(mod.resolveProjectPipelineAuthorityRoot('pp-authority'));
+`], { cwd: caller, env: { ...process.env, PIDEX_ROOT: process.cwd(), PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: helper }, encoding: 'utf8' });
+    assert.equal(proc.status, 0, proc.stderr);
+    assert.equal(proc.stdout.trim(), authority);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

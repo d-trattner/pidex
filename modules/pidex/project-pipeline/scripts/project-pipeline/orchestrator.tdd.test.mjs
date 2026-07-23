@@ -4,7 +4,8 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildBrowserSmokeVerdictTask, buildPhaseTask, buildProjectPipelineAdjudicationTask, buildProjectPipelineSecondaryLaneTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
+import { buildBrowserSmokeVerdictTask, buildPhaseTask, buildProjectPipelineAdjudicationTask, buildProjectPipelineSecondaryLaneTask, discoverBrowserSmokeRequests, ensureProjectImage, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, projectTelemetryRoot, renderProjectPipelineModuleRules, runProjectPipelineOrchestration, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
+import { canonicalProjectIdentity } from '../../../analysis-metrics-history/lib/project-key.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 
@@ -27,6 +28,7 @@ function seedRecord(pidexRoot, projectId = 'pp-orch-test') {
   const record = createProjectRecord({ project_id: projectId, name: projectId });
   record.status = 'ready';
   record.archive.path = path.join(pidexRoot, 'state', 'project-archives', projectId);
+  mkdirSync(record.archive.path, { recursive: true });
   saveProjectRecord(pidexRoot, record);
   return record;
 }
@@ -236,7 +238,7 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
     }
     return 'ok';
   };
-  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-test', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner, moduleRules: false });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-test', task: 'Plan 041 ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner, moduleRules: false });
   assert.equal(result.ok, true);
   assert.deepEqual(execAgents, ['pidex-planner', 'pidex-critic', 'pidex-qa']);
   assert.equal(result.runs.length, 3);
@@ -256,6 +258,10 @@ test('runProjectPipelineOrchestration runs phases sequentially and records archi
   const eventRows = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
   assert.deepEqual(eventRows.map((row) => row.event_type), ['pipeline_started', 'pipeline_completed']);
   assert.equal(eventRows.every((row) => row.project_mode === 'project-pipeline'), true);
+  assert.equal(eventRows.every((row) => row.plan_key === 'plan-041'), true);
+  const authorityRoot = projectTelemetryRoot(loaded, pidexRoot);
+  assert.equal(eventRows.every((row) => row.project_path === authorityRoot), true);
+  assert.equal(existsSync(path.join(pidexRoot, 'state', 'pipeline-events', canonicalProjectIdentity(authorityRoot).projectKey)), true);
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 

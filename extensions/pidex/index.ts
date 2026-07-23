@@ -9,7 +9,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { foldReviewHistory, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
-import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
+import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 
 type AgentFrontmatter = {
 	name?: string;
@@ -3560,17 +3560,12 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		return { identity: supplied as Record<string, string>, pipelineId: lifecycle.pipelineId };
 	}
 	const planId = normalizePlanKey(extractPlanId(String(params?.task || "")));
-	let canonicalProject: string;
-	try { canonicalProject = fs.realpathSync.native(project); } catch { throw new Error("REVIEW_CANONICAL_PROJECT_UNAVAILABLE"); }
-	const base = path.join(lifecycle.stateDir, "pipeline-events", safePathSegment(path.basename(canonicalProject)));
-	const current = path.join(base, `${planId}.current`);
 	let pipelineId = "";
 	let rows: any[] = [];
 	try {
-		pipelineId = fs.readFileSync(current, "utf8").trim();
-		if (!pipelineId) throw new Error("empty pointer");
-		const stream = path.join(base, `${pipelineId}.jsonl`);
-		rows = fs.existsSync(stream) ? fs.readFileSync(stream, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : [];
+		const authority = resolvePlanReviewAuthority({ stateDir: lifecycle.stateDir, project, planId });
+		pipelineId = authority.pipelineId;
+		rows = authority.rows;
 	} catch { throw new Error("REVIEW_IDENTITY_INVALID"); }
 	const candidates = REVIEW_GATES.flatMap((reviewGate) => REVIEW_MODES.map((reviewMode) => ({ runFamilyId: pipelineId, planId, reviewGate, reviewMode, attemptId: derivedAttemptId(pipelineId, reviewGate, reviewMode) })))
 		.filter((identity) => {
@@ -3762,6 +3757,16 @@ export function executeProjectPipelineReviewBoundary(params: any, lifecycle: Pro
 	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params);
 }
 
+export function resolveProjectPipelineAuthorityRoot(projectId: string): string {
+	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) throw new Error("Project Pipeline authority helper missing; no host fallback was used.");
+	const proc = spawnSync(process.execPath, [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "resolve-authority", "--pidex-root", PACKAGE_ROOT, "--project-id", projectId, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
+	let parsed: any; try { parsed = JSON.parse(proc.stdout || "{}"); } catch { throw new Error("Project Pipeline authority resolution failed; no host fallback was used."); }
+	if (proc.status !== 0 || parsed?.ok !== true || typeof parsed?.project_root !== "string" || !path.isAbsolute(parsed.project_root)) throw new Error("Project Pipeline authority resolution failed; no host fallback was used.");
+	let canonical: string; try { canonical = fs.realpathSync.native(parsed.project_root); } catch { throw new Error("Project Pipeline authority resolution failed; no host fallback was used."); }
+	if (canonical !== parsed.project_root) throw new Error("Project Pipeline authority resolution changed; no host fallback was used.");
+	return canonical;
+}
+
 function validateProjectPipelineAgentParams(params: any): void {
 	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
 	if (!isRelativeAgentsOutputPath(params?.expectedOutputPath)) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
@@ -3770,7 +3775,10 @@ function validateProjectPipelineAgentParams(params: any): void {
 
 export function runProjectPipelineAgentTool(params: any): any {
 	validateProjectPipelineAgentParams(params);
-	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${params?.projectId || "project"}-${params?.planId || "plan"}`, project: path.resolve(params?.cwd || PACKAGE_ROOT) };
+	const suppliedIdentity = [params?.runFamilyId, params?.planId, params?.reviewGate, params?.reviewMode, params?.attemptId].some((value) => value !== undefined);
+	const trackedCandidate = PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params?.agent || "")) || (CORRECTION_OWNERS.has(String(params?.agent || "")) && (suppliedIdentity || extractPlanId(String(params?.task || "")) !== "unknown-plan"));
+	const project = trackedCandidate ? resolveProjectPipelineAuthorityRoot(String(params.projectId)) : path.resolve(params?.cwd || PACKAGE_ROOT);
+	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${params?.projectId || "project"}-${params?.planId || "plan"}`, project };
 	return executeProjectPipelineReviewBoundary(params, lifecycle, () => runProjectPipelineAgentToolUnchecked(params));
 }
 

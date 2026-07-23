@@ -22,17 +22,6 @@ const moduleScriptsTokenPattern = /\/scripts\//;
 const stableModuleLibraryPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/lib\/[A-Za-z0-9_./-]+/g;
 const legacyWrapperPattern = /(?:^|[^A-Za-z0-9_./-])scripts\/(?:release|parallel-agents|git-hooks|provider-limits|profile|project-context|project-metadata|wiki|compat|analysis|metrics|history|pipeline)\/[A-Za-z0-9_./-]+/g;
 
-function rawEndsWith(value, suffix) {
-  const bytes = Buffer.from(suffix);
-  return value.length >= bytes.length && value.subarray(-bytes.length).equals(bytes);
-}
-
-function isRawLikelyText(file) {
-  const suffixes = ['.md', '.mdx', '.txt', '.json', '.jsonc', '.mjs', '.js', '.ts', '.tsx', '.sh', '.ps1', '.yml', '.yaml', '.toml', '.html', '.css', '.gitignore'];
-  const names = ['README', 'LICENSE', 'CHANGELOG', 'CONTRIBUTING', 'install.sh', 'uninstall.sh', 'package.json'];
-  return suffixes.some((suffix) => rawEndsWith(file, suffix)) || names.some((name) => rawEndsWith(file, name));
-}
-
 function parseIndexRecord(record, seen, previous) {
   const separator = record.indexOf(9);
   if (separator < 1) throw new Error('Malformed git index record');
@@ -43,8 +32,7 @@ function parseIndexRecord(record, seen, previous) {
   if (!match || seen.has(key) || (previous && Buffer.compare(previous, fileBytes) >= 0)) throw new Error('Malformed git index record');
   seen.add(key);
   try { return { entry: { file: new TextDecoder('utf-8', { fatal: true }).decode(fileBytes), mode: match.groups.mode }, fileBytes }; }
-  catch { if (isRawLikelyText(fileBytes)) throw new Error(`invalid UTF-8 tracked candidate: ${JSON.stringify(fileBytes.toString('hex'))}`); }
-  return { fileBytes };
+  catch { throw new Error(`invalid UTF-8 tracked candidate: ${JSON.stringify(fileBytes.toString('hex'))}`); }
 }
 
 function gitFiles() {

@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { containerCreateArgs, createProjectSandbox, dockerLabels, ensurePreviewContainerPublished, openProjectSandbox, repairProjectSandbox, removeArgs, removeProjectSandbox, setProjectTestClassification, volumeCreateArgs } from './lifecycle.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
+import { resolveProjectPipelineAuthority } from './project-authority.mjs';
 
 function tmpRoot() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-life-')); }
 function callsRunner(calls, failOn = () => false) {
@@ -14,6 +15,22 @@ function callsRunner(calls, failOn = () => false) {
     return 'ok\n';
   };
 }
+
+test('Project Pipeline authority resolves registered host and archive roots, never caller cwd', () => {
+  const root = tmpRoot();
+  const host = path.join(root, 'host-source');
+  const archive = path.join(root, 'state', 'project-archives', 'pp-authority-archive');
+  mkdirSync(host, { recursive: true });
+  mkdirSync(archive, { recursive: true });
+  const hostRecord = createProjectRecord({ project_id: 'pp-authority-host', name: 'host', source_kind: 'host-path', source_ref: host });
+  hostRecord.status = 'ready'; saveProjectRecord(root, hostRecord);
+  const archiveRecord = createProjectRecord({ project_id: 'pp-authority-archive', name: 'archive' });
+  archiveRecord.status = 'ready'; archiveRecord.archive.path = archive; saveProjectRecord(root, archiveRecord);
+  assert.deepEqual(resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-host' }).projectRoot, host);
+  assert.deepEqual(resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-archive' }).projectRoot, archive);
+  rmSync(host, { recursive: true, force: true });
+  assert.throws(() => resolveProjectPipelineAuthority({ pidexRoot: root, projectId: 'pp-authority-host' }), /AUTHORITY_UNAVAILABLE/);
+});
 
 test('dockerLabels include project sandbox labels', () => {
   assert.deepEqual(dockerLabels('pp-demo-abc123', 'workspace'), [

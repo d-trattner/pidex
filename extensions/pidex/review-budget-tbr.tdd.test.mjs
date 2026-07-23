@@ -8,6 +8,7 @@ import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineRe
 import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
 import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
+import { canonicalProjectIdentity } from '../../modules/pidex/analysis-metrics-history/lib/project-key.mjs';
 import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
@@ -30,7 +31,8 @@ assert.equal(preAbortedAttempts, 0, 'pre-aborted review attempts no provider');
 const ordinaryAttempts = [];
 await runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex', retrySameProvider: true, fallbackEnabled: true }, async (provider, fallbackFrom) => { ordinaryAttempts.push([provider, fallbackFrom]); return invalidCompletion({ provider }); });
 assert.deepEqual(ordinaryAttempts, [['pi', undefined], ['pi', 'pi'], ['codex', 'pi']], 'ordinary invalid Pi completion retries Pi then configured fallback');
-const bindCurrent = (stateDir, project, pipelineId) => { const base = path.join(stateDir, 'pipeline-events', path.basename(project)); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, 'plan-038.current'), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', pipeline_id: pipelineId, plan_key: 'plan-038' })}\n`, { flag: 'a' }); };
+const eventBase = (stateDir, project) => path.join(stateDir, 'pipeline-events', canonicalProjectIdentity(project).projectKey);
+const bindCurrent = (stateDir, project, pipelineId) => { const base = eventBase(stateDir, project); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, 'plan-038.current'), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(project).canonicalProject, pipeline_id: pipelineId, plan_key: 'plan-038' })}\n`, { flag: 'a' }); };
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
 assert.deepEqual(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }), { allowed: true });
 assert.equal(admitReviewDispatch('pidex-implementer', { ...identity, reviewMode: 'initial' }, { status: 'allowed' }).allowed, false);
@@ -63,7 +65,7 @@ try {
   const hosted = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'review', ...identity }, hostOptions);
   assert.equal(hosted.exitCode, 0);
   assert.equal(hostChildren, 1);
-  const hostRows = readFileSync(path.join(hostState, 'pipeline-events', path.basename(hostProject), 'host-pipeline.jsonl'), 'utf8');
+  const hostRows = readFileSync(path.join(eventBase(hostState, hostProject), 'host-pipeline.jsonl'), 'utf8');
   assert.match(hostRows, /start_reserved/);
   assert.match(hostRows, /spawn_entered/);
   assert.match(hostRows, /spawn_accepted/);
@@ -76,7 +78,7 @@ try {
 const interruptedState = mkdtempSync(path.join(os.tmpdir(), 'pidex-interrupted-review-state-'));
 const interruptedProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-interrupted-review-project-'));
 try {
-  const base = path.join(interruptedState, 'pipeline-events', path.basename(interruptedProject));
+  const base = eventBase(interruptedState, interruptedProject);
   const context = path.join(interruptedProject, 'agents.output', 'code-review', '038.md');
   mkdirSync(base, { recursive: true });
   mkdirSync(path.dirname(context), { recursive: true });
@@ -158,7 +160,7 @@ try {
 
 const lifecycleState = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-state-'));
 const lifecycleProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-project-'));
-const lifecycleBase = path.join(lifecycleState, 'pipeline-events', path.basename(lifecycleProject));
+const lifecycleBase = eventBase(lifecycleState, lifecycleProject);
 const lifecyclePipeline = 'family-real-host';
 const lifecycleContext = path.join(lifecycleProject, 'agents.output', 'implementation', '038-real-host-review-lifecycle.md');
 const lifecycleAttempt = (family, gate, mode) => `attempt-${createHash('sha256').update(`${family}|${gate}|${mode}`).digest('hex').slice(0, 16)}`;
@@ -324,7 +326,7 @@ const ppCompletionState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-completio
 const ppCompletionProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-completion-project-'));
 const ppCompletionPipeline = 'family-pp-completion';
 try {
-  const ppCompletionBase = path.join(ppCompletionState, 'pipeline-events', path.basename(ppCompletionProject));
+  const ppCompletionBase = eventBase(ppCompletionState, ppCompletionProject);
   const ppCompletionContext = path.join(ppCompletionProject, 'agents.output', 'code-review', '038.md');
   mkdirSync(path.dirname(ppCompletionContext), { recursive: true });
   mkdirSync(ppCompletionBase, { recursive: true });
@@ -340,7 +342,7 @@ const correctionOwnerState = mkdtempSync(path.join(os.tmpdir(), 'pidex-correctio
 const correctionOwnerProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-correction-owner-project-'));
 let correctionOwnerChildren = 0;
 try {
-  const base = path.join(correctionOwnerState, 'pipeline-events', path.basename(correctionOwnerProject));
+  const base = eventBase(correctionOwnerState, correctionOwnerProject);
   mkdirSync(base, { recursive: true });
   bindCurrent(correctionOwnerState, correctionOwnerProject, 'family-owner');
   const options = {
@@ -387,7 +389,7 @@ try {
   mkdirSync(path.dirname(context), { recursive: true });
   mkdirSync(base, { recursive: true });
   writeFileSync(path.join(base, 'plan-038.current'), 'family-slug');
-  writeFileSync(path.join(base, 'family-slug.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', pipeline_id: 'family-slug', plan_key: 'plan-038' })}\n`);
+  writeFileSync(path.join(base, 'family-slug.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(slugProject).canonicalProject, pipeline_id: 'family-slug', plan_key: 'plan-038' })}\n`);
   writeFileSync(context, '# context\n');
   const result = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 review' }, {
     agentCwd: slugProject,
@@ -438,7 +440,7 @@ const directProjectId = 'pp-direct-artifact';
 const directArchive = path.join(directArtifactState, 'project-archives', directProjectId, directExpected);
 const directResult = (overrides = {}) => ({ exitCode: 0, archive_sync_status: 'complete', context_file: directExpected, archive_context_file: directArchive, routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: directExpected }, ...overrides });
 const directParams = { agent: 'pidex-code-reviewer', ...identity, projectId: directProjectId, expectedOutputPath: directExpected };
-const resetDirectRoot = (pipelineId) => { const base = path.join(directArtifactState, 'pipeline-events', path.basename(directArtifactProject)); mkdirSync(base, { recursive: true }); for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name)); bindCurrent(directArtifactState, directArtifactProject, pipelineId); };
+const resetDirectRoot = (pipelineId) => { const base = eventBase(directArtifactState, directArtifactProject); mkdirSync(base, { recursive: true }); for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name)); bindCurrent(directArtifactState, directArtifactProject, pipelineId); };
 try {
   mkdirSync(path.dirname(directArchive), { recursive: true });
   writeFileSync(directArchive, '# archive\n');
@@ -469,7 +471,7 @@ try {
 const aggregateState = mkdtempSync(path.join(os.tmpdir(), 'pidex-aggregate-review-state-'));
 const aggregateProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-aggregate-review-project-'));
 try {
-  const base = path.join(aggregateState, 'pipeline-events', path.basename(aggregateProject));
+  const base = eventBase(aggregateState, aggregateProject);
   const rootPipeline = 'root-038';
   const rootStream = path.join(base, `${rootPipeline}.jsonl`);
   const tuple = (family, mode) => ({ runFamilyId: family, planId: 'plan-038', reviewGate: 'code-review', reviewMode: mode, attemptId: `attempt-${family}-${mode}` });

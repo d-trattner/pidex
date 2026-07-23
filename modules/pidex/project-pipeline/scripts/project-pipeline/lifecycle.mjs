@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createProjectRecord, dockerResourceNames, loadProjectRecord, removeProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
+import { resolveProjectPipelineAuthority } from './project-authority.mjs';
 
 export class PreviewLifecycleError extends Error {
   constructor(category, message = category) {
@@ -270,7 +271,7 @@ export function parseArgs(argv) {
   const out = { json: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === 'create' || arg === 'open' || arg === 'repair' || arg === 'remove' || arg === 'set-test-project') out.command = arg;
+    if (arg === 'create' || arg === 'open' || arg === 'repair' || arg === 'remove' || arg === 'set-test-project' || arg === 'resolve-authority') out.command = arg;
     else if (arg === '--pidex-root') out.pidexRoot = argv[++i];
     else if (arg === '--name') out.name = argv[++i];
     else if (arg === '--project-id') out.projectId = argv[++i];
@@ -288,7 +289,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove|set-test-project> --pidex-root PATH [--name NAME|--project-id ID] [--test-project true|false] [--confirm ID] --json'; }
+function usage() { return 'Usage: lifecycle.mjs <create|open|repair|remove|set-test-project|resolve-authority> --pidex-root PATH [--name NAME|--project-id ID] [--test-project true|false] [--confirm ID] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
@@ -301,6 +302,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     else if (args.command === 'repair') result = repairProjectSandbox(args);
     else if (args.command === 'remove') result = removeProjectSandbox(args);
     else if (args.command === 'set-test-project') result = setProjectTestClassification(args);
+    else if (args.command === 'resolve-authority') { const authority = resolveProjectPipelineAuthority(args); result = { ok: true, project_id: authority.projectId, project_root: authority.projectRoot, authority_kind: authority.kind }; }
     console.log(args.json ? JSON.stringify(result, null, 2) : (result.ok ? 'ok' : result.reason));
     process.exit(result.ok ? 0 : 1);
   } catch (error) {
