@@ -332,11 +332,46 @@ try {
   mkdirSync(ppCompletionBase, { recursive: true });
   bindCurrent(ppCompletionState, ppCompletionProject, ppCompletionPipeline);
   writeFileSync(ppCompletionContext, '# review\n');
-  const ppResult = executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 direct review' }, { stateDir: ppCompletionState, pipelineId: 'ignored-for-derived-identity', project: ppCompletionProject }, () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' }));
+  const ppResult = executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 direct review' }, { stateDir: ppCompletionState, pipelineId: 'ignored-for-derived-identity', project: ppCompletionProject, projectId: 'pp-unchanged', resolveCurrentProject: () => ppCompletionProject }, () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' }));
   assert.match(ppResult.finalText, /APPROVED/);
   const ppRows = readFileSync(path.join(ppCompletionBase, `${ppCompletionPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.planId === 'plan-038');
   assert.deepEqual(ppRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
 } finally { rmSync(ppCompletionState, { recursive: true, force: true }); rmSync(ppCompletionProject, { recursive: true, force: true }); }
+
+for (const explicitIdentity of [false, true]) {
+  const changedState = mkdtempSync(path.join(os.tmpdir(), `pidex-pp-authority-${explicitIdentity ? 'explicit' : 'omitted'}-state-`));
+  const reservedProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-authority-reserved-'));
+  const replacementProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-authority-replacement-'));
+  const changedPipeline = `family-pp-authority-${explicitIdentity ? 'explicit' : 'omitted'}`;
+  let currentProject = reservedProject;
+  try {
+    const base = eventBase(changedState, reservedProject);
+    mkdirSync(base, { recursive: true });
+    mkdirSync(path.join(reservedProject, 'agents.output', 'code-review'), { recursive: true });
+    writeFileSync(path.join(reservedProject, 'agents.output', 'code-review', '038.md'), '# review\n');
+    bindCurrent(changedState, reservedProject, changedPipeline);
+    const params = explicitIdentity
+      ? { agent: 'pidex-code-reviewer', ...identity }
+      : { agent: 'pidex-code-reviewer', task: 'Plan 038 direct review' };
+    assert.throws(() => executeProjectPipelineReviewBoundary(params, {
+      stateDir: changedState,
+      pipelineId: explicitIdentity ? changedPipeline : 'ignored-for-derived-identity',
+      project: reservedProject,
+      projectId: `pp-authority-${explicitIdentity ? 'explicit' : 'omitted'}`,
+      resolveCurrentProject: () => currentProject,
+    }, () => {
+      currentProject = replacementProject;
+      return ppChild();
+    }), /REVIEW_PROJECT_AUTHORITY_CHANGED/);
+    const rows = readFileSync(path.join(base, `${changedPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.planId === 'plan-038');
+    assert.deepEqual(rows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted'], `${explicitIdentity ? 'explicit' : 'omitted'} A→B completion must append no completion events`);
+    assert.equal(rows.some((row) => row.event_type === 'review_outcome'), false);
+  } finally {
+    rmSync(changedState, { recursive: true, force: true });
+    rmSync(reservedProject, { recursive: true, force: true });
+    rmSync(replacementProject, { recursive: true, force: true });
+  }
+}
 
 const correctionOwnerState = mkdtempSync(path.join(os.tmpdir(), 'pidex-correction-owner-state-'));
 const correctionOwnerProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-correction-owner-project-'));

@@ -3737,7 +3737,7 @@ export const PidexAgentParams = Type.Object({
 
 const PROJECT_PIPELINE_REVIEW_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer"]);
 
-type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; project: string };
+type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; project: string; projectId?: string; resolveCurrentProject?: () => string };
 
 export function executeProjectPipelineReviewBoundary(params: any, lifecycle: ProjectPipelineReviewLifecycle, start: () => any): any {
 	const suppliedIdentity = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
@@ -3754,6 +3754,13 @@ export function executeProjectPipelineReviewBoundary(params: any, lifecycle: Pro
 	const effectiveLifecycle = { ...lifecycle, pipelineId: resolvedReview.pipelineId };
 	const reservation = reserveReviewStart({ ...effectiveLifecycle, identity, start });
 	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
+	if (lifecycle.projectId) {
+		if (!lifecycle.resolveCurrentProject) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
+		let currentProject: string;
+		try { currentProject = lifecycle.resolveCurrentProject(); }
+		catch { throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED"); }
+		if (currentProject !== lifecycle.project) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
+	}
 	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params);
 }
 
@@ -3778,7 +3785,8 @@ export function runProjectPipelineAgentTool(params: any): any {
 	const suppliedIdentity = [params?.runFamilyId, params?.planId, params?.reviewGate, params?.reviewMode, params?.attemptId].some((value) => value !== undefined);
 	const trackedCandidate = PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params?.agent || "")) || (CORRECTION_OWNERS.has(String(params?.agent || "")) && (suppliedIdentity || extractPlanId(String(params?.task || "")) !== "unknown-plan"));
 	const project = trackedCandidate ? resolveProjectPipelineAuthorityRoot(String(params.projectId)) : path.resolve(params?.cwd || PACKAGE_ROOT);
-	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${params?.projectId || "project"}-${params?.planId || "plan"}`, project };
+	const projectId = String(params.projectId);
+	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${projectId}-${params?.planId || "plan"}`, project, projectId, resolveCurrentProject: () => resolveProjectPipelineAuthorityRoot(projectId) };
 	return executeProjectPipelineReviewBoundary(params, lifecycle, () => runProjectPipelineAgentToolUnchecked(params));
 }
 
