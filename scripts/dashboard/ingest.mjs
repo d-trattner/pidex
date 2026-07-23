@@ -256,9 +256,21 @@ function globJsonlTwoLevels(root) {
   }
   return out.sort();
 }
+function isGovernorMetricPath(file) {
+  const base = canonicalPath(path.join(METRICS_DIR, 'contract-governor'));
+  const candidate = canonicalPath(file);
+  const relative = path.relative(base, candidate);
+  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+}
+function reconcileGovernorMetrics(db) {
+  const rows = db.prepare("SELECT id, source_path, agent FROM agent_runs WHERE agent = 'pidex-contract-governor'").all();
+  const remove = db.prepare('DELETE FROM agent_runs WHERE id = ?');
+  for (const row of rows) if (isGovernorMetricPath(row.source_path)) remove.run(row.id);
+}
 
 function ingestMetrics(db) {
   let count = 0;
+  reconcileGovernorMetrics(db);
   const stmt = db.prepare(`INSERT OR REPLACE INTO agent_runs(
     source_path, source_line, source_hash, project_id, plan_key, timestamp,
     agent, provider, model, project_mode, verdict, route_to, gate, duration_ms,
@@ -266,6 +278,7 @@ function ingestMetrics(db) {
     cost_usd, context_file, exit_code, fallback_from, tool_count, routing_reason
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const file of globJsonlTwoLevels(METRICS_DIR)) {
+    if (isGovernorMetricPath(file)) continue;
     const fallbackProject = metricProjectFromSlug(path.basename(path.dirname(file)));
     const planKey = path.basename(file, '.jsonl');
     const lines = readText(file).split(/\r?\n/);

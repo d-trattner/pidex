@@ -1,6 +1,6 @@
 # Quality Governance
 
-PIDEX quality governance is the PDQ subsystem for operator trace contracts, expectation corrections, and guarded local rule learning.
+PIDEX quality governance is the PDQ subsystem for operator trace contracts, explicit operator decisions, and guarded local expectation corrections.
 
 ## What PDQ tracks
 
@@ -13,101 +13,86 @@ PDQ reports compare expected operator/process evidence with observed evidence fr
 <pidex-root>/state/quality/**
 ```
 
-Reports are written to:
-
-```text
-<pidex-root>/state/quality/
-<pidex-root>/agents.output/quality/
-```
-
-The dashboard Quality page shows trace gaps, valid operator decisions, violated contracts, freshness, next actions, trends, and background governance status.
+Reports are written under `state/quality/` and `agents.output/quality/`. These are local runtime outputs and must not be committed.
 
 ## Operator contracts
 
-Operator contracts define when PIDEX expects structured evidence such as:
+Contracts define expected evidence for `OpPreflight`, `OpQualityReview`, `OpReview`, `OpGate`, `OpRoute`, `OpSpawn`, and `OpContextPack`. Findings include the contract ID, descriptive expectation, observed state, allowed explicit-decision reasons, and resolution options.
 
-- `OpPreflight`
-- `OpQualityReview`
-- `OpReview`
-- `OpGate`
-- `OpRoute`
-- `OpSpawn`
-- `OpContextPack`
+An explicit valid `OpDecision` counts as evidence. It does not silently rewrite historical metrics or events.
 
-A missing expected event becomes a contract-backed finding with:
+## Manual pending-only governor
 
-- `contract_id`
-- expected condition
-- observed state
-- allowed skip/manual-evidence reasons
-- resolution options
+The contract governor is a manual proposal generator. It is not a pipeline agent, background hook, model reviewer, validator, or auto-apply service.
 
-Valid explicit operator decisions are counted as evidence and are not treated as generic missing instrumentation.
-
-## Contract governor
-
-The background contract governor reviews low-risk contract-correction proposals. It is not a normal `/pidex` pipeline agent and does not participate in the route graph.
-
-Public defaults are safe and disabled:
-
-```text
-config/contract-governor.json
-```
-
-Local/operator overrides, if used, live in:
-
-```text
-config/contract-governor.local.json
-```
-
-Do not commit local governor config or local operator-contract overrides.
-
-## Hot mode
-
-Hot mode is development-only. Low-risk auto-apply requires both:
+Its public contract is:
 
 ```json
 {
-  "hot_mode": true,
-  "auto_apply": "low-risk"
+  "version": 2,
+  "capability": "manual-pending-only",
+  "timeout_seconds": 60,
+  "max_proposals_per_run": 5
 }
 ```
 
-If either is missing, proposals remain pending/report-only. The dashboard Settings page shows Quality Governance controls and warns when hot mode is active.
+Run it explicitly against an existing report:
 
-## Local operator-contract overrides
+```bash
+node scripts/quality/contract-governor.mjs run \
+  --project <project-root> \
+  --report <pdq-report.json> \
+  --dry-run
+```
 
-Approved local contract corrections are written to:
+Remove `--dry-run` only when you intend to record bounded pending proposals and a governance run record. Repeated semantically identical proposals retain one correction identity and do not append duplicate pending lifecycle rows.
+
+The governor cannot:
+
+- approve or apply a correction;
+- write `config/operator-contracts.local.json`;
+- invoke a model or delegate;
+- run automatically after PDQ;
+- emit `validated`;
+- enter normal agent or pipeline metrics.
+
+Legacy hot-mode, agent-review, auto-apply, evaluator, and model settings are unsupported and fail closed.
+
+## Explicit operator approval
+
+A separate operator command governs supported local overrides:
+
+```bash
+node scripts/quality/operator-contracts-admin.mjs propose ...
+node scripts/quality/operator-contracts-admin.mjs approve ...
+node scripts/quality/operator-contracts-admin.mjs supersede ...
+```
+
+Version 2 permits only `allowed_skip_reasons` for `OpPreflight` and `OpQualityReview`. `required_when` remains descriptive metadata and is not mutable. Pending, future-dated, rejected, superseded, malformed, or mismatched rows cannot weaken effective contracts.
+
+Approved local overrides live in:
 
 ```text
 config/operator-contracts.local.json
 ```
 
-This file is private/local state and must not be committed.
-
-## Evaluation and monitoring
-
-Applied corrections enter a monitoring lifecycle and can be evaluated with:
-
-```bash
-node scripts/quality/contract-governor.mjs evaluate \
-  --project <project-root> \
-  --correction-id <id> \
-  --last-reports 5
-```
-
-Evaluator results can mark corrections as validated, needing review, or rollback-recommended. PIDEX does not silently roll back corrections in the current release.
+This file is private local state. Never commit or force-add it. Valid legacy version-1 prose patches are quarantined and inert until the operator explicitly supersedes them; malformed authority fails closed.
 
 ## Dashboard
 
-Quality governance appears in two places:
+Quality → **Manual contract governance** shows:
 
-- **Quality → Background governance**: status, pending proposals, approved/validated corrections, rollback recommendations.
-- **Settings → Quality Governance**: local enabled/mode/model/budget/hot-mode settings.
+- pending proposals;
+- exact manual run outcomes;
+- manual correction history;
+- an explicit inconclusive assessment for legacy labels that lack a baseline and post-apply evidence.
+
+Settings exposes no governor activation, model, budget, hot-mode, or auto-apply controls. The governor API is read-only; POST returns `GOVERNOR_CONFIG_READ_ONLY`.
 
 ## Guardrails
 
-- Public defaults remain disabled and non-spending.
-- Local overrides are ignored by public-readiness checks if untracked, and fail public readiness if tracked.
-- The governor writes only governance artifacts/state and local overrides.
-- The governor must not mutate product/source code, rules, skills, public defaults, or normal route graph state.
+- Public defaults are manual, pending-only, and non-spending.
+- Local configs and all runtime outputs are excluded from public source/package scope.
+- Existing or uncertain locks fail closed and are never automatically deleted.
+- Dashboard SQLite is derived state; governance source records remain authoritative.
+- Governor runs never mutate product code, rules, agents, skills, public defaults, pipeline events, or normal route-graph state.

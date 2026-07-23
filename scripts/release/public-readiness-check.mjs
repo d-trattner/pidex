@@ -86,7 +86,14 @@ if (cmd === 'tracked-clean') {
   if (findings.length) fail(findings.join('\n'));
 } else if (cmd === 'parallel-defaults') {
   const governorFile = 'config/contract-governor.json';
-  if (existsSync(governorFile)) { const g = JSON.parse(readFileSync(governorFile, 'utf8')); if (g.enabled !== false) fail('config/contract-governor.json must be disabled by default'); if (g.hot_mode !== false) fail('contract governor hot_mode must be false by default'); if (!['off', 0, false, null, undefined].includes(g.auto_apply)) fail('contract governor auto_apply must be off by default'); if (g.max_cost_usd_per_run !== 0) fail('contract governor public max_cost_usd_per_run must be 0'); }
+  if (existsSync(governorFile)) {
+    const governor = JSON.parse(readFileSync(governorFile, 'utf8'));
+    if (governor.version !== 2 || governor.capability !== 'manual-pending-only') fail('contract governor public config must be version 2 manual-pending-only');
+    const forbidden = ['enabled', 'background', 'mode', 'hot_mode', 'auto_apply', 'agent_enabled', 'model', 'escalation_model', 'effort', 'max_cost_usd_per_run', 'monitoring_window_reports'].filter((key) => Object.hasOwn(governor, key));
+    if (forbidden.length) fail(`contract governor public config contains unsupported automation fields: ${forbidden.join(', ')}`);
+    if (!Number.isInteger(governor.max_proposals_per_run) || governor.max_proposals_per_run < 1 || governor.max_proposals_per_run > 20) fail('contract governor max_proposals_per_run must be 1..20');
+    if (!Number.isInteger(governor.timeout_seconds) || governor.timeout_seconds < 10 || governor.timeout_seconds > 600) fail('contract governor timeout_seconds must be 10..600');
+  }
 
   const file = 'config/parallel-agents.json';
   if (existsSync(file)) { const data = JSON.parse(readFileSync(file, 'utf8')); if (data.enabled !== false) fail('config/parallel-agents.json must be disabled by default for public release'); for (const [name, cfg] of Object.entries(data.agents || {})) { if (cfg.enabled !== false) fail(`parallel agent ${name} must be disabled by default for public release`); for (const lane of cfg.provider_models || []) if (lane.enabled !== false) fail(`parallel lane ${name}:${lane.provider}:${lane.model} must be disabled by default`); } }

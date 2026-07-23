@@ -49,6 +49,7 @@ try {
   const workspaceRef = 'pidex-project-pp-demo-workspace';
   const legacyWorkspacePath = path.resolve(workspaceRef);
   mkdirSync(path.join(state, 'metrics', 'tmp-project'), { recursive: true });
+  mkdirSync(path.join(state, 'metrics', 'contract-governor'), { recursive: true });
   mkdirSync(path.join(state, 'pipeline-events', 'project'), { recursive: true });
   mkdirSync(path.join(state, 'sandbox-projects'), { recursive: true });
   mkdirSync(path.join(project, 'agents.output', 'parallel-agents'), { recursive: true });
@@ -57,6 +58,8 @@ try {
   writeFileSync(path.join(state, 'metrics', 'tmp-project', 'plan-001.jsonl'), `${JSON.stringify({
     timestamp: '2026-01-01T00:00:00Z', project, plan: '1', project_mode: 'project-pipeline', agent: 'pidex-planner', provider: 'codex', model: 'gpt-5.4-mini', input_tokens_estimate: 10, output_tokens_estimate: 20,
   })}\n`);
+  const governorMetric = path.join(state, 'metrics', 'contract-governor', 'project.jsonl');
+  writeFileSync(governorMetric, `${JSON.stringify({ timestamp: '2026-01-01T00:00:00Z', project_path: project, run_type: 'background-governor', agent: 'pidex-contract-governor', plan_key: 'plan-001' })}\n`);
   writeFileSync(path.join(state, 'pipeline-events', 'project', 'pipe-1.jsonl'), `${JSON.stringify({
     timestamp: '2026-01-01T00:01:00Z', project_path: project, pipeline_id: 'pipe-1', plan_key: '1', event_type: 'pipeline_started', project_mode: 'project-pipeline', is_test_project: true, status: 'running', actor: 'orchestrator', metadata: { canonical_tbr: 'TBR-0123456789ab' }, source: 'test',
   })}\n${JSON.stringify({
@@ -103,6 +106,7 @@ try {
   assert.equal(report.artifacts, 2);
   assert.equal(report.merge_findings, 2);
   assert.equal(count(dbPath, 'agent_runs'), 1);
+  assert.equal(value(dbPath, "select count(*) from agent_runs where agent = 'pidex-contract-governor'"), 0);
   assert.equal(count(dbPath, 'pipeline_events'), 2);
   assert.deepEqual(all(dbPath, "select pipeline_id, metadata_json from pipeline_events where pipeline_id in ('pipe-1', 'pipe-legacy') order by pipeline_id").map((row) => ({ ...row })), [
     { pipeline_id: 'pipe-1', metadata_json: '{"canonical_tbr":"TBR-0123456789ab"}' },
@@ -137,11 +141,14 @@ try {
       db.prepare('INSERT INTO artifacts(path, project_id, title) VALUES (?, ?, ?)').run(path.join(tmp, 'legacy-artifact.md'), legacyId, 'legacy');
       db.prepare('INSERT INTO merge_findings(artifact_path, row_index, project_id, summary) VALUES (?, ?, ?, ?)').run(path.join(tmp, 'legacy-artifact.md'), 1, legacyId, 'legacy finding');
       db.prepare('INSERT INTO agent_runs(source_path, source_line, source_hash, project_id, plan_key) VALUES (?, ?, ?, ?, ?)').run('legacy-metrics.jsonl', 1, 'legacy-agent-hash', legacyId, 'plan-001');
+      db.prepare('INSERT INTO agent_runs(source_path, source_line, source_hash, project_id, plan_key, agent) VALUES (?, ?, ?, ?, ?, ?)').run(governorMetric, 1, 'historical-governor-hash', legacyId, 'plan-001', 'pidex-contract-governor');
       db.prepare('INSERT INTO pipeline_events(source_path, source_line, source_hash, timestamp, project_id, project_path, pipeline_id, plan_key, event_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run('legacy-events.jsonl', 1, 'legacy-event-hash', '2026-01-01T00:02:00Z', legacyId, legacyWorkspacePath, 'legacy-pipeline', 'plan-001', 'pipeline_started');
     } finally { db.close(); }
   }
 
   runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  assert.equal(value(dbPath, "select count(*) from agent_runs where source_hash = 'historical-governor-hash'"), 0, 'derived historical governor row must be reconciled');
+  assert.equal(readFileSync(governorMetric, 'utf8').includes('background-governor'), true, 'source governor metric must remain untouched');
   assert.equal(value(dbPath, `select count(*) from projects where path = '${legacyWorkspacePath.replaceAll("'", "''")}'`), 0);
   const migratedSelectors = {
     artifacts: `t.path = '${path.join(tmp, 'legacy-artifact.md').replaceAll("'", "''")}'`,

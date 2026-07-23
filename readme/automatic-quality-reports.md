@@ -30,7 +30,7 @@ Reports are written under:
 
 PIDEX also emits an `OpQualityReview` operator event.
 
-If the disabled-by-default contract governor is locally enabled, auto-PDQ can also spawn a fail-soft background governor run after the report. This is non-pipeline background governance and does not block terminal event recording. See [Quality governance](quality-governance.md).
+Auto-PDQ does not start the contract governor. Contract-correction detection is an explicit manual, pending-only operation against an existing report. It cannot approve, apply, delegate, or validate corrections. See [Quality governance](quality-governance.md).
 
 ## Notes
 

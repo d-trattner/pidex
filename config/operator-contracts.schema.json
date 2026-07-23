@@ -1,32 +1,50 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "PIDEX local operator contract overrides",
+  "title": "PIDEX local operator contract overrides v2",
   "type": "object",
   "required": ["version", "overrides"],
   "properties": {
-    "version": { "type": "integer", "minimum": 1 },
+    "version": { "const": 2 },
     "overrides": {
       "type": "array",
+      "maxItems": 100,
       "items": {
         "type": "object",
-        "required": ["id", "status", "operator_type"],
+        "required": ["id", "status", "operator_type", "contract_id", "reason", "contract_patch", "historical_reclassification"],
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "id": { "type": "string", "minLength": 1, "maxLength": 160 },
           "status": { "enum": ["pending", "approved", "rejected", "superseded"] },
-          "operator_type": { "type": "string", "minLength": 1 },
-          "contract_id": { "type": ["string", "null"] },
-          "change_type": { "type": "string" },
-          "old_value": {},
-          "new_value": {},
-          "reason": { "type": "string" },
-          "approved_by": { "type": "string" },
-          "approved_at": { "type": "string" },
-          "effective_from": { "type": "string" },
+          "operator_type": { "enum": ["OpPreflight", "OpQualityReview"] },
+          "contract_id": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "approved_by": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "approved_at": { "type": "string", "format": "date-time" },
+          "effective_from": { "type": "string", "format": "date-time" },
           "source_decision_id": { "type": ["string", "null"] },
-          "historical_reclassification": { "enum": ["future-only", "reclassify-matching-history", "manual-only"] },
-          "contract_patch": { "type": "object" }
+          "historical_reclassification": { "const": "future-only" },
+          "contract_patch": {
+            "type": "object",
+            "required": ["allowed_skip_reasons"],
+            "properties": {
+              "allowed_skip_reasons": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "uniqueItems": true,
+                "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$" }
+              }
+            },
+            "additionalProperties": false
+          }
         },
-        "additionalProperties": true
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "approved" } } },
+            "then": { "required": ["approved_by", "approved_at", "effective_from"] }
+          }
+        ]
       }
     }
   },

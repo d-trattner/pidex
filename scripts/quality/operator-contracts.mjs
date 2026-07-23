@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Conservative operator-contract helpers for PDQ trace classification.
+// Conservative, locally governable operator-contract helpers for PDQ trace classification.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const MUTABLE_OPERATORS = new Set(['OpPreflight', 'OpQualityReview']);
+const STATUSES = new Set(['pending', 'approved', 'rejected', 'superseded']);
+const REASON_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 
 export const CONTRACTS = {
   OpPreflight: { contract_id: 'operator.OpPreflight.finalized-preflight', required_when: 'post-Phase-2B pipeline_started exists', allowed_decision_types: ['skip_step', 'manual_evidence', 'backfill_evidence'], allowed_skip_reasons: ['continuation-existing-plan', 'already-covered'], resolution_options: ['record finalized OpPreflight', 'record valid OpDecision skip', 'correct expectation contract'] },
@@ -16,72 +19,71 @@ export const CONTRACTS = {
   OpContextPack: { contract_id: 'operator.OpContextPack.context-pack-evidence', required_when: 'post-Phase-2B agent metric row exists', allowed_decision_types: ['manual_evidence', 'backfill_evidence', 'expectation_correction'], allowed_skip_reasons: ['already-covered', 'duplicate-signal', 'expectation-wrong', 'provider-quota-limited'], resolution_options: ['restore context-pack event emission', 'record manual context-pack evidence', 'correct expectation contract'] },
 };
 
-const DEFAULT_DECISION_TYPES = ['skip_step', 'manual_evidence', 'backfill_evidence'];
-let cachedRoot = null;
-let cachedContracts = null;
-
-function mergeContract(base, override) {
-  return { ...(base || {}), ...(override || {}) };
-}
-
-export function validateContractOverrides(parsed) {
+function issue(code, message, index = null) { return { code, message, ...(index == null ? {} : { index }) }; }
+function validDate(value) { return typeof value === 'string' && Number.isFinite(Date.parse(value)); }
+function patchErrors(row, index) {
   const errors = [];
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return ['override file must be a JSON object'];
-  if (parsed.version == null) errors.push('missing version');
-  if (!Array.isArray(parsed.overrides)) errors.push('overrides must be an array');
-  for (const [index, row] of (parsed.overrides || []).entries()) {
-    if (!row || typeof row !== 'object' || Array.isArray(row)) { errors.push(`overrides[${index}] must be an object`); continue; }
-    for (const key of ['id', 'status', 'operator_type']) if (!row[key]) errors.push(`overrides[${index}] missing ${key}`);
-    if (row.status && !['pending', 'approved', 'rejected', 'superseded'].includes(row.status)) errors.push(`overrides[${index}] invalid status`);
-    if (row.status === 'approved' && !row.approved_by) errors.push(`overrides[${index}] approved override missing approved_by`);
-  }
+  const patch = row?.contract_patch;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return [issue('CONTRACT_OVERRIDE_PATCH_INVALID', 'contract_patch must be an object', index)];
+  const keys = Object.keys(patch);
+  if (keys.length !== 1 || keys[0] !== 'allowed_skip_reasons') errors.push(issue('CONTRACT_OVERRIDE_PATCH_UNSUPPORTED', `unsupported patch keys: ${keys.join(',') || '(none)'}`, index));
+  const reasons = patch.allowed_skip_reasons;
+  if (!Array.isArray(reasons) || reasons.length < 1 || reasons.length > 12 || new Set(reasons).size !== reasons.length || reasons.some((x) => typeof x !== 'string' || !REASON_RE.test(x))) errors.push(issue('CONTRACT_OVERRIDE_REASONS_INVALID', 'allowed_skip_reasons must contain 1..12 unique reason slugs', index));
   return errors;
 }
 
+export function analyzeContractOverrides(parsed) {
+  const errors = []; const diagnostics = [];
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { errors: [issue('CONTRACT_OVERRIDE_FILE_INVALID', 'override file must be an object')], diagnostics };
+  if (![1, 2].includes(parsed.version)) errors.push(issue('CONTRACT_OVERRIDE_VERSION_UNSUPPORTED', 'version must be 1 or 2'));
+  if (!Array.isArray(parsed.overrides)) errors.push(issue('CONTRACT_OVERRIDE_ROWS_INVALID', 'overrides must be an array'));
+  if (Object.keys(parsed).some((key) => !['version', 'overrides'].includes(key))) errors.push(issue('CONTRACT_OVERRIDE_FILE_UNKNOWN_KEY', 'unknown top-level key'));
+  for (const [index, row] of (Array.isArray(parsed.overrides) ? parsed.overrides : []).entries()) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) { errors.push(issue('CONTRACT_OVERRIDE_ROW_INVALID', 'override must be an object', index)); continue; }
+    if (!row.id || !row.status || !row.operator_type || !row.contract_id) errors.push(issue('CONTRACT_OVERRIDE_REQUIRED_FIELD', 'id/status/operator_type/contract_id are required', index));
+    if (!STATUSES.has(row.status)) errors.push(issue('CONTRACT_OVERRIDE_STATUS_INVALID', `invalid status ${row.status}`, index));
+    const base = CONTRACTS[row.operator_type];
+    if (!base || !MUTABLE_OPERATORS.has(row.operator_type)) errors.push(issue('CONTRACT_OVERRIDE_OPERATOR_UNSUPPORTED', `unsupported operator ${row.operator_type}`, index));
+    else if (row.contract_id !== base.contract_id) errors.push(issue('CONTRACT_OVERRIDE_CONTRACT_MISMATCH', `contract_id does not match ${row.operator_type}`, index));
+    if (row.status === 'approved') {
+      if (!row.approved_by || !validDate(row.approved_at) || !validDate(row.effective_from)) errors.push(issue('CONTRACT_OVERRIDE_APPROVAL_INVALID', 'approved override requires approved_by and valid approved_at/effective_from', index));
+      if (row.historical_reclassification !== 'future-only') errors.push(issue('CONTRACT_OVERRIDE_HISTORY_INVALID', 'historical_reclassification must be future-only', index));
+    }
+    const unsupportedV1 = parsed.version === 1 && row.contract_patch && Object.keys(row.contract_patch).some((key) => key !== 'allowed_skip_reasons');
+    if (unsupportedV1 && row.status === 'approved' && base && row.contract_id === base.contract_id) diagnostics.push(issue('CONTRACT_OVERRIDE_V1_QUARANTINED', `v1 override ${row.id} quarantined unsupported keys: ${Object.keys(row.contract_patch).join(',')}`, index));
+    else errors.push(...patchErrors(row, index));
+    if (parsed.version === 2) {
+      const allowed = new Set(['timestamp', 'id', 'status', 'operator_type', 'contract_id', 'reason', 'approved_by', 'approved_at', 'effective_from', 'source_decision_id', 'historical_reclassification', 'contract_patch']);
+      if (Object.keys(row).some((key) => !allowed.has(key))) errors.push(issue('CONTRACT_OVERRIDE_ROW_UNKNOWN_KEY', `override ${row.id || index} has unknown key`, index));
+      if (!row.reason) errors.push(issue('CONTRACT_OVERRIDE_REQUIRED_FIELD', 'reason is required', index));
+    }
+  }
+  return { errors, diagnostics };
+}
+
+let cachedRoot = null; let cachedContracts = null;
 export function loadContracts(root = ROOT) {
   const resolvedRoot = path.resolve(root || ROOT);
   if (cachedRoot === resolvedRoot && cachedContracts) return cachedContracts;
-  const merged = Object.fromEntries(Object.entries(CONTRACTS).map(([k, v]) => [k, { ...v }]));
+  const merged = Object.fromEntries(Object.entries(CONTRACTS).map(([key, value]) => [key, structuredClone(value)]));
   const file = path.join(resolvedRoot, 'config', 'operator-contracts.local.json');
   if (existsSync(file)) {
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    const errors = validateContractOverrides(parsed);
-    if (errors.length) throw new Error(`Invalid operator-contracts.local.json: ${errors.join('; ')}`);
-    for (const row of parsed.overrides || []) {
-      if (row.status !== 'approved') continue;
-      const current = merged[row.operator_type] || {};
-      const patch = row.contract_patch && typeof row.contract_patch === 'object' && !Array.isArray(row.contract_patch) ? row.contract_patch : {};
-      merged[row.operator_type] = mergeContract(current, patch);
+    let parsed;
+    try { parsed = JSON.parse(readFileSync(file, 'utf8')); } catch (error) { throw new Error(`CONTRACT_OVERRIDE_JSON_INVALID: ${error instanceof Error ? error.message : String(error)}`); }
+    const { errors, diagnostics } = analyzeContractOverrides(parsed);
+    if (errors.length) throw new Error(errors.map((x) => `${x.code}: ${x.message}`).join('; '));
+    for (const diagnostic of diagnostics) console.error(`${diagnostic.code}: ${diagnostic.message}`);
+    const quarantined = new Set(diagnostics.map((x) => x.index));
+    for (const [index, row] of parsed.overrides.entries()) {
+      if (row.status !== 'approved' || quarantined.has(index) || Date.parse(row.effective_from) > Date.now()) continue;
+      merged[row.operator_type].allowed_skip_reasons = [...row.contract_patch.allowed_skip_reasons];
     }
   }
-  cachedRoot = resolvedRoot;
-  cachedContracts = merged;
-  return merged;
+  cachedRoot = resolvedRoot; cachedContracts = merged; return merged;
 }
-
 export function resetContractCache() { cachedRoot = null; cachedContracts = null; }
-function contractFor(operatorType) { return loadContracts()[operatorType]; }
 function planMatches(row, plan) { return [plan, null, undefined, ''].includes(row?.plan_key); }
-function targetStepMatches(row, expected) { if (!expected) return true; const target = String(row?.target_step || '').toLowerCase(); if (!target) return true; return target === String(expected).toLowerCase(); }
-
-export function validDecisionFor(decisions, { plan, operator_type, target_step = null }) {
-  const contract = contractFor(operator_type);
-  if (!contract) return null;
-  return (decisions || []).find((row) => row?.operator_type === 'OpDecision'
-    && (contract.allowed_decision_types || DEFAULT_DECISION_TYPES).includes(row.decision_type)
-    && row.target_operator === operator_type
-    && planMatches(row, plan)
-    && targetStepMatches(row, target_step)
-    && (contract.allowed_skip_reasons || []).includes(row.reason)) || null;
-}
-
-export function validSkipFinding(decision, { plan, operator_type, evidence = null, extra = {} }) {
-  const contract = contractFor(operator_type) || {};
-  return { type: 'valid_skip', operator_type, plan_key: plan, confidence: decision?.confidence || 'medium', severity: 'info', reason: `Operator decision ${decision?.decision_type || 'skip'} with reason ${decision?.reason || 'unknown'} satisfies ${operator_type} contract.`, evidence: decision?.physical_action?.evidence_path || decision?.evidence_path || evidence, contract_id: contract.contract_id || null, expected_when: contract.required_when || null, observed_state: 'valid_operator_decision', allowed_skip_reasons: contract.allowed_skip_reasons || [], resolution_options: contract.resolution_options || [], decision_evidence: decision || null, ...extra };
-}
-
-export function decorateContractFinding(finding) {
-  const contract = contractFor(finding?.operator_type);
-  if (!contract) return finding;
-  return { ...finding, contract_id: contract.contract_id, expected_when: contract.required_when, observed_state: finding.type || 'missing', allowed_skip_reasons: contract.allowed_skip_reasons, resolution_options: contract.resolution_options };
-}
+function targetStepMatches(row, expected) { if (!expected) return true; const target = String(row?.target_step || '').toLowerCase(); return !target || target === String(expected).toLowerCase(); }
+export function validDecisionFor(decisions, { root = ROOT, plan, operator_type, target_step = null }) { const contract = loadContracts(root)[operator_type]; if (!contract) return null; return (decisions || []).find((row) => row?.operator_type === 'OpDecision' && (contract.allowed_decision_types || []).includes(row.decision_type) && row.target_operator === operator_type && planMatches(row, plan) && targetStepMatches(row, target_step) && (contract.allowed_skip_reasons || []).includes(row.reason)) || null; }
+export function validSkipFinding(decision, { plan, operator_type, evidence = null, extra = {}, root = ROOT }) { const contract = loadContracts(root)[operator_type] || {}; return { type: 'valid_skip', operator_type, plan_key: plan, confidence: decision?.confidence || 'medium', severity: 'info', reason: `Operator decision ${decision?.decision_type || 'skip'} with reason ${decision?.reason || 'unknown'} satisfies ${operator_type} contract.`, evidence: decision?.physical_action?.evidence_path || decision?.evidence_path || evidence, contract_id: contract.contract_id || null, expected_when: contract.required_when || null, observed_state: 'valid_operator_decision', allowed_skip_reasons: contract.allowed_skip_reasons || [], resolution_options: contract.resolution_options || [], decision_evidence: decision || null, ...extra }; }
+export function decorateContractFinding(finding, root = ROOT) { const contract = loadContracts(root)[finding?.operator_type]; return contract ? { ...finding, contract_id: contract.contract_id, expected_when: contract.required_when, observed_state: finding.type || 'missing', allowed_skip_reasons: contract.allowed_skip_reasons, resolution_options: contract.resolution_options } : finding; }

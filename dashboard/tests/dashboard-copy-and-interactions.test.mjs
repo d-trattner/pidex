@@ -112,6 +112,20 @@ test('dashboard surfaces project mode telemetry in overview runs and quality pag
   assert.match(qualityText, /agent_runs\.project_mode/, 'quality help text should cite project mode source');
 });
 
+test('quality governance is truthful pending-only and settings exposes no automation controls', async () => {
+  const settingsText = await readFile(join(rootRouteRoot.pathname, 'settings.tsx'), 'utf8');
+  assert.doesNotMatch(settingsText, /QualityGovernanceCard|Hot mode ON|agent-review-auto-apply|Save governance config/, 'settings must not expose removed governor automation');
+  const qualityText = await readFile(join(rootRouteRoot.pathname, 'quality.tsx'), 'utf8');
+  assert.match(qualityText, /Manual contract governance/);
+  assert.match(qualityText, /pending-only/);
+  assert.match(qualityText, /cannot approve, apply, delegate, or validate/);
+  assert.doesNotMatch(qualityText, /Hot mode active|auto-applied/);
+  const apiText = await readFile(join(rootRouteRoot.pathname, 'api/quality/contract-governor.tsx'), 'utf8');
+  assert.match(apiText, /GOVERNOR_CONFIG_READ_ONLY/);
+  assert.match(apiText, /405/);
+  assert.doesNotMatch(apiText, /saveContractGovernorLocalConfig/);
+});
+
 test('pipelines route guards object-valued fields before rendering cells', async () => {
   const pipelinesText = await readFile(join(rootRouteRoot.pathname, 'pipelines.tsx'), 'utf8');
   assert.match(pipelinesText, /function formatText\(value: unknown\): string/, 'pipelines should normalize unknown text values to render-safe strings');

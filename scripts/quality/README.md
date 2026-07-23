@@ -185,3 +185,9 @@ Current contract-backed classifications cover:
 - `OpContextPack`: required when a post-Phase-2B agent metric row exists; valid manual/backfill reasons include `already-covered`, `duplicate-signal`, `expectation-wrong`, and `provider-quota-limited`.
 
 When a matching `OpDecision` exists, PDQ reports a `valid_skip` finding, counts it as observed structured evidence, and excludes it from trace gap counts. Other operator expectations still use the legacy conservative classification until their contracts are added.
+
+## Manual pending-only correction governance
+
+`contract-correction-detector.mjs` can propose a bounded `allowed_skip_reasons` correction for `OpPreflight` or `OpQualityReview` after repeated explicit decisions. `contract-governor.mjs run` records those proposals only when invoked manually. It has no background hook, model delegate, approval, apply, evaluator, or normal agent-metric path.
+
+Use `--dry-run` first. A non-dry run writes only pending correction-ledger rows and governance run artifacts. Approval and supersession remain explicit operator actions through `operator-contracts-admin.mjs`. Version-2 local overrides reject `required_when` and every patch field except bounded `allowed_skip_reasons` for the two supported operators.
