@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-07-23
 
 - Added bounded lifecycle review budgets for Critic, Code Review, Security, and QA: canonical root-stream authority prevents family/slice/remediation resets; each gate has a fixed aggregate review and correction limit; interrupted lifecycle reviews have no retry or fallback.
 - Made public review identity atomic: callers may omit it for unambiguous derivation or supply one complete nested `reviewIdentity`; partial, mixed, undeclared, and aggregate-incompatible identities fail closed.
 - Hardened canonical TBR review outcomes, archive transitions, and orchestrator-event validation while preserving `TBR_WRITE_BLOCKED` when terminal review uncertainty cannot be serialized authoritatively.
 - Accepted testserver and real HAA lifecycle evidence confirms pre-abort dispatches stay at zero, accepted interrupted reviews remain one-shot, independent per-gate budgets do not reset across families, and ordinary non-review retry/fallback behavior remains unchanged.
-- Made module-reference release checks parse staged Git index records fail closed, including malformed metadata, non-UTF-8 paths, executable evidence, and control-safe diagnostics.
+- Made module-reference release checks parse staged Git index records fail closed, including malformed metadata, any non-UTF-8 tracked pathname regardless of mode or suffix, executable evidence, and control-safe diagnostics.
+- Made lifecycle authority collision-resistant across same-basename projects with full-realpath-derived project keys, one shared project-and-plan selection lock, exact fail-closed legacy fallback, and current registry-bound Project Pipeline roots revalidated before direct review completion.
+- Included the exact three-file lifecycle dependency closure required by the published extension and added an isolated extracted-package import smoke test using real declared peers with no source-checkout fallback.
+- Changed stale or uncertain lifecycle locks to remain untouched and fail closed, preventing stale-owner observations from deleting successor-owned locks.
 - Replaced the legacy GPT-5.4/GPT-5.5 profile catalog with the evidence-selected GPT-5.6 Balanced, Lowcost, and Sol-quality profiles; aligned Sol-quality Security to the validated high effort, and made Spark fallback permit only an exact named counterpart rather than an unrelated profile.
 - Made `agents.output/**`, `state/**`, and `pidex/state/**` unconditionally local runtime state: wiki hygiene no longer offers audit state for commit, and Pi blocks `git add -f`/`--force` across parent and child sessions even where Windows has no global Git hook.
 - Kept automatic out-of-scope TBR terminalization, structured review2 TBR serialization, process-tree containment, G9 screenshot-contract reconciliation, and LAN-first preview links as explicit follow-up work rather than claiming them complete.

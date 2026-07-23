@@ -48,7 +48,8 @@ test('published tarball contains exact lifecycle closure and imports with real i
     mkdirSync(consumer, { recursive: true });
     const packed = run('npm', ['pack', '--json', '--pack-destination', temp], { cwd: root });
     const report = JSON.parse(packed.stdout)[0];
-    assert.equal(report.version, '0.2.2');
+    const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+    assert.equal(report.version, manifest.version);
     assert.ok(report.unpackedSize < 700_000, `unpacked package budget exceeded: ${report.unpackedSize}`);
     const modulePaths = report.files.map((item) => item.path).filter((item) => item.startsWith('modules/'));
     assert.deepEqual(new Set(modulePaths), requiredModules);
