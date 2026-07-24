@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Fixed Windows/Node 26 lifecycle lock creation by durably writing lock ownership through one exclusive write-capable descriptor, and stopped Review Boundary identity derivation from masking raw lifecycle I/O failures as `REVIEW_IDENTITY_INVALID`.
+- Aligned lifecycle and Review Boundary numeric plan identities through 40 digits, allowing generated IDs such as `plan-16725` while retaining legacy zero-padding and strict bounded validation.
 
 ## 0.3.0 - 2026-07-23
 

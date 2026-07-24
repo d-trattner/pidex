@@ -6,10 +6,14 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
-import { recordPipelineEvent, recordReviewCompletion, reserveReviewStart } from './event.mjs';
+import { normalizePlan, recordPipelineEvent, recordReviewCompletion, reserveReviewStart } from './event.mjs';
 import { canonicalProjectIdentity } from '../../lib/project-key.mjs';
 
 const tuple = { runFamilyId: 'family-001', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-001' };
+assert.equal(normalizePlan('16725'), 'plan-16725');
+assert.equal(normalizePlan('plan-16725'), 'plan-16725');
+assert.equal(normalizePlan('16725-feature'), 'plan-16725');
+assert.equal(normalizePlan('plan-16725_feature'), 'plan-16725');
 assert.deepEqual(validateReviewIdentity(tuple), { ok: true, value: tuple });
 assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'other' }).ok, false);
 assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'security-review' }).ok, false);

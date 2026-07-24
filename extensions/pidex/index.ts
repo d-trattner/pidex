@@ -8,7 +8,7 @@ import { createGzip, gunzipSync } from "node:zlib";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { foldReviewHistory, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
+import { foldReviewHistory, normalizeReviewPlan, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
 import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 
 type AgentFrontmatter = {
@@ -1923,11 +1923,7 @@ function extractPlanUuid(task: string, finalText = ""): string | undefined {
 
 function normalizePlanKey(value: string | undefined): string {
 	const raw = (value ?? "unknown-plan").trim() || "unknown-plan";
-	const numeric = raw.match(/^(?:plan-)?(\d{1,3})$/i)?.[1];
-	if (numeric) return `plan-${numeric.padStart(3, "0")}`;
-	const prefixed = raw.match(/^(?:plan-)?(\d{1,3})[-_]/i)?.[1];
-	if (prefixed) return `plan-${prefixed.padStart(3, "0")}`;
-	return raw;
+	return normalizeReviewPlan(raw) ?? raw;
 }
 
 function operatorEventFile(cwd: string, planId: string): { file: string; pipelineId: string } {

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, normalizePublicReviewIdentity, runConfiguredProviderAttempts } from './index.ts';
-import { foldReviewHistory, normalizeReviewVerdict } from './review-budget.ts';
+import { foldReviewHistory, normalizeReviewVerdict, validateReviewIdentity } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
 import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
 import { canonicalProjectIdentity } from '../../modules/pidex/analysis-metrics-history/lib/project-key.mjs';
@@ -13,7 +13,12 @@ import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
+const extendedPlanIdentity = { ...identity, runFamilyId: 'family-16725', planId: 'plan-16725', attemptId: 'attempt-16725' };
+assert.equal(validateReviewIdentity(extendedPlanIdentity).ok, true);
+assert.equal(validateReviewIdentity({ ...extendedPlanIdentity, planId: `plan-${'1'.repeat(40)}` }).ok, true, '40-digit canonical plan is valid');
+for (const planId of ['plan-', 'plan-alpha', 'plan-ABC', 'plan-1a', 'plan-1/2', 'plan-1 2', `plan-${'1'.repeat(41)}`]) assert.equal(validateReviewIdentity({ ...extendedPlanIdentity, planId }).ok, false, `${planId} must remain invalid`);
 assert.deepEqual(normalizePublicReviewIdentity({ agent: 'pidex-code-reviewer', reviewIdentity: identity }), { agent: 'pidex-code-reviewer', ...identity });
+assert.deepEqual(normalizePublicReviewIdentity({ agent: 'pidex-code-reviewer', reviewIdentity: extendedPlanIdentity }), { agent: 'pidex-code-reviewer', ...extendedPlanIdentity });
 assert.deepEqual(normalizePublicReviewIdentity({ agent: 'pidex-planner' }), { agent: 'pidex-planner' });
 assert.throws(() => normalizePublicReviewIdentity({ reviewIdentity: { planId: 'plan-038' } }), /REVIEW_IDENTITY_INVALID/);
 assert.throws(() => normalizePublicReviewIdentity({ planId: 'plan-038', reviewIdentity: identity }), /REVIEW_IDENTITY_INVALID/);
@@ -32,7 +37,7 @@ const ordinaryAttempts = [];
 await runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex', retrySameProvider: true, fallbackEnabled: true }, async (provider, fallbackFrom) => { ordinaryAttempts.push([provider, fallbackFrom]); return invalidCompletion({ provider }); });
 assert.deepEqual(ordinaryAttempts, [['pi', undefined], ['pi', 'pi'], ['codex', 'pi']], 'ordinary invalid Pi completion retries Pi then configured fallback');
 const eventBase = (stateDir, project) => path.join(stateDir, 'pipeline-events', canonicalProjectIdentity(project).projectKey);
-const bindCurrent = (stateDir, project, pipelineId) => { const base = eventBase(stateDir, project); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, 'plan-038.current'), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(project).canonicalProject, pipeline_id: pipelineId, plan_key: 'plan-038' })}\n`, { flag: 'a' }); };
+const bindCurrent = (stateDir, project, pipelineId, planId = 'plan-038') => { const base = eventBase(stateDir, project); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, `${planId}.current`), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(project).canonicalProject, pipeline_id: pipelineId, plan_key: planId })}\n`, { flag: 'a' }); };
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
 assert.deepEqual(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }), { allowed: true });
 assert.equal(admitReviewDispatch('pidex-implementer', { ...identity, reviewMode: 'initial' }, { status: 'allowed' }).allowed, false);
@@ -175,6 +180,34 @@ try {
 } finally {
   rmSync(lifecycleIoRoot, { recursive: true, force: true });
   rmSync(lifecycleIoProject, { recursive: true, force: true });
+}
+
+const extendedPlanState = mkdtempSync(path.join(os.tmpdir(), 'pidex-extended-plan-state-'));
+const extendedPlanProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-extended-plan-project-'));
+try {
+  const pipelineId = 'family-16725';
+  const contextFile = path.join(extendedPlanProject, 'agents.output', 'review', '16725.md');
+  mkdirSync(path.dirname(contextFile), { recursive: true });
+  writeFileSync(contextFile, '# review evidence\n');
+  bindCurrent(extendedPlanState, extendedPlanProject, pipelineId, 'plan-16725');
+  let extendedPlanChildren = 0;
+  const options = {
+    agentCwd: extendedPlanProject,
+    reviewLifecycle: { stateDir: extendedPlanState, pipelineId },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => {
+      extendedPlanChildren += 1;
+      params.onProcessStarted?.();
+      return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-pi\ncontext_file: agents.output/review/16725.md\n-->', stderr: '' };
+    },
+  };
+  await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 16725 explicit review', ...extendedPlanIdentity }, options);
+  await executeHostAgentBoundary({ agent: 'pidex-critic', task: 'Plan 16725 derived review' }, options);
+  assert.equal(extendedPlanChildren, 2, 'explicit and derived plan-16725 identities must both reach child dispatch');
+} finally {
+  rmSync(extendedPlanState, { recursive: true, force: true });
+  rmSync(extendedPlanProject, { recursive: true, force: true });
 }
 
 const lifecycleState = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-state-'));

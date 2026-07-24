@@ -4,14 +4,14 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { allowedCompletionOutcome, foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
+import { allowedCompletionOutcome, foldReviewHistory, normalizeReviewPlan, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
 import { canonicalProjectIdentity, projectPlanSelectionLock } from '../../lib/project-key.mjs';
 
 const TERMINAL_EVENTS = new Set(['pipeline_completed', 'pipeline_failed', 'pipeline_aborted', 'pipeline_cancelled']);
 
 function rootFromScript() { return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..'); }
 function slug(value, max = 160) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max) || 'unknown'; }
-export function normalizePlan(value) { const s = String(value || '').trim(); let m = s.match(/^(?:plan-)?(\d{1,3})$/i); if (m) return `plan-${m[1].padStart(3, '0')}`; m = s.match(/^(?:plan-)?(\d{1,3})[-_]/i); if (m) return `plan-${m[1].padStart(3, '0')}`; return slug(s || 'unknown-plan', 80); }
+export function normalizePlan(value) { const s = String(value || '').trim(); return normalizeReviewPlan(s) ?? slug(s || 'unknown-plan', 80); }
 function timestampId() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'); }
 function parse(argv) {
   const out = { root: rootFromScript(), stateDir: process.env.RUNNING_PI_STATE_DIR || '', project: '', projectSlug: '', pipelineId: process.env.RUNNING_PI_PIPELINE_ID || '', plan: 'unknown-plan', event: '', status: '', actor: 'orchestrator', message: '', source: 'manual', projectMode: '', testProject: undefined, metadataJson: '' };
