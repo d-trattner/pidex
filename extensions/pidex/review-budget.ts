@@ -1,7 +1,7 @@
 const MODES = ['initial', 'correction1', 'review1', 'correction2', 'review2'];
 const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
-const PLAN = /^plan-\d{1,3}$/;
+const PLAN = /^plan-\d{1,40}$/;
 const GATES = new Set(['critic', 'code-review', 'security', 'qa']);
 const VERDICTS = {
   critic: { APPROVED: 'APPROVED', APPROVED_WITH_COMMENTS: 'APPROVED', REJECTED: 'CHANGES_REQUESTED' },
@@ -10,6 +10,12 @@ const VERDICTS = {
   qa: { COMPLETE: 'APPROVED', FAILED: 'CHANGES_REQUESTED' },
 };
 const CANONICAL_OUTCOMES = new Set(['APPROVED', 'accepted', 'CHANGES_REQUESTED', 'READY_FOR_REVIEW', 'SUBMITTED', 'closed']);
+
+export function normalizeReviewPlan(value) {
+  const raw = String(value ?? '').trim();
+  const digits = raw.match(/^(?:plan-)?(\d{1,40})(?:[-_].*)?$/i)?.[1];
+  return digits ? `plan-${digits.length <= 3 ? digits.padStart(3, '0') : digits}` : null;
+}
 
 function identityFrom(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;

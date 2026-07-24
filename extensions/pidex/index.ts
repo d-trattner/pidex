@@ -8,7 +8,7 @@ import { createGzip, gunzipSync } from "node:zlib";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { foldReviewHistory, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
+import { foldReviewHistory, normalizeReviewPlan, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
 import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 
 type AgentFrontmatter = {
@@ -1923,11 +1923,7 @@ function extractPlanUuid(task: string, finalText = ""): string | undefined {
 
 function normalizePlanKey(value: string | undefined): string {
 	const raw = (value ?? "unknown-plan").trim() || "unknown-plan";
-	const numeric = raw.match(/^(?:plan-)?(\d{1,3})$/i)?.[1];
-	if (numeric) return `plan-${numeric.padStart(3, "0")}`;
-	const prefixed = raw.match(/^(?:plan-)?(\d{1,3})[-_]/i)?.[1];
-	if (prefixed) return `plan-${prefixed.padStart(3, "0")}`;
-	return raw;
+	return normalizeReviewPlan(raw) ?? raw;
 }
 
 function operatorEventFile(cwd: string, planId: string): { file: string; pipelineId: string } {
@@ -3566,7 +3562,11 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		const authority = resolvePlanReviewAuthority({ stateDir: lifecycle.stateDir, project, planId });
 		pipelineId = authority.pipelineId;
 		rows = authority.rows;
-	} catch { throw new Error("REVIEW_IDENTITY_INVALID"); }
+	} catch (error) {
+		if (error instanceof Error && error.message === "REVIEW_HISTORY_INVALID") throw new Error("REVIEW_IDENTITY_INVALID");
+		if (error instanceof Error && /^REVIEW_[A-Z0-9_]+$/.test(error.message)) throw error;
+		throw Object.assign(new Error("REVIEW_LIFECYCLE_UNAVAILABLE"), { cause: error });
+	}
 	const candidates = REVIEW_GATES.flatMap((reviewGate) => REVIEW_MODES.map((reviewMode) => ({ runFamilyId: pipelineId, planId, reviewGate, reviewMode, attemptId: derivedAttemptId(pipelineId, reviewGate, reviewMode) })))
 		.filter((identity) => {
 			if (!reviewAgentMatches(String(params?.agent), identity)) return false;

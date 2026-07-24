@@ -6,10 +6,14 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
-import { recordPipelineEvent, recordReviewCompletion, reserveReviewStart } from './event.mjs';
+import { normalizePlan, recordPipelineEvent, recordReviewCompletion, reserveReviewStart } from './event.mjs';
 import { canonicalProjectIdentity } from '../../lib/project-key.mjs';
 
 const tuple = { runFamilyId: 'family-001', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-001' };
+assert.equal(normalizePlan('16725'), 'plan-16725');
+assert.equal(normalizePlan('plan-16725'), 'plan-16725');
+assert.equal(normalizePlan('16725-feature'), 'plan-16725');
+assert.equal(normalizePlan('plan-16725_feature'), 'plan-16725');
 assert.deepEqual(validateReviewIdentity(tuple), { ok: true, value: tuple });
 assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'other' }).ok, false);
 assert.equal(validateReviewIdentity({ ...tuple, reviewGate: 'security-review' }).ok, false);
@@ -135,6 +139,11 @@ try {
   const lockProof = reserveReviewStart({ stateDir: state, project, pipelineId, identity: lockTuple, start: () => {
     const lockPath = path.join(projectBase, `.review-${lockTuple.planId}-${lockTuple.reviewGate}.lock`);
     lockSeenDuringStart = existsSync(lockPath);
+    const owner = JSON.parse(readFileSync(path.join(lockPath, 'owner.json'), 'utf8'));
+    assert.deepEqual(owner.identity, lockTuple, 'Windows-compatible durable owner write must publish the exact review identity before child start');
+    assert.equal(owner.pid, process.pid);
+    assert.equal(typeof owner.processStart, 'string');
+    assert.ok(owner.processStart.length > 0);
     const currentRows = readFileSync(jsonl, 'utf8');
     assert.match(currentRows, /spawn_entered/);
     assert.doesNotMatch(currentRows, /family-lock[\\s\\S]*spawn_accepted/);
