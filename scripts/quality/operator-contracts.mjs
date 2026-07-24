@@ -8,6 +8,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 export const MUTABLE_OPERATORS = new Set(['OpPreflight', 'OpQualityReview']);
 const STATUSES = new Set(['pending', 'approved', 'rejected', 'superseded']);
 const REASON_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+const DATE_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export const CONTRACTS = {
   OpPreflight: { contract_id: 'operator.OpPreflight.finalized-preflight', required_when: 'post-Phase-2B pipeline_started exists', allowed_decision_types: ['skip_step', 'manual_evidence', 'backfill_evidence'], allowed_skip_reasons: ['continuation-existing-plan', 'already-covered'], resolution_options: ['record finalized OpPreflight', 'record valid OpDecision skip', 'correct expectation contract'] },
@@ -20,7 +21,7 @@ export const CONTRACTS = {
 };
 
 function issue(code, message, index = null) { return { code, message, ...(index == null ? {} : { index }) }; }
-function validDate(value) { return typeof value === 'string' && Number.isFinite(Date.parse(value)); }
+function validDate(value) { return typeof value === 'string' && DATE_TIME_RE.test(value) && Number.isFinite(Date.parse(value)); }
 function patchErrors(row, index) {
   const errors = [];
   const patch = row?.contract_patch;
@@ -32,11 +33,25 @@ function patchErrors(row, index) {
   return errors;
 }
 
+function validateV2Row(row, index, errors) {
+  const allowed = new Set(['timestamp', 'id', 'status', 'operator_type', 'contract_id', 'reason', 'approved_by', 'approved_at', 'effective_from', 'source_decision_id', 'historical_reclassification', 'contract_patch']);
+  if (Object.keys(row).some((key) => !allowed.has(key))) errors.push(issue('CONTRACT_OVERRIDE_ROW_UNKNOWN_KEY', `override ${row.id || index} has unknown key`, index));
+  if (typeof row.id !== 'string' || row.id.length < 1 || row.id.length > 160) errors.push(issue('CONTRACT_OVERRIDE_REQUIRED_FIELD', 'id must contain 1..160 characters', index));
+  if (typeof row.reason !== 'string' || row.reason.length < 1 || row.reason.length > 500) errors.push(issue('CONTRACT_OVERRIDE_REQUIRED_FIELD', 'reason must contain 1..500 characters', index));
+  if (!validDate(row.timestamp)) errors.push(issue('CONTRACT_OVERRIDE_TIMESTAMP_INVALID', 'timestamp must be a valid date-time', index));
+  if (row.source_decision_id != null && (typeof row.source_decision_id !== 'string' || row.source_decision_id.length > 160)) errors.push(issue('CONTRACT_OVERRIDE_SOURCE_INVALID', 'source_decision_id must be null or at most 160 characters', index));
+  if (row.approved_by != null && (typeof row.approved_by !== 'string' || row.approved_by.length < 1 || row.approved_by.length > 120)) errors.push(issue('CONTRACT_OVERRIDE_APPROVAL_INVALID', 'approved_by must contain 1..120 characters', index));
+  for (const field of ['approved_at', 'effective_from']) if (row[field] != null && !validDate(row[field])) errors.push(issue('CONTRACT_OVERRIDE_APPROVAL_INVALID', `${field} must be a valid date-time`, index));
+  if (row.historical_reclassification !== 'future-only') errors.push(issue('CONTRACT_OVERRIDE_HISTORY_INVALID', 'historical_reclassification must be future-only', index));
+  if (row.status === 'approved' && (typeof row.approved_by !== 'string' || !validDate(row.approved_at) || !validDate(row.effective_from))) errors.push(issue('CONTRACT_OVERRIDE_APPROVAL_INVALID', 'approved override requires approved_by and valid approved_at/effective_from', index));
+}
+
 export function analyzeContractOverrides(parsed) {
   const errors = []; const diagnostics = [];
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { errors: [issue('CONTRACT_OVERRIDE_FILE_INVALID', 'override file must be an object')], diagnostics };
   if (![1, 2].includes(parsed.version)) errors.push(issue('CONTRACT_OVERRIDE_VERSION_UNSUPPORTED', 'version must be 1 or 2'));
   if (!Array.isArray(parsed.overrides)) errors.push(issue('CONTRACT_OVERRIDE_ROWS_INVALID', 'overrides must be an array'));
+  if (Array.isArray(parsed.overrides) && parsed.version === 2 && parsed.overrides.length > 100) errors.push(issue('CONTRACT_OVERRIDE_ROWS_INVALID', 'version 2 permits at most 100 overrides'));
   if (Object.keys(parsed).some((key) => !['version', 'overrides'].includes(key))) errors.push(issue('CONTRACT_OVERRIDE_FILE_UNKNOWN_KEY', 'unknown top-level key'));
   for (const [index, row] of (Array.isArray(parsed.overrides) ? parsed.overrides : []).entries()) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) { errors.push(issue('CONTRACT_OVERRIDE_ROW_INVALID', 'override must be an object', index)); continue; }
@@ -45,18 +60,11 @@ export function analyzeContractOverrides(parsed) {
     const base = CONTRACTS[row.operator_type];
     if (!base || !MUTABLE_OPERATORS.has(row.operator_type)) errors.push(issue('CONTRACT_OVERRIDE_OPERATOR_UNSUPPORTED', `unsupported operator ${row.operator_type}`, index));
     else if (row.contract_id !== base.contract_id) errors.push(issue('CONTRACT_OVERRIDE_CONTRACT_MISMATCH', `contract_id does not match ${row.operator_type}`, index));
-    if (row.status === 'approved') {
-      if (!row.approved_by || !validDate(row.approved_at) || !validDate(row.effective_from)) errors.push(issue('CONTRACT_OVERRIDE_APPROVAL_INVALID', 'approved override requires approved_by and valid approved_at/effective_from', index));
-      if (row.historical_reclassification !== 'future-only') errors.push(issue('CONTRACT_OVERRIDE_HISTORY_INVALID', 'historical_reclassification must be future-only', index));
-    }
+    if (parsed.version === 1 && row.status === 'approved' && (!row.approved_by || !validDate(row.approved_at) || !validDate(row.effective_from))) errors.push(issue('CONTRACT_OVERRIDE_APPROVAL_INVALID', 'approved override requires approved_by and valid approved_at/effective_from', index));
     const unsupportedV1 = parsed.version === 1 && row.contract_patch && Object.keys(row.contract_patch).some((key) => key !== 'allowed_skip_reasons');
-    if (unsupportedV1 && row.status === 'approved' && base && row.contract_id === base.contract_id) diagnostics.push(issue('CONTRACT_OVERRIDE_V1_QUARANTINED', `v1 override ${row.id} quarantined unsupported keys: ${Object.keys(row.contract_patch).join(',')}`, index));
+    if (unsupportedV1 && row.status === 'approved' && base && row.contract_id === base.contract_id) diagnostics.push(issue('CONTRACT_OVERRIDE_V1_QUARANTINED', `v1 override ${row.id} operator ${row.operator_type} quarantined unsupported keys: ${Object.keys(row.contract_patch).join(',')}`, index));
     else errors.push(...patchErrors(row, index));
-    if (parsed.version === 2) {
-      const allowed = new Set(['timestamp', 'id', 'status', 'operator_type', 'contract_id', 'reason', 'approved_by', 'approved_at', 'effective_from', 'source_decision_id', 'historical_reclassification', 'contract_patch']);
-      if (Object.keys(row).some((key) => !allowed.has(key))) errors.push(issue('CONTRACT_OVERRIDE_ROW_UNKNOWN_KEY', `override ${row.id || index} has unknown key`, index));
-      if (!row.reason) errors.push(issue('CONTRACT_OVERRIDE_REQUIRED_FIELD', 'reason is required', index));
-    }
+    if (parsed.version === 2) validateV2Row(row, index, errors);
   }
   return { errors, diagnostics };
 }

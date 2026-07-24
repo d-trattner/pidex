@@ -20,6 +20,11 @@ try {
   const propose = run(['propose', '--id', 'corr-1', '--operator-type', 'OpQualityReview', '--change-type', 'allowed_skip_reasons', '--new-value', reasons, '--reason', 'manual imports need explicit skip']);
   assert.equal(propose.status, 0, propose.stderr || propose.stdout);
   assert.equal(JSON.parse(propose.stdout).correction.status, 'pending');
+  const ledgerBeforeBadDate = readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8');
+  const badDate = run(['approve', '--id', 'corr-1', '--approved-by', 'operator', '--effective-from', 'not-a-date']);
+  assert.equal(badDate.status, 1);
+  assert.match(badDate.stderr, /CONTRACT_OVERRIDE_APPROVAL_INVALID/);
+  assert.equal(readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8'), ledgerBeforeBadDate);
 
   const approve = run(['approve', '--id', 'corr-1', '--approved-by', 'operator', '--effective-from', '2026-01-01T00:00:00Z']);
   assert.equal(approve.status, 0, approve.stderr || approve.stdout);
@@ -38,6 +43,18 @@ try {
   assert.equal(rows.at(-1).monitoring_status, 'inconclusive');
   assert.equal(rows.at(-1).operator_type, 'OpQualityReview');
   assert.equal(rows.at(-1).contract_id, CONTRACTS.OpQualityReview.contract_id);
+
+  const propose2 = run(['propose', '--id', 'corr-2', '--operator-type', 'OpQualityReview', '--change-type', 'allowed_skip_reasons', '--new-value', reasons, '--reason', 'malformed local test']);
+  assert.equal(propose2.status, 0, propose2.stderr || propose2.stdout);
+  const localPath = path.join(tmp, 'config/operator-contracts.local.json');
+  writeFileSync(localPath, '{bad json\n');
+  const malformedBefore = readFileSync(localPath, 'utf8');
+  const ledgerBeforeMalformed = readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8');
+  const malformed = run(['approve', '--id', 'corr-2', '--approved-by', 'operator', '--effective-from', 'now']);
+  assert.equal(malformed.status, 1);
+  assert.match(malformed.stderr, /CONTRACT_OVERRIDE_JSON_INVALID/);
+  assert.equal(readFileSync(localPath, 'utf8'), malformedBefore);
+  assert.equal(readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8'), ledgerBeforeMalformed);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
   resetContractCache();

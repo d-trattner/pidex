@@ -10,7 +10,7 @@
       "maxItems": 100,
       "items": {
         "type": "object",
-        "required": ["id", "status", "operator_type", "contract_id", "reason", "contract_patch", "historical_reclassification"],
+        "required": ["timestamp", "id", "status", "operator_type", "contract_id", "reason", "contract_patch", "historical_reclassification"],
         "properties": {
           "timestamp": { "type": "string", "format": "date-time" },
           "id": { "type": "string", "minLength": 1, "maxLength": 160 },
@@ -21,7 +21,7 @@
           "approved_by": { "type": "string", "minLength": 1, "maxLength": 120 },
           "approved_at": { "type": "string", "format": "date-time" },
           "effective_from": { "type": "string", "format": "date-time" },
-          "source_decision_id": { "type": ["string", "null"] },
+          "source_decision_id": { "type": ["string", "null"], "maxLength": 160 },
           "historical_reclassification": { "const": "future-only" },
           "contract_patch": {
             "type": "object",
@@ -43,6 +43,14 @@
           {
             "if": { "properties": { "status": { "const": "approved" } } },
             "then": { "required": ["approved_by", "approved_at", "effective_from"] }
+          },
+          {
+            "if": { "properties": { "operator_type": { "const": "OpPreflight" } } },
+            "then": { "properties": { "contract_id": { "const": "operator.OpPreflight.finalized-preflight" } } }
+          },
+          {
+            "if": { "properties": { "operator_type": { "const": "OpQualityReview" } } },
+            "then": { "properties": { "contract_id": { "const": "operator.OpQualityReview.terminal-pdq" } } }
           }
         ]
       }

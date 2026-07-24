@@ -2,6 +2,5 @@
   "$schema": "https://pidex.dev/contract-governor.schema.json",
   "version": 2,
   "capability": "manual-pending-only",
-  "timeout_seconds": 60,
   "max_proposals_per_run": 5
 }

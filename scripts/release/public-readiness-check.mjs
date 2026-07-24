@@ -92,7 +92,6 @@ if (cmd === 'tracked-clean') {
     const forbidden = ['enabled', 'background', 'mode', 'hot_mode', 'auto_apply', 'agent_enabled', 'model', 'escalation_model', 'effort', 'max_cost_usd_per_run', 'monitoring_window_reports'].filter((key) => Object.hasOwn(governor, key));
     if (forbidden.length) fail(`contract governor public config contains unsupported automation fields: ${forbidden.join(', ')}`);
     if (!Number.isInteger(governor.max_proposals_per_run) || governor.max_proposals_per_run < 1 || governor.max_proposals_per_run > 20) fail('contract governor max_proposals_per_run must be 1..20');
-    if (!Number.isInteger(governor.timeout_seconds) || governor.timeout_seconds < 10 || governor.timeout_seconds > 600) fail('contract governor timeout_seconds must be 10..600');
   }
 
   const file = 'config/parallel-agents.json';

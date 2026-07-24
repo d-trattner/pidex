@@ -31,7 +31,6 @@ Its public contract is:
 {
   "version": 2,
   "capability": "manual-pending-only",
-  "timeout_seconds": 60,
   "max_proposals_per_run": 5
 }
 ```

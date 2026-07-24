@@ -15,11 +15,17 @@ function run(args = [], env = {}) { return spawnSync(process.execPath, [script, 
 try {
   mkdirSync(path.join(tmp, 'config'), { recursive: true });
   mkdirSync(project, { recursive: true });
-  writeFileSync(path.join(tmp, 'config/contract-governor.json'), JSON.stringify({ version: 2, capability: 'manual-pending-only', timeout_seconds: 60, max_proposals_per_run: 5 }));
+  writeFileSync(path.join(tmp, 'config/contract-governor.json'), JSON.stringify({ version: 2, capability: 'manual-pending-only', max_proposals_per_run: 5 }));
   const reportFile = path.join(tmp, 'report.json');
   writeFileSync(reportFile, JSON.stringify({ generated_at: '2026-01-01T00:00:00Z', project_path: project, summary: { operator_trace: { findings: [] } } }));
   mkdirSync(path.join(tmp, 'state/orchestrator-events/test'), { recursive: true });
   writeFileSync(path.join(tmp, 'state/orchestrator-events/test/events.jsonl'), [1, 2].map((n) => JSON.stringify({ timestamp: `2026-01-01T00:00:0${n}Z`, project_path: project, operator_type: 'OpDecision', decision_type: 'skip_step', target_operator: 'OpQualityReview', reason: 'manual-terminal-import', confidence: 'high', plan_key: `plan-00${n}` })).join('\n') + '\n');
+
+  const localConfig = path.join(tmp, 'config/contract-governor.local.json');
+  writeFileSync(localConfig, '{bad json\n'); const badConfigBytes = readFileSync(localConfig, 'utf8');
+  const badConfig = run(['run', '--report', reportFile]);
+  assert.equal(badConfig.status, 1); assert.equal(JSON.parse(badConfig.stdout).error_code, 'GOVERNOR_CONFIG_INVALID'); assert.equal(readFileSync(localConfig, 'utf8'), badConfigBytes);
+  rmSync(localConfig);
 
   const first = run(['run', '--report', reportFile]);
   assert.equal(first.status, 0, first.stderr || first.stdout);
@@ -32,8 +38,13 @@ try {
   const second = run(['run', '--report', reportFile]);
   assert.equal(second.status, 0, second.stderr || second.stdout);
   assert.equal(JSON.parse(second.stdout).duplicates, 1);
-  const ledger = readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8').trim().split(/\r?\n/);
+  const ledgerPath = path.join(tmp, 'state/quality/contract-corrections.jsonl');
+  const ledgerBytes = readFileSync(ledgerPath, 'utf8'); const ledger = ledgerBytes.trim().split(/\r?\n/);
   assert.equal(ledger.length, 1, 'duplicate pending lifecycle rows are forbidden');
+  writeFileSync(ledgerPath, '{bad json\n'); const malformedLedgerBytes = readFileSync(ledgerPath, 'utf8');
+  const badLedger = run(['run', '--report', reportFile]);
+  assert.equal(badLedger.status, 1); assert.equal(JSON.parse(badLedger.stdout).error_code, 'GOVERNOR_LEDGER_INVALID'); assert.equal(readFileSync(ledgerPath, 'utf8'), malformedLedgerBytes);
+  writeFileSync(ledgerPath, ledgerBytes);
 
   const beforeEntries = readdirSync(path.join(tmp, 'state/quality/contract-governor')).length;
   const unsupported = run(['run', '--report', reportFile], { PIDEX_CONTRACT_GOVERNOR_HOT_MODE: '1' });
@@ -65,6 +76,16 @@ try {
   writeFileSync(meta, JSON.stringify({ token: 'replacement' }));
   assert.equal(owned.release(), false);
   assert.ok(existsSync(path.dirname(meta)), 'token mismatch must preserve lock');
+  rmSync(path.dirname(meta), { recursive: true, force: true });
+
+  for (const [step, mutate] of [
+    ['after-claim', ({ lockDir, claimName }) => writeFileSync(path.join(lockDir, claimName), JSON.stringify({ token: 'replacement' }))],
+    ['before-owner-unlink', ({ lockDir }) => writeFileSync(path.join(lockDir, 'intruder'), 'x')],
+    ['after-owner-unlink', ({ lockDir, claimName }) => writeFileSync(path.join(lockDir, claimName), JSON.stringify({ token: 'replacement' }))],
+  ]) {
+    const raced = acquireGovernorLock(tmp, { onReleaseStep: (current, details) => { if (current === step) mutate(details); } });
+    assert.ok(raced); assert.equal(raced.release(), false, `${step} replacement must fail closed`); assert.ok(existsSync(raced.lockDir)); rmSync(raced.lockDir, { recursive: true, force: true });
+  }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
 }

@@ -121,8 +121,8 @@ test('quality governance is truthful pending-only and settings exposes no automa
   assert.match(qualityText, /cannot approve, apply, delegate, or validate/);
   assert.doesNotMatch(qualityText, /Hot mode active|auto-applied/);
   const apiText = await readFile(join(rootRouteRoot.pathname, 'api/quality/contract-governor.tsx'), 'utf8');
-  assert.match(apiText, /GOVERNOR_CONFIG_READ_ONLY/);
-  assert.match(apiText, /405/);
+  assert.match(apiText, /GET:\s*\(\)\s*=>\s*contractGovernorReadResponse\(\)/);
+  assert.match(apiText, /POST:\s*rejectContractGovernorWrite/);
   assert.doesNotMatch(apiText, /saveContractGovernorLocalConfig/);
 });
 
