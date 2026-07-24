@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Manual pending-only contract-governor runner. No apply, delegate, or validation authority.
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -36,24 +36,26 @@ function config(root) {
 }
 
 export function acquireGovernorLock(root, options = {}) {
-  const lockDir = path.join(path.resolve(root), 'state/quality/contract-governor/.lock'); const token = randomUUID(); const tokenName = `owner-${token}`; const claimName = `release-${token}.json`;
+  const lockDir = path.join(path.resolve(root), 'state/quality/contract-governor/.lock'); const token = randomUUID(); const tokenName = `owner-${token}`; const releaseDir = `${lockDir}.release-${token}`;
   try { mkdirSync(path.dirname(lockDir), { recursive: true }); mkdirSync(lockDir); writeFileSync(path.join(lockDir, tokenName), token, { flag: 'wx' }); writeJson(path.join(lockDir, 'meta.json'), { token, pid: process.pid, acquired_at: new Date().toISOString() }); }
   catch { return null; }
-  const hook = (step) => { if (typeof options.onReleaseStep === 'function') options.onReleaseStep(step, { lockDir, token, tokenName, claimName }); };
-  const exact = (names) => JSON.stringify(readdirSync(lockDir).sort()) === JSON.stringify([...names].sort());
-  const owns = (name) => readFileSync(path.join(lockDir, name), 'utf8').trim() === token;
-  return { token, lockDir, release() { try {
-    if (!exact(['meta.json', tokenName]) || readJsonRequired(path.join(lockDir, 'meta.json'), 'GOVERNOR_LOCK_INVALID')?.token !== token || !owns(tokenName)) return false;
-    hook('before-claim');
-    renameSync(path.join(lockDir, 'meta.json'), path.join(lockDir, claimName));
-    hook('after-claim');
-    if (!exact([claimName, tokenName]) || readJsonRequired(path.join(lockDir, claimName), 'GOVERNOR_LOCK_INVALID')?.token !== token || !owns(tokenName)) return false;
-    hook('before-owner-unlink');
-    if (!exact([claimName, tokenName]) || !owns(tokenName)) return false;
-    unlinkSync(path.join(lockDir, tokenName));
-    hook('after-owner-unlink');
-    if (!exact([claimName]) || readJsonRequired(path.join(lockDir, claimName), 'GOVERNOR_LOCK_INVALID')?.token !== token) return false;
-    unlinkSync(path.join(lockDir, claimName)); rmdirSync(lockDir); return true;
+  const details = { lockDir, releaseDir, token, tokenName };
+  const hook = (step) => { if (typeof options.onReleaseStep === 'function') options.onReleaseStep(step, details); };
+  const exact = (dir, names) => JSON.stringify(readdirSync(dir).sort()) === JSON.stringify([...names].sort());
+  const owns = (dir) => readFileSync(path.join(dir, tokenName), 'utf8').trim() === token && readJsonRequired(path.join(dir, 'meta.json'), 'GOVERNOR_LOCK_INVALID')?.token === token;
+  return { token, lockDir, releaseDir, release() { try {
+    const identity = statSync(lockDir);
+    if (!exact(lockDir, ['meta.json', tokenName]) || !owns(lockDir)) return false;
+    hook('before-directory-claim');
+    renameSync(lockDir, releaseDir);
+    hook('after-directory-claim');
+    const claimed = statSync(releaseDir);
+    if (identity.dev !== claimed.dev || identity.ino !== claimed.ino || !exact(releaseDir, ['meta.json', tokenName]) || !owns(releaseDir)) return false;
+    hook('before-private-cleanup');
+    if (!exact(releaseDir, ['meta.json', tokenName]) || !owns(releaseDir)) return false;
+    unlinkSync(path.join(releaseDir, tokenName));
+    if (!exact(releaseDir, ['meta.json']) || readJsonRequired(path.join(releaseDir, 'meta.json'), 'GOVERNOR_LOCK_INVALID')?.token !== token) return false;
+    unlinkSync(path.join(releaseDir, 'meta.json')); rmdirSync(releaseDir); return true;
   } catch { return false; } } };
 }
 function allDecisions(root, project) { const projectPath = path.resolve(project); return walk(path.join(root, 'state/orchestrator-events')).filter((file) => file.endsWith('.jsonl')).flatMap((file) => readJsonlStrict(file, 'GOVERNOR_EVENT_INVALID')).filter((row) => row.operator_type === 'OpDecision' && path.resolve(String(row.project_path || projectPath)) === projectPath); }

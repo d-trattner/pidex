@@ -78,13 +78,18 @@ try {
   assert.ok(existsSync(path.dirname(meta)), 'token mismatch must preserve lock');
   rmSync(path.dirname(meta), { recursive: true, force: true });
 
+  const swapped = acquireGovernorLock(tmp, { onReleaseStep: (step, { lockDir, tokenName }) => { if (step !== 'before-directory-claim') return; rmSync(lockDir, { recursive: true }); mkdirSync(lockDir); writeFileSync(path.join(lockDir, tokenName), 'replacement'); writeFileSync(path.join(lockDir, 'meta.json'), JSON.stringify({ token: 'replacement' })); } });
+  assert.ok(swapped); assert.equal(swapped.release(), false, 'whole-directory replacement must fail identity check'); assert.ok(existsSync(swapped.releaseDir), 'replacement directory must be preserved'); rmSync(swapped.releaseDir, { recursive: true, force: true });
+
+  const canonicalReplacement = acquireGovernorLock(tmp, { onReleaseStep: (step, { lockDir }) => { if (step !== 'after-directory-claim') return; mkdirSync(lockDir); writeFileSync(path.join(lockDir, 'replacement-owner'), 'replacement'); } });
+  assert.ok(canonicalReplacement); assert.equal(canonicalReplacement.release(), true); assert.ok(existsSync(path.join(canonicalReplacement.lockDir, 'replacement-owner')), 'new canonical owner must remain untouched'); rmSync(canonicalReplacement.lockDir, { recursive: true, force: true });
+
   for (const [step, mutate] of [
-    ['after-claim', ({ lockDir, claimName }) => writeFileSync(path.join(lockDir, claimName), JSON.stringify({ token: 'replacement' }))],
-    ['before-owner-unlink', ({ lockDir }) => writeFileSync(path.join(lockDir, 'intruder'), 'x')],
-    ['after-owner-unlink', ({ lockDir, claimName }) => writeFileSync(path.join(lockDir, claimName), JSON.stringify({ token: 'replacement' }))],
+    ['after-directory-claim', ({ releaseDir }) => writeFileSync(path.join(releaseDir, 'meta.json'), JSON.stringify({ token: 'replacement' }))],
+    ['before-private-cleanup', ({ releaseDir }) => writeFileSync(path.join(releaseDir, 'intruder'), 'x')],
   ]) {
     const raced = acquireGovernorLock(tmp, { onReleaseStep: (current, details) => { if (current === step) mutate(details); } });
-    assert.ok(raced); assert.equal(raced.release(), false, `${step} replacement must fail closed`); assert.ok(existsSync(raced.lockDir)); rmSync(raced.lockDir, { recursive: true, force: true });
+    assert.ok(raced); assert.equal(raced.release(), false, `${step} replacement must fail closed`); assert.ok(existsSync(raced.releaseDir)); rmSync(raced.releaseDir, { recursive: true, force: true });
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
