@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -574,6 +575,175 @@ test('runProjectPipelineOrchestration sanitizes browser smoke evidence when fina
   assert.doesNotMatch(JSON.stringify(result.browser_smoke_results), new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.doesNotMatch(JSON.stringify(result.browser_smoke_results), /state\/project-archives/);
   rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration automatically records one passive terminal tracer exposure', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  mkdirSync(path.join(pidexRoot, 'agents'), { recursive: true });
+  writeFileSync(path.join(pidexRoot, 'agents', 'pidex-alpha.md'), '# Alpha\n');
+  seedRecord(pidexRoot, 'pp-orch-rule-exposure');
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const context = 'agents.output/pidex-planner/artifact.md';
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId: 'pp-orch-rule-exposure', task: 'Plan 045', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false,
+    ruleExposureTracer: () => ({
+      exposure: { exposure_id: 'exposure:public', snapshot_id: 'snapshot:public', quality: 'identity_incomplete', quality_flags: ['identity_incomplete'] },
+      artifacts: { reconciliation_id: 'reconciliation:public', snapshot_id: 'snapshot:public', exposure_id: 'exposure:public', path: '/private/state', root: pidexRoot, private_metadata: { token: 'nope' } },
+    }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.rule_exposure.exposure.usable_for_evidence, false);
+  assert.equal(result.rule_exposure.exposure.quality, 'identity_incomplete');
+  assert.deepEqual(result.rule_exposure.artifacts, { reconciliation_id: 'reconciliation:public', snapshot_id: 'snapshot:public', exposure_id: 'exposure:public' });
+  assert.equal('paths' in result.rule_exposure, false);
+  assert.doesNotMatch(JSON.stringify(result.rule_exposure), new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('runProjectPipelineOrchestration keeps terminal success coherent when passive tracer fails without leaking storage paths', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-tracer-failure');
+  const progress = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const context = 'agents.output/pidex-planner/artifact.md';
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-tracer-failure', task: 'Plan 045', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false, onProgress: ({ message }) => progress.push(message), ruleExposureTracer: () => { throw new Error('disk-full-private-path'); } });
+  const events = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.rule_exposure, { quality: 'recorder_degraded', quality_flags: ['recorder_failure'], usable_for_evidence: false });
+  assert.deepEqual(events.map((event) => event.event_type), ['pipeline_started', 'pipeline_completed']);
+  assert.equal(progress.some((message) => /Project Pipeline complete/.test(message)), true);
+  assert.doesNotMatch(JSON.stringify(result.rule_exposure), new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('C49-3-recorder_degraded keeps completed projection identical across telemetry, progress, and return', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  seedRecord(pidexRoot, 'pp-orch-c49-3-degraded');
+  const progress = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const context = 'agents.output/pidex-planner/artifact.md';
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId: 'pp-orch-c49-3-degraded', task: 'Plan 049', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false,
+    onProgress: (event) => progress.push(event),
+    ruleExposureTracer: () => { throw new Error('private storage failure'); },
+  });
+  const events = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
+  const completed = events.find((event) => event.event_type === 'pipeline_completed');
+  const finalProgress = progress.at(-1);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.rule_exposure, { quality: 'recorder_degraded', quality_flags: ['recorder_failure'], usable_for_evidence: false });
+  assert.deepEqual(completed.metadata.rule_exposure, result.rule_exposure);
+  assert.deepEqual(finalProgress.rule_exposure, result.rule_exposure);
+  assert.doesNotMatch(JSON.stringify([completed, finalProgress, result]), /private storage failure|state\/quality/);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('C49-3-inventory_incomplete preserves exact three-ID projection across completed terminal surfaces', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+  const progress = [];
+  const runner = (args) => {
+    if (args[0] === 'exec' && args.includes('pi')) {
+      const context = 'agents.output/pidex-planner/artifact.md';
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+      writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+      return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+    }
+    return 'ok';
+  };
+  const projection = { reconciliation_id: null, snapshot_id: 'snapshot:public', exposure_id: 'exposure:public' };
+  seedRecord(pidexRoot, 'pp-orch-c49-3-incomplete');
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId: 'pp-orch-c49-3-incomplete', task: 'Plan 049', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false,
+    onProgress: (event) => progress.push(event),
+    ruleExposureTracer: () => ({
+      exposure: { snapshot_id: projection.snapshot_id, exposure_id: projection.exposure_id, quality: 'inventory_incomplete', quality_flags: ['inventory_incomplete'] },
+      artifacts: { ...projection, private_path: path.join(pidexRoot, 'state', 'quality') },
+    }),
+  });
+  const events = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
+  const completed = events.find((event) => event.event_type === 'pipeline_completed');
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.rule_exposure.artifacts, projection);
+  assert.deepEqual(Object.keys(result.rule_exposure.artifacts).sort(), ['exposure_id', 'reconciliation_id', 'snapshot_id']);
+  assert.deepEqual(completed.metadata.rule_exposure, result.rule_exposure);
+  assert.deepEqual(progress.at(-1).rule_exposure, result.rule_exposure);
+  assert.equal(result.rule_exposure.exposure.quality, 'inventory_incomplete');
+  assert.equal(result.rule_exposure.exposure.usable_for_evidence, false);
+  assert.doesNotMatch(JSON.stringify([completed, progress.at(-1), result]), /private_path|state\/quality/);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('C49-3-AUTH-ordinary default terminal path publishes verified manifest authority without a tracer stub', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  const progress = [];
+  try {
+    mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+    mkdirSync(path.join(pidexRoot, 'agents'), { recursive: true });
+    writeFileSync(path.join(pidexRoot, 'agents', 'pidex-alpha.md'), '# Alpha\n');
+    execFileSync('git', ['init', '-q', pidexRoot]);
+    execFileSync('git', ['-C', pidexRoot, 'add', 'agents/pidex-alpha.md']);
+    seedRecord(pidexRoot, 'pp-orch-c49-3-authority');
+    const runner = (args) => {
+      if (args[0] === 'exec' && args.includes('pi')) {
+        const context = 'agents.output/pidex-planner/artifact.md';
+        mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+        writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+        return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+      }
+      return 'ok';
+    };
+    const result = await runProjectPipelineOrchestration({
+      pidexRoot, projectId: 'pp-orch-c49-3-authority', task: 'Plan 049', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false,
+      modelIdentity: 'pi@1', configFingerprint: 'config:1', onProgress: (event) => progress.push(event),
+    });
+    const events = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
+    const completed = events.find((event) => event.event_type === 'pipeline_completed');
+    const bundleRoot = path.join(pidexRoot, 'state', 'quality', 'rule-exposure');
+    const publication = JSON.parse(readFileSync(path.join(bundleRoot, readdirSync(bundleRoot)[0], 'commit-manifest.json'), 'utf8'));
+
+    assert.equal(result.ok, true);
+    assert.equal(result.rule_exposure.exposure.quality, 'complete');
+    assert.equal(result.rule_exposure.exposure.usable_for_evidence, false);
+    assert.deepEqual(Object.keys(result.rule_exposure.artifacts).sort(), ['exposure_id', 'reconciliation_id', 'snapshot_id']);
+    assert.deepEqual(publication.public_ids, result.rule_exposure.artifacts);
+    assert.deepEqual(Object.keys(publication.members).sort(), ['catalog_contribution', 'epoch', 'exposure', 'reconciliation', 'snapshot']);
+    assert.deepEqual(completed.metadata.rule_exposure, result.rule_exposure);
+    assert.deepEqual(progress.at(-1).rule_exposure, result.rule_exposure);
+    assert.equal(existsSync(path.join(pidexRoot, 'state', 'quality', 'publications')), false);
+  } finally { rmSync(pidexRoot, { recursive: true, force: true }); }
 });
 
 test('runProjectPipelineOrchestration omits failed child raw output from public result', async () => {
