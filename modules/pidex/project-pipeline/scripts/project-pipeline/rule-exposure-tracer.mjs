@@ -57,7 +57,7 @@ function publicationIdentity(identity, snapshot, exposure) {
 function publishCompleteBundle({ pidexRoot, identity, reconciliation, snapshot, exposure, epoch }) {
   const publication = publicationIdentity(identity, snapshot, exposure);
   const recovered = recoverPassiveBundle({ root: pidexRoot, identity: publication });
-  if (recovered.state === 'COMMITTED_VERIFIED') return recovered.artifacts;
+  if (recovered.state === 'COMMITTED_VERIFIED' || recovered.state === 'COMMITTED_UNCONFIRMED') return recovered;
   if (recovered.state !== 'ABSENT') throw new Error(recovered.reason === 'RECOVERY_IDENTITY_CONFLICT' ? 'CONFLICT_IDENTITY' : recovered.reason);
   return publishPassiveBundle({
     root: pidexRoot,
@@ -68,6 +68,10 @@ function publishCompleteBundle({ pidexRoot, identity, reconciliation, snapshot, 
     catalog_contribution: { schema: 1, entries: snapshot.active_rules },
     identity: publication,
   });
+}
+
+function publicationArtifacts(publication) {
+  return publication?.artifacts || publication;
 }
 
 export function verifyPlan042Preservation({ root, protectedPaths, operation } = {}) {
@@ -96,8 +100,9 @@ export function traceProjectPipelineExposure({ pidexRoot, run, terminal_outcome_
     reconciliationArtifact: reconciliation,
   });
   const exposure = recordTerminalExposure({ snapshot, terminal_outcome_ref, now: deterministicTerminalTime(identity) });
-  const artifacts = reconciliation
+  const publication = reconciliation
     ? publishCompleteBundle({ pidexRoot, identity, reconciliation, snapshot, exposure, epoch })
-    : { reconciliation_id: null, snapshot_id: snapshot.snapshot_id, exposure_id: exposure.exposure_id };
-  return { inventory, reconciliation, snapshot, exposure, artifacts };
+    : undefined;
+  const artifacts = publicationArtifacts(publication) || { reconciliation_id: null, snapshot_id: snapshot.snapshot_id, exposure_id: exposure.exposure_id };
+  return { inventory, reconciliation, snapshot, exposure, artifacts, publication };
 }

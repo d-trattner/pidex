@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import fs, { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -100,6 +101,38 @@ test('C49-3-IDENTITY-tracer preserves ordered run identity and logical-OR falsy 
 
     assert.equal(result.exposure.timestamp, new Date(milliseconds).toISOString());
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('C49-5 tracer carries Windows unconfirmed durability result and exact public IDs', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-tracer-windows-unconfirmed-'));
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fsync = fs.fsyncSync;
+  try {
+    write(root, 'agents/pidex-alpha.md', '# Alpha\n');
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    fs.fsyncSync = (descriptor) => {
+      if (fs.fstatSync(descriptor).isDirectory()) throw Object.assign(new Error('unsupported parent sync'), { code: 'EPERM' });
+      return fsync(descriptor);
+    };
+    syncBuiltinESMExports();
+
+    const result = traceProjectPipelineExposure({ pidexRoot: root, gitTrackedPaths: ['agents/pidex-alpha.md'], run: { run_id: 'windows-unconfirmed', plan_id: '049', project_scope: 'project-safe', pipeline_version: 'project-pipeline-v1', model_identity: 'pi', config_fingerprint: 'config-v1', correlation_id: 'corr-windows-unconfirmed' }, terminal_outcome_ref: 'complete' });
+
+    const artifacts = {
+      reconciliation_id: result.reconciliation.reconciliation_id,
+      snapshot_id: result.snapshot.snapshot_id,
+      exposure_id: result.exposure.exposure_id,
+    };
+    assert.deepEqual(result.publication, {
+      state: 'COMMITTED_UNCONFIRMED', reason: 'RECOVERY_DURABILITY_UNCONFIRMED', usable: false, parent_sync: 'unsupported', artifacts,
+    });
+    assert.deepEqual(result.artifacts, artifacts);
+  } finally {
+    fs.fsyncSync = fsync;
+    syncBuiltinESMExports();
+    Object.defineProperty(process, 'platform', platform);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('Project Pipeline tracer resolves one canonical-inclusive snapshot and records passive unusable S1 terminal exposure', () => {

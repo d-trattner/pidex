@@ -667,6 +667,43 @@ test('C49-3-recorder_degraded keeps completed projection identical across teleme
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
+test('C49-5 unconfirmed durability preserves terminal success, exact IDs, and degraded unusable projection', async () => {
+  const pidexRoot = tmp();
+  const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  const progress = [];
+  const projection = { reconciliation_id: 'reconciliation:unconfirmed', snapshot_id: 'snapshot:unconfirmed', exposure_id: 'exposure:unconfirmed' };
+  try {
+    mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+    seedRecord(pidexRoot, 'pp-orch-c49-5-unconfirmed');
+    const runner = (args) => {
+      if (args[0] === 'exec' && args.includes('pi')) {
+        const context = 'agents.output/pidex-planner/artifact.md';
+        mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+        writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+        return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->`, stderr: '' };
+      }
+      return 'ok';
+    };
+    const result = await runProjectPipelineOrchestration({
+      pidexRoot, projectId: 'pp-orch-c49-5-unconfirmed', task: 'Plan 049', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false,
+      onProgress: (event) => progress.push(event),
+      ruleExposureTracer: () => ({
+        exposure: { ...projection, quality: 'complete', quality_flags: [], usable_for_evidence: false },
+        artifacts: projection,
+        publication: { state: 'COMMITTED_UNCONFIRMED', reason: 'RECOVERY_DURABILITY_UNCONFIRMED', usable: false, parent_sync: 'unsupported', artifacts: projection },
+      }),
+    });
+    const completed = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events')).find((event) => event.event_type === 'pipeline_completed');
+    const expected = { exposure: { snapshot_id: projection.snapshot_id, exposure_id: projection.exposure_id, quality: 'recorder_degraded', quality_flags: ['durability_unconfirmed'], usable_for_evidence: false }, artifacts: projection };
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.rule_exposure, expected);
+    assert.deepEqual(completed.metadata.rule_exposure, expected);
+    assert.deepEqual(progress.at(-1).rule_exposure, expected);
+    assert.doesNotMatch(JSON.stringify([result, completed, progress.at(-1)]), /TypeError|state\/quality|unsupported parent sync/);
+  } finally { rmSync(pidexRoot, { recursive: true, force: true }); }
+});
+
 test('C49-3-inventory_incomplete preserves exact three-ID projection across completed terminal surfaces', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');

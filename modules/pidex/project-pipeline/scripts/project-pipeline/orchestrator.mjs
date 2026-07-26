@@ -642,12 +642,16 @@ export async function runProjectPipelineOrchestration(options = {}) {
       },
       terminal_outcome_ref: previous?.project_run_id || telemetryPipelineId,
     });
+    const durabilityUnconfirmed = traced.publication?.state === 'COMMITTED_UNCONFIRMED'
+      && traced.publication.reason === 'RECOVERY_DURABILITY_UNCONFIRMED'
+      && traced.publication.usable === false
+      && traced.publication.parent_sync === 'unsupported';
     ruleExposure = {
       exposure: {
         exposure_id: traced.exposure.exposure_id,
         snapshot_id: traced.exposure.snapshot_id,
-        quality: traced.exposure.quality,
-        quality_flags: traced.exposure.quality_flags,
+        quality: durabilityUnconfirmed ? 'recorder_degraded' : traced.exposure.quality,
+        quality_flags: durabilityUnconfirmed ? ['durability_unconfirmed'] : traced.exposure.quality_flags,
         usable_for_evidence: false,
       },
       artifacts: {
