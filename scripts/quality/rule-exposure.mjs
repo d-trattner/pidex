@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 function digest(value) {
@@ -225,14 +225,47 @@ function writeDurable(file, content) {
   }
 }
 
-function syncParent(directory) {
+const WINDOWS_TARGET_FACTS = Object.freeze([
+  'platform_win32', 'probe_root_self_created', 'target_self_created', 'target_root_confined',
+  'target_real_directory', 'target_not_symlink_or_reparse',
+]);
+const WINDOWS_DIRECTORY_SYNC_FACTS = Object.freeze([
+  ...WINDOWS_TARGET_FACTS, 'file_create_write_flush_succeeded', 'same_volume_rename_verify_succeeded',
+  'directory_open_succeeded', 'descriptor_is_directory', 'cleanup_succeeded',
+]);
+const WINDOWS_DESCRIPTOR_FACTS = Object.freeze([...WINDOWS_TARGET_FACTS, 'file_create_write_flush_succeeded', 'directory_open_succeeded', 'descriptor_is_directory']);
+const WINDOWS_DIRECTORY_SYNC_TUPLES = new Map([
+  ['directory_open\0EISDIR', { tuple_id: 'UC-1A', required_facts: WINDOWS_TARGET_FACTS }],
+  ['directory_fsync\0EINVAL', { tuple_id: 'UC-1B', required_facts: WINDOWS_DESCRIPTOR_FACTS }],
+  ['directory_fsync\0ENOTSUP', { tuple_id: 'UC-1B', required_facts: WINDOWS_DESCRIPTOR_FACTS }],
+  ['directory_fsync\0EPERM', { tuple_id: 'UC-1B-WIN', required_facts: WINDOWS_DIRECTORY_SYNC_FACTS }],
+]);
+
+/** Classifies finite UC-1 parent-directory capability observations; every nonmember hard-fails. */
+export function classifyDirectorySyncFailure({ operation, code, platform, facts } = {}) {
+  const tuple = WINDOWS_DIRECTORY_SYNC_TUPLES.get(`${operation}\0${code}`);
+  const admitted = platform === 'win32' && tuple && tuple.required_facts.every((key) => facts?.[key] === true);
+  return admitted
+    ? { classification: 'directory_sync_unsupported', tuple_id: tuple.tuple_id }
+    : { classification: 'operation_failure', tuple_id: null };
+}
+
+function syncParent(directory, operationFacts = {}) {
   let descriptor;
+  let operation = 'directory_open';
+  const facts = { ...operationFacts, platform_win32: process.platform === 'win32' };
   try {
     descriptor = openSync(directory, 'r');
+    facts.directory_open_succeeded = true;
+    operation = 'directory_descriptor';
+    facts.descriptor_is_directory = fstatSync(descriptor).isDirectory();
+    if (!facts.descriptor_is_directory) throw bundleError('RECOVERY_DURABILITY_FAILED');
+    operation = 'directory_fsync';
     fsyncSync(descriptor);
     return 'confirmed';
   } catch (error) {
-    if (['EINVAL', 'ENOTSUP', 'EPERM', 'EISDIR'].includes(error?.code)) return 'unsupported';
+    const result = classifyDirectorySyncFailure({ operation, code: error?.code, platform: process.platform, facts });
+    if (result.classification === 'directory_sync_unsupported') return 'unsupported';
     throw bundleError('RECOVERY_DURABILITY_FAILED');
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
@@ -668,16 +701,27 @@ function recoveryOwnerResult(lock, identity) {
   return reason && { state: reason[0], reason: reason[1], usable: false };
 }
 
+function unconfirmedPublicationResult(artifacts) {
+  return { state: 'COMMITTED_UNCONFIRMED', reason: 'RECOVERY_DURABILITY_UNCONFIRMED', usable: false, parent_sync: 'unsupported', artifacts };
+}
+
+function recoveredUnsupportedPublication(manifest, artifacts) {
+  if (!Number.isInteger(manifest.publisher_process_id) || manifest.publisher_process_id === process.pid) return unconfirmedPublicationResult(artifacts);
+  return { state: 'COMMITTED_VERIFIED', reason: 'RECOVERY_COMMITTED_REVERIFIED', usable: true, parent_sync: 'unsupported', artifacts };
+}
+
+function verifiedManifestResult(publicationRoot, identity, manifest) {
+  const artifacts = verifyManifest(publicationRoot, manifest, identity);
+  return manifest.durability?.parent_sync === 'unsupported'
+    ? recoveredUnsupportedPublication(manifest, artifacts)
+    : { state: 'COMMITTED_VERIFIED', reason: 'RECOVERY_COMMITTED_VERIFIED', usable: true, artifacts };
+}
+
 function recoveryManifestResult(publicationRoot, identity) {
-  const manifest = path.join(publicationRoot, 'commit-manifest.json');
-  if (!existsSync(manifest)) return undefined;
-  try {
-    const artifacts = verifyManifest(publicationRoot, readManifest(manifest), identity);
-    return { state: 'COMMITTED_VERIFIED', reason: 'RECOVERY_COMMITTED_VERIFIED', usable: true, artifacts };
-  } catch (error) {
-    if (error?.code === 'CONFLICT_IDENTITY') return { state: 'CONFLICT', reason: 'RECOVERY_IDENTITY_CONFLICT', usable: false };
-    return undefined;
-  }
+  const manifestFile = path.join(publicationRoot, 'commit-manifest.json');
+  if (!existsSync(manifestFile)) return undefined;
+  try { return verifiedManifestResult(publicationRoot, identity, readManifest(manifestFile)); }
+  catch (error) { return error?.code === 'CONFLICT_IDENTITY' ? { state: 'CONFLICT', reason: 'RECOVERY_IDENTITY_CONFLICT', usable: false } : undefined; }
 }
 
 function stagedGeneration(publicationRoot) {
@@ -724,24 +768,50 @@ function publishBundleMember(stage, members, generation, input, name) {
   const staged = path.join(stage, `${name}.stage`);
   writeDurable(temp, content);
   renameSync(temp, staged);
-  syncParent(stage);
+  if (process.platform !== 'win32') syncParent(stage);
   renameSync(staged, path.join(members, `${name}.json`));
-  syncParent(members);
+  if (process.platform !== 'win32') syncParent(members);
   return { digest: bundleDigest(content) };
 }
 
 function publishBundleMembers(stage, members, generation, input) {
   const hashes = {};
   for (const name of BUNDLE_MEMBERS) hashes[name] = publishBundleMember(stage, members, generation, input, name);
-  return hashes;
+  return { hashes, file_create_write_flush_succeeded: Object.keys(hashes).length === BUNDLE_MEMBERS.length };
 }
 
-function publishBundleManifest(root, stage, generation, input, members) {
-  const manifest = { schema: 1, generation, identity: input.identity, public_ids: publicIds(input), members, durability: { parent_sync: 'confirmed' } };
+function completeMemberPublication(root, generation, identity, members) {
+  return BUNDLE_MEMBERS.every((member) => verifiedManifestMember(root, { generation, identity, members }, identity, member));
+}
+
+function windowsDirectorySyncFacts(root, stage, generation, input, members, rootCreated, fileCreateWriteFlushSucceeded) {
+  let target;
+  try { target = lstatSync(root); } catch { return {}; }
+  let probeRoot;
+  let targetPath;
+  try {
+    probeRoot = realpathSync(root);
+    targetPath = realpathSync(root);
+  } catch { return {}; }
+  const relativeTarget = path.relative(probeRoot, targetPath);
+  return {
+    probe_root_self_created: rootCreated,
+    target_self_created: rootCreated,
+    target_root_confined: !relativeTarget.startsWith(`..${path.sep}`) && relativeTarget !== '..' && !path.isAbsolute(relativeTarget),
+    target_real_directory: target.isDirectory(),
+    target_not_symlink_or_reparse: !target.isSymbolicLink(),
+    file_create_write_flush_succeeded: fileCreateWriteFlushSucceeded,
+    same_volume_rename_verify_succeeded: completeMemberPublication(root, generation, input.identity, members),
+    cleanup_succeeded: !readdirSync(stage).some((name) => name.endsWith('.tmp') || name.endsWith('.stage')),
+  };
+}
+
+function publishBundleManifest(root, stage, generation, input, members, parentSync) {
+  const manifest = { schema: 1, generation, identity: input.identity, public_ids: publicIds(input), members, durability: { parent_sync: parentSync }, publisher_process_id: process.pid };
   const temporary = path.join(stage, 'commit-manifest.tmp');
   writeDurable(temporary, `${canonical(manifest)}\n`);
   renameSync(temporary, path.join(root, 'commit-manifest.json'));
-  if (syncParent(root) !== 'confirmed') throw bundleError('RECOVERY_DURABILITY_UNCONFIRMED');
+  if (parentSync === 'confirmed' && syncParent(root) !== 'confirmed') throw bundleError('RECOVERY_DURABILITY_FAILED');
   return manifest;
 }
 
@@ -750,28 +820,45 @@ function releaseOwnershipLock(lock, descriptor) {
   try { rmSync(lock, { force: true }); } catch { /* lock residue becomes recovery input */ }
 }
 
-export function publishPassiveBundle(input = {}) {
-  assertBundleInput(input);
-  const root = bundleRoot(input.root, input.identity);
-  mkdirSync(root, { recursive: true, mode: 0o700 });
-  const existing = existingPublication(root, input.identity);
-  if (existing) return existing;
+function existingBundleResult(root, identity) {
+  const existing = existingPublication(root, identity);
+  if (!existing) return undefined;
+  return readManifest(path.join(root, 'commit-manifest.json')).durability?.parent_sync === 'unsupported'
+    ? recoverExistingPublication(root, identity)
+    : existing;
+}
+
+function publishNewBundle(root, input, rootCreated) {
   const lock = path.join(root, '.lock');
   const lockFd = acquireOwnershipLock(root, lock, input.identity);
-  if (lockFd === null) return existingPublication(root, input.identity);
+  if (lockFd === null) return existingBundleResult(root, input.identity);
   try {
-    const replay = existingPublication(root, input.identity);
+    const replay = existingBundleResult(root, input.identity);
     if (replay) return replay;
     const generation = randomUUID().replaceAll('-', '');
     const stage = path.join(root, '.staging', generation);
     const members = path.join(root, 'members');
     mkdirSync(stage, { recursive: true, mode: 0o700 });
     mkdirSync(members, { recursive: true, mode: 0o700 });
-    const memberHashes = publishBundleMembers(stage, members, generation, input);
-    return verifyManifest(root, publishBundleManifest(root, stage, generation, input, memberHashes), input.identity);
+    const memberPublication = publishBundleMembers(stage, members, generation, input);
+    const memberHashes = memberPublication.hashes;
+    const parentSync = process.platform === 'win32'
+      ? syncParent(root, windowsDirectorySyncFacts(root, stage, generation, input, memberHashes, rootCreated, memberPublication.file_create_write_flush_succeeded))
+      : 'confirmed';
+    const artifacts = verifyManifest(root, publishBundleManifest(root, stage, generation, input, memberHashes, parentSync), input.identity);
+    if (parentSync !== 'unsupported') return artifacts;
+    return unconfirmedPublicationResult(artifacts);
   } finally {
     releaseOwnershipLock(lock, lockFd);
   }
+}
+
+export function publishPassiveBundle(input = {}) {
+  assertBundleInput(input);
+  const root = bundleRoot(input.root, input.identity);
+  const rootCreated = !existsSync(root);
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  return existingBundleResult(root, input.identity) || publishNewBundle(root, input, rootCreated);
 }
 
 const TERMINAL_EXPOSURE_INPUT_KEYS = new Set(['snapshot', 'terminal_outcome_ref', 'now', 'measurement']);

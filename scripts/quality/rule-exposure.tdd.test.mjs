@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { classifyRecoveryObservation, createActivationEpochCatalog, createPassiveQuality, faultBoundaryCensus, loadActivationEpochCatalog, publicationFaultLedger, proveRecoveryObservationPartition, publishPassiveBundle, publishRuleSnapshot, recoverPassiveBundle, recoveryFaultLedger, recordTerminalExposure, saveActivationEpochCatalog, transitionActivationEpoch } from './rule-exposure.mjs';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { classifyDirectorySyncFailure, classifyRecoveryObservation, createActivationEpochCatalog, createPassiveQuality, faultBoundaryCensus, loadActivationEpochCatalog, publicationFaultLedger, proveRecoveryObservationPartition, publishPassiveBundle, publishRuleSnapshot, recoverPassiveBundle, recoveryFaultLedger, recordTerminalExposure, saveActivationEpochCatalog, transitionActivationEpoch } from './rule-exposure.mjs';
+import fs, { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -144,7 +145,51 @@ test('persists activation epoch catalog only to caller-selected state path', () 
   }
 });
 
-test('publishes only a manifest-last verified bundle and exact replay returns three opaque IDs', () => {
+test('UC-1 admits only exact Windows directory-fsync EPERM conjunction and hard-fails complement', () => {
+  const facts = {
+    platform_win32: true,
+    probe_root_self_created: true,
+    target_self_created: true,
+    target_root_confined: true,
+    target_real_directory: true,
+    target_not_symlink_or_reparse: true,
+    file_create_write_flush_succeeded: true,
+    same_volume_rename_verify_succeeded: true,
+    directory_open_succeeded: true,
+    descriptor_is_directory: true,
+    cleanup_succeeded: true,
+  };
+  assert.deepEqual(classifyDirectorySyncFailure({ operation: 'directory_open', code: 'EISDIR', platform: 'win32', facts }), { classification: 'directory_sync_unsupported', tuple_id: 'UC-1A' });
+  assert.deepEqual(classifyDirectorySyncFailure({ operation: 'directory_fsync', code: 'EINVAL', platform: 'win32', facts }), { classification: 'directory_sync_unsupported', tuple_id: 'UC-1B' });
+  assert.deepEqual(classifyDirectorySyncFailure({ operation: 'directory_fsync', code: 'ENOTSUP', platform: 'win32', facts }), { classification: 'directory_sync_unsupported', tuple_id: 'UC-1B' });
+  assert.deepEqual(classifyDirectorySyncFailure({ operation: 'directory_fsync', code: 'EPERM', platform: 'win32', facts }), { classification: 'directory_sync_unsupported', tuple_id: 'UC-1B-WIN' });
+
+  const targetFacts = Object.fromEntries([
+    'platform_win32', 'probe_root_self_created', 'target_self_created', 'target_root_confined',
+    'target_real_directory', 'target_not_symlink_or_reparse',
+  ].map((key) => [key, true]));
+  assert.deepEqual(classifyDirectorySyncFailure({ operation: 'directory_open', code: 'EISDIR', platform: 'win32', facts: targetFacts }), { classification: 'directory_sync_unsupported', tuple_id: 'UC-1A' });
+  assert.deepEqual(classifyDirectorySyncFailure({ operation: 'directory_fsync', code: 'EINVAL', platform: 'win32', facts: { ...targetFacts, file_create_write_flush_succeeded: true, directory_open_succeeded: true, descriptor_is_directory: true } }), { classification: 'directory_sync_unsupported', tuple_id: 'UC-1B' });
+
+  const nonmembers = [
+    { operation: 'file_fsync' }, { operation: 'directory_open' }, { code: 'EACCES' }, { code: 'EIO' },
+    { code: 'EBADF' }, { code: 'ENOENT' }, { code: undefined }, { operation: undefined }, { platform: 'linux' },
+    { facts: { ...facts, target_self_created: false } },
+    ...Object.keys(facts).flatMap((key) => [
+      { facts: { ...facts, [key]: false } },
+      { facts: Object.fromEntries(Object.entries(facts).filter(([present]) => present !== key)) },
+    ]),
+  ];
+  for (const delta of nonmembers) {
+    assert.deepEqual(
+      classifyDirectorySyncFailure({ operation: 'directory_fsync', code: 'EPERM', platform: 'win32', facts, ...delta }),
+      { classification: 'operation_failure', tuple_id: null },
+      JSON.stringify(delta),
+    );
+  }
+});
+
+test('supported POSIX publication stays verified and exact replay returns three opaque IDs', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-bundle-'));
   try {
     const input = {
@@ -175,6 +220,96 @@ test('publishes only a manifest-last verified bundle and exact replay returns th
   }
 });
 
+test('Windows UC-1B-WIN publication stays unconfirmed in publisher and re-verifies only in fresh process', async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-windows-'));
+  const identity = { run_id: 'windows-run', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
+  const input = {
+    root,
+    reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)) },
+    snapshot: { schema: 1, snapshot_id: identity.snapshot_id, reconciliation_revision: 'recon-v1' },
+    exposure: { schema: 1, exposure_id: identity.exposure_id, snapshot_id: identity.snapshot_id },
+    epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity,
+  };
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fsync = fs.fsyncSync;
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    fs.fsyncSync = (descriptor) => {
+      if (fs.fstatSync(descriptor).isDirectory()) {
+        const error = new Error('Windows parent directory sync unsupported');
+        error.code = 'EPERM';
+        throw error;
+      }
+      return fsync(descriptor);
+    };
+    syncBuiltinESMExports();
+
+    const expected = {
+      state: 'COMMITTED_UNCONFIRMED', reason: 'RECOVERY_DURABILITY_UNCONFIRMED', usable: false,
+      parent_sync: 'unsupported', artifacts: {
+        reconciliation_id: input.reconciliation.reconciliation_id,
+        snapshot_id: input.snapshot.snapshot_id,
+        exposure_id: input.exposure.exposure_id,
+      },
+    };
+    assert.deepEqual(publishPassiveBundle(input), expected);
+    assert.deepEqual(publishPassiveBundle(input), expected, 'same-process replay remains unconfirmed');
+    assert.deepEqual(recoverPassiveBundle({ root, identity }), expected, 'same-process recovery remains unconfirmed');
+    const source = pathToFileURL(path.resolve('scripts/quality/rule-exposure.mjs')).href;
+    const reloaded = await import(`${source}?same-process-reentry=${Date.now()}`);
+    assert.deepEqual(reloaded.recoverPassiveBundle({ root, identity }), expected, 'cache-busted module re-entry is still publisher process');
+    const child = await new Promise((resolve) => {
+      const childProcess = spawn(process.execPath, ['--input-type=module', '--eval', `import { recoverPassiveBundle } from ${JSON.stringify(source)}; console.log(JSON.stringify(recoverPassiveBundle(JSON.parse(process.argv[1]))));`, JSON.stringify({ root, identity })]);
+      let output = '';
+      childProcess.stdout.on('data', (chunk) => { output += chunk; });
+      childProcess.on('close', (status) => resolve({ status, output }));
+    });
+    assert.equal(child.status, 0);
+    assert.deepEqual(JSON.parse(child.output), { state: 'COMMITTED_VERIFIED', reason: 'RECOVERY_COMMITTED_REVERIFIED', usable: true, parent_sync: 'unsupported', artifacts: expected.artifacts });
+  } finally {
+    fs.fsyncSync = fsync;
+    syncBuiltinESMExports();
+    Object.defineProperty(process, 'platform', platform);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects EPERM when live directory-descriptor proof cannot be observed', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-windows-unproved-'));
+  const identity = { run_id: 'windows-unproved', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
+  const input = {
+    root,
+    reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)) },
+    snapshot: { schema: 1, snapshot_id: identity.snapshot_id, reconciliation_revision: 'recon-v1' },
+    exposure: { schema: 1, exposure_id: identity.exposure_id, snapshot_id: identity.snapshot_id },
+    epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity,
+  };
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fsync = fs.fsyncSync;
+  const fstat = fs.fstatSync;
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    fs.fsyncSync = (descriptor) => {
+      if (fstat(descriptor).isDirectory()) {
+        const error = new Error('Windows parent directory sync unsupported');
+        error.code = 'EPERM';
+        throw error;
+      }
+      return fsync(descriptor);
+    };
+    fs.fstatSync = () => { throw Object.assign(new Error('descriptor unproved'), { code: 'EIO' }); };
+    syncBuiltinESMExports();
+
+    assert.throws(() => publishPassiveBundle(input), /RECOVERY_DURABILITY_FAILED/);
+  } finally {
+    fs.fsyncSync = fsync;
+    fs.fstatSync = fstat;
+    syncBuiltinESMExports();
+    Object.defineProperty(process, 'platform', platform);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('recovery classifies torn manifest residue as unusable incomplete generation', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-torn-manifest-'));
   try {
@@ -191,6 +326,8 @@ test('recovery classifies torn manifest residue as unusable incomplete generatio
 test('Q49-V1 keeps all six passive quality facts orthogonal and globally unusable before S2', () => {
   const quality = createPassiveQuality({ completeness: 'complete', derivation: 'direct', recorder_condition: 'healthy', currency: 'current', run_provenance: 'ordinary', occurrence: 'original' });
   assert.deepEqual(quality, { completeness: 'complete', derivation: 'direct', recorder_condition: 'healthy', currency: 'current', run_provenance: 'ordinary', occurrence: 'original', usable_for_evidence: false });
+  const durabilityUnconfirmed = createPassiveQuality({ completeness: 'complete', derivation: 'direct', recorder_condition: 'degraded', currency: 'current', run_provenance: 'ordinary', occurrence: 'original' });
+  assert.deepEqual(durabilityUnconfirmed, { completeness: 'complete', derivation: 'direct', recorder_condition: 'degraded', currency: 'current', run_provenance: 'ordinary', occurrence: 'original', usable_for_evidence: false });
   assert.throws(() => createPassiveQuality({ completeness: 'complete', derivation: 'direct', recorder_condition: 'healthy', currency: 'current', run_provenance: 'ordinary', occurrence: 'inferred' }), /PASSIVE_QUALITY_INVALID/);
 });
 
