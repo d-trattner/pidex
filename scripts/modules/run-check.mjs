@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { allCapabilities, appendJsonLine, capabilityAvailability, evidencePath, loadModuleSystem, parseArgs, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { allCapabilities, appendJsonLine, capabilityAvailability, evidencePath, loadModuleSystem, parseArgs, scriptPidexRoot, trackedSnapshotMatches, validateNodeTestFixedRuntime, validateProjectPath, validateSystem } from './lib.mjs';
 
 const rawArgv = process.argv.slice(2);
 const passthroughSeparator = rawArgv.indexOf('--');
@@ -133,9 +133,27 @@ const execArgs = command.args.map((arg) => String(arg).replaceAll('__PIDEX_PROJE
 const executedArgs = [...execArgs, ...passthroughArgs];
 const redactedPassthroughArgs = redactArgs(passthroughArgs);
 const redactedExecutedArgs = [...execArgs, ...redactedPassthroughArgs];
-const proc = spawnSync(command.bin, executedArgs, { cwd: pidexRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+let runtimeError = '';
+let proc;
+if (command.validation_profile === 'node-test-fixed-v1') {
+  const preflight = validateNodeTestFixedRuntime(project, command);
+  if (preflight.error) {
+    runtimeError = preflight.error;
+    proc = { status: 1, signal: null, stdout: '', stderr: `${runtimeError}\n` };
+  } else {
+    const preflightHead = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: preflight.root, encoding: 'utf8' }).trim();
+    const childEnv = { ...process.env };
+    delete childEnv.NODE_TEST_CONTEXT;
+    proc = spawnSync(process.execPath, execArgs, { cwd: preflight.root, shell: false, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: childEnv });
+    const postflight = validateNodeTestFixedRuntime(project, command);
+    const postflightHead = postflight.error ? '' : execFileSync('git', ['rev-parse', '--verify', 'HEAD'], { cwd: postflight.root, encoding: 'utf8' }).trim();
+    if (postflight.error || postflight.root !== preflight.root || postflightHead !== preflightHead || !trackedSnapshotMatches(preflight.root, preflight.snapshot)) runtimeError = postflight.error || (postflight.root !== preflight.root ? 'POSTFLIGHT_ROOT_DRIFT' : (postflightHead !== preflightHead ? 'POSTFLIGHT_HEAD_DRIFT' : 'POSTFLIGHT_DRIFT'));
+  }
+} else {
+  proc = spawnSync(command.bin, executedArgs, { cwd: pidexRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
 const endedAt = new Date().toISOString();
-const status = proc.status === 0 ? 'passed' : 'failed';
+const passed = proc.status === 0 && !proc.signal && !proc.error && !runtimeError;
 const evidence = {
   type: 'module_capability_evidence',
   module_id: entry.module.id,
@@ -144,19 +162,27 @@ const evidence = {
   phase,
   project,
   scope: entry.capability.scope,
-  status,
+  status: passed ? 'passed' : 'failed',
   started_at: startedAt,
   ended_at: endedAt,
   exit_code: proc.status,
   signal: proc.signal,
   command: { bin: command.bin, args: command.args },
-  executed_command: { bin: command.bin, args: redactedExecutedArgs },
+  executed_command: { bin: command.validation_profile === 'node-test-fixed-v1' ? process.execPath : command.bin, args: redactedExecutedArgs },
   passthrough_args: redactedPassthroughArgs,
   artifacts: [],
 };
-const file = evidencePath(pidexRoot, project, entry.capability.scope);
-appendJsonLine(file, evidence);
+let evidenceError = '';
+let file;
+try {
+  file = evidencePath(pidexRoot, project, entry.capability.scope);
+  appendJsonLine(file, evidence);
+} catch (error) {
+  evidenceError = `EVIDENCE_WRITE_FAILED: ${error.message}`;
+}
 if (proc.stdout) process.stdout.write(proc.stdout);
 if (proc.stderr) process.stderr.write(proc.stderr);
-console.error(`module capability evidence: ${file}`);
-process.exit(proc.status ?? 1);
+if (runtimeError) console.error(runtimeError);
+if (evidenceError) console.error(evidenceError);
+if (file && !evidenceError) console.error(`module capability evidence: ${file}`);
+process.exit(passed && !evidenceError ? 0 : (proc.status && proc.status !== 0 ? proc.status : 1));

@@ -43,6 +43,30 @@ function fakeGitBytes(bytes) {
   return `process.stdout.write(Buffer.from(${JSON.stringify([...bytes])}));`;
 }
 
+test('B-T4 rejects Plan049 active pointer routes to retired external execution or user', () => {
+  const dir = fixture();
+  writeTracked(dir, 'wiki/status.md', 'process-rules.plan049-passive-exposure-platform\nroute_to: user\nInvoke-Plan049WindowsValidation\n');
+  assert.throws(() => runGuard(dir), /unsafe Plan049 active reference/);
+});
+
+test('B-T5 rejects runnable same-path evidence read and append amplification', () => {
+  const dir = fixture();
+  writeTracked(dir, 'scripts/modules/unsafe.mjs', "const evidence = 'state/modules/evidence/row.jsonl';\nreadFileSync(evidence);\nappendFileSync(evidence, 'amplify');\n");
+  assert.throws(() => runGuard(dir), /same-path evidence read\/append/);
+});
+
+test('B-T6 rejects Plan049 capability aliases and retired paths without terminal marker', () => {
+  const dir = fixture();
+  writeTracked(dir, 'modules/pidex/process-rules/module.json', JSON.stringify({ capabilities: [{ id: 'process-rules.passive-exposure-platform' }] }));
+  writeTracked(dir, 'wiki/roadmap.md', 'plan049-c49-5-ise-worksheet\n');
+  assert.throws(() => runGuard(dir), /Plan049 capability alias|retired external reference lacks terminal marker/);
+
+  const partial = fixture();
+  writeTracked(partial, 'modules/pidex/process-rules/module.json', JSON.stringify({ capabilities: [{ id: 'process-rules.plan049-passive-exposure-platform' }] }));
+  writeTracked(partial, 'wiki/roadmap.md', 'process-rules.plan049-passive-exposure-platform\nB implemented — CMD-1 locked pending independent technical/process/safety/QA verdicts and immutable-coordinate approval\n');
+  assert.throws(() => runGuard(partial), /Plan049 pointer state incomplete/);
+});
+
 test('allows module manifest and module internal implementation references', () => {
   const dir = fixture();
   writeTracked(dir, 'modules/pidex/example/module.json', '{"command":{"args":["modules/pidex/example/scripts/tool.mjs"]}}\n');

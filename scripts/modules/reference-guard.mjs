@@ -21,6 +21,15 @@ const modulePathTokenPattern = /modules\/pidex\//;
 const moduleScriptsTokenPattern = /\/scripts\//;
 const stableModuleLibraryPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/lib\/[A-Za-z0-9_./-]+/g;
 const legacyWrapperPattern = /(?:^|[^A-Za-z0-9_./-])scripts\/(?:release|parallel-agents|git-hooks|provider-limits|profile|project-context|project-metadata|wiki|compat|analysis|metrics|history|pipeline)\/[A-Za-z0-9_./-]+/g;
+const plan049Capability = 'process-rules.plan049-passive-exposure-platform';
+const plan049PointerState = 'B implemented — CMD-1 locked pending independent technical/process/safety/QA verdicts and immutable-coordinate approval';
+const plan049PointerFiles = new Set([
+  'wiki/roadmap.md', 'wiki/status.md', 'wiki/initiatives/011-quality-rule-learning/index.md', 'wiki/initiatives/011-quality-rule-learning/plan-049-crash-safe-passive-exposure-foundation.md',
+  'agents.output/planning/049-crash-safe-passive-exposure-foundation.md', 'agents.output/planning/049-crash-safe-passive-exposure-execution-slices.md', 'agents.output/planning/049-c49-5-run-check-capability-reset.md',
+  'agents.output/planning/049-c49-5-direct-windows-evidence-reset.md', 'agents.output/planning/049-c49-5-windows-concurrency-test-and-ise-capture-correction.md', 'agents.output/devops/049-native-windows-validation-lane.md', 'agents.output/qa/049-windows-validation/README.md', 'agents.output/analysis/049-windows-evidence-worksheet-runaway-incident.md',
+]);
+const plan049RetiredReference = /Invoke-Plan049WindowsValidation|plan049-c49-5-ise-worksheet|plan049-direct-windows-evidence-worksheet|plan049-uc1-probe/;
+const plan049Alias = /process-rules\.(?!plan049-passive-exposure-platform\b)[A-Za-z0-9._-]*passive-exposure-platform\b/;
 
 function parseIndexRecord(record, seen, previous) {
   const separator = record.indexOf(9);
@@ -101,14 +110,24 @@ function isGeneratedOrBinary(file) {
 
 const moduleViolations = [];
 const legacyWarnings = [];
+const plan049Violations = [];
+const trackedText = new Map();
 for (const { file, mode } of gitFiles()) {
-  if (isGeneratedOrBinary(file) || !isLikelyText(file)) continue;
+  if ((isGeneratedOrBinary(file) && !plan049PointerFiles.has(file)) || !isLikelyText(file)) continue;
   const abs = checkedTrackedPath(file);
   let text;
   try {
     if (!lstatSync(abs).isFile()) throw new Error('not regular');
     text = readFileSync(abs, 'utf8');
   } catch { throw new Error(`tracked text checkout is not regular: ${renderPathname(file)}`); }
+  trackedText.set(file, text);
+  if (!file.endsWith('.tdd.test.mjs')) {
+    if (plan049Alias.test(text)) plan049Violations.push(`${renderPathname(file)}: Plan049 capability alias`);
+    if (plan049RetiredReference.test(text) && !text.includes('RETIRED_UNSAFE — HISTORICAL — DO NOT EXECUTE')) plan049Violations.push(`${renderPathname(file)}: retired external reference lacks terminal marker`);
+    if (text.includes(plan049Capability) && /route_to:\s*user\b/.test(text)) plan049Violations.push(`${renderPathname(file)}: unsafe Plan049 active reference`);
+    const evidenceRead = /readFileSync\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/.exec(text);
+    if (evidenceRead && new RegExp(`appendFileSync\\(\\s*${evidenceRead[1]}\\b`).test(text)) plan049Violations.push(`${renderPathname(file)}: same-path evidence read/append`);
+  }
 
   const moduleMatches = [...text.matchAll(moduleScriptPattern)].map((match) => match[0]);
   const constructedPathScanText = text.replaceAll(stableModuleLibraryPattern, '');
@@ -135,11 +154,30 @@ if (legacyWarnings.length) {
   if (legacyWarnings.length > 50) console.error(`warning: ... ${legacyWarnings.length - 50} more file(s)`);
 }
 
-if (moduleViolations.length) {
+for (const file of plan049PointerFiles) {
+  if (trackedText.has(file)) continue;
+  const abs = checkedTrackedPath(file);
+  if (!lstatSync(abs, { throwIfNoEntry: false })?.isFile()) continue;
+  trackedText.set(file, readFileSync(abs, 'utf8'));
+}
+
+if (trackedText.get('modules/pidex/process-rules/module.json')?.includes(plan049Capability)) {
+  for (const file of plan049PointerFiles) {
+    const text = trackedText.get(file);
+    if (!text?.includes(plan049Capability) || !text.includes(plan049PointerState)) plan049Violations.push(`${renderPathname(file)}: Plan049 pointer state incomplete`);
+  }
+}
+
+if (plan049Violations.length) {
+  console.error('module reference guard: unsafe Plan049 references found');
+  for (const violation of plan049Violations) console.error(violation);
+}
+
+if (moduleViolations.length || plan049Violations.length) {
   console.error(`module reference guard: forbidden hard-coded module implementation path(s) found`);
   for (const item of moduleViolations) console.error(`${renderPathname(item.file)}: ${item.matches.join(', ')}`);
   if (mode === 'fail') process.exit(1);
 }
 
-console.log(JSON.stringify({ ok: moduleViolations.length === 0, mode, forbidden_module_path_files: moduleViolations.length, legacy_wrapper_reference_files: legacyWarnings.length }, null, 2));
+console.log(JSON.stringify({ ok: moduleViolations.length === 0 && plan049Violations.length === 0, mode, forbidden_module_path_files: moduleViolations.length, plan049_reference_violations: plan049Violations.length, legacy_wrapper_reference_files: legacyWarnings.length }, null, 2));
 process.exit(0);

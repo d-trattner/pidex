@@ -5,5 +5,28 @@
   "kind": "core-required",
   "default_enabled": true,
   "dependencies": ["pidex.core"],
-  "capabilities": []
+  "capabilities": [
+    {
+      "id": "process-rules.plan049-passive-exposure-platform",
+      "kind": "check",
+      "phases": ["maintenance", "qa", "devops"],
+      "scope": "install",
+      "importance": "recommended",
+      "allowed_agents": ["orchestrator", "pidex-qa", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "validation_profile": "node-test-fixed-v1",
+        "bin": "node",
+        "args": [
+          "--test",
+          "scripts/quality/rule-inventory.tdd.test.mjs",
+          "scripts/quality/rule-exposure.tdd.test.mjs",
+          "modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.tdd.test.mjs",
+          "scripts/quality/plan-042-preservation.tdd.test.mjs",
+          "modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.tdd.test.mjs"
+        ]
+      }
+    }
+  ]
 }

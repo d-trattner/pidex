@@ -14,6 +14,13 @@ const AGENT_RULE_ID_RE = /^[a-z0-9][a-z0-9.-]{2,160}$/;
 const AGENT_RULE_TOKEN_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 const CAPABILITY_ID_RE = /^[A-Za-z0-9_.:-]{1,160}$/;
 const MAX_AGENT_RULE_FILE_BYTES = 16 * 1024;
+const NODE_TEST_FIXED_V1_TARGETS = [
+  'scripts/quality/rule-inventory.tdd.test.mjs',
+  'scripts/quality/rule-exposure.tdd.test.mjs',
+  'modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.tdd.test.mjs',
+  'scripts/quality/plan-042-preservation.tdd.test.mjs',
+  'modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.tdd.test.mjs',
+];
 
 export function scriptPidexRoot(importMetaUrl) {
   return path.resolve(path.dirname(fileURLToPath(importMetaUrl)), '../..');
@@ -125,10 +132,86 @@ export function validateProtectedContexts(system, projectRoot) {
   return errors;
 }
 
+function git(root, args) {
+  const proc = spawnSync('git', args, { cwd: root, encoding: null, stdio: ['ignore', 'pipe', 'pipe'] });
+  if (proc.error || proc.status !== 0) throw new Error(`GIT_UNAVAILABLE: git ${args[0]} failed`);
+  return proc.stdout;
+}
+
+function strictDescendant(root, target) {
+  const rel = path.relative(root, target);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+function assertNoLink(root, target) {
+  const rel = path.relative(root, target);
+  let current = root;
+  for (const part of rel.split(path.sep)) {
+    current = path.join(current, part);
+    if (lstatSync(current).isSymbolicLink()) throw new Error(`TARGET_LINK: ${rel}`);
+  }
+}
+
+function snapshotTracked(root) {
+  const tracked = git(root, ['ls-files', '-z']).toString('utf8').split('\0').filter(Boolean);
+  const bytes = new Map();
+  for (const relative of tracked) {
+    try { bytes.set(relative, readFileSync(path.join(root, relative)).toString('base64')); } catch { throw new Error(`POSTFLIGHT_DRIFT: ${relative}`); }
+  }
+  const indexPath = git(root, ['rev-parse', '--git-path', 'index']).toString('utf8').trim();
+  return { bytes, index: readFileSync(path.resolve(root, indexPath)).toString('base64') };
+}
+
+export function validateNodeTestFixedRuntime(projectRoot, command) {
+  try {
+    const root = realpathSync(projectRoot);
+    if (!lstatSync(root).isDirectory()) throw new Error('ROOT_INVALID: root is not directory');
+    const top = realpathSync(git(root, ['rev-parse', '--show-toplevel']).toString('utf8').trim());
+    if (top !== root) throw new Error('ROOT_INVALID: root is not Git worktree top level');
+    git(root, ['rev-parse', '--verify', 'HEAD']);
+    for (const target of command.args.slice(1)) {
+      const stage = git(root, ['ls-files', '-s', '--', target]).toString('utf8').trim().split('\n').filter(Boolean);
+      if (stage.length !== 1 || !/^(100644|100755) [0-9a-f]{40,64} 0\t/.test(stage[0])) throw new Error(`TARGET_UNTRACKED: ${target}`);
+      const leaf = path.join(root, target);
+      if (!existsSync(leaf)) throw new Error(`TARGET_TYPE: ${target}`);
+      assertNoLink(root, leaf);
+      if (!lstatSync(leaf).isFile()) throw new Error(`TARGET_TYPE: ${target}`);
+      const realLeaf = realpathSync(leaf);
+      if (!strictDescendant(root, realLeaf)) throw new Error(`TARGET_ESCAPE: ${target}`);
+      const head = git(root, ['show', `HEAD:${target}`]);
+      if (!readFileSync(leaf).equals(head)) throw new Error(`TARGET_DIRTY: ${target}`);
+    }
+    return { root, snapshot: snapshotTracked(root) };
+  } catch (error) {
+    return { error: error.message || 'ROOT_INVALID' };
+  }
+}
+
+export function trackedSnapshotMatches(root, before) {
+  try {
+    const after = snapshotTracked(root);
+    if (before.index !== after.index || before.bytes.size !== after.bytes.size) return false;
+    return [...before.bytes].every(([file, bytes]) => after.bytes.get(file) === bytes);
+  } catch { return false; }
+}
+
 export function validateCapabilityCommand(pidexRoot, capability) {
   const errors = [];
   const command = capability.command;
   if (!command || typeof command.bin !== 'string' || !Array.isArray(command.args)) return errors;
+  if (command.validation_profile !== undefined) {
+    if (command.validation_profile !== 'node-test-fixed-v1') {
+      errors.push(`${capability.id}: unknown command validation profile: ${command.validation_profile}`);
+      return errors;
+    }
+    if (command.bin !== 'node') errors.push(`${capability.id}: node-test-fixed-v1 requires bin node`);
+    if (command.passthrough !== undefined || command.passthrough_policy !== undefined) errors.push(`${capability.id}: node-test-fixed-v1 forbids passthrough`);
+    const expectedArgs = ['--test', ...NODE_TEST_FIXED_V1_TARGETS];
+    if (command.args.length !== expectedArgs.length || command.args.some((arg, index) => arg !== expectedArgs[index])) {
+      errors.push(`${capability.id}: node-test-fixed-v1 requires exact fixed test vector`);
+    }
+    return errors;
+  }
   const allowedBins = new Set(['node', 'bash']);
   const riskyFlags = new Set(['-e', '--eval', '-c', '--command']);
   if (!allowedBins.has(command.bin)) errors.push(`${capability.id}: command bin is not allowed: ${command.bin}`);
