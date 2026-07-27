@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import fs, { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
@@ -742,11 +743,23 @@ test('C49-3-inventory_incomplete preserves exact three-ID projection across comp
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
-test('C49-3-AUTH-ordinary default terminal path publishes verified manifest authority without a tracer stub', async () => {
+test('C49-3-AUTH-ordinary native terminal path projects degraded unusable authority without a tracer stub', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
   const progress = [];
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fsync = fs.fsyncSync;
   try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    fs.fsyncSync = (descriptor) => {
+      if (fs.fstatSync(descriptor).isDirectory()) {
+        const error = new Error('Windows parent directory sync unsupported');
+        error.code = 'EPERM';
+        throw error;
+      }
+      return fsync(descriptor);
+    };
+    syncBuiltinESMExports();
     mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
     mkdirSync(path.join(pidexRoot, 'agents'), { recursive: true });
     writeFileSync(path.join(pidexRoot, 'agents', 'pidex-alpha.md'), '# Alpha\n');
@@ -772,15 +785,22 @@ test('C49-3-AUTH-ordinary default terminal path publishes verified manifest auth
     const publication = JSON.parse(readFileSync(path.join(bundleRoot, readdirSync(bundleRoot)[0], 'commit-manifest.json'), 'utf8'));
 
     assert.equal(result.ok, true);
-    assert.equal(result.rule_exposure.exposure.quality, 'complete');
+    assert.equal(result.rule_exposure.exposure.quality, 'recorder_degraded');
+    assert.deepEqual(result.rule_exposure.exposure.quality_flags, ['durability_unconfirmed']);
     assert.equal(result.rule_exposure.exposure.usable_for_evidence, false);
+    assert.notEqual(result.rule_exposure.exposure.quality, 'complete');
     assert.deepEqual(Object.keys(result.rule_exposure.artifacts).sort(), ['exposure_id', 'reconciliation_id', 'snapshot_id']);
     assert.deepEqual(publication.public_ids, result.rule_exposure.artifacts);
     assert.deepEqual(Object.keys(publication.members).sort(), ['catalog_contribution', 'epoch', 'exposure', 'reconciliation', 'snapshot']);
     assert.deepEqual(completed.metadata.rule_exposure, result.rule_exposure);
     assert.deepEqual(progress.at(-1).rule_exposure, result.rule_exposure);
     assert.equal(existsSync(path.join(pidexRoot, 'state', 'quality', 'publications')), false);
-  } finally { rmSync(pidexRoot, { recursive: true, force: true }); }
+  } finally {
+    fs.fsyncSync = fsync;
+    syncBuiltinESMExports();
+    Object.defineProperty(process, 'platform', platform);
+    rmSync(pidexRoot, { recursive: true, force: true });
+  }
 });
 
 test('runProjectPipelineOrchestration omits failed child raw output from public result', async () => {

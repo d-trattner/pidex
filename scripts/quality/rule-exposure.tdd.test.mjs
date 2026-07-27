@@ -189,9 +189,11 @@ test('UC-1 admits only exact Windows directory-fsync EPERM conjunction and hard-
   }
 });
 
-test('supported POSIX publication stays verified and exact replay returns three opaque IDs', () => {
+test('supported capability publication stays verified and exact replay returns three opaque IDs', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-bundle-'));
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
   try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'linux' });
     const input = {
       root,
       reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)), reconciliation_revision: 'recon-v1', inventory_count: 1, inventory_digest: 'digest-v1' },
@@ -216,6 +218,7 @@ test('supported POSIX publication stays verified and exact replay returns three 
     assert.throws(() => publishPassiveBundle({ ...input, identity: { ...input.identity, terminal_outcome_ref: 'changed' } }), /CONFLICT_IDENTITY/);
     assert.throws(() => publishPassiveBundle({ ...input, extra: true }), /PASSIVE_SCHEMA_UNKNOWN_KEY/);
   } finally {
+    Object.defineProperty(process, 'platform', platform);
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -453,7 +456,7 @@ test('ROV-49-2 recomposes all C49-1 ledger partitions into exact 89-boundary/178
   assert.deepEqual(new Set(ledger.map((row) => row.command)), new Set(['CMD-FAULT-1']));
 });
 
-test('CO-49-1 process matrix converges exact writers and fences conflict, live, dead, unknown, and timeout ownership', async () => {
+test('CO-49-1 native UC-1 sequence has one unconfirmed publisher and two fresh reverified readers', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-concurrency-'));
   const identity = { run_id: 'concurrent-run', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
   const input = {
@@ -464,7 +467,7 @@ test('CO-49-1 process matrix converges exact writers and fences conflict, live, 
     epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity,
   };
   const source = pathToFileURL(path.resolve('scripts/quality/rule-exposure.mjs')).href;
-  const worker = JSON.stringify(`import { publishPassiveBundle } from ${JSON.stringify(source)}; const input = JSON.parse(process.argv[1]); console.log(JSON.stringify(publishPassiveBundle(input)));`);
+  const worker = JSON.stringify(`import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; import { publishPassiveBundle } from ${JSON.stringify(source)}; const input = JSON.parse(process.argv[1]); const platform = Object.getOwnPropertyDescriptor(process, 'platform'); const fsync = fs.fsyncSync; Object.defineProperty(process, 'platform', { ...platform, value: 'win32' }); fs.fsyncSync = (descriptor) => { if (fs.fstatSync(descriptor).isDirectory()) { const error = new Error('Windows parent directory sync unsupported'); error.code = 'EPERM'; throw error; } return fsync(descriptor); }; syncBuiltinESMExports(); console.log(JSON.stringify(publishPassiveBundle(input)));`);
   const publish = () => new Promise((resolve) => {
     const child = spawn(process.execPath, ['--input-type=module', '--eval', JSON.parse(worker), JSON.stringify(input)]);
     let output = '';
@@ -473,20 +476,32 @@ test('CO-49-1 process matrix converges exact writers and fences conflict, live, 
   });
   const bundlePath = path.join(root, 'state/quality/rule-exposure', createHash('sha256').update(JSON.stringify({ run_id: identity.run_id })).digest('hex'));
   try {
-    const writers = await Promise.all([publish(), publish(), publish()]);
+    const publisherProcess = await publish();
+    const freshReaderProcesses = await Promise.all([publish(), publish()]);
+    const writers = [publisherProcess, ...freshReaderProcesses];
     assert.deepEqual(writers.map(({ status }) => status), [0, 0, 0]);
-    assert.deepEqual(writers.map(({ output }) => JSON.parse(output)), Array(3).fill({
+    const artifacts = {
       reconciliation_id: input.reconciliation.reconciliation_id,
       snapshot_id: input.snapshot.snapshot_id,
       exposure_id: input.exposure.exposure_id,
-    }));
+    };
+    const publisher = { state: 'COMMITTED_UNCONFIRMED', reason: 'RECOVERY_DURABILITY_UNCONFIRMED', usable: false, parent_sync: 'unsupported', artifacts };
+    const freshReader = { state: 'COMMITTED_VERIFIED', reason: 'RECOVERY_COMMITTED_REVERIFIED', usable: true, parent_sync: 'unsupported', artifacts };
+    const observed = writers.map(({ output }) => JSON.parse(output));
+    const publisherResults = observed.filter((result) => result.state === 'COMMITTED_UNCONFIRMED');
+    const freshReaderResults = observed.filter((result) => result.state === 'COMMITTED_VERIFIED');
+    assert.equal(publisherResults.length, 1, 'one publisher-role result');
+    assert.equal(freshReaderResults.length, 2, 'two fresh-reader results');
+    assert.deepEqual(publisherResults, [publisher], 'publisher exact typed shape');
+    assert.deepEqual(freshReaderResults, [freshReader, freshReader], 'fresh-reader exact typed shapes');
+    assert.equal(publisherResults.length + freshReaderResults.length, observed.length, 'no bare IDs or unknown role shape');
     assert.throws(() => publishPassiveBundle({ ...input, identity: { ...identity, terminal_outcome_ref: 'conflict' } }), /CONFLICT_IDENTITY/);
 
     writeFileSync(path.join(bundlePath, '.lock'), JSON.stringify({ pid: process.pid, identity }));
     assert.deepEqual(recoverPassiveBundle({ root, identity }), { state: 'TORN_OR_INVALID', reason: 'RECOVERY_OWNER_ACTIVE', usable: false });
 
     writeFileSync(path.join(bundlePath, '.lock'), JSON.stringify({ pid: 999999, identity }));
-    assert.deepEqual(recoverPassiveBundle({ root, identity }).artifacts, publishPassiveBundle(input));
+    assert.deepEqual(recoverPassiveBundle({ root, identity }).artifacts, artifacts);
 
     writeFileSync(path.join(bundlePath, '.lock'), '{malformed');
     assert.deepEqual(recoverPassiveBundle({ root, identity }), { state: 'QUARANTINED', reason: 'RECOVERY_OWNER_UNCERTAIN', usable: false });
