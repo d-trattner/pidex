@@ -191,9 +191,18 @@ test('UC-1 admits only exact Windows directory-fsync EPERM conjunction and hard-
 
 test('supported capability publication stays verified and exact replay returns three opaque IDs', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-bundle-'));
-  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const fixtureSource = readFileSync(new URL(import.meta.url), 'utf8');
+  const fixtureStart = fixtureSource.indexOf("test('supported capability publication stays verified and exact replay returns three opaque IDs'");
+  const fixtureEnd = fixtureSource.indexOf("\ntest('Windows UC-1B-WIN publication stays unconfirmed in publisher and re-verifies only in fresh process'", fixtureStart);
+  const platformMutation = ['Object.defineProperty(process', "'platform'"].join(', ');
+  assert.equal(fixtureSource.slice(fixtureStart, fixtureEnd).includes(platformMutation), false, 'supported-capability fixture must not mutate process.platform during real publication I/O');
+  const fsync = fs.fsyncSync;
   try {
-    Object.defineProperty(process, 'platform', { ...platform, value: 'linux' });
+    fs.fsyncSync = (descriptor) => {
+      if (fs.fstatSync(descriptor).isDirectory()) return undefined;
+      return fsync(descriptor);
+    };
+    syncBuiltinESMExports();
     const input = {
       root,
       reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)), reconciliation_revision: 'recon-v1', inventory_count: 1, inventory_digest: 'digest-v1' },
@@ -213,12 +222,15 @@ test('supported capability publication stays verified and exact replay returns t
     });
     assert.deepEqual(replay, first);
     const storageKey = createHash('sha256').update(JSON.stringify({ run_id: input.identity.run_id })).digest('hex');
-    assert.equal(existsSync(path.join(root, 'state/quality/rule-exposure', storageKey, 'commit-manifest.json')), true);
+    const manifestPath = path.join(root, 'state/quality/rule-exposure', storageKey, 'commit-manifest.json');
+    assert.equal(existsSync(manifestPath), true);
+    assert.equal(JSON.parse(readFileSync(manifestPath, 'utf8')).durability.parent_sync, 'confirmed');
     assert.equal(JSON.stringify(first).includes(root), false);
     assert.throws(() => publishPassiveBundle({ ...input, identity: { ...input.identity, terminal_outcome_ref: 'changed' } }), /CONFLICT_IDENTITY/);
     assert.throws(() => publishPassiveBundle({ ...input, extra: true }), /PASSIVE_SCHEMA_UNKNOWN_KEY/);
   } finally {
-    Object.defineProperty(process, 'platform', platform);
+    fs.fsyncSync = fsync;
+    syncBuiltinESMExports();
     rmSync(root, { recursive: true, force: true });
   }
 });
