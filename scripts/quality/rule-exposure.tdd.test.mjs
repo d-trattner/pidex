@@ -189,7 +189,7 @@ test('UC-1 admits only exact Windows directory-fsync EPERM conjunction and hard-
   }
 });
 
-test('supported capability publication stays verified and exact replay returns three opaque IDs', () => {
+test('supported capability publication stays verified and exact replay returns three opaque IDs', { skip: process.platform === 'win32' ? 'POSIX-supported parent sync is platform-inapplicable on native Windows' : false }, () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-bundle-'));
   const fixtureSource = readFileSync(new URL(import.meta.url), 'utf8');
   const fixtureStart = fixtureSource.indexOf("test('supported capability publication stays verified and exact replay returns three opaque IDs'");
@@ -525,6 +525,10 @@ function fullProducerBundle(root, identity = {}) {
 }
 
 test('C-1 + M-3 writes schema-2 member-bound bundle and rejects nested schema drift', () => {
+  const fixtureSource = readFileSync(new URL(import.meta.url), 'utf8');
+  const fixtureStart = fixtureSource.indexOf("test('C-1 + M-3 writes schema-2 member-bound bundle and rejects nested schema drift'");
+  const fixtureEnd = fixtureSource.indexOf("\ntest('M-3 rejects snapshot/exposure identity", fixtureStart);
+  assert.match(fixtureSource.slice(fixtureStart, fixtureEnd), /\n    if \(process\.platform === 'win32'\) \{/, 'schema-2 fixture must branch by native platform instead of hard-coding confirmed-only publication');
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-schema2-'));
   try {
     const input = fullProducerBundle(root);
@@ -539,10 +543,24 @@ test('C-1 + M-3 writes schema-2 member-bound bundle and rejects nested schema dr
       assert.deepEqual(Object.keys(envelope).sort(), ['body', 'generation', 'identity', 'member', 'publication', 'schema']);
       assert.equal(envelope.schema, 2);
       assert.equal(envelope.member, member);
-      assert.deepEqual(envelope.publication, { publisher_process_id: process.pid, durability: { parent_sync: 'confirmed' } });
+      assert.deepEqual(envelope.publication, { publisher_process_id: process.pid, durability: { parent_sync: process.platform === 'win32' ? 'unsupported' : 'confirmed' } });
       assert.equal(manifest.members[member].digest, createHash('sha256').update(readFileSync(path.join(bundleRoot, 'members', `${member}.json`))).digest('hex'), 'manifest digest binds exact persisted member bytes');
     }
-    assert.deepEqual(ids, { reconciliation_id: input.reconciliation.reconciliation_id, snapshot_id: input.snapshot.snapshot_id, exposure_id: input.exposure.exposure_id });
+    if (process.platform === 'win32') {
+      assert.deepEqual(ids, {
+        state: 'COMMITTED_UNCONFIRMED',
+        reason: 'RECOVERY_DURABILITY_UNCONFIRMED',
+        usable: false,
+        parent_sync: 'unsupported',
+        artifacts: {
+          reconciliation_id: input.reconciliation.reconciliation_id,
+          snapshot_id: input.snapshot.snapshot_id,
+          exposure_id: input.exposure.exposure_id,
+        },
+      });
+    } else {
+      assert.deepEqual(ids, { reconciliation_id: input.reconciliation.reconciliation_id, snapshot_id: input.snapshot.snapshot_id, exposure_id: input.exposure.exposure_id });
+    }
     assert.throws(() => publishPassiveBundle({ ...fullProducerBundle(root, { run_id: 'nested-drift' }), snapshot: { ...input.snapshot, later_plan: true } }), /PASSIVE_SCHEMA_UNKNOWN_KEY/);
     const nestedRule = fullProducerBundle(root, { run_id: 'recursive-drift' });
     nestedRule.snapshot.active_rules = [{ ...nestedRule.snapshot.active_rules[0], later_plan: true }];
