@@ -3563,6 +3563,7 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		pipelineId = authority.pipelineId;
 		rows = authority.rows;
 	} catch (error) {
+		if (error instanceof Error && error.message === "REVIEW_AUTHORITY_NOT_FOUND") return undefined;
 		if (error instanceof Error && error.message === "REVIEW_HISTORY_INVALID") throw new Error("REVIEW_IDENTITY_INVALID");
 		if (error instanceof Error && /^REVIEW_[A-Z0-9_]+$/.test(error.message)) throw error;
 		throw Object.assign(new Error("REVIEW_LIFECYCLE_UNAVAILABLE"), { cause: error });

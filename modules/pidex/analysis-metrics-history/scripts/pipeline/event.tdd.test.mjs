@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
-import { normalizePlan, recordPipelineEvent, recordReviewCompletion, reserveReviewStart } from './event.mjs';
+import { normalizePlan, recordPipelineEvent, recordReviewCompletion, reserveReviewStart, resolvePlanReviewAuthority } from './event.mjs';
 import { canonicalProjectIdentity } from '../../lib/project-key.mjs';
 
 const tuple = { runFamilyId: 'family-001', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-001' };
@@ -30,6 +30,28 @@ const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-pipeline-event-'));
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-'));
 try {
   const env = { ...process.env, RUNNING_PI_STATE_DIR: state, PIDEX_AUTO_PDQ: '0' };
+  assert.throws(() => resolvePlanReviewAuthority({ stateDir: state, project, planId: '12345' }), /REVIEW_AUTHORITY_NOT_FOUND/);
+  const documentedStarted = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', project, '--plan', '12345', '--event', 'pipeline_started', '--status', 'running', '--actor', 'orchestrator', '--message', 'Started direct-mode pipeline', '--project-mode', 'host-direct', '--metadata-json', '{"entrypoint":"pidex-skill"}'], { encoding: 'utf8', env });
+  assert.equal(documentedStarted.status, 0, documentedStarted.stderr || documentedStarted.stdout);
+  const documentedBase = path.join(state, 'pipeline-events', canonicalProjectIdentity(project).projectKey);
+  const documentedCurrent = path.join(documentedBase, 'plan-12345.current');
+  assert.ok(existsSync(documentedCurrent));
+  const documentedPipeline = readFileSync(documentedCurrent, 'utf8').trim();
+  const documentedRows = readFileSync(path.join(documentedBase, `${documentedPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.deepEqual(documentedRows[0].metadata, { entrypoint: 'pidex-skill' });
+  assert.equal(documentedRows[0].message, 'Started direct-mode pipeline');
+  assert.equal(documentedRows[0].project_mode, 'host-direct');
+  const documentedCompleted = spawnSync(process.execPath, [script, '--project', project, '--plan', '12345', '--event', 'pipeline_completed'], { encoding: 'utf8', env });
+  assert.equal(documentedCompleted.status, 0, documentedCompleted.stderr || documentedCompleted.stdout);
+  assert.equal(existsSync(documentedCurrent), false);
+  assert.equal(readFileSync(path.join(documentedBase, `${documentedPipeline}.jsonl`), 'utf8').trim().split('\n').length, 2);
+  const unsupportedPassthrough = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', project, '--unknown', 'value'], { encoding: 'utf8', env });
+  assert.equal(unsupportedPassthrough.status, 2);
+  assert.match(unsupportedPassthrough.stderr, /passthrough args rejected/);
+  const orphanPassthrough = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', 'orphan-value'], { encoding: 'utf8', env });
+  assert.equal(orphanPassthrough.status, 2);
+  assert.match(orphanPassthrough.stderr, /passthrough args rejected/);
+
   const started = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--event', 'pipeline_started', '--project-mode', 'hardened-pipeline', '--test-project', 'true', '--metadata-json', '{"x":1}'], { encoding: 'utf8', env });
   assert.equal(started.status, 0, started.stderr || started.stdout);
   const match = started.stdout.match(/pipeline_id=([^\s]+)/);

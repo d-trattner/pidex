@@ -37,20 +37,44 @@ function regularFile(file) {
   try { return lstatSync(file).isFile(); } catch { return false; }
 }
 
+function currentPointerFile(current) {
+  try {
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('REVIEW_HISTORY_INVALID');
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    if (error?.message === 'REVIEW_HISTORY_INVALID') throw error;
+    throw new Error('REVIEW_HISTORY_UNAVAILABLE');
+  }
+}
+
 function assertAuthorityBase(eventsRoot, base) {
   if (path.dirname(base) !== eventsRoot) throw new Error('REVIEW_HISTORY_INVALID');
   if (existsSync(base) && !lstatSync(base).isDirectory()) throw new Error('REVIEW_HISTORY_INVALID');
 }
 
-function authorityAtBase(base, canonicalProject, planId) {
+function authorityAtBase(base, canonicalProject, planId, legacy = false) {
   const current = path.join(base, `${planId}.current`);
-  if (!regularFile(current)) return null;
-  const pipelineId = readFileSync(current, 'utf8').trim();
+  if (!currentPointerFile(current)) return null;
+  let pipelineId;
+  try { pipelineId = readFileSync(current, 'utf8').trim(); }
+  catch { throw new Error('REVIEW_HISTORY_UNAVAILABLE'); }
   if (!/^[a-zA-Z0-9._-]{1,160}$/.test(pipelineId)) throw new Error('REVIEW_HISTORY_INVALID');
   const stream = path.join(base, `${pipelineId}.jsonl`);
   if (!regularFile(stream)) throw new Error('REVIEW_HISTORY_INVALID');
   const rows = readReviewRows(stream);
-  const roots = rows.filter((row) => row?.event_type === 'pipeline_started' && row?.pipeline_id === pipelineId && row?.plan_key === planId && row?.project_path === canonicalProject);
+  const pipelineRoots = rows.filter((row) => row?.event_type === 'pipeline_started' && row?.pipeline_id === pipelineId && row?.plan_key === planId);
+  const roots = legacy
+    ? pipelineRoots.filter((row) => {
+      if (typeof row?.project_path !== 'string') throw new Error('REVIEW_HISTORY_INVALID');
+      let rootProject;
+      try { rootProject = canonicalProjectIdentity(row.project_path).canonicalProject; }
+      catch { throw new Error('REVIEW_HISTORY_INVALID'); }
+      return rootProject === canonicalProject;
+    })
+    : pipelineRoots.filter((row) => row?.project_path === canonicalProject);
+  if (legacy && pipelineRoots.length > 0 && roots.length === 0) return null;
   if (roots.length !== 1 || rows.some((row) => TERMINAL_EVENTS.has(row?.event_type) && row?.pipeline_id === pipelineId && row?.plan_key === planId)) throw new Error('REVIEW_HISTORY_INVALID');
   return { base, current, stream, pipelineId, rows };
 }
@@ -60,8 +84,8 @@ function legacyAuthorities(eventsRoot, hashedBase, canonicalProject, planId) {
   const matches = [];
   for (const entry of readdirSync(eventsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith('.') || path.join(eventsRoot, entry.name) === hashedBase) continue;
-    try { const authority = authorityAtBase(path.join(eventsRoot, entry.name), canonicalProject, planId); if (authority) matches.push(authority); }
-    catch (error) { if (error?.message !== 'REVIEW_HISTORY_INVALID') throw error; }
+    const authority = authorityAtBase(path.join(eventsRoot, entry.name), canonicalProject, planId, true);
+    if (authority) matches.push(authority);
   }
   return matches;
 }
@@ -73,15 +97,12 @@ function resolvePipelineAuthority({ stateDir, project, planId, allowCreate = fal
   const hashedBase = path.join(eventsRoot, projectKey);
   assertAuthorityBase(eventsRoot, hashedBase);
   const hashedCurrent = path.join(hashedBase, `${normalizedPlan}.current`);
-  if (existsSync(hashedCurrent)) {
-    const hashed = authorityAtBase(hashedBase, canonicalProject, normalizedPlan);
-    if (!hashed) throw new Error('REVIEW_HISTORY_INVALID');
-    return { ...hashed, canonicalProject, projectKey, planId: normalizedPlan, legacy: false, eventsRoot };
-  }
+  const hashed = authorityAtBase(hashedBase, canonicalProject, normalizedPlan);
+  if (hashed) return { ...hashed, canonicalProject, projectKey, planId: normalizedPlan, legacy: false, eventsRoot };
   const legacy = legacyAuthorities(eventsRoot, hashedBase, canonicalProject, normalizedPlan);
   if (legacy.length === 1 && !allowCreate) return { ...legacy[0], canonicalProject, projectKey, planId: normalizedPlan, legacy: true, eventsRoot };
   if (legacy.length !== 0) throw new Error('REVIEW_HISTORY_INVALID');
-  if (!allowCreate) throw new Error('REVIEW_HISTORY_INVALID');
+  if (!allowCreate) throw new Error('REVIEW_AUTHORITY_NOT_FOUND');
   return { base: hashedBase, current: hashedCurrent, canonicalProject, projectKey, planId: normalizedPlan, legacy: false, eventsRoot };
 }
 
@@ -162,7 +183,7 @@ function releasePair(gateLock, selectionLock) {
   return !uncertain;
 }
 function lifecycleErrorResult(error) {
-  if (error?.message === 'REVIEW_HISTORY_INVALID') return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' };
+  if (['REVIEW_HISTORY_INVALID', 'REVIEW_AUTHORITY_NOT_FOUND'].includes(error?.message)) return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' };
   if (error?.message === 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE') return { status: 'denied', code: error.message };
   return { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' };
 }
@@ -247,7 +268,7 @@ export function recordReviewCompletion({ stateDir, project, pipelineId, identity
 function eventAuthority({ stateDir, project, planId, event }) {
   try { return resolvePipelineAuthority({ stateDir, project, planId, allowCreate: event === 'pipeline_started' }); }
   catch (error) {
-    if (TERMINAL_EVENTS.has(event) && error?.message === 'REVIEW_HISTORY_INVALID') throw new Error(`Terminal event ${event} for project=${path.basename(project)} plan=${planId} has no active pipeline id`);
+    if (TERMINAL_EVENTS.has(event) && ['REVIEW_HISTORY_INVALID', 'REVIEW_AUTHORITY_NOT_FOUND'].includes(error?.message)) throw new Error(`Terminal event ${event} for project=${path.basename(project)} plan=${planId} has no active pipeline id`);
     throw error;
   }
 }

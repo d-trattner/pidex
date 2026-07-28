@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, normalizePublicReviewIdentity, runConfiguredProviderAttempts } from './index.ts';
@@ -431,7 +432,6 @@ let correctionOwnerChildren = 0;
 try {
   const base = eventBase(correctionOwnerState, correctionOwnerProject);
   mkdirSync(base, { recursive: true });
-  bindCurrent(correctionOwnerState, correctionOwnerProject, 'family-owner');
   const options = {
     agentCwd: correctionOwnerProject,
     reviewLifecycle: { stateDir: correctionOwnerState, pipelineId: 'ignored' },
@@ -445,9 +445,55 @@ try {
         : { agent: params.agent, provider: 'pi', exitCode: 0, finalText: 'ordinary result', stderr: '' };
     },
   };
+  const eventsRoot = path.join(correctionOwnerState, 'pipeline-events');
+  const foreignProject = path.join(correctionOwnerProject, 'foreign-project');
+  mkdirSync(foreignProject);
+  const foreignBase = path.join(eventsRoot, 'legacy-foreign-root');
+  mkdirSync(foreignBase);
+  writeFileSync(path.join(foreignBase, 'plan-12345.current'), 'foreign-pipeline');
+  writeFileSync(path.join(foreignBase, 'foreign-pipeline.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(foreignProject).canonicalProject, pipeline_id: 'foreign-pipeline', plan_key: 'plan-12345' })}\n`);
+  await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'Plan 12345 ordinary planning with valid foreign legacy authority' }, options);
+  await executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 12345 ordinary implementation with valid foreign legacy authority' }, options);
+  assert.equal(correctionOwnerChildren, 2, 'well-formed foreign legacy authority must be ignored for identity-free primary dispatch');
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 12345 reviewer without authority' }, options), /REVIEW_IDENTITY_INVALID/);
+  assert.equal(correctionOwnerChildren, 2, 'reviewer authority absence must fail closed with zero children');
+
+  for (const [plan, project_path] of [['12346', undefined], ['12347', 42], ['12348', path.join(correctionOwnerProject, 'missing-project')]]) {
+    const malformedBase = path.join(eventsRoot, `legacy-malformed-root-${plan}`);
+    const malformedPipeline = `malformed-pipeline-${plan}`;
+    mkdirSync(malformedBase);
+    writeFileSync(path.join(malformedBase, `plan-${plan}.current`), malformedPipeline);
+    writeFileSync(path.join(malformedBase, `${malformedPipeline}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', ...(project_path === undefined ? {} : { project_path }), pipeline_id: malformedPipeline, plan_key: `plan-${plan}` })}\n`);
+    await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-planner', task: `Plan ${plan} malformed legacy root must fail closed` }, options), /REVIEW_IDENTITY_INVALID/);
+    assert.equal(correctionOwnerChildren, 2, `malformed legacy project_path for Plan ${plan} must create zero ordinary children`);
+  }
+
+  for (const [plan, malformedPointer] of [['12349', (current) => mkdirSync(current)], ['12350', (current) => symlinkSync(path.join(correctionOwnerProject, 'missing-pointer-target'), current, 'file')]]) {
+    const malformedBase = path.join(eventsRoot, `legacy-malformed-pointer-${plan}`);
+    mkdirSync(malformedBase);
+    malformedPointer(path.join(malformedBase, `plan-${plan}.current`));
+    for (const agent of ['pidex-planner', 'pidex-implementer']) {
+      await assert.rejects(() => executeHostAgentBoundary({ agent, task: `Plan ${plan} malformed current pointer must fail closed` }, options), /REVIEW_IDENTITY_INVALID/);
+      assert.equal(correctionOwnerChildren, 2, `${agent} must create zero children for malformed current pointer`);
+    }
+  }
+
+  for (const [plan, fault] of [['12351', 'lstatSync'], ['12352', 'readFileSync']]) {
+    const current = path.join(base, `plan-${plan}.current`);
+    writeFileSync(current, 'unreadable-pipeline');
+    for (const agent of ['pidex-planner', 'pidex-implementer']) {
+      const source = `import { createRequire, syncBuiltinESMExports } from 'node:module'; const [indexUrl, current, agent, project, stateDir, fault] = process.argv.slice(1); const require = createRequire(import.meta.url); const fs = require('node:fs'); const original = fs[fault]; fs[fault] = (candidate, ...args) => { if (candidate === current) { const error = new Error('injected pointer ${fault} fault'); error.code = 'EIO'; throw error; } return original(candidate, ...args); }; syncBuiltinESMExports(); const { executeHostAgentBoundary } = await import(indexUrl); let children = 0; try { await executeHostAgentBoundary({ agent, task: 'Plan ${plan} pointer fault' }, { agentCwd: project, reviewLifecycle: { stateDir, pipelineId: 'ignored' }, loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }), resolveSandboxState: () => ({ enabled: false }), runConfigured: async () => { children += 1; return { agent, provider: 'pi', exitCode: 0, finalText: 'ordinary result', stderr: '' }; } }); console.log(JSON.stringify({ children })); } catch (error) { console.log(JSON.stringify({ code: error.message, children })); }`;
+      const probe = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '--eval', source, new URL('./index.ts', import.meta.url).href, current, agent, correctionOwnerProject, correctionOwnerState, fault], { encoding: 'utf8' });
+      assert.equal(probe.status, 0, probe.stderr || probe.stdout);
+      assert.deepEqual(JSON.parse(probe.stdout.trim()), { code: 'REVIEW_HISTORY_UNAVAILABLE', children: 0 }, `${agent} ${fault} current-pointer fault must fail closed as unavailable`);
+    }
+    rmSync(current);
+  }
+
+  bindCurrent(correctionOwnerState, correctionOwnerProject, 'family-owner');
   await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'Plan 038 ordinary planning' }, options);
   await executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 038 ordinary implementation' }, options);
-  assert.equal(correctionOwnerChildren, 2, 'zero-pending correction owners must remain ordinary calls');
+  assert.equal(correctionOwnerChildren, 4, 'zero-pending correction owners must remain ordinary calls');
 
   mkdirSync(path.join(correctionOwnerProject, 'agents.output', 'planning'), { recursive: true });
   writeFileSync(path.join(correctionOwnerProject, 'agents.output', 'planning', '038.md'), '# planner context\n');
@@ -456,14 +502,14 @@ try {
   assert.equal(start('critic').status, 'accepted');
   assert.equal(recordReviewCompletion({ stateDir: correctionOwnerState, project: correctionOwnerProject, pipelineId: 'family-owner', identity: critic, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
   await executeHostAgentBoundary({ agent: 'pidex-planner', task: 'Plan 038 tracked correction' }, options);
-  assert.equal(correctionOwnerChildren, 3, 'one pending planner correction must remain lifecycle tracked');
+  assert.equal(correctionOwnerChildren, 5, 'one pending planner correction must remain lifecycle tracked');
   for (const gate of ['code-review', 'security']) {
     const current = { runFamilyId: 'family-owner', planId: 'plan-038', reviewGate: gate, reviewMode: 'initial', attemptId: lifecycleAttempt('family-owner', gate, 'initial') };
     assert.equal(start(gate).status, 'accepted');
     assert.equal(recordReviewCompletion({ stateDir: correctionOwnerState, project: correctionOwnerProject, pipelineId: 'family-owner', identity: current, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
   }
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 038 ambiguous correction' }, options), /REVIEW_IDENTITY_INVALID/);
-  assert.equal(correctionOwnerChildren, 3, 'multiple pending corrections must create zero children');
+  assert.equal(correctionOwnerChildren, 5, 'multiple pending corrections must create zero children');
 } finally { rmSync(correctionOwnerState, { recursive: true, force: true }); rmSync(correctionOwnerProject, { recursive: true, force: true }); }
 
 const slugState = mkdtempSync(path.join(os.tmpdir(), 'pidex-slug-state-'));

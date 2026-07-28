@@ -1093,7 +1093,9 @@ node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-hi
   --event pipeline_started \
   --status running \
   --actor orchestrator \
-  --message "Started direct-mode pipeline"
+  --message "Started direct-mode pipeline" \
+  --project-mode host-direct \
+  --metadata-json '{"entrypoint":"pidex-skill"}'
 ```
 
 `analysis-metrics-history.record-event` is analytics-only. It writes JSONL under `<pidex-root>/state/pipeline-events/`; it does not drive a backend scheduler. Operators never pass SQLite `project_id`; ingest derives that from `project_path` (default `$PWD`).

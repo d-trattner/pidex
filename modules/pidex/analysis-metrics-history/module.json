@@ -48,9 +48,25 @@
         "passthrough": true,
         "passthrough_policy": {
           "allowed_patterns": [
-            "^--(project|state-dir|event|source|actor|status|plan|pipeline-id|test-project)$",
-            "^[A-Za-z0-9 ._:/=@-]+$"
+            "^--(project|state-dir|project-slug|slug|pipeline-id|plan|event|event-type|status|actor|message|source|project-mode|test-project|metadata-json)$"
           ],
+          "allowed_value_patterns": {
+            "--project": ["^[A-Za-z0-9 ._:/=@-]+$"],
+            "--state-dir": ["^[A-Za-z0-9 ._:/=@-]+$"],
+            "--project-slug": ["^[A-Za-z0-9._-]{1,160}$"],
+            "--slug": ["^[A-Za-z0-9._-]{1,160}$"],
+            "--pipeline-id": ["^[A-Za-z0-9._-]{1,160}$"],
+            "--plan": ["^[A-Za-z0-9._-]{1,80}$"],
+            "--event": ["^[a-z][a-z_]{0,63}$"],
+            "--event-type": ["^[a-z][a-z_]{0,63}$"],
+            "--status": ["^[A-Za-z0-9._-]{1,80}$"],
+            "--actor": ["^[A-Za-z0-9._-]{1,80}$"],
+            "--message": ["^[\\s\\S]{1,2000}$"],
+            "--source": ["^[A-Za-z0-9._-]{1,80}$"],
+            "--project-mode": ["^(host-direct|hardened-pipeline|project-pipeline)$"],
+            "--test-project": ["^(true|false)$"],
+            "--metadata-json": ["^\\{[\\s\\S]{0,16000}\\}$"]
+          },
           "allow_absolute_project_paths": true
         }
       }
