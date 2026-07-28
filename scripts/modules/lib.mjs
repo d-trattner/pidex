@@ -162,9 +162,11 @@ function snapshotTracked(root) {
   return { bytes, index: readFileSync(path.resolve(root, indexPath)).toString('base64') };
 }
 
-export function validateNodeTestFixedRuntime(projectRoot, command) {
+export function validateNodeTestFixedRuntime(projectRoot, command, pidexRoot = projectRoot) {
   try {
     const root = realpathSync(projectRoot);
+    const trustedRoot = realpathSync(pidexRoot);
+    if (root !== trustedRoot) throw new Error('ROOT_INVALID: project root does not equal PIDEX root');
     if (!lstatSync(root).isDirectory()) throw new Error('ROOT_INVALID: root is not directory');
     const top = realpathSync(git(root, ['rev-parse', '--show-toplevel']).toString('utf8').trim());
     if (top !== root) throw new Error('ROOT_INVALID: root is not Git worktree top level');

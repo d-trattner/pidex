@@ -134,12 +134,18 @@ function allowedRuntimePath(parts, type) {
 function committedBundleAbsent(manifestFile, members) { return !existsSync(manifestFile) && !existsSync(members); }
 function committedBundlePresent(manifestFile, members) { return existsSync(manifestFile) && existsSync(members); }
 function committedManifestValid(manifest) {
-  if (!/^[a-f0-9]{32}$/.test(manifest.generation || '')) return false;
+  if (manifest.schema !== 2 || !/^[a-f0-9]{32}$/.test(manifest.generation || '')) return false;
   return Object.keys(manifest.members || {}).sort().join(',') === MEMBERS.slice().sort().join(',');
 }
 function committedMemberValid(members, manifest, member) {
   const content = readFileSync(path.join(members, `${member}.json`), 'utf8'); const parsed = JSON.parse(content);
-  return parsed.schema === 1 && parsed.generation === manifest.generation && manifest.members[member]?.digest === hash(JSON.stringify(content));
+  return parsed.schema === 2
+    && parsed.generation === manifest.generation
+    && parsed.member === member
+    && JSON.stringify(parsed.identity) === JSON.stringify(manifest.identity)
+    && parsed.publication?.publisher_process_id === manifest.publisher_process_id
+    && JSON.stringify(parsed.publication?.durability) === JSON.stringify(manifest.durability)
+    && manifest.members[member]?.digest === hash(readFileSync(path.join(members, `${member}.json`)));
 }
 function committedBundleValid(root, storage) {
   const base = runtime(root, storage); const manifestFile = path.join(base, 'commit-manifest.json'); const members = path.join(base, 'members');
@@ -270,7 +276,7 @@ test('RP-49 extracted decision helpers preserve closed runtime grammar and forbi
 });
 
 test('RP-49 remaining closure helpers preserve manifest, snapshot, and seed facts', () => {
-  const manifest = { generation: GENERATION, members: Object.fromEntries(MEMBERS.map((member) => [member, {}])) };
+  const manifest = { schema: 2, generation: GENERATION, members: Object.fromEntries(MEMBERS.map((member) => [member, {}])) };
   assert.equal(committedManifestValid(manifest), true);
   assert.equal(committedManifestValid({ ...manifest, members: {} }), false);
   const { root } = fixture();

@@ -22,7 +22,16 @@ const moduleScriptsTokenPattern = /\/scripts\//;
 const stableModuleLibraryPattern = /modules\/pidex\/[A-Za-z0-9_.-]+\/lib\/[A-Za-z0-9_./-]+/g;
 const legacyWrapperPattern = /(?:^|[^A-Za-z0-9_./-])scripts\/(?:release|parallel-agents|git-hooks|provider-limits|profile|project-context|project-metadata|wiki|compat|analysis|metrics|history|pipeline)\/[A-Za-z0-9_./-]+/g;
 const plan049Capability = 'process-rules.plan049-passive-exposure-platform';
-const plan049PointerState = 'B implemented — CMD-1 locked pending independent technical/process/safety/QA verdicts and immutable-coordinate approval';
+const plan049PointerStatePatterns = [
+  /B implemented — CMD-1 locked pending independent technical\/process\/safety\/QA verdicts and immutable-coordinate approval/,
+  /T-1 reached:\s*pushed SHA \x60?[0-9a-f]{40}/,
+  /T-2 reached:\s*Linux passed at SHA \x60?[0-9a-f]{40}/,
+  /Plan049 T-3 passed:\s*Linux and native Windows each passed once, 73\/73, at correction SHA \x60?[0-9a-f]{40}/,
+  /Plan049 T-3 passed at (?:correction )?(?:SHA )?\x60?[0-9a-f]{40}\x60?:\s*Linux and native Windows each passed (?:exactly )?once, 73\/73/,
+  /ELIGIBLE FOR IMMUTABLE-COORDINATE APPROVAL PLANNING[\s\S]{0,240}Git\/CMD-1\/native\/release authority remains locked/,
+  /T-3 blocked at immutable SHA \x60?[0-9a-f]{40}\x60?\./,
+  /Plan049 lifecycle reviewed:\s*code review, security, and QA accepted at SHA \x60?[0-9a-f]{40}/,
+];
 const plan049PointerFiles = new Set([
   'wiki/roadmap.md', 'wiki/status.md', 'wiki/initiatives/011-quality-rule-learning/index.md', 'wiki/initiatives/011-quality-rule-learning/plan-049-crash-safe-passive-exposure-foundation.md',
   'agents.output/planning/049-crash-safe-passive-exposure-foundation.md', 'agents.output/planning/049-crash-safe-passive-exposure-execution-slices.md', 'agents.output/planning/049-c49-5-run-check-capability-reset.md',
@@ -30,6 +39,14 @@ const plan049PointerFiles = new Set([
 ]);
 const plan049RetiredReference = /Invoke-Plan049WindowsValidation|plan049-c49-5-ise-worksheet|plan049-direct-windows-evidence-worksheet|plan049-uc1-probe/;
 const plan049Alias = /process-rules\.(?!plan049-passive-exposure-platform\b)[A-Za-z0-9._-]*passive-exposure-platform\b/;
+
+function hasPlan049PointerState(text) {
+  if (text.includes('RETIRED_UNSAFE — HISTORICAL — DO NOT EXECUTE')) return true;
+  const active = text.split('\n').find((line) => /^> (?:Current Plan049|Plan049 T-3)/.test(line)) || text;
+  const matchingStates = plan049PointerStatePatterns.filter((pattern) => pattern.test(active));
+  const shas = new Set([...active.matchAll(/\b[a-f0-9]{40}\b/g)].map((match) => match[0]));
+  return matchingStates.length === 1 && shas.size <= 1;
+}
 
 function parseIndexRecord(record, seen, previous) {
   const separator = record.indexOf(9);
@@ -124,7 +141,7 @@ for (const { file, mode } of gitFiles()) {
   if (!file.endsWith('.tdd.test.mjs')) {
     if (plan049Alias.test(text)) plan049Violations.push(`${renderPathname(file)}: Plan049 capability alias`);
     if (plan049RetiredReference.test(text) && !text.includes('RETIRED_UNSAFE — HISTORICAL — DO NOT EXECUTE')) plan049Violations.push(`${renderPathname(file)}: retired external reference lacks terminal marker`);
-    if (text.includes(plan049Capability) && /route_to:\s*user\b/.test(text)) plan049Violations.push(`${renderPathname(file)}: unsafe Plan049 active reference`);
+    if (text.includes(plan049Capability) && /route_to:\s*(?:user|custom[-_]?runner|worksheet)\b/.test(text)) plan049Violations.push(`${renderPathname(file)}: unsafe Plan049 active reference`);
     const evidenceRead = /readFileSync\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/.exec(text);
     if (evidenceRead && new RegExp(`appendFileSync\\(\\s*${evidenceRead[1]}\\b`).test(text)) plan049Violations.push(`${renderPathname(file)}: same-path evidence read/append`);
   }
@@ -164,7 +181,7 @@ for (const file of plan049PointerFiles) {
 if (trackedText.get('modules/pidex/process-rules/module.json')?.includes(plan049Capability)) {
   for (const file of plan049PointerFiles) {
     const text = trackedText.get(file);
-    if (!text?.includes(plan049Capability) || !text.includes(plan049PointerState)) plan049Violations.push(`${renderPathname(file)}: Plan049 pointer state incomplete`);
+    if (!text || !hasPlan049PointerState(text)) plan049Violations.push(`${renderPathname(file)}: Plan049 pointer state incomplete`);
   }
 }
 

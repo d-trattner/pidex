@@ -80,21 +80,21 @@ test('C49-3-AUTH-tracer binds complete replay and conflicts to accepted five-mem
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('C49-3-IDENTITY-tracer preserves ordered run identity and logical-OR falsy normalization', () => {
+test('C49-3-IDENTITY-tracer preserves ordered full producer identity', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-pipeline-run-identity-'));
   try {
     write(root, 'agents/pidex-alpha.md', '# Alpha\n');
-    const run = { run_id: 'run-id-pass-through', plan_id: '', project_scope: 0, pipeline_version: false, model_identity: null, config_fingerprint: undefined, correlation_id: '' };
-    const terminal_outcome_ref = '';
+    const run = { run_id: 'run-id-pass-through', plan_id: 'plan-049', project_scope: 'project-safe', pipeline_version: 'project-pipeline-v1', model_identity: 'pi@1', config_fingerprint: 'config:1', correlation_id: 'corr-identity' };
+    const terminal_outcome_ref = 'complete';
     const identity = {
       run_id: 'run-id-pass-through',
-      plan_id: null,
-      project_scope: null,
-      pipeline_version: null,
-      model_identity: null,
-      config_fingerprint: null,
-      correlation_id: null,
-      terminal_outcome_ref: null,
+      plan_id: 'plan-049',
+      project_scope: 'project-safe',
+      pipeline_version: 'project-pipeline-v1',
+      model_identity: 'pi@1',
+      config_fingerprint: 'config:1',
+      correlation_id: 'corr-identity',
+      terminal_outcome_ref: 'complete',
     };
     const milliseconds = Number.parseInt(createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 12), 16) % 253402300799999;
     const result = traceProjectPipelineExposure({ pidexRoot: root, gitTrackedPaths: ['agents/pidex-alpha.md'], run, terminal_outcome_ref });

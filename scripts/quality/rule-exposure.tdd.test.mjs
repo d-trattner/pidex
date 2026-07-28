@@ -203,15 +203,7 @@ test('supported capability publication stays verified and exact replay returns t
       return fsync(descriptor);
     };
     syncBuiltinESMExports();
-    const input = {
-      root,
-      reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)), reconciliation_revision: 'recon-v1', inventory_count: 1, inventory_digest: 'digest-v1' },
-      snapshot: { schema: 1, snapshot_id: 'snapshot:'.concat('b'.repeat(64)), reconciliation_revision: 'recon-v1', active_rules: [] },
-      exposure: { schema: 1, exposure_id: 'exposure:'.concat('c'.repeat(64)), snapshot_id: 'snapshot:'.concat('b'.repeat(64)), usable_for_evidence: false },
-      epoch: { schema: 1, epochs: {} },
-      catalog_contribution: { schema: 1, entries: [] },
-      identity: { run_id: 'run-1', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) },
-    };
+    const input = fullProducerBundle(root, { run_id: 'run-1', terminal_outcome_ref: 'outcome-1' });
     const first = publishPassiveBundle(input);
     const replay = publishPassiveBundle(input);
 
@@ -226,7 +218,8 @@ test('supported capability publication stays verified and exact replay returns t
     assert.equal(existsSync(manifestPath), true);
     assert.equal(JSON.parse(readFileSync(manifestPath, 'utf8')).durability.parent_sync, 'confirmed');
     assert.equal(JSON.stringify(first).includes(root), false);
-    assert.throws(() => publishPassiveBundle({ ...input, identity: { ...input.identity, terminal_outcome_ref: 'changed' } }), /CONFLICT_IDENTITY/);
+    // Schema-2 validates identity links before publication-root effects; malformed replay cannot reach conflict lookup.
+    assert.throws(() => publishPassiveBundle({ ...input, identity: { ...input.identity, terminal_outcome_ref: 'changed' } }), /PASSIVE_SCHEMA_LINK_INVALID/);
     assert.throws(() => publishPassiveBundle({ ...input, extra: true }), /PASSIVE_SCHEMA_UNKNOWN_KEY/);
   } finally {
     fs.fsyncSync = fsync;
@@ -238,13 +231,7 @@ test('supported capability publication stays verified and exact replay returns t
 test('Windows UC-1B-WIN publication stays unconfirmed in publisher and re-verifies only in fresh process', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-windows-'));
   const identity = { run_id: 'windows-run', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
-  const input = {
-    root,
-    reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)) },
-    snapshot: { schema: 1, snapshot_id: identity.snapshot_id, reconciliation_revision: 'recon-v1' },
-    exposure: { schema: 1, exposure_id: identity.exposure_id, snapshot_id: identity.snapshot_id },
-    epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity,
-  };
+  const input = fullProducerBundle(root, identity);
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');
   const fsync = fs.fsyncSync;
   try {
@@ -292,13 +279,7 @@ test('Windows UC-1B-WIN publication stays unconfirmed in publisher and re-verifi
 test('rejects EPERM when live directory-descriptor proof cannot be observed', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-windows-unproved-'));
   const identity = { run_id: 'windows-unproved', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
-  const input = {
-    root,
-    reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)) },
-    snapshot: { schema: 1, snapshot_id: identity.snapshot_id, reconciliation_revision: 'recon-v1' },
-    exposure: { schema: 1, exposure_id: identity.exposure_id, snapshot_id: identity.snapshot_id },
-    epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity,
-  };
+  const input = fullProducerBundle(root, identity);
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');
   const fsync = fs.fsyncSync;
   const fstat = fs.fstatSync;
@@ -329,10 +310,10 @@ test('recovery classifies torn manifest residue as unusable incomplete generatio
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-torn-manifest-'));
   try {
     const identity = { run_id: 'torn-run', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
-    publishPassiveBundle({ root, reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)) }, snapshot: { schema: 1, snapshot_id: identity.snapshot_id, reconciliation_revision: 'recon-v1' }, exposure: { schema: 1, exposure_id: identity.exposure_id, snapshot_id: identity.snapshot_id }, epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity });
+    publishPassiveBundle(fullProducerBundle(root, identity));
     const storageKey = createHash('sha256').update(JSON.stringify({ run_id: identity.run_id })).digest('hex');
     writeFileSync(path.join(root, 'state/quality/rule-exposure', storageKey, 'commit-manifest.json'), '{torn');
-    assert.deepEqual(recoverPassiveBundle({ root, identity }), { state: 'QUARANTINED', reason: 'RECOVERY_INCOMPLETE_GENERATION', usable: false });
+    assert.deepEqual(recoverPassiveBundle({ root, identity }), { state: 'TORN_OR_INVALID', reason: 'RECOVERY_MANIFEST_SCHEMA_INVALID', usable: false });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -471,13 +452,7 @@ test('ROV-49-2 recomposes all C49-1 ledger partitions into exact 89-boundary/178
 test('CO-49-1 native UC-1 sequence has one unconfirmed publisher and two fresh reverified readers', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-concurrency-'));
   const identity = { run_id: 'concurrent-run', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
-  const input = {
-    root,
-    reconciliation: { schema: 1, reconciliation_id: 'reconciliation:'.concat('a'.repeat(64)) },
-    snapshot: { schema: 1, snapshot_id: identity.snapshot_id, reconciliation_revision: 'recon-v1' },
-    exposure: { schema: 1, exposure_id: identity.exposure_id, snapshot_id: identity.snapshot_id },
-    epoch: { schema: 1 }, catalog_contribution: { schema: 1 }, identity,
-  };
+  const input = fullProducerBundle(root, identity);
   const source = pathToFileURL(path.resolve('scripts/quality/rule-exposure.mjs')).href;
   const worker = JSON.stringify(`import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module'; import { publishPassiveBundle } from ${JSON.stringify(source)}; const input = JSON.parse(process.argv[1]); const platform = Object.getOwnPropertyDescriptor(process, 'platform'); const fsync = fs.fsyncSync; Object.defineProperty(process, 'platform', { ...platform, value: 'win32' }); fs.fsyncSync = (descriptor) => { if (fs.fstatSync(descriptor).isDirectory()) { const error = new Error('Windows parent directory sync unsupported'); error.code = 'EPERM'; throw error; } return fsync(descriptor); }; syncBuiltinESMExports(); console.log(JSON.stringify(publishPassiveBundle(input)));`);
   const publish = () => new Promise((resolve) => {
@@ -507,7 +482,8 @@ test('CO-49-1 native UC-1 sequence has one unconfirmed publisher and two fresh r
     assert.deepEqual(publisherResults, [publisher], 'publisher exact typed shape');
     assert.deepEqual(freshReaderResults, [freshReader, freshReader], 'fresh-reader exact typed shapes');
     assert.equal(publisherResults.length + freshReaderResults.length, observed.length, 'no bare IDs or unknown role shape');
-    assert.throws(() => publishPassiveBundle({ ...input, identity: { ...identity, terminal_outcome_ref: 'conflict' } }), /CONFLICT_IDENTITY/);
+    // Schema-2 rejects mismatched identity links before existing-publication lookup.
+    assert.throws(() => publishPassiveBundle({ ...input, identity: { ...identity, terminal_outcome_ref: 'conflict' } }), /PASSIVE_SCHEMA_LINK_INVALID/);
 
     writeFileSync(path.join(bundlePath, '.lock'), JSON.stringify({ pid: process.pid, identity }));
     assert.deepEqual(recoverPassiveBundle({ root, identity }), { state: 'TORN_OR_INVALID', reason: 'RECOVERY_OWNER_ACTIVE', usable: false });
@@ -522,6 +498,124 @@ test('CO-49-1 native UC-1 sequence has one unconfirmed publisher and two fresh r
     assert.deepEqual(recoverPassiveBundle({ root, identity }), { state: 'TORN_OR_INVALID', reason: 'RECOVERY_OWNER_ACTIVE', usable: false }, 'timeout never proves a live owner dead');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function fullProducerBundle(root, identity = {}) {
+  const ids = {
+    reconciliation_id: `reconciliation:${'a'.repeat(64)}`,
+    snapshot_id: `snapshot:${'b'.repeat(64)}`,
+    exposure_id: `exposure:${'c'.repeat(64)}`,
+  };
+  const resolvedIdentity = {
+    run_id: 'schema2-run', terminal_outcome_ref: 'terminal-1', reconciliation_revision: 'recon-v1',
+    snapshot_id: ids.snapshot_id, exposure_id: ids.exposure_id, ...identity,
+  };
+  const activeRule = { rule_id: 'rule:agent:pidex-alpha', version_hash: 'd'.repeat(64), activation_epoch: `epoch:${'e'.repeat(24)}` };
+  const nullableRunFields = { plan_id: null, project_scope: null, pipeline_version: null, model_identity: null, config_fingerprint: null, correlation_id: null };
+  return {
+    root,
+    reconciliation: { schema: 1, reconciliation_revision: 'recon-v1', inventory_count: 1, inventory_digest: 'digest-v1', reconciliation_id: ids.reconciliation_id, artifact_id: ids.reconciliation_id },
+    snapshot: { schema: 1, snapshot_id: ids.snapshot_id, complete: true, quality_flags: [], active_rules: [activeRule], resolver_revision: 'resolver-v1', inventory_revision: 'inventory-v1', reconciliation_revision: 'recon-v1', inventory_count: 1, projection_revision: 'projection-v1', run_id: resolvedIdentity.run_id, ...nullableRunFields, created_at: '2026-07-27T00:00:00.000Z' },
+    exposure: { schema: 1, exposure_id: ids.exposure_id, snapshot_id: ids.snapshot_id, run_id: resolvedIdentity.run_id, ...nullableRunFields, resolver_revision: 'resolver-v1', inventory_revision: 'inventory-v1', reconciliation_revision: 'recon-v1', projection_revision: 'projection-v1', active_rules: [activeRule], activation_epochs: { [activeRule.rule_id]: activeRule.activation_epoch }, terminal_outcome_ref: resolvedIdentity.terminal_outcome_ref, timestamp: '2026-07-27T00:00:00.000Z', quality: 'complete', quality_flags: [], usable_for_evidence: false, attestation: 'project-pipeline-tracer' },
+    epoch: { schema: 1, epochs: { [`${activeRule.rule_id}\0${activeRule.version_hash}`]: activeRule.activation_epoch } },
+    catalog_contribution: { schema: 1, entries: [activeRule] },
+    identity: resolvedIdentity,
+  };
+}
+
+test('C-1 + M-3 writes schema-2 member-bound bundle and rejects nested schema drift', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-schema2-'));
+  try {
+    const input = fullProducerBundle(root);
+    const ids = publishPassiveBundle(input);
+    const storageKey = createHash('sha256').update(JSON.stringify({ run_id: input.identity.run_id })).digest('hex');
+    const bundleRoot = path.join(root, 'state/quality/rule-exposure', storageKey);
+    const manifest = JSON.parse(readFileSync(path.join(bundleRoot, 'commit-manifest.json'), 'utf8'));
+    assert.equal(manifest.schema, 2);
+    assert.equal(manifest.publisher_process_id, process.pid);
+    for (const member of ['reconciliation', 'snapshot', 'exposure', 'epoch', 'catalog_contribution']) {
+      const envelope = JSON.parse(readFileSync(path.join(bundleRoot, 'members', `${member}.json`), 'utf8'));
+      assert.deepEqual(Object.keys(envelope).sort(), ['body', 'generation', 'identity', 'member', 'publication', 'schema']);
+      assert.equal(envelope.schema, 2);
+      assert.equal(envelope.member, member);
+      assert.deepEqual(envelope.publication, { publisher_process_id: process.pid, durability: { parent_sync: 'confirmed' } });
+      assert.equal(manifest.members[member].digest, createHash('sha256').update(readFileSync(path.join(bundleRoot, 'members', `${member}.json`))).digest('hex'), 'manifest digest binds exact persisted member bytes');
+    }
+    assert.deepEqual(ids, { reconciliation_id: input.reconciliation.reconciliation_id, snapshot_id: input.snapshot.snapshot_id, exposure_id: input.exposure.exposure_id });
+    assert.throws(() => publishPassiveBundle({ ...fullProducerBundle(root, { run_id: 'nested-drift' }), snapshot: { ...input.snapshot, later_plan: true } }), /PASSIVE_SCHEMA_UNKNOWN_KEY/);
+    const nestedRule = fullProducerBundle(root, { run_id: 'recursive-drift' });
+    nestedRule.snapshot.active_rules = [{ ...nestedRule.snapshot.active_rules[0], later_plan: true }];
+    assert.throws(() => publishPassiveBundle(nestedRule), /PASSIVE_SCHEMA_UNKNOWN_KEY/);
+    writeFileSync(path.join(bundleRoot, 'commit-manifest.json'), `${JSON.stringify({ ...manifest, publisher_process_id: process.pid + 1 })}\n`);
+    assert.deepEqual(recoverPassiveBundle({ root, identity: input.identity }), { state: 'TORN_OR_INVALID', reason: 'RECOVERY_PUBLISHER_INVALID', usable: false });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('M-3 rejects snapshot/exposure identity, revision, and quality-link mismatches before publish and recovery authority', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-schema2-links-'));
+  try {
+    for (const exposure of [
+      { ...fullProducerBundle(root).exposure, plan_id: 'foreign-plan' },
+      { ...fullProducerBundle(root).exposure, projection_revision: 'foreign-projection' },
+      { ...fullProducerBundle(root).exposure, quality: 'inventory_incomplete' },
+      { ...fullProducerBundle(root).exposure, quality_flags: ['inventory_incomplete'] },
+    ]) {
+      const input = fullProducerBundle(root);
+      input.exposure = exposure;
+      assert.throws(() => publishPassiveBundle(input), /PASSIVE_SCHEMA_LINK_INVALID/);
+    }
+
+    const input = fullProducerBundle(root, { run_id: 'recovery-link-mismatch' });
+    publishPassiveBundle(input);
+    const storageKey = createHash('sha256').update(JSON.stringify({ run_id: input.identity.run_id })).digest('hex');
+    const bundleRoot = path.join(root, 'state/quality/rule-exposure', storageKey);
+    const memberPath = path.join(bundleRoot, 'members/exposure.json');
+    const envelope = JSON.parse(readFileSync(memberPath, 'utf8'));
+    const content = `${JSON.stringify({ ...envelope, body: { ...envelope.body, config_fingerprint: 'foreign-config' } })}\n`;
+    writeFileSync(memberPath, content);
+    const manifestPath = path.join(bundleRoot, 'commit-manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.members.exposure.digest = createHash('sha256').update(content).digest('hex');
+    writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
+    assert.deepEqual(recoverPassiveBundle({ root, identity: input.identity }), { state: 'TORN_OR_INVALID', reason: 'RECOVERY_LINK_INVALID', usable: false });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Plan050 verifies exact persisted member bytes before strict UTF-8 decode', () => {
+  const source = readFileSync(new URL('./rule-exposure.mjs', import.meta.url), 'utf8');
+  const verifier = source.slice(source.indexOf('function verifiedManifestMember'), source.indexOf('\nfunction verifyManifest'));
+
+  assert.match(verifier, /const bytes = existsSync\(memberFile\) \? readFileSync\(memberFile\) : null;/);
+  assert.match(verifier, /memberDigest\(bytes\).*strictMemberText\(bytes\)/s);
+
+  for (const member of ['reconciliation', 'snapshot', 'exposure', 'epoch', 'catalog_contribution']) {
+    const root = mkdtempSync(path.join(os.tmpdir(), `pidex-plan050-${member}-`));
+    try {
+      const input = fullProducerBundle(root, { run_id: `plan050-invalid-${member}` });
+      publishPassiveBundle(input);
+      const storageKey = createHash('sha256').update(JSON.stringify({ run_id: input.identity.run_id })).digest('hex');
+      const bundleRoot = path.join(root, 'state/quality/rule-exposure', storageKey);
+      const manifestFile = path.join(bundleRoot, 'commit-manifest.json');
+      const manifest = readFileSync(manifestFile);
+      const memberFile = path.join(bundleRoot, 'members', `${member}.json`);
+      const bytes = readFileSync(memberFile);
+      bytes[0] = 0x80;
+      writeFileSync(memberFile, bytes);
+
+      assert.deepEqual(readFileSync(manifestFile), manifest, `${member}: manifest remains unchanged`);
+      assert.deepEqual(
+        recoverPassiveBundle({ root, identity: input.identity }),
+        { state: 'TORN_OR_INVALID', reason: 'RECOVERY_MEMBER_INVALID', usable: false },
+        `${member}: malformed raw substitution grants no IDs`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

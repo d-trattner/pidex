@@ -47,8 +47,15 @@ if (!availability.available) {
   process.exit(1);
 }
 
-const startedAt = new Date().toISOString();
 const command = entry.capability.command;
+const fixedRuntime = command.validation_profile === 'node-test-fixed-v1'
+  ? validateNodeTestFixedRuntime(project, command, pidexRoot)
+  : null;
+if (fixedRuntime?.error?.startsWith('ROOT_INVALID: project root does not equal PIDEX root')) {
+  console.error(fixedRuntime.error);
+  process.exit(1);
+}
+const startedAt = new Date().toISOString();
 if (passthroughArgs.length && command.passthrough !== true) {
   console.error(`capability does not allow passthrough args: ${capabilityId}`);
   process.exit(2);
@@ -136,7 +143,7 @@ const redactedExecutedArgs = [...execArgs, ...redactedPassthroughArgs];
 let runtimeError = '';
 let proc;
 if (command.validation_profile === 'node-test-fixed-v1') {
-  const preflight = validateNodeTestFixedRuntime(project, command);
+  const preflight = fixedRuntime;
   if (preflight.error) {
     runtimeError = preflight.error;
     proc = { status: 1, signal: null, stdout: '', stderr: `${runtimeError}\n` };

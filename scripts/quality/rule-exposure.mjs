@@ -203,6 +203,10 @@ function bundleDigest(value) {
   return createHash('sha256').update(canonical(value)).digest('hex');
 }
 
+function memberDigest(content) {
+  return createHash('sha256').update(content).digest('hex');
+}
+
 function bundleError(code) {
   const error = new Error(code);
   error.code = code;
@@ -276,43 +280,109 @@ function validBundleRecord(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function assertKnownBundleKeys(input) {
-  for (const key of Object.keys(input)) if (!BUNDLE_INPUT_KEYS.has(key)) throw bundleError('PASSIVE_SCHEMA_UNKNOWN_KEY');
+function hasExactKeys(value, keys) {
+  return validBundleRecord(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
-function assertBundleMembers(input) {
-  for (const member of BUNDLE_MEMBERS) if (!validBundleRecord(input[member])) throw bundleError('PASSIVE_SCHEMA_MEMBER_REQUIRED');
-}
-
-function validBundleSchemas(reconciliation, snapshot, exposure, identity) {
-  return reconciliation.schema === 1 && snapshot.schema === 1 && exposure.schema === 1 && validBundleRecord(identity);
+function nonempty(value) {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function validBundleIdentifier(value, prefix) {
   return new RegExp(`^${prefix}:[a-f0-9]{64}$`).test(value || '');
 }
 
-function matchingBundleIdentity(snapshot, exposure, identity) {
-  return identity.reconciliation_revision === snapshot.reconciliation_revision
-    && identity.snapshot_id === snapshot.snapshot_id
-    && identity.exposure_id === exposure.exposure_id;
+function validActiveRule(value) {
+  return hasExactKeys(value, ['rule_id', 'version_hash', 'activation_epoch'])
+    && /^rule:/.test(value.rule_id) && /^[a-f0-9]{64}$/.test(value.version_hash)
+    && /^epoch:[a-f0-9]{24}$/.test(value.activation_epoch);
 }
 
-function validBundleLinks(reconciliation, snapshot, exposure, identity) {
-  if (!validBundleIdentifier(reconciliation.reconciliation_id, 'reconciliation')) return false;
-  if (!validBundleIdentifier(snapshot.snapshot_id, 'snapshot')) return false;
-  if (!validBundleIdentifier(exposure.exposure_id, 'exposure')) return false;
-  if (exposure.snapshot_id !== snapshot.snapshot_id) return false;
-  return matchingBundleIdentity(snapshot, exposure, identity);
+function validActiveRules(value) {
+  return Array.isArray(value) && value.every(validActiveRule)
+    && new Set(value.map((rule) => `${rule.rule_id}\0${rule.version_hash}`)).size === value.length;
+}
+
+function validNullable(value) {
+  return value === null || nonempty(value);
+}
+
+function validIdentity(identity) {
+  return hasExactKeys(identity, ['run_id', 'terminal_outcome_ref', 'reconciliation_revision', 'snapshot_id', 'exposure_id'])
+    && nonempty(identity.run_id) && validNullable(identity.terminal_outcome_ref) && nonempty(identity.reconciliation_revision)
+    && validBundleIdentifier(identity.snapshot_id, 'snapshot') && validBundleIdentifier(identity.exposure_id, 'exposure');
+}
+
+function validReconciliation(value) {
+  return hasExactKeys(value, ['schema', 'reconciliation_revision', 'inventory_count', 'inventory_digest', 'reconciliation_id', 'artifact_id'])
+    && value.schema === 1 && nonempty(value.reconciliation_revision) && Number.isInteger(value.inventory_count) && value.inventory_count >= 0
+    && nonempty(value.inventory_digest) && validBundleIdentifier(value.reconciliation_id, 'reconciliation') && value.artifact_id === value.reconciliation_id;
+}
+
+function validSnapshot(value) {
+  const keys = ['schema', 'snapshot_id', 'complete', 'quality_flags', 'active_rules', 'resolver_revision', 'inventory_revision', 'reconciliation_revision', 'inventory_count', 'projection_revision', 'run_id', 'plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id', 'created_at'];
+  return hasExactKeys(value, keys) && value.schema === 1 && validBundleIdentifier(value.snapshot_id, 'snapshot')
+    && typeof value.complete === 'boolean' && Array.isArray(value.quality_flags) && value.quality_flags.every((flag) => ['inventory_incomplete', 'identity_incomplete'].includes(flag))
+    && new Set(value.quality_flags).size === value.quality_flags.length && validActiveRules(value.active_rules)
+    && ['resolver_revision', 'inventory_revision', 'reconciliation_revision', 'projection_revision', 'run_id'].every((key) => nonempty(value[key]))
+    && Number.isInteger(value.inventory_count) && value.inventory_count >= 0
+    && ['plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id'].every((key) => validNullable(value[key]))
+    && !Number.isNaN(Date.parse(value.created_at));
+}
+
+function validExposure(value) {
+  const keys = ['schema', 'exposure_id', 'snapshot_id', 'run_id', 'plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id', 'resolver_revision', 'inventory_revision', 'reconciliation_revision', 'projection_revision', 'active_rules', 'activation_epochs', 'terminal_outcome_ref', 'timestamp', 'quality', 'quality_flags', 'usable_for_evidence', 'attestation'];
+  return hasExactKeys(value, keys) && value.schema === 1 && validBundleIdentifier(value.exposure_id, 'exposure') && validBundleIdentifier(value.snapshot_id, 'snapshot')
+    && nonempty(value.run_id) && ['plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id', 'terminal_outcome_ref'].every((key) => validNullable(value[key]))
+    && ['resolver_revision', 'inventory_revision', 'reconciliation_revision', 'projection_revision'].every((key) => nonempty(value[key]))
+    && validActiveRules(value.active_rules) && hasExactKeys(value.activation_epochs, value.active_rules.map((rule) => rule.rule_id))
+    && value.active_rules.every((rule) => value.activation_epochs[rule.rule_id] === rule.activation_epoch)
+    && ['complete', 'identity_incomplete', 'inventory_incomplete'].includes(value.quality) && Array.isArray(value.quality_flags)
+    && value.usable_for_evidence === false && value.attestation === 'project-pipeline-tracer' && !Number.isNaN(Date.parse(value.timestamp));
+}
+
+function validEpoch(value) {
+  return hasExactKeys(value, ['schema', 'epochs']) && value.schema === 1 && validBundleRecord(value.epochs)
+    && Object.entries(value.epochs).every(([key, epoch]) => /^rule:.+\0[a-f0-9]{64}$/.test(key) && /^epoch:[a-f0-9]{24}$/.test(epoch));
+}
+
+function validCatalog(value) {
+  return hasExactKeys(value, ['schema', 'entries']) && value.schema === 1 && validActiveRules(value.entries);
+}
+
+function bundleBodyReason(input) {
+  if (!validBundleRecord(input)) return 'PASSIVE_SCHEMA_INVALID';
+  for (const key of Object.keys(input)) if (!BUNDLE_INPUT_KEYS.has(key)) return 'PASSIVE_SCHEMA_UNKNOWN_KEY';
+  const bodyKeys = {
+    reconciliation: ['schema', 'reconciliation_revision', 'inventory_count', 'inventory_digest', 'reconciliation_id', 'artifact_id'],
+    snapshot: ['schema', 'snapshot_id', 'complete', 'quality_flags', 'active_rules', 'resolver_revision', 'inventory_revision', 'reconciliation_revision', 'inventory_count', 'projection_revision', 'run_id', 'plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id', 'created_at'],
+    exposure: ['schema', 'exposure_id', 'snapshot_id', 'run_id', 'plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id', 'resolver_revision', 'inventory_revision', 'reconciliation_revision', 'projection_revision', 'active_rules', 'activation_epochs', 'terminal_outcome_ref', 'timestamp', 'quality', 'quality_flags', 'usable_for_evidence', 'attestation'],
+    epoch: ['schema', 'epochs'], catalog_contribution: ['schema', 'entries'],
+  };
+  if (Object.entries(bodyKeys).some(([member, keys]) => validBundleRecord(input[member]) && Object.keys(input[member]).some((key) => !keys.includes(key)))) return 'PASSIVE_SCHEMA_UNKNOWN_KEY';
+  const activeRuleUnknown = (rules) => Array.isArray(rules) && rules.some((rule) => validBundleRecord(rule) && Object.keys(rule).some((key) => !['rule_id', 'version_hash', 'activation_epoch'].includes(key)));
+  if (activeRuleUnknown(input.snapshot?.active_rules) || activeRuleUnknown(input.exposure?.active_rules) || activeRuleUnknown(input.catalog_contribution?.entries)) return 'PASSIVE_SCHEMA_UNKNOWN_KEY';
+  if (!BUNDLE_MEMBERS.every((member) => validBundleRecord(input[member])) || !validIdentity(input.identity)) return 'PASSIVE_SCHEMA_INVALID';
+  if (![validReconciliation(input.reconciliation), validSnapshot(input.snapshot), validExposure(input.exposure), validEpoch(input.epoch), validCatalog(input.catalog_contribution)].every(Boolean)) return 'PASSIVE_SCHEMA_INVALID';
+  const { reconciliation, snapshot, exposure, epoch, catalog_contribution: catalog, identity } = input;
+  const sharedSnapshotExposureFields = ['run_id', 'plan_id', 'project_scope', 'pipeline_version', 'model_identity', 'config_fingerprint', 'correlation_id', 'resolver_revision', 'inventory_revision', 'reconciliation_revision', 'projection_revision'];
+  const expectedQuality = snapshot.complete
+    ? 'complete'
+    : snapshot.quality_flags.includes('inventory_incomplete') ? 'inventory_incomplete' : 'identity_incomplete';
+  const linked = reconciliation.reconciliation_revision === snapshot.reconciliation_revision && reconciliation.reconciliation_revision === exposure.reconciliation_revision
+    && snapshot.snapshot_id === exposure.snapshot_id && identity.reconciliation_revision === reconciliation.reconciliation_revision
+    && identity.snapshot_id === snapshot.snapshot_id && identity.exposure_id === exposure.exposure_id
+    && identity.run_id === snapshot.run_id && identity.run_id === exposure.run_id && identity.terminal_outcome_ref === exposure.terminal_outcome_ref
+    && sharedSnapshotExposureFields.every((key) => snapshot[key] === exposure[key])
+    && exposure.quality === expectedQuality && canonical(exposure.quality_flags) === canonical(snapshot.quality_flags)
+    && canonical(snapshot.active_rules) === canonical(exposure.active_rules) && canonical(snapshot.active_rules) === canonical(catalog.entries)
+    && snapshot.active_rules.every((rule) => epoch.epochs[epochKey(rule)] === rule.activation_epoch);
+  return linked ? null : 'PASSIVE_SCHEMA_LINK_INVALID';
 }
 
 function assertBundleInput(input) {
-  if (!validBundleRecord(input)) throw bundleError('PASSIVE_SCHEMA_INVALID');
-  assertKnownBundleKeys(input);
-  assertBundleMembers(input);
-  const { reconciliation, snapshot, exposure, identity } = input;
-  if (!validBundleSchemas(reconciliation, snapshot, exposure, identity)) throw bundleError('PASSIVE_SCHEMA_INVALID');
-  if (!validBundleLinks(reconciliation, snapshot, exposure, identity)) throw bundleError('PASSIVE_SCHEMA_LINK_INVALID');
+  const reason = bundleBodyReason(input);
+  if (reason) throw bundleError(reason);
 }
 
 function publicIds(input) {
@@ -324,57 +394,71 @@ function publicIds(input) {
 }
 
 function readManifest(file) {
-  try { return JSON.parse(readFileSync(file, 'utf8')); }
-  catch { throw bundleError('RECOVERY_INCOMPLETE_GENERATION'); }
+  try {
+    const content = readFileSync(file, 'utf8');
+    const parsed = JSON.parse(content);
+    if (content !== `${canonical(parsed)}\n`) throw bundleError('RECOVERY_MANIFEST_SCHEMA_INVALID');
+    return parsed;
+  } catch (error) {
+    if (error?.code) throw error;
+    throw bundleError('RECOVERY_MANIFEST_SCHEMA_INVALID');
+  }
 }
 
 function manifestHasStructure(manifest) {
-  return Boolean(manifest)
-    && manifest.schema === 1
-    && /^[a-f0-9]{32}$/.test(manifest.generation || '')
-    && Boolean(manifest.members)
-    && typeof manifest.members === 'object';
+  return hasExactKeys(manifest, ['schema', 'generation', 'identity', 'public_ids', 'members', 'durability', 'publisher_process_id'])
+    && manifest.schema === 2 && /^[a-f0-9]{32}$/.test(manifest.generation)
+    && validIdentity(manifest.identity) && hasExactKeys(manifest.public_ids, ['reconciliation_id', 'snapshot_id', 'exposure_id'])
+    && ['reconciliation_id', 'snapshot_id', 'exposure_id'].every((key) => validBundleIdentifier(manifest.public_ids[key], key.replace('_id', '')))
+    && hasExactKeys(manifest.members, BUNDLE_MEMBERS) && BUNDLE_MEMBERS.every((member) => hasExactKeys(manifest.members[member], ['digest']) && /^[a-f0-9]{64}$/.test(manifest.members[member].digest))
+    && hasExactKeys(manifest.durability, ['parent_sync']) && ['confirmed', 'unsupported'].includes(manifest.durability.parent_sync)
+    && Number.isInteger(manifest.publisher_process_id) && manifest.publisher_process_id > 0;
 }
 
 function manifestMatchesIdentity(manifest, identity) {
   return canonical(manifest.identity) === canonical(identity);
 }
 
-function validManifestMemberDigest(expected) {
-  return Boolean(expected) && typeof expected.digest === 'string';
-}
-
-function manifestMemberContent(file) {
-  return existsSync(file) ? readFileSync(file, 'utf8') : null;
-}
-
-function manifestMemberMatches(content, manifest, identity) {
+function strictMemberText(bytes) {
   try {
+    const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     const parsed = JSON.parse(content);
-    return parsed.generation === manifest.generation && manifestMatchesIdentity(parsed, identity);
-  } catch {
-    return false;
-  }
+    return bytes.equals(Buffer.from(`${canonical(parsed)}\n`, 'utf8')) ? parsed : null;
+  } catch { return null; }
 }
 
 function verifiedManifestMember(root, manifest, identity, member) {
-  const expected = manifest.members[member];
-  if (!validManifestMemberDigest(expected)) return false;
-  const content = manifestMemberContent(path.join(root, 'members', `${member}.json`));
-  if (content === null || bundleDigest(content) !== expected.digest) return false;
-  return manifestMemberMatches(content, manifest, identity);
+  const memberFile = path.join(root, 'members', `${member}.json`);
+  const bytes = existsSync(memberFile) ? readFileSync(memberFile) : null;
+  if (bytes === null || memberDigest(bytes) !== manifest.members[member].digest) throw bundleError('RECOVERY_MEMBER_INVALID');
+  const envelope = strictMemberText(bytes);
+  if (!hasExactKeys(envelope, ['schema', 'generation', 'member', 'identity', 'publication', 'body']) || envelope.schema !== 2 || envelope.generation !== manifest.generation || envelope.member !== member || !manifestMatchesIdentity(envelope, identity)) throw bundleError('RECOVERY_MEMBER_INVALID');
+  if (!hasExactKeys(envelope.publication, ['publisher_process_id', 'durability']) || envelope.publication.publisher_process_id !== manifest.publisher_process_id) throw bundleError('RECOVERY_PUBLISHER_INVALID');
+  if (!hasExactKeys(envelope.publication.durability, ['parent_sync']) || envelope.publication.durability.parent_sync !== manifest.durability.parent_sync) throw bundleError('RECOVERY_DURABILITY_INVALID');
+  return envelope.body;
 }
 
 function verifyManifest(root, manifest, identity) {
-  if (!manifestHasStructure(manifest) || !manifestMatchesIdentity(manifest, identity)) throw bundleError('CONFLICT_IDENTITY');
-  for (const member of BUNDLE_MEMBERS) if (!verifiedManifestMember(root, manifest, identity, member)) throw bundleError('RECOVERY_INCOMPLETE_GENERATION');
-  return manifest.public_ids;
+  if (!manifestHasStructure(manifest)) throw bundleError('RECOVERY_MANIFEST_SCHEMA_INVALID');
+  if (!manifestMatchesIdentity(manifest, identity)) throw bundleError('RECOVERY_IDENTITY_CONFLICT');
+  const bodies = Object.fromEntries(BUNDLE_MEMBERS.map((member) => [member, verifiedManifestMember(root, manifest, identity, member)]));
+  const input = { root: '.', identity, ...bodies };
+  const reason = bundleBodyReason(input);
+  if (reason === 'PASSIVE_SCHEMA_LINK_INVALID') throw bundleError('RECOVERY_LINK_INVALID');
+  if (reason) throw bundleError('RECOVERY_MEMBER_SCHEMA_INVALID');
+  const ids = publicIds(input);
+  if (canonical(ids) !== canonical(manifest.public_ids)) throw bundleError('RECOVERY_LINK_INVALID');
+  return ids;
 }
 
 function existingPublication(root, identity) {
   const manifest = path.join(root, 'commit-manifest.json');
   if (!existsSync(manifest)) return undefined;
-  return verifyManifest(root, readManifest(manifest), identity);
+  try { return verifyManifest(root, readManifest(manifest), identity); }
+  catch (error) {
+    if (error?.code === 'RECOVERY_IDENTITY_CONFLICT') throw bundleError('CONFLICT_IDENTITY');
+    throw error;
+  }
 }
 
 function readLockOwner(lock) {
@@ -721,7 +805,11 @@ function recoveryManifestResult(publicationRoot, identity) {
   const manifestFile = path.join(publicationRoot, 'commit-manifest.json');
   if (!existsSync(manifestFile)) return undefined;
   try { return verifiedManifestResult(publicationRoot, identity, readManifest(manifestFile)); }
-  catch (error) { return error?.code === 'CONFLICT_IDENTITY' ? { state: 'CONFLICT', reason: 'RECOVERY_IDENTITY_CONFLICT', usable: false } : undefined; }
+  catch (error) {
+    if (error?.code === 'RECOVERY_IDENTITY_CONFLICT') return { state: 'CONFLICT', reason: 'RECOVERY_IDENTITY_CONFLICT', usable: false };
+    if (error?.code?.startsWith('RECOVERY_')) return { state: 'TORN_OR_INVALID', reason: error.code, usable: false };
+    return { state: 'TORN_OR_INVALID', reason: 'RECOVERY_MANIFEST_SCHEMA_INVALID', usable: false };
+  }
 }
 
 function stagedGeneration(publicationRoot) {
@@ -762,29 +850,38 @@ export function recoverPassiveBundle({ root, identity } = {}) {
 }
 
 /** Publishes one immutable, manifest-last passive bundle. Existing exact identity replays; changed identity conflicts. */
-function publishBundleMember(stage, members, generation, input, name) {
-  const content = `${canonical({ schema: 1, generation, identity: input.identity, body: input[name] })}\n`;
+function publishBundleMember(stage, members, generation, input, name, publication) {
+  const bytes = Buffer.from(`${canonical({ schema: 2, generation, member: name, identity: input.identity, publication, body: input[name] })}\n`, 'utf8');
   const temp = path.join(stage, `${name}.tmp`);
   const staged = path.join(stage, `${name}.stage`);
-  writeDurable(temp, content);
+  const final = path.join(members, `${name}.json`);
+  writeDurable(temp, bytes);
   renameSync(temp, staged);
   if (process.platform !== 'win32') syncParent(stage);
-  renameSync(staged, path.join(members, `${name}.json`));
+  renameSync(staged, final);
   if (process.platform !== 'win32') syncParent(members);
-  return { digest: bundleDigest(content) };
+  const readback = readFileSync(final);
+  if (!readback.equals(bytes)) throw bundleError('RECOVERY_MEMBER_INVALID');
+  return { digest: memberDigest(readback) };
 }
 
-function publishBundleMembers(stage, members, generation, input) {
+function publishBundleMembers(stage, members, generation, input, publication) {
   const hashes = {};
-  for (const name of BUNDLE_MEMBERS) hashes[name] = publishBundleMember(stage, members, generation, input, name);
+  for (const name of BUNDLE_MEMBERS) hashes[name] = publishBundleMember(stage, members, generation, input, name, publication);
   return { hashes, file_create_write_flush_succeeded: Object.keys(hashes).length === BUNDLE_MEMBERS.length };
 }
 
-function completeMemberPublication(root, generation, identity, members) {
-  return BUNDLE_MEMBERS.every((member) => verifiedManifestMember(root, { generation, identity, members }, identity, member));
+function completeMemberPublication(root, generation, identity, members, publication) {
+  const manifest = { generation, identity, members, publisher_process_id: publication.publisher_process_id, durability: publication.durability };
+  try {
+    return BUNDLE_MEMBERS.every((member) => {
+      verifiedManifestMember(root, manifest, identity, member);
+      return true;
+    });
+  } catch { return false; }
 }
 
-function windowsDirectorySyncFacts(root, stage, generation, input, members, rootCreated, fileCreateWriteFlushSucceeded) {
+function windowsDirectorySyncFacts(root, stage, generation, input, members, publication, rootCreated, fileCreateWriteFlushSucceeded) {
   let target;
   try { target = lstatSync(root); } catch { return {}; }
   let probeRoot;
@@ -801,13 +898,13 @@ function windowsDirectorySyncFacts(root, stage, generation, input, members, root
     target_real_directory: target.isDirectory(),
     target_not_symlink_or_reparse: !target.isSymbolicLink(),
     file_create_write_flush_succeeded: fileCreateWriteFlushSucceeded,
-    same_volume_rename_verify_succeeded: completeMemberPublication(root, generation, input.identity, members),
+    same_volume_rename_verify_succeeded: completeMemberPublication(root, generation, input.identity, members, publication),
     cleanup_succeeded: !readdirSync(stage).some((name) => name.endsWith('.tmp') || name.endsWith('.stage')),
   };
 }
 
 function publishBundleManifest(root, stage, generation, input, members, parentSync) {
-  const manifest = { schema: 1, generation, identity: input.identity, public_ids: publicIds(input), members, durability: { parent_sync: parentSync }, publisher_process_id: process.pid };
+  const manifest = { schema: 2, generation, identity: input.identity, public_ids: publicIds(input), members, durability: { parent_sync: parentSync }, publisher_process_id: process.pid };
   const temporary = path.join(stage, 'commit-manifest.tmp');
   writeDurable(temporary, `${canonical(manifest)}\n`);
   renameSync(temporary, path.join(root, 'commit-manifest.json'));
@@ -840,11 +937,14 @@ function publishNewBundle(root, input, rootCreated) {
     const members = path.join(root, 'members');
     mkdirSync(stage, { recursive: true, mode: 0o700 });
     mkdirSync(members, { recursive: true, mode: 0o700 });
-    const memberPublication = publishBundleMembers(stage, members, generation, input);
+    const parentSync = process.platform === 'win32' ? 'unsupported' : 'confirmed';
+    const publication = { publisher_process_id: process.pid, durability: { parent_sync: parentSync } };
+    const memberPublication = publishBundleMembers(stage, members, generation, input, publication);
     const memberHashes = memberPublication.hashes;
-    const parentSync = process.platform === 'win32'
-      ? syncParent(root, windowsDirectorySyncFacts(root, stage, generation, input, memberHashes, rootCreated, memberPublication.file_create_write_flush_succeeded))
-      : 'confirmed';
+    if (process.platform === 'win32') {
+      const observed = syncParent(root, windowsDirectorySyncFacts(root, stage, generation, input, memberHashes, publication, rootCreated, memberPublication.file_create_write_flush_succeeded));
+      if (observed !== parentSync) throw bundleError('RECOVERY_DURABILITY_FAILED');
+    }
     const artifacts = verifyManifest(root, publishBundleManifest(root, stage, generation, input, memberHashes, parentSync), input.identity);
     if (parentSync !== 'unsupported') return artifacts;
     return unconfirmedPublicationResult(artifacts);

@@ -67,6 +67,53 @@ test('B-T6 rejects Plan049 capability aliases and retired paths without terminal
   assert.throws(() => runGuard(partial), /Plan049 pointer state incomplete/);
 });
 
+test('accepts each finite Plan049 lifecycle pointer state and rejects custom runner routes', () => {
+  const pointerFiles = [
+    'wiki/roadmap.md', 'wiki/status.md', 'wiki/initiatives/011-quality-rule-learning/index.md', 'wiki/initiatives/011-quality-rule-learning/plan-049-crash-safe-passive-exposure-foundation.md',
+    'agents.output/planning/049-crash-safe-passive-exposure-foundation.md', 'agents.output/planning/049-crash-safe-passive-exposure-execution-slices.md', 'agents.output/planning/049-c49-5-run-check-capability-reset.md',
+    'agents.output/planning/049-c49-5-direct-windows-evidence-reset.md', 'agents.output/planning/049-c49-5-windows-concurrency-test-and-ise-capture-correction.md', 'agents.output/devops/049-native-windows-validation-lane.md', 'agents.output/qa/049-windows-validation/README.md', 'agents.output/analysis/049-windows-evidence-worksheet-runaway-incident.md',
+  ];
+  const states = [
+    'B implemented — CMD-1 locked pending independent technical/process/safety/QA verdicts and immutable-coordinate approval',
+    'T-1 reached: pushed SHA 0bb3052d6ad21d900a06ec67b141527ec2a6f638.',
+    'T-2 reached: Linux passed at SHA 0bb3052d6ad21d900a06ec67b141527ec2a6f638.',
+    'Plan049 T-3 passed: Linux and native Windows each passed once, 73/73, at correction SHA 0bb3052d6ad21d900a06ec67b141527ec2a6f638. Original lifecycle reviews are pending.',
+    'Plan049 lifecycle reviewed: code review, security, and QA accepted at SHA 0bb3052d6ad21d900a06ec67b141527ec2a6f638.',
+    'Plan049 T-3 passed at correction SHA `0bb3052d6ad21d900a06ec67b141527ec2a6f638`: Linux and native Windows each passed exactly once, 73/73.',
+    'Current Plan049 B state: ELIGIBLE FOR IMMUTABLE-COORDINATE APPROVAL PLANNING — Git/CMD-1/native/release authority remains locked.',
+    'Current Plan049 state: T-3 blocked at immutable SHA `8e2716e5c89ba354f1055c80cb91e56450c74552`. Verified RCA found one defect; sole prospective correction authority pending critic.',
+  ];
+  for (const state of states) {
+    const dir = fixture();
+    writeTracked(dir, 'modules/pidex/process-rules/module.json', JSON.stringify({ capabilities: [{ id: 'process-rules.plan049-passive-exposure-platform' }] }));
+    for (const file of pointerFiles) writeTracked(dir, file, state);
+    assert.equal(JSON.parse(runGuard(dir)).ok, true, state);
+  }
+
+  const unsafe = fixture();
+  writeTracked(unsafe, 'modules/pidex/process-rules/module.json', JSON.stringify({ capabilities: [{ id: 'process-rules.plan049-passive-exposure-platform' }] }));
+  for (const file of pointerFiles) writeTracked(unsafe, file, `${states[3]}\nprocess-rules.plan049-passive-exposure-platform\nroute_to: custom-runner`);
+  assert.throws(() => runGuard(unsafe), /unsafe Plan049 active reference/);
+});
+
+test('rejects mixed Plan049 lifecycle states and cross-SHA facts', () => {
+  const pointerFiles = [
+    'wiki/roadmap.md', 'wiki/status.md', 'wiki/initiatives/011-quality-rule-learning/index.md', 'wiki/initiatives/011-quality-rule-learning/plan-049-crash-safe-passive-exposure-foundation.md',
+    'agents.output/planning/049-crash-safe-passive-exposure-foundation.md', 'agents.output/planning/049-crash-safe-passive-exposure-execution-slices.md', 'agents.output/planning/049-c49-5-run-check-capability-reset.md',
+    'agents.output/planning/049-c49-5-direct-windows-evidence-reset.md', 'agents.output/planning/049-c49-5-windows-concurrency-test-and-ise-capture-correction.md', 'agents.output/devops/049-native-windows-validation-lane.md', 'agents.output/qa/049-windows-validation/README.md', 'agents.output/analysis/049-windows-evidence-worksheet-runaway-incident.md',
+  ];
+  const cases = [
+    'T-1 reached: pushed SHA 0bb3052d6ad21d900a06ec67b141527ec2a6f638.\nT-2 reached: Linux passed at SHA 8e2716e5c89ba354f1055c80cb91e56450c74552.',
+    'T-2 reached: Linux passed at SHA 0bb3052d6ad21d900a06ec67b141527ec2a6f638 and evidence also names 8e2716e5c89ba354f1055c80cb91e56450c74552.',
+  ];
+  for (const state of cases) {
+    const dir = fixture();
+    writeTracked(dir, 'modules/pidex/process-rules/module.json', JSON.stringify({ capabilities: [{ id: 'process-rules.plan049-passive-exposure-platform' }] }));
+    for (const file of pointerFiles) writeTracked(dir, file, state);
+    assert.throws(() => runGuard(dir), /Plan049 pointer state incomplete/, state);
+  }
+});
+
 test('allows module manifest and module internal implementation references', () => {
   const dir = fixture();
   writeTracked(dir, 'modules/pidex/example/module.json', '{"command":{"args":["modules/pidex/example/scripts/tool.mjs"]}}\n');

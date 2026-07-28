@@ -529,6 +529,17 @@ test('B-T3 fixed-profile fixture preserves checkout and records induced child fa
   assert.equal(execFileSync('git', ['diff', '--cached'], { cwd: fixture.root, encoding: 'utf8' }), '');
 });
 
+test('node-test-fixed-v1 rejects foreign valid Git worktree before child spawn or evidence append', () => {
+  const canonical = fixedRunnerFixture("import { test } from 'node:test'; test('fixed fixture', () => {});\n");
+  const marker = 'foreign-child-ran';
+  const foreign = fixedRunnerFixture((root) => `import { writeFileSync } from 'node:fs'; import { test } from 'node:test'; test('foreign target', () => writeFileSync(${JSON.stringify(path.join(root, marker))}, 'ran'));\n`);
+  const proc = spawnSync(process.execPath, [canonical.runnerPath, '--pidex-root', canonical.root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', foreign.root], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.notEqual(proc.status, 0);
+  assert.match(proc.stderr, /ROOT_INVALID/);
+  assert.equal(existsSync(path.join(foreign.root, marker)), false, 'foreign fixed targets must not execute');
+  assert.equal(existsSync(path.join(canonical.root, 'state/modules/evidence')), false, 'root rejection must not append evidence');
+});
+
 test('run-check propagates command failure and writes failed evidence', () => {
   const { root, project } = makeModuleFixture();
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
