@@ -52,6 +52,25 @@ try {
   assert.equal(orphanPassthrough.status, 2);
   assert.match(orphanPassthrough.stderr, /passthrough args rejected/);
 
+  const windowsProject = 'C:\\Users\\Daniel\\pidex';
+  const windowsStateDir = 'C:\\Users\\Daniel\\pidex-state';
+  try {
+    mkdirSync(path.resolve(windowsProject), { recursive: true });
+    const nativeWindowsPaths = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', windowsProject, '--state-dir', windowsStateDir, '--plan', '12346', '--event', 'pipeline_started', '--status', 'running', '--actor', 'orchestrator'], { encoding: 'utf8', env });
+    assert.equal(nativeWindowsPaths.status, 0, nativeWindowsPaths.stderr || nativeWindowsPaths.stdout);
+    const traversalProject = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', 'C:\\Users\\Daniel\\..\\outside', '--plan', '12346', '--event', 'pipeline_started'], { encoding: 'utf8', env });
+    assert.equal(traversalProject.status, 2);
+    assert.match(traversalProject.stderr, /passthrough args rejected/);
+    const traversalStateDir = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--state-dir', 'C:\\Users\\Daniel\\..\\outside', '--plan', '12346', '--event', 'pipeline_started'], { encoding: 'utf8', env });
+    assert.equal(traversalStateDir.status, 2);
+    assert.match(traversalStateDir.stderr, /passthrough args rejected/);
+    const recordEventCapability = JSON.parse(readFileSync(path.join(root, 'modules/pidex/analysis-metrics-history/module.json'), 'utf8')).capabilities.find((capability) => capability.id === 'analysis-metrics-history.record-event');
+    assert.ok(recordEventCapability.supported_platforms.includes('windows-native'));
+  } finally {
+    rmSync(path.resolve(windowsProject), { recursive: true, force: true });
+    rmSync(path.resolve(windowsStateDir), { recursive: true, force: true });
+  }
+
   const started = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--event', 'pipeline_started', '--project-mode', 'hardened-pipeline', '--test-project', 'true', '--metadata-json', '{"x":1}'], { encoding: 'utf8', env });
   assert.equal(started.status, 0, started.stderr || started.stdout);
   const match = started.stdout.match(/pipeline_id=([^\s]+)/);

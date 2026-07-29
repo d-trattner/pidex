@@ -35,7 +35,8 @@
       "supported_platforms": [
         "linux",
         "wsl2",
-        "windows-git-bash"
+        "windows-git-bash",
+        "windows-native"
       ],
       "mutability": [
         "writes-artifacts"
@@ -51,8 +52,8 @@
             "^--(project|state-dir|project-slug|slug|pipeline-id|plan|event|event-type|status|actor|message|source|project-mode|test-project|metadata-json)$"
           ],
           "allowed_value_patterns": {
-            "--project": ["^[A-Za-z0-9 ._:/=@-]+$"],
-            "--state-dir": ["^[A-Za-z0-9 ._:/=@-]+$"],
+            "--project": ["^[A-Za-z0-9 ._:/=@\\\\-]+$"],
+            "--state-dir": ["^[A-Za-z0-9 ._:/=@\\\\-]+$"],
             "--project-slug": ["^[A-Za-z0-9._-]{1,160}$"],
             "--slug": ["^[A-Za-z0-9._-]{1,160}$"],
             "--pipeline-id": ["^[A-Za-z0-9._-]{1,160}$"],
