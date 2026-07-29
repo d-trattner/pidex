@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -52,23 +52,49 @@ try {
   assert.equal(orphanPassthrough.status, 2);
   assert.match(orphanPassthrough.stderr, /passthrough args rejected/);
 
-  const windowsProject = 'C:\\Users\\Daniel\\pidex';
-  const windowsStateDir = 'C:\\Users\\Daniel\\pidex-state';
+  // Native-Windows fixture must stay beneath one owned temporary root.
+  const testSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const nativeWindowsFixture = testSource.slice(testSource.indexOf('// Native-Windows fixture'), testSource.indexOf('\n\n  const started ='));
+  const forbiddenWindowsHomeFixture = ['C:', 'Users', 'Daniel', 'pidex'].join('\\');
+  assert.equal(testSource.includes(forbiddenWindowsHomeFixture), false, 'test must not contain a literal user-home fixture path');
+  assert.match(nativeWindowsFixture, /rmSync\(windowsFixtureRoot, \{ recursive: true, force: true \}\)/, 'fixture cleanup must target owned root');
+  assert.doesNotMatch(nativeWindowsFixture, /rmSync\((?!windowsFixtureRoot, \{ recursive: true, force: true \}\))/, 'fixture must not recursively remove separate targets');
+
+  const recordEventCapability = JSON.parse(readFileSync(path.join(root, 'modules/pidex/analysis-metrics-history/module.json'), 'utf8')).capabilities.find((capability) => capability.id === 'analysis-metrics-history.record-event');
+  for (const [field, windowsPath, traversalPath] of [
+    ['--project', 'C:\\fixtures\\project', 'C:\\fixtures\\..\\outside'],
+    ['--state-dir', 'C:\\fixtures\\state', 'C:\\fixtures\\..\\outside'],
+  ]) {
+    const contextualPattern = new RegExp(recordEventCapability.command.passthrough_policy.allowed_value_patterns[field][0]);
+    assert.match(windowsPath, contextualPattern, `${field} contextual regex must accept Windows backslashes`);
+    assert.equal(!traversalPath.includes('..') && contextualPattern.test(traversalPath), false, `${field} contextual policy must reject traversal`);
+  }
+
+  const windowsFixtureRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-native-windows-fixture-'));
+  const windowsProject = path.join(windowsFixtureRoot, 'project');
+  const windowsStateDir = path.join(windowsProject, '.pidex-state');
   try {
-    mkdirSync(path.resolve(windowsProject), { recursive: true });
-    const nativeWindowsPaths = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', windowsProject, '--state-dir', windowsStateDir, '--plan', '12346', '--event', 'pipeline_started', '--status', 'running', '--actor', 'orchestrator'], { encoding: 'utf8', env });
+    mkdirSync(windowsProject, { recursive: true });
+    const nativeWindowsPaths = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', windowsProject, '--', '--project', windowsProject, '--state-dir', windowsStateDir, '--plan', '12346', '--event', 'pipeline_started', '--status', 'running', '--actor', 'orchestrator'], { encoding: 'utf8', env });
     assert.equal(nativeWindowsPaths.status, 0, nativeWindowsPaths.stderr || nativeWindowsPaths.stdout);
-    const traversalProject = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', 'C:\\Users\\Daniel\\..\\outside', '--plan', '12346', '--event', 'pipeline_started'], { encoding: 'utf8', env });
+    const traversalProjectPath = `${windowsFixtureRoot}${path.sep}..${path.sep}outside`;
+    const traversalProject = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', windowsProject, '--', '--project', traversalProjectPath, '--plan', '12346', '--event', 'pipeline_started'], { encoding: 'utf8', env });
     assert.equal(traversalProject.status, 2);
     assert.match(traversalProject.stderr, /passthrough args rejected/);
-    const traversalStateDir = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--state-dir', 'C:\\Users\\Daniel\\..\\outside', '--plan', '12346', '--event', 'pipeline_started'], { encoding: 'utf8', env });
+    const traversalStateDir = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', windowsProject, '--', '--state-dir', traversalProjectPath, '--plan', '12346', '--event', 'pipeline_started'], { encoding: 'utf8', env });
     assert.equal(traversalStateDir.status, 2);
     assert.match(traversalStateDir.stderr, /passthrough args rejected/);
-    const recordEventCapability = JSON.parse(readFileSync(path.join(root, 'modules/pidex/analysis-metrics-history/module.json'), 'utf8')).capabilities.find((capability) => capability.id === 'analysis-metrics-history.record-event');
     assert.ok(recordEventCapability.supported_platforms.includes('windows-native'));
   } finally {
-    rmSync(path.resolve(windowsProject), { recursive: true, force: true });
-    rmSync(path.resolve(windowsStateDir), { recursive: true, force: true });
+    const lexicalTempRoot = path.resolve(os.tmpdir());
+    const lexicalFixtureRoot = path.resolve(windowsFixtureRoot);
+    assert.equal(path.dirname(lexicalFixtureRoot), lexicalTempRoot, 'fixture root must be direct os.tmpdir child');
+    const realTempRoot = realpathSync(lexicalTempRoot);
+    const realFixtureRoot = realpathSync(lexicalFixtureRoot);
+    assert.equal(realpathSync(path.dirname(lexicalFixtureRoot)), realTempRoot, 'fixture parent must resolve to os.tmpdir');
+    assert.notEqual(realFixtureRoot, realTempRoot, 'fixture root must not equal os.tmpdir');
+    assert.ok(realFixtureRoot.startsWith(`${realTempRoot}${path.sep}`), 'fixture root must resolve beneath os.tmpdir');
+    rmSync(windowsFixtureRoot, { recursive: true, force: true });
   }
 
   const started = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--event', 'pipeline_started', '--project-mode', 'hardened-pipeline', '--test-project', 'true', '--metadata-json', '{"x":1}'], { encoding: 'utf8', env });
