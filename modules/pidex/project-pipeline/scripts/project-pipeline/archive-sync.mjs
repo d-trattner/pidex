@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import crypto from 'node:crypto';
@@ -10,6 +10,10 @@ const DEFAULT_LIMITS = { maxFiles: 5000, maxBytes: 50 * 1024 * 1024, maxFileByte
 const BLOCKED_EXT = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd', '.exe', '.dll', '.so', '.dylib', '.jar', '.py', '.rb', '.pl', '.php', '.wasm', '.pem', '.key', '.p12', '.pfx', '.env']);
 const BLOCKED_NAMES = new Set(['.ssh', '.aws', '.config', 'secrets', 'secret', 'credentials', 'credential', '.git', 'node_modules']);
 const TEXT_EXT = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.html', '.htm', '.log']);
+const BROWSER_REQUEST_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{2,120}$/;
+const BROWSER_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
+const BROWSER_EXT = new Set(['.json', '.png', '.jpg', '.jpeg', '.webp']);
+const BROWSER_LIMITS = Object.freeze({ maxBundles: 500, maxFiles: 2500, maxFileBytes: 2 * 1024 * 1024, maxResultBytes: 256 * 1024, maxBytes: 500 * 1024 * 1024 });
 const SECRET_PATTERNS = [
   /-----BEGIN (?:RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/,
   /\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b/,
@@ -56,9 +60,25 @@ function maybeSecret(file, rel) {
   return undefined;
 }
 
-function ensureEmptyDir(dir) {
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
+export function trustedDirectoryIdentity(dir, { create = false } = {}) {
+  const resolved = path.resolve(dir);
+  if (create) mkdirSync(resolved, { recursive: true });
+  const st = lstatSync(resolved);
+  if (!st.isDirectory() || st.isSymbolicLink()) throw new Error('unsafe directory identity');
+  const canonical = realpathSync.native(resolved);
+  if (path.relative(resolved, canonical) !== '') throw new Error('unsafe directory chain');
+  return { path: resolved, canonical, dev: st.dev, ino: st.ino };
+}
+
+export function assertTrustedDirectory(identity) {
+  const current = trustedDirectoryIdentity(identity.path);
+  if (current.canonical !== identity.canonical || current.dev !== identity.dev || current.ino !== identity.ino) throw new Error('directory identity changed');
+  return current;
+}
+
+export function removeOwnedDirectory(identity) {
+  assertTrustedDirectory(identity);
+  rmSync(identity.path, { recursive: true, force: false });
 }
 
 function walkSource(root, base, rel, state) {
@@ -104,36 +124,136 @@ export function resolveArchiveRoot(options = {}) {
   return target;
 }
 
+export function projectArchiveLockPath(options = {}) {
+  if (options.unsafeAllowCustomArchiveRoot) {
+    if (!options.archiveRoot) throw new Error('archiveRoot is required for custom archive lock');
+    const archiveRoot = path.resolve(options.archiveRoot);
+    return path.join(path.dirname(archiveRoot), `.${path.basename(archiveRoot)}.archive.lock`);
+  }
+  if (!options.pidexRoot) throw new Error('pidexRoot is required for archive lock');
+  if (!options.projectId) throw new Error('projectId is required for archive lock');
+  return path.join(path.resolve(options.pidexRoot), 'state', 'project-archive-locks', `${safeProjectId(options.projectId)}.lock`);
+}
+
+function sleep(milliseconds) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds); }
+
+export function acquireProjectArchiveLock(options = {}) {
+  const lock = projectArchiveLockPath(options);
+  const timeoutMs = Number.isInteger(options.lockTimeoutMs) ? Math.max(0, options.lockTimeoutMs) : 5000;
+  const deadline = Date.now() + timeoutMs;
+  const token = crypto.randomBytes(16).toString('hex');
+  const parentIdentity = trustedDirectoryIdentity(path.dirname(lock), { create: true });
+  while (true) {
+    let created = false;
+    try {
+      assertTrustedDirectory(parentIdentity);
+      mkdirSync(lock, { mode: 0o700 });
+      created = true;
+      writeFileSync(path.join(lock, 'owner.json'), `${JSON.stringify({ token, pid: process.pid, operation: String(options.operation || 'archive'), created_at: new Date().toISOString() })}\n`, { flag: 'wx', mode: 0o600 });
+      return {
+        ok: true,
+        path: lock,
+        release() {
+          assertTrustedDirectory(parentIdentity);
+          const owner = JSON.parse(readFileSync(path.join(lock, 'owner.json'), 'utf8'));
+          if (owner?.token !== token) throw new Error('archive lock ownership changed');
+          unlinkSync(path.join(lock, 'owner.json'));
+          rmdirSync(lock);
+        },
+      };
+    } catch (error) {
+      if (created) { try { rmSync(lock, { recursive: true, force: true }); } catch {} throw error; }
+      if (error?.code !== 'EEXIST') throw error;
+      if (Date.now() >= deadline) return { ok: false, error: 'archive lock unavailable', path: lock };
+      sleep(Math.min(25, Math.max(1, deadline - Date.now())));
+    }
+  }
+}
+
+export function validateBrowserEvidenceBundle(bundleDir, requestId = path.basename(bundleDir)) {
+  if (!BROWSER_REQUEST_RE.test(String(requestId || ''))) throw new Error('invalid browser evidence request id');
+  const root = path.resolve(bundleDir);
+  const st = lstatSync(root);
+  if (!st.isDirectory() || st.isSymbolicLink()) throw new Error('invalid browser evidence bundle');
+  const files = [];
+  let bytes = 0;
+  for (const name of readdirSync(root).sort()) {
+    if (!BROWSER_FILE_RE.test(name) || !BROWSER_EXT.has(path.extname(name).toLowerCase())) throw new Error('invalid browser evidence file');
+    const file = path.join(root, name);
+    if (!pathWithin(root, file)) throw new Error('browser evidence path escape');
+    const fileStat = lstatSync(file);
+    if (!fileStat.isFile() || fileStat.isSymbolicLink() || fileStat.nlink > 1) throw new Error('invalid browser evidence file type');
+    const cap = name === 'browser-smoke-result.json' ? BROWSER_LIMITS.maxResultBytes : BROWSER_LIMITS.maxFileBytes;
+    if (fileStat.size > cap || files.length >= 20) throw new Error('browser evidence bundle limit exceeded');
+    bytes += fileStat.size;
+    files.push({ name, size: fileStat.size, sha256: sha256(file) });
+  }
+  if (!files.some((item) => item.name === 'browser-smoke-result.json')) throw new Error('browser evidence result missing');
+  return { request_id: requestId, files, bytes };
+}
+
+function carryBrowserEvidence(archiveRoot, nextRoot) {
+  const sourceRoot = path.join(archiveRoot, 'browser-smoke');
+  if (!existsSync(sourceRoot)) return;
+  const rootStat = lstatSync(sourceRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('invalid browser evidence root');
+  let bundles = 0; let files = 0; let bytes = 0;
+  for (const requestId of readdirSync(sourceRoot).sort()) {
+    if (++bundles > BROWSER_LIMITS.maxBundles) throw new Error('browser evidence capacity exceeded');
+    const source = path.join(sourceRoot, requestId);
+    const inventory = validateBrowserEvidenceBundle(source, requestId);
+    files += inventory.files.length; bytes += inventory.bytes;
+    if (files > BROWSER_LIMITS.maxFiles || bytes > BROWSER_LIMITS.maxBytes) throw new Error('browser evidence capacity exceeded');
+    const target = path.join(nextRoot, 'browser-smoke', requestId);
+    mkdirSync(target, { recursive: true });
+    for (const item of inventory.files) {
+      copyFileSync(path.join(source, item.name), path.join(target, item.name));
+      if (sha256(path.join(target, item.name)) !== item.sha256) throw new Error('browser evidence changed during copy');
+    }
+  }
+}
+
 export function syncProjectArchive(options = {}) {
   const workspace = path.resolve(options.workspace || '.');
   const archiveRoot = resolveArchiveRoot(options);
   const limits = { ...DEFAULT_LIMITS, ...(options.limits || {}) };
   const sources = ['agents.output', 'wiki'];
-  const stageRoot = path.join(path.dirname(archiveRoot), `.${path.basename(archiveRoot)}.staging-${process.pid}-${Date.now()}`);
-  const nextRoot = path.join(stageRoot, 'latest');
   const report = { ok: true, copied: [], skipped: [], warnings: [], limits, archive_root: archiveRoot };
-  ensureEmptyDir(nextRoot);
-  const state = { stageRoot: nextRoot, copied: report.copied, skipped: report.skipped, limits, files_seen: 0, bytes_copied: 0 };
+  let stageIdentity;
+  let nextRoot;
+  let lock;
+  try { lock = acquireProjectArchiveLock({ ...options, archiveRoot, operation: 'sync' }); }
+  catch (error) { return { ...report, ok: false, error: error.message || String(error) }; }
+  if (!lock.ok) return { ...report, ok: false, error: lock.error };
   try {
+    const archiveParent = trustedDirectoryIdentity(path.dirname(archiveRoot), { create: true });
+    const stageRoot = mkdtempSync(path.join(archiveParent.path, `.${path.basename(archiveRoot)}.staging-`));
+    stageIdentity = trustedDirectoryIdentity(stageRoot);
+    nextRoot = path.join(stageRoot, 'latest');
+    mkdirSync(nextRoot);
+    const state = { stageRoot: nextRoot, copied: report.copied, skipped: report.skipped, limits, files_seen: 0, bytes_copied: 0 };
     for (const source of sources) {
       const sourcePath = path.join(workspace, source);
       if (!existsSync(sourcePath)) { report.warnings.push({ source, reason: 'source-missing' }); continue; }
       if (!pathWithin(workspace, sourcePath)) { report.skipped.push({ path: source, reason: 'source-escape' }); continue; }
       walkSource(sourcePath, workspace, source, state);
     }
+    carryBrowserEvidence(archiveRoot, nextRoot);
     report.bytes_copied = state.bytes_copied;
     report.files_copied = report.copied.length;
     report.files_skipped = report.skipped.length;
     report.generated_at = new Date().toISOString();
     writeFileSync(path.join(nextRoot, 'archive-sync-report.json.tmp'), JSON.stringify(report, null, 2));
     renameSync(path.join(nextRoot, 'archive-sync-report.json.tmp'), path.join(nextRoot, 'archive-sync-report.json'));
-    mkdirSync(path.dirname(archiveRoot), { recursive: true });
+    assertTrustedDirectory(stageIdentity);
     const previous = `${archiveRoot}.previous-${process.pid}-${Date.now()}`;
     let previousMoved = false;
     try {
       if (existsSync(archiveRoot)) { renameSync(archiveRoot, previous); previousMoved = true; }
       renameSync(nextRoot, archiveRoot);
-      rmSync(stageRoot, { recursive: true, force: true });
+      assertTrustedDirectory(stageIdentity);
+      rmdirSync(stageIdentity.path);
+      stageIdentity = undefined;
       if (previousMoved) rmSync(previous, { recursive: true, force: true });
       return report;
     } catch (publishError) {
@@ -145,8 +265,10 @@ export function syncProjectArchive(options = {}) {
   } catch (error) {
     report.ok = false;
     report.error = error.message || String(error);
-    try { rmSync(stageRoot, { recursive: true, force: true }); } catch {}
+    if (stageIdentity) { try { removeOwnedDirectory(stageIdentity); } catch {} }
     return report;
+  } finally {
+    lock.release();
   }
 }
 

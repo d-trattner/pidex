@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { classifyArchivePath, resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
+import { classifyArchivePath, projectArchiveLockPath, resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-archive-')); }
 function write(file, text) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); }
@@ -79,4 +79,89 @@ test('syncProjectArchive enforces file size limits without failing entire sync',
   assert.equal(result.ok, true);
   assert.equal(existsSync(path.join(archive, 'wiki/small.md')), false);
   assert.equal(result.skipped.some((item) => item.reason === 'max-file-bytes-exceeded'), true);
+});
+
+test('syncProjectArchive preserves host browser evidence without adding it to the mirror report', () => {
+  const workspace = tmp();
+  const archive = tmp();
+  write(path.join(workspace, 'wiki/index.md'), 'first\n');
+  assert.equal(syncProjectArchive({ workspace, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true }).ok, true);
+  write(path.join(archive, 'browser-smoke/request-1/browser-smoke-result.json'), '{"status":"BROWSER-SMOKE-PASS"}\n');
+  write(path.join(archive, 'browser-smoke/request-1/desktop.png'), 'png-bytes');
+  const workspace2 = tmp();
+  write(path.join(workspace2, 'wiki/index.md'), 'second\n');
+  const result = syncProjectArchive({ workspace: workspace2, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true });
+  assert.equal(result.ok, true);
+  assert.equal(readFileSync(path.join(archive, 'browser-smoke/request-1/browser-smoke-result.json'), 'utf8'), '{"status":"BROWSER-SMOKE-PASS"}\n');
+  assert.equal(readFileSync(path.join(archive, 'browser-smoke/request-1/desktop.png'), 'utf8'), 'png-bytes');
+  assert.equal(result.copied.some((item) => item.path.startsWith('browser-smoke/')), false);
+});
+
+test('invalid browser evidence aborts sync and leaves the previous archive authoritative', () => {
+  const workspace = tmp();
+  const archive = tmp();
+  write(path.join(workspace, 'wiki/index.md'), 'before\n');
+  assert.equal(syncProjectArchive({ workspace, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true }).ok, true);
+  const outside = path.join(tmp(), 'outside.json');
+  write(outside, '{}\n');
+  mkdirSync(path.join(archive, 'browser-smoke/request-unsafe'), { recursive: true });
+  symlinkSync(outside, path.join(archive, 'browser-smoke/request-unsafe/browser-smoke-result.json'));
+  const workspace2 = tmp();
+  write(path.join(workspace2, 'wiki/index.md'), 'after\n');
+  const result = syncProjectArchive({ workspace: workspace2, archiveRoot: archive, unsafeAllowCustomArchiveRoot: true });
+  assert.equal(result.ok, false);
+  assert.equal(readFileSync(path.join(archive, 'wiki/index.md'), 'utf8'), 'before\n');
+  assert.equal(existsSync(path.join(archive, 'browser-smoke/request-unsafe/browser-smoke-result.json')), true);
+});
+
+test('archive lock path is outside the replaceable archive and an existing lock fails closed', () => {
+  const root = tmp();
+  const projectId = 'pp-lock-demo';
+  const archive = resolveArchiveRoot({ pidexRoot: root, projectId });
+  const lock = projectArchiveLockPath({ pidexRoot: root, projectId });
+  assert.equal(path.dirname(lock), path.join(root, 'state', 'project-archive-locks'));
+  assert.equal(lock.startsWith(`${archive}${path.sep}`), false);
+  mkdirSync(lock, { recursive: true });
+  write(path.join(lock, 'owner.json'), '{"owner":"other"}\n');
+  const workspace = tmp();
+  write(path.join(workspace, 'wiki/index.md'), 'locked\n');
+  const result = syncProjectArchive({ workspace, pidexRoot: root, projectId, lockTimeoutMs: 10 });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /archive lock unavailable/);
+  assert.equal(existsSync(lock), true);
+});
+
+test('staging initialization failure releases the acquired external lock', () => {
+  const root = tmp();
+  const projectId = 'pp-stage-failure';
+  mkdirSync(path.join(root, 'state'), { recursive: true });
+  writeFileSync(path.join(root, 'state', 'project-archives'), 'not-a-directory');
+  const workspace = tmp();
+  write(path.join(workspace, 'wiki/index.md'), 'content\n');
+  const result = syncProjectArchive({ workspace, pidexRoot: root, projectId });
+  assert.equal(result.ok, false);
+  assert.equal(existsSync(projectArchiveLockPath({ pidexRoot: root, projectId })), false);
+});
+
+test('archive staging and lock parents reject symlink redirection without touching outside data', () => {
+  const workspace = tmp();
+  write(path.join(workspace, 'wiki/index.md'), 'content\n');
+
+  const stageRoot = tmp();
+  const stageOutside = tmp();
+  write(path.join(stageOutside, 'sentinel.txt'), 'keep\n');
+  mkdirSync(path.join(stageRoot, 'state'), { recursive: true });
+  symlinkSync(stageOutside, path.join(stageRoot, 'state', 'project-archives'));
+  const staged = syncProjectArchive({ workspace, pidexRoot: stageRoot, projectId: 'pp-stage-link' });
+  assert.equal(staged.ok, false);
+  assert.equal(readFileSync(path.join(stageOutside, 'sentinel.txt'), 'utf8'), 'keep\n');
+  assert.deepEqual(readdirSync(stageOutside), ['sentinel.txt']);
+
+  const lockRoot = tmp();
+  const lockOutside = tmp();
+  mkdirSync(path.join(lockRoot, 'state'), { recursive: true });
+  symlinkSync(lockOutside, path.join(lockRoot, 'state', 'project-archive-locks'));
+  const locked = syncProjectArchive({ workspace, pidexRoot: lockRoot, projectId: 'pp-lock-link' });
+  assert.equal(locked.ok, false);
+  assert.deepEqual(readdirSync(lockOutside), []);
 });

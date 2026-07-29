@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BROWSER_SMOKE_STATUS } from '../../../browser-smoke/scripts/browser-smoke/status.mjs';
 import { validateBrowserSmokeRequest } from '../../../browser-smoke/scripts/browser-smoke/request-schema.mjs';
 import { runBrowserSmokeCheck } from '../../../browser-smoke/scripts/browser-smoke/check.mjs';
 import { browserSmokePaths } from '../../../browser-smoke/scripts/browser-smoke/paths.mjs';
-import { resolveArchiveRoot, normalizeRel, pathWithin } from './archive-sync.mjs';
+import { acquireProjectArchiveLock, assertTrustedDirectory, normalizeRel, pathWithin, removeOwnedDirectory, resolveArchiveRoot, trustedDirectoryIdentity, validateBrowserEvidenceBundle } from './archive-sync.mjs';
 import { loadProjectRecord, safeProjectId } from './registry.mjs';
 
 const REQUESTER_BY_ARCHIVE_SEGMENT = Object.freeze({ qa: 'pidex-qa', uat: 'pidex-uat', devops: 'pidex-devops' });
@@ -13,6 +13,35 @@ const DEVOPS_ALLOWED_CHECKS = new Set(['url', 'console']);
 
 function blocked(reason, detail) {
   return { ok: false, status: BROWSER_SMOKE_STATUS.BLOCKED_INFRA, status_reason: reason, detail };
+}
+
+function readStableRequestJson(file, archiveRoot, maxBytes = 256 * 1024) {
+  const rootIdentity = trustedDirectoryIdentity(archiveRoot);
+  const rel = path.relative(rootIdentity.path, path.resolve(file));
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error('request outside archive');
+  const parentIdentities = [];
+  let current = rootIdentity.path;
+  for (const part of rel.split(path.sep).slice(0, -1)) {
+    if (!part || part === '.' || part === '..') throw new Error('unsafe request path');
+    current = path.join(current, part);
+    parentIdentities.push(trustedDirectoryIdentity(current));
+  }
+  const before = lstatSync(file);
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size > maxBytes || (before.mode & 0o111) !== 0) throw new Error('unsafe request file');
+  let fd;
+  try {
+    fd = openSync(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0));
+    const opened = fstatSync(fd);
+    if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > maxBytes || (opened.mode & 0o111) !== 0) throw new Error('request file changed');
+    const content = readFileSync(fd);
+    const after = fstatSync(fd);
+    if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || content.length !== after.size) throw new Error('request file changed');
+    assertTrustedDirectory(rootIdentity);
+    for (const identity of parentIdentities) assertTrustedDirectory(identity);
+    return JSON.parse(content.toString('utf8'));
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 
 export function browserSmokeBridgeRoot(pidexRoot, projectId) {
@@ -57,7 +86,7 @@ export function validateProjectPipelineBrowserSmokeRequest(options = {}) {
   const pathInfo = classifyBrowserSmokeRequestPath(archiveRoot, options.requestPath || '');
   if (!pathInfo.ok) return pathInfo;
   let raw;
-  try { raw = JSON.parse(readFileSync(pathInfo.file, 'utf8')); } catch { return blocked('invalid-request', 'request json unreadable'); }
+  try { raw = readStableRequestJson(pathInfo.file, archiveRoot); } catch { return blocked('invalid-request', 'request json unreadable or unsafe'); }
   const generic = validateBrowserSmokeRequest(raw);
   if (!generic.ok) return generic;
   const request = generic.request;
@@ -93,38 +122,63 @@ export async function runProjectPipelineBrowserSmokeRequest(options = {}) {
     maxAgeMs: options.maxAgeMs,
   });
   if (!validated.ok) return validated;
+  let stageIdentity;
   try {
-    reserveBrowserSmokeResultDir(validated.result_dir);
+    const stageParent = trustedDirectoryIdentity(path.dirname(validated.archive_root));
+    const stageRoot = mkdtempSync(path.join(stageParent.path, `.${path.basename(validated.archive_root)}.browser-smoke-runner-`));
+    stageIdentity = trustedDirectoryIdentity(stageRoot);
+    const outputDir = path.join(stageRoot, validated.request.request_id);
+    mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+    const runner = options.browserSmokeRunner || runBrowserSmokeCheck;
+    const runtime = browserSmokePaths(pidexRoot);
+    const result = await runner({
+      url: validated.preview_url,
+      requestPath: validated.request_file,
+      outputDir,
+      outputRoot: stageRoot,
+      project: runtime.stateDir,
+      stateDir: runtime.stateDir,
+      browsersPath: runtime.cacheDir,
+      playwright: options.playwright,
+      previewUrlSource: validated.preview_url_source,
+    });
+    validateBrowserEvidenceBundle(outputDir, validated.request.request_id);
+    const lock = acquireProjectArchiveLock({ pidexRoot, projectId, operation: 'browser-publish', lockTimeoutMs: options.lockTimeoutMs });
+    if (!lock.ok) return blocked('archive-lock-unavailable', 'browser evidence archive is busy');
+    try {
+      const archiveIdentity = trustedDirectoryIdentity(validated.archive_root);
+      if (existsSync(validated.result_dir)) return blocked('duplicate-request', 'browser-smoke result directory already exists');
+      const browserRoot = path.dirname(validated.result_dir);
+      const browserIdentity = trustedDirectoryIdentity(browserRoot, { create: true });
+      assertTrustedDirectory(archiveIdentity);
+      assertTrustedDirectory(browserIdentity);
+      assertTrustedDirectory(stageIdentity);
+      renameSync(outputDir, validated.result_dir);
+      assertTrustedDirectory(archiveIdentity);
+      assertTrustedDirectory(browserIdentity);
+      validateBrowserEvidenceBundle(validated.result_dir, validated.request.request_id);
+    } finally {
+      lock.release();
+    }
+    return {
+      ok: result?.ok === true,
+      status: result?.status,
+      status_reason: result?.status_reason,
+      request_id: validated.request.request_id,
+      request_file: validated.request_file,
+      request_rel: validated.request_rel,
+      result_dir: validated.result_dir,
+      result_file: path.join(validated.result_dir, 'browser-smoke-result.json'),
+      preview_url: validated.preview_url,
+      preview_url_source: validated.preview_url_source,
+      preview_generation: validated.preview_generation,
+      result,
+    };
   } catch {
-    return blocked('duplicate-request', 'browser-smoke result directory already exists');
+    return blocked('evidence-publication-failed', 'browser evidence publication failed');
+  } finally {
+    if (stageIdentity) { try { removeOwnedDirectory(stageIdentity); } catch {} }
   }
-  const runner = options.browserSmokeRunner || runBrowserSmokeCheck;
-  const runtime = browserSmokePaths(pidexRoot);
-  const result = await runner({
-    url: validated.preview_url,
-    requestPath: validated.request_file,
-    outputDir: validated.result_dir,
-    outputRoot: browserSmokeBridgeRoot(pidexRoot, projectId),
-    project: runtime.stateDir,
-    stateDir: runtime.stateDir,
-    browsersPath: runtime.cacheDir,
-    playwright: options.playwright,
-    previewUrlSource: validated.preview_url_source,
-  });
-  return {
-    ok: result?.ok === true,
-    status: result?.status,
-    status_reason: result?.status_reason,
-    request_id: validated.request.request_id,
-    request_file: validated.request_file,
-    request_rel: validated.request_rel,
-    result_dir: validated.result_dir,
-    result_file: path.join(validated.result_dir, 'browser-smoke-result.json'),
-    preview_url: validated.preview_url,
-    preview_url_source: validated.preview_url_source,
-    preview_generation: validated.preview_generation,
-    result,
-  };
 }
 
 export function parseArgs(argv) {

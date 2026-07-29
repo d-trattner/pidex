@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { BROWSER_SMOKE_STATUS } from '../../../browser-smoke/scripts/browser-smoke/status.mjs';
@@ -70,6 +70,25 @@ test('bridge rejects path escape requester mismatch project mismatch stale and d
   assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: dup, now: '2026-07-01T12:00:00.000Z' }).status_reason, 'duplicate-request');
 });
 
+test('bridge request reader rejects symlink, hardlink, executable and oversized JSON artifacts', (t) => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const outside = path.join(tmp(), 'outside.json');
+  writeFileSync(outside, `${JSON.stringify(request({ request_id: 'qa-outside' }))}\n`);
+  const qaRoot = path.join(archiveRoot, 'agents.output/qa');
+  mkdirSync(qaRoot, { recursive: true });
+  try { symlinkSync(outside, path.join(qaRoot, 'symlink.json')); }
+  catch { t.diagnostic('symlink creation unavailable; symlink case covered by archive tests'); }
+  if (existsSync(path.join(qaRoot, 'symlink.json'))) assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: path.join(qaRoot, 'symlink.json'), now: '2026-07-01T12:00:00.000Z' }).ok, false);
+  linkSync(outside, path.join(qaRoot, 'hardlink.json'));
+  assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: path.join(qaRoot, 'hardlink.json'), now: '2026-07-01T12:00:00.000Z' }).ok, false);
+  const executable = writeRequest(archiveRoot, 'agents.output/qa/executable.json', request({ request_id: 'qa-executable' }));
+  chmodSync(executable, 0o755);
+  assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: executable, now: '2026-07-01T12:00:00.000Z' }).ok, false);
+  const oversized = path.join(qaRoot, 'oversized.json');
+  writeFileSync(oversized, JSON.stringify({ ...request({ request_id: 'qa-oversized' }), reason: 'x'.repeat(300_000) }));
+  assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: oversized, now: '2026-07-01T12:00:00.000Z' }).ok, false);
+});
+
 test('bridge rejects request when registered archive root does not match derived project archive root', () => {
   const { pidexRoot, projectId, archiveRoot, record } = setup();
   record.archive.path = path.join(path.dirname(archiveRoot), 'other-archive-root');
@@ -119,13 +138,34 @@ test('runProjectPipelineBrowserSmokeRequest reserves result dir and invokes gene
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'http://localhost:42080');
   assert.equal(calls[0].requestPath, file);
-  assert.equal(calls[0].outputRoot, browserSmokeBridgeRoot(pidexRoot, projectId));
+  assert.notEqual(calls[0].outputRoot, browserSmokeBridgeRoot(pidexRoot, projectId));
+  assert.equal(path.dirname(calls[0].outputRoot), path.dirname(archiveRoot));
   assert.equal(calls[0].project, browserSmokePaths(pidexRoot).stateDir);
   assert.equal(calls[0].stateDir, browserSmokePaths(pidexRoot).stateDir);
   assert.equal(calls[0].browsersPath, browserSmokePaths(pidexRoot).cacheDir);
   assert.equal(calls[0].previewUrlSource, 'project-pipeline-registry');
   assert.equal(existsSync(result.result_file), true);
   assert.equal(JSON.parse(readFileSync(result.result_file, 'utf8')).preview_url_source, 'project-pipeline-registry');
+  assert.equal(readdirSync(path.dirname(archiveRoot)).some((name) => name.includes('.browser-smoke-runner-')), false);
+});
+
+test('browser publication rejects a symlinked browser destination without writing outside archive', async (t) => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const file = writeRequest(archiveRoot, 'agents.output/qa/symlink-destination.json', request({ request_id: 'qa-symlink-destination' }));
+  const outside = tmp();
+  try { symlinkSync(outside, path.join(archiveRoot, 'browser-smoke')); }
+  catch { t.skip('symlink creation unavailable'); return; }
+  const result = await runProjectPipelineBrowserSmokeRequest({
+    pidexRoot, projectId, requestPath: file, now: '2026-07-01T12:00:30.000Z',
+    browserSmokeRunner: async (args) => {
+      const artifact = { ok: true, status: BROWSER_SMOKE_STATUS.PASS, status_reason: 'all-checks-passed' };
+      writeFileSync(path.join(args.outputDir, 'browser-smoke-result.json'), `${JSON.stringify(artifact)}\n`);
+      return artifact;
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status_reason, 'evidence-publication-failed');
+  assert.deepEqual(readdirSync(outside), []);
 });
 
 test('browser smoke bridge CLI rejects caller-controlled project runtime root', () => {
