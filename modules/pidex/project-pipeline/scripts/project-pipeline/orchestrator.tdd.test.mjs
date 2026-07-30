@@ -576,6 +576,20 @@ test('runProjectPipelineOrchestration sanitizes browser smoke evidence when fina
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
+test('every schema2 status stops before verdict agent and next phase with typed hold', async () => {
+  for (const status of ['PASS', 'FAILED_FEATURE', 'BLOCKED_INFRA', 'AUTH_STATE_MISMATCH', 'PRECONDITION_FAILED', 'REQUEST_UNSUPPORTED']) {
+    const pidexRoot = tmp(); const projectId = `pp-orch-schema2-${status.toLowerCase()}`; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+    mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true });
+    const record = seedRecord(pidexRoot, projectId); record.preview = { ports: { base: 42080, size: 20, container_base: 42080, host_bind: '127.0.0.1', generation: 1 }, processes: { preview: { status: 'running', operator_url: 'http://localhost:42080', host_port: 42080, container_port: 42080 } } }; saveProjectRecord(pidexRoot, record);
+    let agentCalls = 0;
+    const runner = (args) => { if (args[0] !== 'exec' || !args.includes('pi')) return 'ok'; agentCalls += 1; writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/artifact.md'), '# qa\n'); writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId), null, 2)}\n`); return { status: 0, stdout: '<!-- ROUTING\ncontext_file: agents.output/qa/artifact.md\n-->', stderr: '' }; };
+    const result = await runProjectPipelineOrchestration({ pidexRoot, projectId, task: 'schema2 hold', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, now: '2026-07-01T12:00:30.000Z', browserSmokeBridgeRunner: async () => ({ ok: status === 'PASS', status, status_reason: 'fixture', request_schema: 2 }) });
+    assert.equal(result.error, 'schema2-verdict-not-enabled');
+    assert.equal(agentCalls, 1, status);
+    rmSync(pidexRoot, { recursive: true, force: true });
+  }
+});
+
 test('runProjectPipelineOrchestration omits failed child raw output from public result', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');

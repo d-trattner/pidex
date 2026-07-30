@@ -4,6 +4,7 @@ import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { BROWSER_SMOKE_STATUS } from '../../../browser-smoke/scripts/browser-smoke/status.mjs';
+import { validateBrowserSmokeResult } from '../../../browser-smoke/scripts/browser-smoke/result-contract.mjs';
 import { browserSmokePaths } from '../../../browser-smoke/scripts/browser-smoke/paths.mjs';
 import { browserSmokeBridgeRoot, browserSmokeResultDir, classifyBrowserSmokeRequestPath, parseArgs, reserveBrowserSmokeResultDir, runProjectPipelineBrowserSmokeRequest, validateProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
@@ -37,6 +38,17 @@ function request(overrides = {}) {
     timeout_ms: 10000,
     ...overrides,
   };
+}
+
+function schema2Request(overrides = {}) {
+  return {
+    schema: 2, requester: 'pidex-qa', project_id: 'pidex-browser-smoke-demo', request_id: 'qa-schema2-bridge', phase_run_id: 'pprun-abc123/pidex-qa/phase-6', created_at: '2026-07-01T12:00:00.000Z', preview: { managed: true, process: 'preview' }, timeout_ms: 10000,
+    viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/', preconditions: [], actions: [], checks: [], capture: { screenshot: false, console_errors: false } }], ...overrides,
+  };
+}
+
+function schema2Result(request, overrides = {}) {
+  return { schema: 2, ok: true, status: 'PASS', status_reason: 'all-checks-passed', project_id: request.project_id, request_id: request.request_id, phase_run_id: request.phase_run_id, requester: request.requester, preview_url_source: 'project-pipeline-registry', started_at: '2026-07-01T12:00:00.000Z', ended_at: '2026-07-01T12:00:01.000Z', viewports: request.viewports.map((viewport) => ({ id: viewport.id, width: viewport.width, height: viewport.height, status: 'PASS', status_reason: 'all-checks-passed', stage: 'complete', preconditions: [], actions: [], checks: [], console_errors: [], screenshot: null })), ...overrides };
 }
 
 function writeRequest(archiveRoot, rel, data) {
@@ -171,6 +183,101 @@ test('browser publication rejects a symlinked browser destination without writin
   assert.equal(result.ok, false);
   assert.equal(result.status_reason, 'evidence-publication-failed');
   assert.deepEqual(readdirSync(outside), []);
+});
+
+test('bridge validates actual schema2 runner artifact identity before Plan055 publication and rejects malformed or mismatched artifacts', async () => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const goodRequest = schema2Request();
+  const goodFile = writeRequest(archiveRoot, 'agents.output/qa/schema2-good.json', goodRequest);
+  const good = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: goodFile, now: '2026-07-01T12:00:30.000Z', browserSmokeRunner: async (args) => { const artifact = schema2Result(goodRequest); writeFileSync(path.join(args.outputDir, 'browser-smoke-result.json'), JSON.stringify(artifact)); return artifact; } });
+  assert.equal(good.ok, true);
+  assert.deepEqual(JSON.parse(readFileSync(good.result_file, 'utf8')), schema2Result(goodRequest));
+  const forgedCompleteRequest = schema2Request({ request_id: 'qa-schema2-forged-complete-runtime' });
+  const forgedCompleteFile = writeRequest(archiveRoot, 'agents.output/qa/schema2-forged-complete-runtime.json', forgedCompleteRequest);
+  const forgedComplete = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: forgedCompleteFile, now: '2026-07-01T12:00:30.000Z', browserSmokeRunner: async (args) => { const artifact = schema2Result(forgedCompleteRequest, { ok: false, status: 'BLOCKED_INFRA', status_reason: 'runtime-infra', viewports: forgedCompleteRequest.viewports.map((viewport) => ({ id: viewport.id, width: viewport.width, height: viewport.height, status: 'BLOCKED_INFRA', status_reason: 'runtime-infra', stage: 'complete', preconditions: [], actions: [], checks: [], console_errors: [], screenshot: null })) }); writeFileSync(path.join(args.outputDir, 'browser-smoke-result.json'), JSON.stringify(artifact)); return artifact; } });
+  assert.equal(forgedComplete.status_reason, 'evidence-publication-failed');
+  assert.equal(existsSync(browserSmokeResultDir(pidexRoot, projectId, forgedCompleteRequest.request_id)), false);
+  const malformedRequest = schema2Request({ request_id: 'qa-schema2-malformed' });
+  const malformedFile = writeRequest(archiveRoot, 'agents.output/qa/schema2-malformed.json', malformedRequest);
+  const malformed = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: malformedFile, now: '2026-07-01T12:00:30.000Z', browserSmokeRunner: async (args) => { writeFileSync(path.join(args.outputDir, 'browser-smoke-result.json'), '{malformed'); return schema2Result(malformedRequest); } });
+  assert.equal(malformed.status_reason, 'evidence-publication-failed');
+  assert.equal(existsSync(browserSmokeResultDir(pidexRoot, projectId, malformedRequest.request_id)), false);
+  const mismatchedRequest = schema2Request({ request_id: 'qa-schema2-mismatched' });
+  const mismatchedFile = writeRequest(archiveRoot, 'agents.output/qa/schema2-mismatched.json', mismatchedRequest);
+  const mismatched = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: mismatchedFile, now: '2026-07-01T12:00:30.000Z', browserSmokeRunner: async (args) => { const artifact = schema2Result(mismatchedRequest, { request_id: 'wrong-request-id' }); writeFileSync(path.join(args.outputDir, 'browser-smoke-result.json'), JSON.stringify(artifact)); return artifact; } });
+  assert.equal(mismatched.status_reason, 'evidence-publication-failed');
+  assert.equal(existsSync(browserSmokeResultDir(pidexRoot, projectId, mismatchedRequest.request_id)), false);
+});
+
+test('actual schema2 runner publishes auth-state mismatch and selector precondition failure with request schema metadata', async () => {
+  const cases = [
+    { name: 'auth', preconditions: [{ type: 'auth_state', authenticated_selector: '.authenticated', login_selector: '.login' }], counts: { '.authenticated': 0, '.login': 1 }, status: 'AUTH_STATE_MISMATCH', status_reason: 'auth-state-mismatch' },
+    { name: 'selector', preconditions: [{ type: 'selector_present', selector: '.required' }], counts: { '.required': 0 }, status: 'PRECONDITION_FAILED', status_reason: 'precondition-failed' },
+  ];
+  for (const item of cases) {
+    const { pidexRoot, projectId, archiveRoot } = setup();
+    const schemaRequest = schema2Request({ request_id: `qa-schema2-${item.name}-precondition`, viewports: [{ ...schema2Request().viewports[0], preconditions: item.preconditions }] });
+    const file = writeRequest(archiveRoot, `agents.output/qa/schema2-${item.name}-precondition.json`, schemaRequest);
+    const page = { on() {}, goto: async () => {}, locator: (selector) => ({ count: async () => item.counts[selector] ?? 1 }), keyboard: { press: async () => {} } };
+    const playwright = { chromium: { launch: async () => ({ newContext: async () => ({ newPage: async () => page, close: async () => {} }), close: async () => {} }) } };
+    const result = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: file, now: '2026-07-01T12:00:30.000Z', playwright });
+    assert.equal(result.request_schema, 2);
+    assert.equal(result.status, item.status);
+    assert.equal(result.status_reason, item.status_reason);
+    assert.deepEqual(JSON.parse(readFileSync(result.result_file, 'utf8')).status, item.status);
+    assert.deepEqual(JSON.parse(readFileSync(result.result_file, 'utf8')).status_reason, item.status_reason);
+  }
+});
+
+test('actual schema2 runner publishes action and check runtime failures through Plan055', async () => {
+  const cases = [
+    { name: 'action', actions: [{ type: 'hover', selector: '.menu' }], checks: [], throws: 'hover' },
+    { name: 'check', actions: [], checks: [{ type: 'selector_present', selector: '.required' }], throws: 'count' },
+  ];
+  for (const item of cases) {
+    const { pidexRoot, projectId, archiveRoot } = setup();
+    const schemaRequest = schema2Request({ request_id: `qa-schema2-${item.name}-runtime`, viewports: [{ ...schema2Request().viewports[0], actions: item.actions, checks: item.checks }] });
+    const file = writeRequest(archiveRoot, `agents.output/qa/schema2-${item.name}-runtime.json`, schemaRequest);
+    const page = { on() {}, goto: async () => {}, locator: () => ({ count: async () => { if (item.throws === 'count') throw new Error('check dependency failed'); return 1; }, hover: async () => { if (item.throws === 'hover') throw new Error('action dependency failed'); } }), keyboard: { press: async () => {} } };
+    const playwright = { chromium: { launch: async () => ({ newContext: async () => ({ newPage: async () => page, close: async () => {} }), close: async () => {} }) } };
+    const result = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: file, now: '2026-07-01T12:00:30.000Z', playwright });
+    assert.equal(result.request_schema, 2);
+    assert.deepEqual([result.status, result.status_reason], ['BLOCKED_INFRA', 'runtime-infra']);
+    assert.deepEqual(JSON.parse(readFileSync(result.result_file, 'utf8')).status_reason, 'runtime-infra');
+  }
+});
+
+test('actual schema2 runner byte-truncates exact QA multibyte console repro before strict Plan055 publication', async () => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const schemaRequest = schema2Request({
+    request_id: 'qa056-schema2-multibyte-console',
+    viewports: ['desktop1280', 'desktop1440'].map((id, index) => ({ id, width: index ? 1440 : 1280, height: index ? 900 : 800, route: '/dashboard', preconditions: [], actions: [], checks: [], capture: { screenshot: false, console_errors: true } })),
+  });
+  const file = writeRequest(archiveRoot, 'agents.output/qa/schema2-multibyte-console.json', schemaRequest);
+  const emitted = Array.from({ length: 25 }, (_, index) => `password=supersecret-${index} ${'😀'.repeat(250)}`);
+  let contextIndex = 0;
+  const playwright = { chromium: { launch: async () => ({
+    newContext: async () => {
+      const emitConsole = contextIndex++ === 0;
+      let consoleListener;
+      const page = {
+        on: (event, listener) => { if (event === 'console') consoleListener = listener; },
+        goto: async () => { if (emitConsole) for (const text of emitted) consoleListener?.({ type: () => 'error', text: () => text }); },
+        locator: () => ({ count: async () => 1 }),
+        keyboard: { press: async () => {} },
+      };
+      return { on() {}, route: async () => {}, newPage: async () => page, close: async () => {} };
+    },
+    close: async () => {},
+  }) } };
+  const result = await runProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: file, now: '2026-07-01T12:00:30.000Z', playwright });
+  assert.equal(result.ok, true);
+  const published = JSON.parse(readFileSync(result.result_file, 'utf8'));
+  const consoleErrors = published.viewports.flatMap((viewport) => viewport.console_errors);
+  assert.ok(consoleErrors.length <= 20);
+  assert.ok(Buffer.byteLength(consoleErrors.join(''), 'utf8') <= 4096);
+  assert.equal(consoleErrors.some((message) => message.includes('supersecret')), false);
+  assert.equal(validateBrowserSmokeResult(published, schemaRequest).ok, true);
 });
 
 test('browser smoke bridge CLI rejects caller-controlled project runtime root', () => {

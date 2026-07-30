@@ -1,48 +1,64 @@
 import path from 'node:path';
 import { BROWSER_SMOKE_STATUS, isBrowserSmokeStatus } from './status.mjs';
-
-function fail(reason, detail) {
-  return { ok: false, status: BROWSER_SMOKE_STATUS.BLOCKED_INFRA, status_reason: reason, detail };
+const S2_STATUS = new Set(['PASS', 'FAILED_FEATURE', 'BLOCKED_INFRA', 'AUTH_STATE_MISMATCH', 'PRECONDITION_FAILED', 'REQUEST_UNSUPPORTED']);
+const S2_REASON = new Set(['all-checks-passed', 'unsupported-request', 'navigation-infra', 'auth-state-mismatch', 'precondition-failed', 'feature-failed', 'evidence-infra', 'runtime-infra']);
+const STAGES = ['validation', 'navigation', 'preconditions', 'actions', 'checks', 'capture', 'complete'];
+const MAX_VALUE = 1_000_000;
+const keys = (object, allowed) => object && typeof object === 'object' && !Array.isArray(object) && Object.keys(object).length === allowed.length && Object.keys(object).every((key) => allowed.includes(key));
+const fail = (status_reason, detail) => ({ ok: false, status: BROWSER_SMOKE_STATUS.BLOCKED_INFRA, status_reason, detail });
+const finite = (value) => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= MAX_VALUE;
+const integer = (value) => Number.isInteger(value) && value >= 0 && value <= MAX_VALUE;
+const canonicalTime = (value) => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+export function isSafeRelativeEvidencePath(value) { const text = String(value || '').replaceAll('\\', '/'); return Boolean(text) && !/^[A-Za-z]:\//.test(text) && !text.startsWith('/') && !path.isAbsolute(text) && !text.split('/').some((part) => part === '..' || part === ''); }
+const same = (actual, expected, names) => names.every((name) => actual[name] === expected[name]);
+function box(value) { return value === null || (keys(value, ['x', 'y', 'width', 'height']) && Object.values(value).every(finite)); }
+function overlaps(a, b) { return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y; }
+function derivedObservation(observation, operation, lane, consoleErrors) {
+  if (!observation || typeof observation !== 'object' || typeof observation.ok !== 'boolean') return false;
+  if (operation.type === 'selector_present') return keys(observation, ['type', 'selector', 'count', 'ok']) && same(observation, operation, ['type', 'selector']) && integer(observation.count) && observation.ok === (observation.count > 0);
+  if (operation.type === 'auth_state') return keys(observation, ['type', 'authenticated_count', 'login_count', 'ok']) && observation.type === 'auth_state' && integer(observation.authenticated_count) && integer(observation.login_count) && observation.ok === (observation.authenticated_count > 0 && observation.login_count === 0);
+  if (operation.type === 'hover' || operation.type === 'focus') return keys(observation, ['type', 'selector', 'target_count', 'ok']) && same(observation, operation, ['type', 'selector']) && integer(observation.target_count) && observation.ok === (observation.target_count > 0);
+  if (operation.type === 'scroll_into_view') return keys(observation, ['type', 'selector', 'target_count', 'block', 'inline', 'ok']) && same(observation, operation, ['type', 'selector', 'block', 'inline']) && integer(observation.target_count) && observation.ok === (observation.target_count > 0);
+  if (operation.type === 'keyboard') return keys(observation, ['type', 'selector', 'key', 'target_count', 'ok']) && observation.type === 'keyboard' && observation.key === operation.key && observation.selector === (operation.selector || null) && (observation.target_count === null || integer(observation.target_count)) && observation.ok === (observation.target_count === null || observation.target_count > 0);
+  if (operation.type === 'aria_describedby') return keys(observation, ['type', 'trigger_selector', 'description_selector', 'trigger_count', 'description_count', 'linked', 'visible', 'ok']) && same(observation, operation, ['type', 'trigger_selector', 'description_selector']) && integer(observation.trigger_count) && integer(observation.description_count) && typeof observation.linked === 'boolean' && typeof observation.visible === 'boolean' && observation.ok === (observation.trigger_count > 0 && observation.description_count > 0 && observation.linked && observation.visible);
+  if (operation.type === 'dimension') { const valid = keys(observation, ['type', 'selector', 'property', 'operator', 'expected', 'actual', 'count', 'ok']) && same(observation, operation, ['type', 'selector', 'property', 'operator']) && observation.expected === operation.value && integer(observation.actual) && integer(observation.count); const comparison = operation.operator === 'eq' ? observation.actual === operation.value : operation.operator === 'lte' ? observation.actual <= operation.value : observation.actual >= operation.value; return valid && observation.ok === (observation.count > 0 && comparison); }
+  if (operation.type === 'bounding_box') { const valid = keys(observation, ['type', 'subject_selector', 'reference_selector', 'relation', 'subject_count', 'reference_count', 'subject_box', 'reference_box', 'ok']) && same(observation, operation, ['type', 'subject_selector', 'reference_selector', 'relation']) && integer(observation.subject_count) && integer(observation.reference_count) && box(observation.subject_box) && box(observation.reference_box); if (!valid) return false; const present = observation.subject_count === 1 && observation.reference_count === 1 && observation.subject_box && observation.reference_box; const contained = present && observation.subject_box.x >= observation.reference_box.x && observation.subject_box.y >= observation.reference_box.y && observation.subject_box.x + observation.subject_box.width <= observation.reference_box.x + observation.reference_box.width && observation.subject_box.y + observation.subject_box.height <= observation.reference_box.y + observation.reference_box.height; const hit = present && overlaps(observation.subject_box, observation.reference_box); return observation.ok === (operation.relation === 'contained_by' ? contained : operation.relation === 'overlaps' ? hit : present && !hit); }
+  return lane === 'checks' && operation.type === 'console' && keys(observation, ['type', 'errors', 'ok']) && observation.type === 'console' && observation.errors === 'none' && observation.ok === (consoleErrors.length === 0);
 }
-
-export function isSafeRelativeEvidencePath(value) {
-  const text = String(value || '').replaceAll('\\', '/');
-  return Boolean(text) && !/^[A-Za-z]:\//.test(text) && !text.startsWith('/') && !path.isAbsolute(text) && !text.split('/').some((part) => part === '..' || part === '');
-}
-
-export function validateBrowserSmokeResult(result) {
-  if (!result || typeof result !== 'object' || Array.isArray(result)) return fail('invalid-result', 'result must be object');
-  if (result.schema !== 1) return fail('invalid-result', `unsupported schema: ${result.schema}`);
-  if (!isBrowserSmokeStatus(result.status)) return fail('invalid-status', `unsupported status: ${result.status}`);
-  if (typeof result.status_reason !== 'string' || !result.status_reason) return fail('invalid-status-reason', 'status_reason required');
-  for (const key of ['project_id', 'request_id', 'phase_run_id']) {
-    if (typeof result[key] !== 'string' || !result[key]) return fail('invalid-result', `${key} required`);
+function allowedPrefix(viewport, expected) { const stage = STAGES.indexOf(viewport.stage); if (stage < 0) return false; const lanes = ['preconditions', 'actions', 'checks']; for (let index = 0; index < lanes.length; index += 1) { const lane = lanes[index]; const required = stage > index + 2; if (required && viewport[lane].length !== expected[lane].length) return false; if (!required && viewport[lane].length > expected[lane].length) return false; if (stage < index + 2 && viewport[lane].length !== 0) return false; } return true; }
+function expectedViewportOutcome(viewport) { const all = [...viewport.preconditions, ...viewport.actions, ...viewport.checks]; const failed = all.find((item) => !item.ok); if (!failed) return { status: 'PASS', status_reason: 'all-checks-passed', stage: 'complete' }; if (viewport.stage === 'preconditions') return { status: failed.type === 'auth_state' ? 'AUTH_STATE_MISMATCH' : 'PRECONDITION_FAILED', status_reason: failed.type === 'auth_state' ? 'auth-state-mismatch' : 'precondition-failed' }; return { status: 'FAILED_FEATURE', status_reason: 'feature-failed' }; }
+function validStatusPair(status, reason) { return (status === 'PASS' && reason === 'all-checks-passed') || (status === 'REQUEST_UNSUPPORTED' && reason === 'unsupported-request') || (status === 'AUTH_STATE_MISMATCH' && reason === 'auth-state-mismatch') || (status === 'PRECONDITION_FAILED' && reason === 'precondition-failed') || (status === 'FAILED_FEATURE' && reason === 'feature-failed') || (status === 'BLOCKED_INFRA' && ['navigation-infra', 'evidence-infra', 'runtime-infra'].includes(reason)); }
+function validateSchema2(result, request) {
+  const root = ['schema', 'ok', 'status', 'status_reason', 'project_id', 'request_id', 'phase_run_id', 'requester', 'preview_url_source', 'viewports', 'started_at', 'ended_at'];
+  if (!keys(result, root) || result.schema !== 2 || !S2_STATUS.has(result.status) || !S2_REASON.has(result.status_reason) || !validStatusPair(result.status, result.status_reason) || result.ok !== (result.status === 'PASS') || result.preview_url_source !== 'project-pipeline-registry' || !canonicalTime(result.started_at) || !canonicalTime(result.ended_at) || Date.parse(result.ended_at) < Date.parse(result.started_at) || Buffer.byteLength(JSON.stringify(result), 'utf8') > 256 * 1024) return fail('invalid-result', 'schema2 top-level contract invalid');
+  if (!request || ['project_id', 'request_id', 'phase_run_id', 'requester'].some((key) => result[key] !== request[key])) return fail('invalid-result-identity', 'result identity differs from request');
+  if (!Array.isArray(result.viewports) || result.viewports.length !== request.viewports.length) return fail('invalid-viewports', 'viewport count invalid');
+  let consoleCount = 0; let consoleBytes = 0;
+  for (let index = 0; index < result.viewports.length; index += 1) {
+    const viewport = result.viewports[index]; const expected = request.viewports[index];
+    if (!keys(viewport, ['id', 'width', 'height', 'status', 'status_reason', 'stage', 'preconditions', 'actions', 'checks', 'console_errors', 'screenshot']) || !validStatusPair(viewport.status, viewport.status_reason) || !Array.isArray(viewport.preconditions) || !Array.isArray(viewport.actions) || !Array.isArray(viewport.checks) || !Array.isArray(viewport.console_errors) || viewport.console_errors.some((item) => typeof item !== 'string') || viewport.id !== expected.id || viewport.width !== expected.width || viewport.height !== expected.height || !allowedPrefix(viewport, expected)) return fail('invalid-viewport-result', 'viewport contract invalid');
+    consoleCount += viewport.console_errors.length; consoleBytes += Buffer.byteLength(viewport.console_errors.join(''), 'utf8');
+    for (const lane of ['preconditions', 'actions', 'checks']) if (!viewport[lane].every((item, position) => derivedObservation(item, expected[lane][position], lane, viewport.console_errors))) return fail('invalid-observation', 'observation differs from request or derivation');
+    const outcome = expectedViewportOutcome(viewport);
+    const runtimeFailure = viewport.status === 'BLOCKED_INFRA' && ['navigation-infra', 'evidence-infra', 'runtime-infra'].includes(viewport.status_reason) && ['navigation', 'preconditions', 'actions', 'checks', 'capture'].includes(viewport.stage);
+    if ((!runtimeFailure && (viewport.status !== outcome.status || viewport.status_reason !== outcome.status_reason || (outcome.status === 'PASS' && viewport.stage !== 'complete'))) || (viewport.stage === 'complete' && outcome.status !== 'PASS')) return fail('invalid-viewport-status', 'viewport status not derived');
+    const screenshot = `${expected.id}.png`;
+    if (!(viewport.screenshot === null || viewport.screenshot === screenshot) || (viewport.screenshot && (!expected.capture.screenshot || viewport.stage !== 'complete')) || (expected.capture.screenshot && viewport.status === 'PASS' && viewport.screenshot !== screenshot)) return fail('invalid-screenshot', 'screenshot contract invalid');
   }
-  if (result.screenshot !== undefined && result.screenshot !== '' && !isSafeRelativeEvidencePath(result.screenshot)) return fail('invalid-screenshot-path', 'screenshot path must be relative evidence path');
-  if (!Array.isArray(result.checks)) return fail('invalid-checks', 'checks must be array');
-  if (!Array.isArray(result.console_errors)) return fail('invalid-console-errors', 'console_errors must be array');
+  if (consoleCount > 20 || consoleBytes > 4096) return fail('invalid-console-errors', 'global console limit exceeded');
+  const failed = result.viewports.find((viewport) => viewport.status !== 'PASS'); const expectedStatus = failed?.status || 'PASS'; const expectedReason = failed?.status_reason || 'all-checks-passed';
+  if (result.status !== expectedStatus || result.status_reason !== expectedReason) return fail('invalid-result-status', 'aggregate status not derived');
   return { ok: true, result };
 }
-
-export function buildBrowserSmokeResult(params = {}) {
-  const status = params.status || (params.ok ? BROWSER_SMOKE_STATUS.PASS : BROWSER_SMOKE_STATUS.BLOCKED_INFRA);
-  const result = {
-    schema: 1,
-    ok: status === BROWSER_SMOKE_STATUS.PASS,
-    status,
-    status_reason: params.status_reason || (status === BROWSER_SMOKE_STATUS.PASS ? 'all-checks-passed' : 'unspecified'),
-    project_id: String(params.project_id || ''),
-    request_id: String(params.request_id || ''),
-    phase_run_id: String(params.phase_run_id || ''),
-    preview_url_source: params.preview_url_source || 'caller-provided-url',
-    url: params.url || '',
-    checks: Array.isArray(params.checks) ? params.checks : [],
-    console_errors: Array.isArray(params.console_errors) ? params.console_errors : [],
-    screenshot: params.screenshot || '',
-    started_at: params.started_at || new Date().toISOString(),
-    ended_at: params.ended_at || new Date().toISOString(),
-  };
-  const validation = validateBrowserSmokeResult(result);
-  if (!validation.ok) throw new Error(`invalid browser-smoke result: ${validation.status_reason}`);
-  return result;
+export function validateBrowserSmokeResult(result, request) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return fail('invalid-result', 'result must be object');
+  if (result.schema === 2) return validateSchema2(result, request);
+  if (result.schema !== 1) return fail('invalid-result', 'unsupported schema');
+  if (!isBrowserSmokeStatus(result.status)) return fail('invalid-status', 'unsupported status');
+  if (typeof result.status_reason !== 'string' || !result.status_reason) return fail('invalid-status-reason', 'status reason required');
+  if (['project_id', 'request_id', 'phase_run_id'].some((key) => typeof result[key] !== 'string' || !result[key])) return fail('invalid-result', 'identity required');
+  if (result.screenshot !== undefined && result.screenshot !== '' && !isSafeRelativeEvidencePath(result.screenshot)) return fail('invalid-screenshot-path', 'screenshot path invalid');
+  if (!Array.isArray(result.checks) || !Array.isArray(result.console_errors)) return fail('invalid-checks', 'evidence arrays required');
+  return { ok: true, result };
 }
+export function buildBrowserSmokeResult(params = {}) { const status = params.status || (params.ok ? BROWSER_SMOKE_STATUS.PASS : BROWSER_SMOKE_STATUS.BLOCKED_INFRA); const result = { schema: 1, ok: status === BROWSER_SMOKE_STATUS.PASS, status, status_reason: params.status_reason || (status === BROWSER_SMOKE_STATUS.PASS ? 'all-checks-passed' : 'unspecified'), project_id: String(params.project_id || ''), request_id: String(params.request_id || ''), phase_run_id: String(params.phase_run_id || ''), preview_url_source: params.preview_url_source || 'caller-provided-url', url: params.url || '', checks: Array.isArray(params.checks) ? params.checks : [], console_errors: Array.isArray(params.console_errors) ? params.console_errors : [], screenshot: params.screenshot || '', started_at: params.started_at || new Date().toISOString(), ended_at: params.ended_at || new Date().toISOString() }; if (!validateBrowserSmokeResult(result).ok) throw new Error('invalid browser-smoke result'); return result; }

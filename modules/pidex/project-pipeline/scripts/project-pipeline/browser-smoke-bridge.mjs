@@ -1,10 +1,11 @@
-import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync } from 'node:fs';
+import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BROWSER_SMOKE_STATUS } from '../../../browser-smoke/scripts/browser-smoke/status.mjs';
 import { validateBrowserSmokeRequest } from '../../../browser-smoke/scripts/browser-smoke/request-schema.mjs';
 import { runBrowserSmokeCheck } from '../../../browser-smoke/scripts/browser-smoke/check.mjs';
 import { browserSmokePaths } from '../../../browser-smoke/scripts/browser-smoke/paths.mjs';
+import { validateBrowserSmokeResult } from '../../../browser-smoke/scripts/browser-smoke/result-contract.mjs';
 import { acquireProjectArchiveLock, assertTrustedDirectory, normalizeRel, pathWithin, removeOwnedDirectory, resolveArchiveRoot, trustedDirectoryIdentity, validateBrowserEvidenceBundle } from './archive-sync.mjs';
 import { loadProjectRecord, safeProjectId } from './registry.mjs';
 
@@ -88,20 +89,20 @@ export function validateProjectPipelineBrowserSmokeRequest(options = {}) {
   let raw;
   try { raw = readStableRequestJson(pathInfo.file, archiveRoot); } catch { return blocked('invalid-request', 'request json unreadable or unsafe'); }
   const generic = validateBrowserSmokeRequest(raw);
-  if (!generic.ok) return generic;
+  if (!generic.ok) return raw?.schema === 2 ? { ...generic, request_schema: 2 } : generic;
   const request = generic.request;
-  if (request.project_id !== projectId) return blocked('project-id-mismatch', 'request project_id does not match registry project');
-  if (request.requester !== pathInfo.requester) return blocked('requester-path-mismatch', 'requester does not match agents.output path');
-  if (request.requester === 'pidex-devops' && request.checks.some((check) => !DEVOPS_ALLOWED_CHECKS.has(check.type))) return blocked('devops-check-not-allowed', 'pidex-devops may request reachability/status checks only');
+  if (request.project_id !== projectId) return request.schema === 2 ? { ...blocked('project-id-mismatch', 'request project_id does not match registry project'), request_schema: 2 } : blocked('project-id-mismatch', 'request project_id does not match registry project');
+  if (request.requester !== pathInfo.requester) return request.schema === 2 ? { ...blocked('requester-path-mismatch', 'requester does not match agents.output path'), request_schema: 2 } : blocked('requester-path-mismatch', 'requester does not match agents.output path');
+  if (request.schema === 1 && request.requester === 'pidex-devops' && request.checks.some((check) => !DEVOPS_ALLOWED_CHECKS.has(check.type))) return blocked('devops-check-not-allowed', 'pidex-devops may request reachability/status checks only');
   const nowMs = options.now ? Date.parse(options.now) : Date.now();
   const createdMs = Date.parse(request.created_at);
   const maxAgeMs = Number.isInteger(options.maxAgeMs) ? options.maxAgeMs : 24 * 60 * 60 * 1000;
-  if (!Number.isFinite(nowMs) || Math.abs(nowMs - createdMs) > maxAgeMs) return blocked('stale-request', 'request timestamp is outside accepted freshness window');
+  if (!Number.isFinite(nowMs) || Math.abs(nowMs - createdMs) > maxAgeMs) return request.schema === 2 ? { ...blocked('stale-request', 'request timestamp is outside accepted freshness window'), request_schema: 2 } : blocked('stale-request', 'request timestamp is outside accepted freshness window');
   const resultDir = browserSmokeResultDir(pidexRoot, projectId, request.request_id);
-  if (existsSync(resultDir)) return blocked('duplicate-request', 'browser-smoke result directory already exists');
+  if (existsSync(resultDir)) return request.schema === 2 ? { ...blocked('duplicate-request', 'browser-smoke result directory already exists'), request_schema: 2 } : blocked('duplicate-request', 'browser-smoke result directory already exists');
   const preview = previewUrlFromRecord(record, request.preview.process);
-  if (!preview.ok) return preview;
-  return { ok: true, request, request_file: pathInfo.file, request_rel: pathInfo.rel, archive_root: archiveRoot, result_dir: resultDir, preview_url: preview.url, preview_url_source: preview.source, preview_generation: preview.generation };
+  if (!preview.ok) return request.schema === 2 ? { ...preview, request_schema: 2 } : preview;
+  return { ok: true, request, request_schema: request.schema, request_file: pathInfo.file, request_rel: pathInfo.rel, archive_root: archiveRoot, result_dir: resultDir, preview_url: preview.url, preview_url_source: preview.source, preview_generation: preview.generation };
 }
 
 export function reserveBrowserSmokeResultDir(resultDir) {
@@ -142,12 +143,20 @@ export async function runProjectPipelineBrowserSmokeRequest(options = {}) {
       playwright: options.playwright,
       previewUrlSource: validated.preview_url_source,
     });
+    if (validated.request.schema === 2) {
+      const resultFile = path.join(outputDir, 'browser-smoke-result.json');
+      const publishedResult = JSON.parse(readFileSync(resultFile, 'utf8'));
+      if (!validateBrowserSmokeResult(result, validated.request).ok || !validateBrowserSmokeResult(publishedResult, validated.request).ok || JSON.stringify(result) !== JSON.stringify(publishedResult)) throw new Error('invalid browser result');
+      const expectedFiles = new Set(['browser-smoke-result.json', ...publishedResult.viewports.flatMap((viewport) => viewport.screenshot ? [viewport.screenshot] : [])]);
+      const actualFiles = readdirSync(outputDir).sort();
+      if (actualFiles.length !== expectedFiles.size || actualFiles.some((name) => !expectedFiles.has(name))) throw new Error('schema2 evidence inventory invalid');
+    }
     validateBrowserEvidenceBundle(outputDir, validated.request.request_id);
     const lock = acquireProjectArchiveLock({ pidexRoot, projectId, operation: 'browser-publish', lockTimeoutMs: options.lockTimeoutMs });
-    if (!lock.ok) return blocked('archive-lock-unavailable', 'browser evidence archive is busy');
+    if (!lock.ok) return validated.request.schema === 2 ? { ...blocked('archive-lock-unavailable', 'browser evidence archive is busy'), request_schema: 2 } : blocked('archive-lock-unavailable', 'browser evidence archive is busy');
     try {
       const archiveIdentity = trustedDirectoryIdentity(validated.archive_root);
-      if (existsSync(validated.result_dir)) return blocked('duplicate-request', 'browser-smoke result directory already exists');
+      if (existsSync(validated.result_dir)) return validated.request.schema === 2 ? { ...blocked('duplicate-request', 'browser-smoke result directory already exists'), request_schema: 2 } : blocked('duplicate-request', 'browser-smoke result directory already exists');
       const browserRoot = path.dirname(validated.result_dir);
       const browserIdentity = trustedDirectoryIdentity(browserRoot, { create: true });
       assertTrustedDirectory(archiveIdentity);
@@ -173,9 +182,10 @@ export async function runProjectPipelineBrowserSmokeRequest(options = {}) {
       preview_url_source: validated.preview_url_source,
       preview_generation: validated.preview_generation,
       result,
+      request_schema: validated.request.schema,
     };
   } catch {
-    return blocked('evidence-publication-failed', 'browser evidence publication failed');
+    return validated.request.schema === 2 ? { ...blocked('evidence-publication-failed', 'browser evidence publication failed'), request_schema: 2 } : blocked('evidence-publication-failed', 'browser evidence publication failed');
   } finally {
     if (stageIdentity) { try { removeOwnedDirectory(stageIdentity); } catch {} }
   }

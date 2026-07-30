@@ -375,6 +375,7 @@ export function sanitizeBrowserSmokeResultForSandbox(item = {}, { pidexRoot, pro
     status: item.status,
     status_reason: item.status_reason,
     request_id: item.request_id,
+    request_schema: item.request_schema,
     result_file: sanitizePath(item.result_file),
     preview_url: item.preview_url,
     preview_url_source: item.preview_url_source,
@@ -608,6 +609,8 @@ export async function runProjectPipelineOrchestration(options = {}) {
       projectPipelineProgress(options, `checking browser-smoke requests after ${agent}`, { phase: 'browser-smoke', agent, project_id: projectId });
       const browserSmokeResults = await runBrowserSmokeBridgeForPhase({ pidexRoot, projectId, agent, browserSmokeBridgeRunner: options.browserSmokeBridgeRunner, now: options.now, maxAgeMs: options.browserSmokeMaxAgeMs, playwright: options.playwright });
       if (browserSmokeResults.length) {
+        const schema2Result = browserSmokeResults.find((item) => item?.request_schema === 2);
+        if (schema2Result) return { ok: false, error: 'schema2-verdict-not-enabled', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, browser_smoke_results: browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId })), no_fallback: true };
         const sandboxResults = browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId }));
         runSummary.browser_smoke_results = sandboxResults;
         const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
