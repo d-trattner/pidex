@@ -70,7 +70,7 @@ test('bridge rejects path escape requester mismatch project mismatch stale and d
   assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: dup, now: '2026-07-01T12:00:00.000Z' }).status_reason, 'duplicate-request');
 });
 
-test('bridge request reader rejects symlink, hardlink, executable and oversized JSON artifacts', (t) => {
+test('bridge request reader rejects symlink, hardlink and oversized JSON artifacts', (t) => {
   const { pidexRoot, projectId, archiveRoot } = setup();
   const outside = path.join(tmp(), 'outside.json');
   writeFileSync(outside, `${JSON.stringify(request({ request_id: 'qa-outside' }))}\n`);
@@ -81,12 +81,17 @@ test('bridge request reader rejects symlink, hardlink, executable and oversized 
   if (existsSync(path.join(qaRoot, 'symlink.json'))) assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: path.join(qaRoot, 'symlink.json'), now: '2026-07-01T12:00:00.000Z' }).ok, false);
   linkSync(outside, path.join(qaRoot, 'hardlink.json'));
   assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: path.join(qaRoot, 'hardlink.json'), now: '2026-07-01T12:00:00.000Z' }).ok, false);
-  const executable = writeRequest(archiveRoot, 'agents.output/qa/executable.json', request({ request_id: 'qa-executable' }));
-  chmodSync(executable, 0o755);
-  assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: executable, now: '2026-07-01T12:00:00.000Z' }).ok, false);
   const oversized = path.join(qaRoot, 'oversized.json');
   writeFileSync(oversized, JSON.stringify({ ...request({ request_id: 'qa-oversized' }), reason: 'x'.repeat(300_000) }));
   assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: oversized, now: '2026-07-01T12:00:00.000Z' }).ok, false);
+});
+
+test('bridge request reader rejects executable JSON artifacts on POSIX', (t) => {
+  if (process.platform === 'win32') { t.skip('Windows does not expose POSIX executable mode bits'); return; }
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const executable = writeRequest(archiveRoot, 'agents.output/qa/executable.json', request({ request_id: 'qa-executable' }));
+  chmodSync(executable, 0o755);
+  assert.equal(validateProjectPipelineBrowserSmokeRequest({ pidexRoot, projectId, requestPath: executable, now: '2026-07-01T12:00:00.000Z' }).ok, false);
 });
 
 test('bridge rejects request when registered archive root does not match derived project archive root', () => {
