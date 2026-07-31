@@ -57,6 +57,43 @@ export function browserSmokeResultDir(pidexRoot, projectId, requestId) {
   return target;
 }
 
+function evidenceInfra(detail) {
+  return { ok: false, status: BROWSER_SMOKE_STATUS.BLOCKED_INFRA, status_reason: 'browser-smoke-evidence-infra', detail };
+}
+
+export function isSafeSchema2VerdictRoute(route) {
+  if (typeof route !== 'string' || !route.startsWith('/') || route.includes('//') || Buffer.byteLength(route, 'utf8') > 300) return false;
+  if (/[\p{Cc}\\@#]/u.test(route)) return false;
+  return !/[a-z][a-z0-9+.-]*:\/\/|[a-z0-9.-]+:\d{1,5}(?:[/?#]|$)/i.test(route);
+}
+
+export function loadPersistedSchema2EvidenceSnapshot(options = {}) {
+  try {
+    const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+    const projectId = safeProjectId(options.projectId);
+    const archiveRoot = resolveArchiveRoot({ pidexRoot, projectId });
+    const record = options.record || loadProjectRecord(pidexRoot, projectId);
+    if (path.resolve(record?.archive?.path || '') !== archiveRoot) return evidenceInfra('registered archive mismatch');
+    const requestFile = path.resolve(String(options.request_file || ''));
+    if (!pathWithin(archiveRoot, requestFile)) return evidenceInfra('request outside registered archive');
+    const request = readStableRequestJson(requestFile, archiveRoot);
+    const validatedRequest = validateBrowserSmokeRequest(request);
+    if (!validatedRequest.ok || validatedRequest.request.schema !== 2 || validatedRequest.request.project_id !== projectId || (options.request_id && validatedRequest.request.request_id !== options.request_id)) return evidenceInfra('schema2 request invalid');
+    if (!validatedRequest.request.viewports.every((viewport) => isSafeSchema2VerdictRoute(viewport.route))) return evidenceInfra('schema2 verdict route invalid');
+    const resultDir = browserSmokeResultDir(pidexRoot, projectId, validatedRequest.request.request_id);
+    const inventory = validateBrowserEvidenceBundle(resultDir, validatedRequest.request.request_id);
+    const resultFile = path.join(resultDir, 'browser-smoke-result.json');
+    const result = readStableRequestJson(resultFile, archiveRoot);
+    if (!validateBrowserSmokeResult(result, validatedRequest.request).ok) return evidenceInfra('schema2 result invalid');
+    const expected = new Set(['browser-smoke-result.json', ...result.viewports.flatMap((viewport) => viewport.screenshot ? [viewport.screenshot] : [])]);
+    if (inventory.files.length !== expected.size || inventory.files.some((file) => !expected.has(file.name))) return evidenceInfra('schema2 screenshot inventory invalid');
+    const prefix = `browser-smoke/${validatedRequest.request.request_id}/`;
+    return { ok: true, snapshot: { status: result.status, status_reason: result.status_reason, request: validatedRequest.request, result, result_ref: `${prefix}browser-smoke-result.json`, screenshot_refs: result.viewports.flatMap((viewport) => viewport.screenshot ? [`${prefix}${viewport.screenshot}`] : []) } };
+  } catch {
+    return evidenceInfra('persisted schema2 evidence unreadable');
+  }
+}
+
 export function classifyBrowserSmokeRequestPath(archiveRoot, requestPath) {
   const file = path.resolve(requestPath);
   if (!pathWithin(archiveRoot, file)) return blocked('request-path-escape', 'request path outside archive root');

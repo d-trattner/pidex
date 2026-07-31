@@ -14,7 +14,7 @@ import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
 import { resolveProjectPipelineAuthority } from './project-authority.mjs';
 import { normalizePlan, recordPipelineEvent } from '../../../analysis-metrics-history/lib/review-lifecycle.mjs';
-import { runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
+import { isSafeSchema2VerdictRoute, loadPersistedSchema2EvidenceSnapshot, runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
 import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
 
@@ -382,33 +382,55 @@ export function sanitizeBrowserSmokeResultForSandbox(item = {}, { pidexRoot, pro
   };
 }
 
-export function buildBrowserSmokeVerdictTask({ phase, initialTask, previous, results = [] }) {
+export function buildBrowserSmokeVerdictTask({ phase, initialTask, previous, results = [], request_schema }) {
+  if (request_schema !== 2) {
+    const evidence = results.map((item, index) => [
+      `Browser smoke result ${index + 1}:`,
+      `status: ${item.status || 'unknown'}`,
+      `status_reason: ${item.status_reason || ''}`,
+      `preview_url: ${item.preview_url || ''}`,
+      `preview_url_source: ${item.preview_url_source || ''}`,
+      `result_file: ${item.result_file || ''}`,
+    ].join('\n')).join('\n\n');
+    return [
+      `Project Pipeline browser-smoke final verdict phase for ${phase}.`,
+      'You are running inside the persistent Project Sandbox at /workspace.',
+      'Do not modify source files. Read the browser-smoke result context below and write a final verdict artifact under your agents.output prefix.',
+      'If the result is BROWSER-SMOKE-PASS, record acceptance evidence. If it is BROWSER-SMOKE-FAILED-FEATURE, document the user-visible failure and route back for correction. If it is BROWSER-SMOKE-SKIP-NOT-CONFIGURED or BROWSER-SMOKE-BLOCKED-INFRA, document whether acceptance is blocked or can proceed with stated limitations.',
+      `Original user task:\n${initialTask || ''}`,
+      previous?.context_file ? `Previous phase artifact in container: ${previous.context_file}` : '',
+      evidence,
+      [
+        'Finish with a ROUTING HTML comment exactly like:',
+        '<!-- ROUTING',
+        'verdict: COMPLETE',
+        'route_to: orchestrator',
+        'reason: browser smoke final verdict recorded',
+        `context_file: ${phaseOutputPrefix(phase)}browser-smoke-verdict.md`,
+        '-->',
+        'The context_file value must be a relative agents.output/** path, never an absolute path.',
+      ].join('\n'),
+    ].filter(Boolean).join('\n\n');
+  }
+  const featureFailed = results.some((item) => item.status === 'FAILED_FEATURE');
+  const routeTo = featureFailed ? 'pidex-implementer' : 'orchestrator';
   const evidence = results.map((item, index) => [
-    `Browser smoke result ${index + 1}:`,
-    `status: ${item.status || 'unknown'}`,
-    `status_reason: ${item.status_reason || ''}`,
-    `preview_url: ${item.preview_url || ''}`,
-    `preview_url_source: ${item.preview_url_source || ''}`,
-    `result_file: ${item.result_file || ''}`,
+    `Browser smoke result ${index + 1}:`, `status: ${item.status}`, `status_reason: ${item.status_reason}`,
+    `result_ref: ${item.result_ref}`, `screenshot_refs: ${(item.screenshot_refs || []).join(', ') || 'none'}`,
+    ...(item.request.viewports || []).slice(0, 4).flatMap((requestViewport, viewportIndex) => {
+      const resultViewport = item.result.viewports?.[viewportIndex];
+      if (!resultViewport || resultViewport.id !== requestViewport.id || resultViewport.width !== requestViewport.width || resultViewport.height !== requestViewport.height) return [];
+      return [`viewport ${resultViewport.id}: route_json: ${JSON.stringify(requestViewport.route)}; status=${resultViewport.status}; status_reason=${resultViewport.status_reason}; preconditions=${JSON.stringify(resultViewport.preconditions || []).slice(0, 1024)}; actions=${JSON.stringify(resultViewport.actions || []).slice(0, 1024)}; checks=${JSON.stringify(resultViewport.checks || []).slice(0, 1024)}; console=${JSON.stringify(resultViewport.console_errors || []).slice(0, 1024)}`];
+    }),
   ].join('\n')).join('\n\n');
   return [
     `Project Pipeline browser-smoke final verdict phase for ${phase}.`,
-    'You are running inside the persistent Project Sandbox at /workspace.',
-    'Do not modify source files. Read the browser-smoke result context below and write a final verdict artifact under your agents.output prefix.',
-    'If the result is BROWSER-SMOKE-PASS, record acceptance evidence. If it is BROWSER-SMOKE-FAILED-FEATURE, document the user-visible failure and route back for correction. If it is BROWSER-SMOKE-SKIP-NOT-CONFIGURED or BROWSER-SMOKE-BLOCKED-INFRA, document whether acceptance is blocked or can proceed with stated limitations.',
+    'You are running inside persistent Project Sandbox at /workspace.',
+    'Do not modify source files. Read browser-smoke result context below and write final verdict artifact under agents.output prefix.',
+    `Evidence is validated schema2. ${featureFailed ? 'Record user-visible failure; exact route is pidex-implementer.' : 'Record acceptance; exact route is orchestrator.'}`,
     `Original user task:\n${initialTask || ''}`,
-    previous?.context_file ? `Previous phase artifact in container: ${previous.context_file}` : '',
-    evidence,
-    [
-      'Finish with a ROUTING HTML comment exactly like:',
-      '<!-- ROUTING',
-      'verdict: COMPLETE',
-      'route_to: orchestrator',
-      'reason: browser smoke final verdict recorded',
-      `context_file: ${phaseOutputPrefix(phase)}browser-smoke-verdict.md`,
-      '-->',
-      'The context_file value must be a relative agents.output/** path, never an absolute path.',
-    ].join('\n'),
+    previous?.context_file ? `Previous phase artifact in container: ${previous.context_file}` : '', evidence,
+    ['Finish with ROUTING HTML comment exactly like:', '<!-- ROUTING', 'verdict: COMPLETE', `route_to: ${routeTo}`, 'reason: browser smoke final verdict recorded', `context_file: ${phaseOutputPrefix(phase)}browser-smoke-verdict.md`, '-->', 'context_file must be relative agents.output/** path.'].join('\n'),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -501,7 +523,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
     const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length, moduleRulesText, projectId });
     let run;
     let retryCount = 0;
-    const runAgentOnce = (phaseTask) => runProjectPipelineAgent({
+    const runAgentOnce = (phaseTask, extra = {}) => runProjectPipelineAgent({
       pidexRoot,
       projectId,
       agent,
@@ -510,6 +532,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
       archiveWorkspace: options.archiveWorkspace,
       runner: options.runner,
       archiveCopyRunner: options.runner,
+      ...extra,
     });
     try {
       run = runAgentOnce(task);
@@ -609,20 +632,41 @@ export async function runProjectPipelineOrchestration(options = {}) {
       projectPipelineProgress(options, `checking browser-smoke requests after ${agent}`, { phase: 'browser-smoke', agent, project_id: projectId });
       const browserSmokeResults = await runBrowserSmokeBridgeForPhase({ pidexRoot, projectId, agent, browserSmokeBridgeRunner: options.browserSmokeBridgeRunner, now: options.now, maxAgeMs: options.browserSmokeMaxAgeMs, playwright: options.playwright });
       if (browserSmokeResults.length) {
-        const schema2Result = browserSmokeResults.find((item) => item?.request_schema === 2);
-        if (schema2Result) return { ok: false, error: 'schema2-verdict-not-enabled', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, browser_smoke_results: browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId })), no_fallback: true };
-        const sandboxResults = browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId }));
-        runSummary.browser_smoke_results = sandboxResults;
-        const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
-        const verdictRun = runAgentOnce(verdictTask);
-        const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
-        runs.push(verdictSummary);
-        appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
-        if (!verdictRun.ok) {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline browser-smoke verdict failed: ${agent}`, metadata: { failed_agent: agent, browser_smoke_results: sandboxResults, runs } });
-          return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
+        const schema2Results = browserSmokeResults.filter((item) => item?.request_schema === 2);
+        if (schema2Results.length) {
+          const loader = options.schema2EvidenceLoader || loadPersistedSchema2EvidenceSnapshot;
+          const snapshots = schema2Results.map((item) => loader({ pidexRoot, projectId, record: telemetryRecord, request_file: item.request_file, request_id: item.request_id }));
+          if (snapshots.some((item) => !item?.ok)) return { ok: false, error: 'browser-smoke-evidence-infra', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+          const evidence = snapshots.map((item) => item.snapshot);
+          if (evidence.some((item) => !item?.request?.viewports?.every((viewport) => isSafeSchema2VerdictRoute(viewport.route)))) return { ok: false, error: 'browser-smoke-evidence-infra', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+          runSummary.browser_smoke_results = evidence.map(({ status, status_reason, result_ref, screenshot_refs }) => ({ status, status_reason, result_ref, screenshot_refs }));
+          const nonFeature = evidence.find((item) => !['PASS', 'FAILED_FEATURE'].includes(item.status));
+          if (nonFeature) return { ok: false, error: `browser-smoke-${String(nonFeature.status).toLowerCase()}`, failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+          if (evidence.length !== 1 || browserSmokeResults.length !== 1) return { ok: false, error: 'browser-smoke-evidence-infra', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+          const expectedContext = `${phaseOutputPrefix(agent)}browser-smoke-verdict.md`;
+          const verdictRun = runAgentOnce(buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: evidence, request_schema: 2 }), { expectedOutputPath: expectedContext, requireExplicitRouting: true });
+          const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
+          runs.push(verdictSummary);
+          appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
+          const expectedRoute = evidence[0].status === 'PASS' ? 'orchestrator' : 'pidex-implementer';
+          const postSync = (options.schema2EvidencePostSyncLoader || loader)({ pidexRoot, projectId, record: telemetryRecord, request_file: schema2Results[0].request_file, request_id: schema2Results[0].request_id });
+          if (!verdictRun.ok || verdictRun.routing?.route_to !== expectedRoute || verdictRun.context_file !== expectedContext || !postSync?.ok) return { ok: false, error: 'browser-smoke-verdict-infra', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), no_fallback: true };
+          if (evidence[0].status === 'FAILED_FEATURE') return { ok: false, error: 'browser-smoke-feature-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+          previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
+        } else {
+          const sandboxResults = browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId }));
+          runSummary.browser_smoke_results = sandboxResults;
+          const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
+          const verdictRun = runAgentOnce(verdictTask);
+          const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
+          runs.push(verdictSummary);
+          appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
+          if (!verdictRun.ok) {
+            appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline browser-smoke verdict failed: ${agent}`, metadata: { failed_agent: agent, browser_smoke_results: sandboxResults, runs } });
+            return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
+          }
+          previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
         }
-        previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
       }
     }
   }

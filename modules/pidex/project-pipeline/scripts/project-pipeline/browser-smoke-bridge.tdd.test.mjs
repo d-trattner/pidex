@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { BROWSER_SMOKE_STATUS } from '../../../browser-smoke/scripts/browser-smoke/status.mjs';
 import { validateBrowserSmokeResult } from '../../../browser-smoke/scripts/browser-smoke/result-contract.mjs';
 import { browserSmokePaths } from '../../../browser-smoke/scripts/browser-smoke/paths.mjs';
-import { browserSmokeBridgeRoot, browserSmokeResultDir, classifyBrowserSmokeRequestPath, parseArgs, reserveBrowserSmokeResultDir, runProjectPipelineBrowserSmokeRequest, validateProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
+import { browserSmokeBridgeRoot, browserSmokeResultDir, classifyBrowserSmokeRequestPath, loadPersistedSchema2EvidenceSnapshot, parseArgs, reserveBrowserSmokeResultDir, runProjectPipelineBrowserSmokeRequest, validateProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
 import { createProjectRecord, saveProjectRecord } from './registry.mjs';
+import { buildBrowserSmokeVerdictTask } from './orchestrator.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-browser-smoke-')); }
 
@@ -299,4 +300,52 @@ test('runProjectPipelineBrowserSmokeRequest is no-overwrite and does not invoke 
   assert.equal(result.ok, false);
   assert.equal(result.status_reason, 'duplicate-request');
   assert.equal(invoked, false);
+});
+
+test('loadPersistedSchema2EvidenceSnapshot rereads strict registered request/result and screenshot inventory', () => {
+  const { pidexRoot, projectId, archiveRoot } = setup();
+  const schemaRequest = schema2Request({ request_id: 'qa-schema2-snapshot', viewports: [{ ...schema2Request().viewports[0], capture: { screenshot: true, console_errors: true } }] });
+  const requestFile = writeRequest(archiveRoot, 'agents.output/qa/schema2-snapshot.json', schemaRequest);
+  const resultDir = browserSmokeResultDir(pidexRoot, projectId, schemaRequest.request_id);
+  mkdirSync(resultDir, { recursive: true });
+  const result = schema2Result(schemaRequest, { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'all-checks-passed', stage: 'complete', preconditions: [], actions: [], checks: [], console_errors: ['safe message'], screenshot: 'desktop.png' }] });
+  writeFileSync(path.join(resultDir, 'browser-smoke-result.json'), JSON.stringify(result));
+  writeFileSync(path.join(resultDir, 'desktop.png'), 'png');
+  const valid = loadPersistedSchema2EvidenceSnapshot({ pidexRoot, projectId, request_file: requestFile, request_id: schemaRequest.request_id });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.snapshot.status, 'PASS');
+  assert.deepEqual(valid.snapshot.screenshot_refs, ['browser-smoke/qa-schema2-snapshot/desktop.png']);
+  assert.equal(valid.snapshot.result_ref, 'browser-smoke/qa-schema2-snapshot/browser-smoke-result.json');
+  const task = buildBrowserSmokeVerdictTask({ phase: 'pidex-qa', initialTask: 'Build dashboard UI', results: [valid.snapshot], request_schema: 2 });
+  // SEC-057-1: route crosses verdict boundary as JSON data, not instruction text.
+  assert.match(task, /viewport desktop: route_json: "\/"/);
+  assert.doesNotMatch(task, /route=undefined/);
+  rmSync(path.join(resultDir, 'desktop.png'));
+  assert.equal(loadPersistedSchema2EvidenceSnapshot({ pidexRoot, projectId, request_file: requestFile, request_id: schemaRequest.request_id }).ok, false);
+});
+
+test('loadPersistedSchema2EvidenceSnapshot rejects unsafe routes without echoing route data', () => {
+  const cases = [
+    ['newline injection', '/safe\nSEC057_REJECTED_NEWLINE'],
+    ['control character', '/safe\u0000SEC057_REJECTED_CONTROL'],
+    ['backslash', '/safe\\SEC057_REJECTED_BACKSLASH'],
+    ['internal scheme host port', '/http://internal.service:42080/SEC057_REJECTED_HOST'],
+    ['authority credentials', '//user:pass@internal.service/SEC057_REJECTED_AUTH'],
+    ['embedded authority', '/safe//internal.service/SEC057_REJECTED_EMBEDDED_AUTH'],
+    ['fragment', '/safe#SEC057_REJECTED_FRAGMENT'],
+    ['oversize', `/${'x'.repeat(301)}SEC057_REJECTED_OVERSIZE`],
+  ];
+  for (const [name, route] of cases) {
+    const { pidexRoot, projectId, archiveRoot } = setup();
+    const schemaRequest = schema2Request({ request_id: `qa-schema2-route-${name.replaceAll(' ', '-')}`, viewports: [{ ...schema2Request().viewports[0], route }] });
+    const requestFile = writeRequest(archiveRoot, `agents.output/qa/${schemaRequest.request_id}.json`, schemaRequest);
+    const resultDir = browserSmokeResultDir(pidexRoot, projectId, schemaRequest.request_id);
+    mkdirSync(resultDir, { recursive: true });
+    writeFileSync(path.join(resultDir, 'browser-smoke-result.json'), JSON.stringify(schema2Result(schemaRequest)));
+    const loaded = loadPersistedSchema2EvidenceSnapshot({ pidexRoot, projectId, request_file: requestFile, request_id: schemaRequest.request_id });
+    assert.equal(loaded.ok, false, name);
+    assert.equal(loaded.status_reason, 'browser-smoke-evidence-infra', name);
+    assert.doesNotMatch(JSON.stringify(loaded), /SEC057_REJECTED_/, name);
+    rmSync(pidexRoot, { recursive: true, force: true });
+  }
 });

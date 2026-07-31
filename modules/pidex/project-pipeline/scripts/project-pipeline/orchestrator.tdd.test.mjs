@@ -473,6 +473,45 @@ test('buildBrowserSmokeVerdictTask instructs validation agent to write final ver
   assert.match(task, /context_file: agents\.output\/qa\/browser-smoke-verdict\.md/);
 });
 
+test('buildBrowserSmokeVerdictTask preserves schema1 legacy task bytes despite schema2-like result fields', () => {
+  const task = buildBrowserSmokeVerdictTask({
+    phase: 'pidex-qa', initialTask: 'Build dashboard UI', previous: { context_file: 'agents.output/qa/qa.md' }, request_schema: 1,
+    results: [{ status: 'BROWSER-SMOKE-PASS', status_reason: 'all-checks-passed', result_file: 'browser-smoke/req/browser-smoke-result.json', preview_url: 'http://localhost:42080', preview_url_source: 'project-pipeline-registry', result_ref: 'browser-smoke/req/browser-smoke-result.json', result: { viewports: [] } }],
+  });
+  assert.equal(task, [
+    'Project Pipeline browser-smoke final verdict phase for pidex-qa.',
+    'You are running inside the persistent Project Sandbox at /workspace.',
+    'Do not modify source files. Read the browser-smoke result context below and write a final verdict artifact under your agents.output prefix.',
+    'If the result is BROWSER-SMOKE-PASS, record acceptance evidence. If it is BROWSER-SMOKE-FAILED-FEATURE, document the user-visible failure and route back for correction. If it is BROWSER-SMOKE-SKIP-NOT-CONFIGURED or BROWSER-SMOKE-BLOCKED-INFRA, document whether acceptance is blocked or can proceed with stated limitations.',
+    'Original user task:\nBuild dashboard UI',
+    'Previous phase artifact in container: agents.output/qa/qa.md',
+    'Browser smoke result 1:\nstatus: BROWSER-SMOKE-PASS\nstatus_reason: all-checks-passed\npreview_url: http://localhost:42080\npreview_url_source: project-pipeline-registry\nresult_file: browser-smoke/req/browser-smoke-result.json',
+    ['Finish with a ROUTING HTML comment exactly like:', '<!-- ROUTING', 'verdict: COMPLETE', 'route_to: orchestrator', 'reason: browser smoke final verdict recorded', 'context_file: agents.output/qa/browser-smoke-verdict.md', '-->', 'The context_file value must be a relative agents.output/** path, never an absolute path.'].join('\n'),
+  ].join('\n\n'));
+});
+
+test('buildBrowserSmokeVerdictTask gives schema2 PASS bounded evidence and exact orchestrator routing without topology', () => {
+  const task = buildBrowserSmokeVerdictTask({
+    phase: 'pidex-qa', initialTask: 'Build dashboard UI', previous: { context_file: 'agents.output/qa/qa.md' }, request_schema: 2,
+    results: [{ status: 'PASS', status_reason: 'all-checks-passed', result_ref: 'browser-smoke/req/browser-smoke-result.json', screenshot_refs: ['browser-smoke/req/desktop.png'], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/', preconditions: [], actions: [], checks: [], capture: { screenshot: false, console_errors: true } }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'all-checks-passed', preconditions: [], actions: [], checks: [], console_errors: ['safe'] }] } }],
+  });
+  assert.match(task, /route_to: orchestrator/);
+  assert.match(task, /browser-smoke\/req\/browser-smoke-result\.json/);
+  assert.match(task, /browser-smoke\/req\/desktop\.png/);
+  // SEC-057-1: route crosses verdict boundary as JSON data, not instruction text.
+  assert.match(task, /viewport desktop: route_json: "\/"; status=PASS/);
+  assert.doesNotMatch(task, /route=undefined|preview_url|localhost|host_port|container_port/i);
+});
+
+test('buildBrowserSmokeVerdictTask renders accepted schema2 routes as JSON data', () => {
+  const task = buildBrowserSmokeVerdictTask({
+    phase: 'pidex-qa', initialTask: 'Build dashboard UI', request_schema: 2,
+    results: [{ status: 'PASS', status_reason: 'all-checks-passed', result_ref: 'browser-smoke/req/browser-smoke-result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/safe?query=1' }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'all-checks-passed' }] } }],
+  });
+  assert.match(task, /viewport desktop: route_json: "\/safe\?query=1"; status=PASS/);
+  assert.doesNotMatch(task, /viewport desktop: route=\/safe\?query=1/);
+});
+
 test('sanitizeBrowserSmokeResultForSandbox converts host paths to archive-relative evidence refs', () => {
   const pidexRoot = tmp();
   const projectId = 'pp-orch-sanitize-smoke';
@@ -584,10 +623,53 @@ test('every schema2 status stops before verdict agent and next phase with typed 
     let agentCalls = 0;
     const runner = (args) => { if (args[0] !== 'exec' || !args.includes('pi')) return 'ok'; agentCalls += 1; writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/artifact.md'), '# qa\n'); writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId), null, 2)}\n`); return { status: 0, stdout: '<!-- ROUTING\ncontext_file: agents.output/qa/artifact.md\n-->', stderr: '' }; };
     const result = await runProjectPipelineOrchestration({ pidexRoot, projectId, task: 'schema2 hold', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, now: '2026-07-01T12:00:30.000Z', browserSmokeBridgeRunner: async () => ({ ok: status === 'PASS', status, status_reason: 'fixture', request_schema: 2 }) });
-    assert.equal(result.error, 'schema2-verdict-not-enabled');
+    assert.equal(result.error, 'browser-smoke-evidence-infra');
     assert.equal(agentCalls, 1, status);
     rmSync(pidexRoot, { recursive: true, force: true });
   }
+});
+
+test('schema2 status gate invokes verdict only for PASS or FAILED_FEATURE and enforces exact routing', async () => {
+  for (const scenario of [{ status: 'BLOCKED_INFRA', calls: 1, error: 'browser-smoke-blocked_infra' }, { status: 'PASS', calls: 3, error: undefined }, { status: 'FAILED_FEATURE', calls: 2, error: 'browser-smoke-feature-failed' }]) {
+    const pidexRoot = tmp(); const projectId = `pp-orch-verdict-${scenario.status.toLowerCase()}`; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+    mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true }); seedRecord(pidexRoot, projectId);
+    let calls = 0;
+    const runner = (args) => {
+      if (args[0] !== 'exec' || !args.includes('pi')) return 'ok'; calls += 1;
+      const prompt = String(args.at(-1)); const verdict = /browser-smoke final verdict/.test(prompt);
+      const context = verdict ? 'agents.output/qa/browser-smoke-verdict.md' : `agents.output/${calls === 3 ? 'uat' : 'qa'}/artifact.md`;
+      mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+      if (!verdict && calls === 1) writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId))}\n`);
+      const route = scenario.status === 'FAILED_FEATURE' && verdict ? 'pidex-implementer' : 'orchestrator';
+      return { status: 0, stdout: `<!-- ROUTING\nverdict: COMPLETE\nroute_to: ${route}\nreason: ok\ncontext_file: ${context}\n-->` };
+    };
+    const result = await runProjectPipelineOrchestration({ pidexRoot, projectId, task: 'schema2 verdict', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, moduleRules: false, browserSmokeBridgeRunner: async () => ({ request_schema: 2, request_file: 'ignored', request_id: 'req' }), schema2EvidenceLoader: () => ({ ok: true, snapshot: { status: scenario.status, status_reason: 'fixture', result_ref: 'browser-smoke/req/browser-smoke-result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/' }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: scenario.status, status_reason: 'fixture' }] } } }), schema2EvidencePostSyncLoader: () => ({ ok: true }) });
+    assert.equal(calls, scenario.calls, scenario.status); assert.equal(result.error, scenario.error, scenario.status); if (scenario.status === 'PASS') assert.equal(result.ok, true);
+    rmSync(pidexRoot, { recursive: true, force: true });
+  }
+});
+
+test('schema2 unsafe route stops before verdict or next phase without public or task leak', async () => {
+  const pidexRoot = tmp(); const projectId = 'pp-orch-schema2-unsafe-route'; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, projectId);
+  const rejectedRoute = '/safe\nSEC057_REJECTED_PUBLIC_TASK_LEAK'; let calls = 0; const prompts = [];
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok'; calls += 1; prompts.push(String(args.at(-1)));
+    const context = `agents.output/${calls === 1 ? 'qa' : 'uat'}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    if (calls === 1) { const requestDir = path.join(archiveWorkspace, 'agents.output/qa'); mkdirSync(requestDir, { recursive: true }); writeFileSync(path.join(requestDir, 'browser-smoke-request.json'), '{}'); }
+    return { status: 0, stdout: `<!-- ROUTING\nverdict: COMPLETE\nroute_to: orchestrator\nreason: ok\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId, task: 'schema2 unsafe route', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, moduleRules: false,
+    browserSmokeBridgeRunner: async () => ({ request_schema: 2, request_file: 'ignored', request_id: 'req' }),
+    schema2EvidenceLoader: () => ({ ok: true, snapshot: { status: 'PASS', status_reason: 'fixture', result_ref: 'browser-smoke/req/browser-smoke-result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: rejectedRoute }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'fixture' }] } } }),
+  });
+  assert.equal(result.error, 'browser-smoke-evidence-infra');
+  assert.equal(calls, 1);
+  assert.doesNotMatch(prompts.join('\n'), /SEC057_REJECTED_PUBLIC_TASK_LEAK/);
+  assert.doesNotMatch(JSON.stringify(result), /SEC057_REJECTED_PUBLIC_TASK_LEAK/);
+  rmSync(pidexRoot, { recursive: true, force: true });
 });
 
 test('runProjectPipelineOrchestration omits failed child raw output from public result', async () => {
