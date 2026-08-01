@@ -2,14 +2,38 @@
 
 These module-scoped rules apply only in Project Pipeline mode when `project-pipeline.browser-smoke` is available.
 
-When the orchestrator provides browser-smoke result context, UAT owns the final user-facing interpretation.
+When orchestrator supplies sanitized archive-relative result context, UAT owns final user-facing interpretation. Read supplied references only, never host absolute paths, and do not modify source during verdict. Write verdict under `agents.output/uat/**`.
 
-Rules:
+## Schema 1
 
-- Read only the sanitized archive-relative result references supplied by the orchestrator.
-- Do not copy host absolute paths into UAT artifacts.
-- Do not modify source files during the verdict step.
-- Write the final verdict under `agents.output/uat/**`.
-- If the result is `BROWSER-SMOKE-PASS`, record concise acceptance evidence.
-- If the result is `BROWSER-SMOKE-FAILED-FEATURE`, route correction with the visible failure symptoms.
-- If the result is skipped or blocked, state the limitation and whether manual user preview approval is still required.
+Interpret legacy statuses as before: `BROWSER-SMOKE-PASS` supports relevant acceptance; `BROWSER-SMOKE-FAILED-FEATURE` records visible symptoms for correction; `BROWSER-SMOKE-SKIP-NOT-CONFIGURED` and `BROWSER-SMOKE-BLOCKED-INFRA` document limitation without calling feature passed.
+
+## Schema 2
+
+- Schema 2 `BLOCKED_INFRA`, `AUTH_STATE_MISMATCH`, `PRECONDITION_FAILED`, and `REQUEST_UNSUPPORTED` stop upstream. Do not create a feature verdict, fallback, or alternate route.
+- Do not interpret schema 2 non-feature statuses as feature verdicts.
+- Schema 2 `PASS` MUST finish with `route_to: orchestrator` and exact context `context_file: agents.output/uat/browser-smoke-verdict.md`.
+- Schema 2 `FAILED_FEATURE` MUST finish with `route_to: pidex-implementer` and exact context `context_file: agents.output/uat/browser-smoke-verdict.md`.
+- Record concise user-facing acceptance evidence or visible failure symptoms from supplied result only.
+
+Schema 2 PASS routing:
+
+```html
+<!-- ROUTING
+verdict: COMPLETE
+route_to: orchestrator
+reason: browser smoke final verdict recorded
+context_file: agents.output/uat/browser-smoke-verdict.md
+-->
+```
+
+Schema 2 FAILED_FEATURE routing:
+
+```html
+<!-- ROUTING
+verdict: COMPLETE
+route_to: pidex-implementer
+reason: browser smoke final verdict recorded
+context_file: agents.output/uat/browser-smoke-verdict.md
+-->
+```

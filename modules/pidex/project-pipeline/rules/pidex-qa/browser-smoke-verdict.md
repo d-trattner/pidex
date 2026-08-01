@@ -2,16 +2,38 @@
 
 These module-scoped rules apply only in Project Pipeline mode when `project-pipeline.browser-smoke` is available.
 
-When the orchestrator provides browser-smoke result context, QA owns the final interpretation.
+When orchestrator supplies sanitized archive-relative result context, QA owns final interpretation. Read supplied references only, never host absolute paths, and do not modify source during verdict. Write verdict under `agents.output/qa/**`.
 
-Rules:
+## Schema 1
 
-- Read only the sanitized archive-relative result references supplied by the orchestrator.
-- Do not copy host absolute paths into QA artifacts.
-- Do not modify source files during the verdict step.
-- Write the final verdict under `agents.output/qa/**`.
-- Interpret statuses as follows:
-  - `BROWSER-SMOKE-PASS`: browser evidence supports the relevant acceptance criteria.
-  - `BROWSER-SMOKE-FAILED-FEATURE`: user-visible behavior failed; route correction with concise visible symptoms.
-  - `BROWSER-SMOKE-SKIP-NOT-CONFIGURED`: browser runtime missing; document limitation and any fallback evidence.
-  - `BROWSER-SMOKE-BLOCKED-INFRA`: request, preview, or infrastructure problem; do not call the feature passed.
+Interpret legacy statuses as before: `BROWSER-SMOKE-PASS` supports relevant acceptance; `BROWSER-SMOKE-FAILED-FEATURE` records visible symptoms for correction; `BROWSER-SMOKE-SKIP-NOT-CONFIGURED` and `BROWSER-SMOKE-BLOCKED-INFRA` document limitation without calling feature passed.
+
+## Schema 2
+
+- Schema 2 `BLOCKED_INFRA`, `AUTH_STATE_MISMATCH`, `PRECONDITION_FAILED`, and `REQUEST_UNSUPPORTED` stop upstream. Do not create a feature verdict, fallback, or alternate route.
+- Do not interpret schema 2 non-feature statuses as feature verdicts.
+- Schema 2 `PASS` MUST finish with `route_to: orchestrator` and exact context `context_file: agents.output/qa/browser-smoke-verdict.md`.
+- Schema 2 `FAILED_FEATURE` MUST finish with `route_to: pidex-implementer` and exact context `context_file: agents.output/qa/browser-smoke-verdict.md`.
+- Record concise visible acceptance evidence or visible failure symptoms from supplied result only.
+
+Schema 2 PASS routing:
+
+```html
+<!-- ROUTING
+verdict: COMPLETE
+route_to: orchestrator
+reason: browser smoke final verdict recorded
+context_file: agents.output/qa/browser-smoke-verdict.md
+-->
+```
+
+Schema 2 FAILED_FEATURE routing:
+
+```html
+<!-- ROUTING
+verdict: COMPLETE
+route_to: pidex-implementer
+reason: browser smoke final verdict recorded
+context_file: agents.output/qa/browser-smoke-verdict.md
+-->
+```
