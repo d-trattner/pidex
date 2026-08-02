@@ -77,7 +77,9 @@ test('Project Pipeline browser-smoke schema2 consumer rules preserve schema1 and
     assert.match(rules, /Actions precede checks; separate viewport states may cover hover and keyboard\/focus/);
     assert.match(rules, /Derive safe selectors and numeric bounds from acceptance and project evidence; never invent URL, credentials, JavaScript, or project specification/);
     assert.match(rules, /No sandbox browser or install fallback/);
-    const template = rules.match(/Canonical closed schema 2 template:\n\n```json\n([\s\S]*?)\n```/)[1];
+    const templateMatch = rules.match(/Canonical closed schema 2 template:\r?\n\r?\n```json\r?\n([\s\S]*?)\r?\n```/);
+    assert.ok(templateMatch, 'rendered schema2 JSON template must be present');
+    const template = templateMatch[1];
     const schema2 = JSON.parse(template);
     assert.deepEqual(Object.keys(schema2).sort(), ['created_at', 'phase_run_id', 'preview', 'project_id', 'request_id', 'requester', 'schema', 'timeout_ms', 'viewports']);
     assert.equal(schema2.viewports.every((viewport) => JSON.stringify(Object.keys(viewport).sort()) === JSON.stringify(['actions', 'capture', 'checks', 'height', 'id', 'preconditions', 'route', 'width'])), true);
