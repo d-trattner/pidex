@@ -188,7 +188,7 @@ assert.match(MODES_DOC, /<root>\/state/, 'readme/modes.md must document the defa
 // host lifecycle, CLI, event pipeline, dashboard ingest, metrics record, and the
 // project TBR serialization lock can never diverge under a single supported override.
 import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
-assert.equal(resolveStateRoot({ root: '/repo-root' }), path.join('/repo-root', 'state'), 'default state root is <root>/state');
+assert.equal(resolveStateRoot({ root: '/repo-root', env: {} }), path.join('/repo-root', 'state'), 'default state root is <root>/state when no environment overrides are supplied');
 assert.equal(resolveStateRoot({ root: '/repo-root', env: { PIDEX_STATE_DIR: '/canonical', RUNNING_PI_STATE_DIR: '/legacy' } }), path.resolve('/canonical'), 'PIDEX_STATE_DIR takes precedence over RUNNING_PI_STATE_DIR');
 assert.equal(resolveStateRoot({ root: '/repo-root', env: { RUNNING_PI_STATE_DIR: '/legacy' } }), path.resolve('/legacy'), 'legacy RUNNING_PI_STATE_DIR alias honored when canonical unset');
 assert.equal(resolveStateRoot({ root: '/repo-root', env: { PIDEX_STATE_DIR: '', RUNNING_PI_STATE_DIR: '/legacy' } }), path.resolve('/legacy'), 'empty canonical override falls back to the legacy alias');
