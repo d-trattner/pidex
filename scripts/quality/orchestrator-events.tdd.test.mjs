@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 import { main, transitionReviewOutcome } from './orchestrator-events.mjs';
 
 const identity = { planId: 'plan-038', runFamilyId: 'family-038', reviewGate: 'code-review' };
@@ -13,6 +14,10 @@ const finding = (findingId) => ({
 });
 const active = { findingId: 'F-active', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'active' };
 const reorderKeys = (value) => Array.isArray(value) ? value.map(reorderKeys) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reorderKeys(child)])) : value;
+// Subprocess lanes carry explicit env objects, so the parent process env is never
+// mutated (no restore needed); stateRootFromEnv mirrors the shared authority for
+// the in-process CLI state root.
+const stateRootFromEnv = (env = process.env) => resolveStateRoot({ root: path.resolve('.'), env });
 const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-b3-'));
 try {
   const events = []; let spawns = 0;
@@ -80,7 +85,7 @@ try {
 } finally { rmSync(dryRoot, { recursive: true, force: true }); }
 
 const cliRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-cli-'));
-const cliState = path.resolve('state/orchestrator-events', path.basename(cliRoot));
+const cliState = path.join(stateRootFromEnv(), 'orchestrator-events', path.basename(cliRoot));
 try {
   const cliOutcome = { verdict: 'REJECTED', findings: [active, finding('F-cli')] };
   const cliArgs = ['--project', cliRoot, '--pipeline-id', 'cli-038', '--run-family-id', 'cli-family-038', '--operator-type', 'OpReview', '--gate', 'code-review', '--review-outcome-json', JSON.stringify(cliOutcome)];
@@ -158,14 +163,14 @@ try {
 } finally { rmSync(concurrentRoot, { recursive: true, force: true }); rmSync(concurrentEvents, { recursive: true, force: true }); }
 
 // Security F-2 (conditional lock parity gap): the CLI must derive its state root
-// from RUNNING_PI_STATE_DIR when provided (the same configured state root the host
-// lifecycle and event.mjs honor) so the CLI TBR lock and the host serialize on the
-// same lock file; otherwise it defaults to <repo>/state. A lock taken under the env
-// state root must block the CLI with zero writes (no TBR index items, no operator
-// event append); the default (env unset) path stays compatible with the repo state
-// root. Subprocess lanes: real child processes, real env control, no in-process
+// from RUNNING_PI_STATE_DIR when only that override is provided and PIDEX_STATE_DIR
+// when both are set (PIDEX_STATE_DIR takes precedence). A lock taken under the
+// resolved state root must block the CLI with zero writes (no TBR index items, no
+// operator event append); the default (env unset) path stays compatible with the repo
+// state root. Subprocess lanes: real child processes, real env control, no in-process
 // STATE override.
-const envState = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-envstate-'));
+const envLegacyState = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-envstate-legacy-'));
+const envCanonicalState = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-envstate-canonical-'));
 const envProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-envproj-'));
 const envStateHolder = `import { withProjectTbrLock } from ${JSON.stringify(new URL('../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs', import.meta.url).href)}; const [stateDir, project] = process.argv.slice(1); withProjectTbrLock({ stateDir, project }, () => { const end = Date.now() + 3000; while (Date.now() < end) {} return 'held'; });`;
 const envCliSource = `import { main } from ${JSON.stringify(new URL('./orchestrator-events.mjs', import.meta.url).href)}; const [project, pipelineId, runFamily, outcomeJson] = process.argv.slice(1); process.exitCode = main(['--project', project, '--pipeline-id', pipelineId, '--run-family-id', runFamily, '--operator-type', 'OpReview', '--gate', 'code-review', '--review-outcome-json', outcomeJson]);`;
@@ -175,24 +180,63 @@ const runCliSubprocess = (project, pipelineId, runFamily, outcomeJson, env) => n
   child.stdout.on('data', (chunk) => { output += chunk; }); child.stderr.on('data', (chunk) => { error += chunk; });
   child.on('error', reject); child.on('close', (code) => resolve({ code, output, error }));
 });
-const cleanEnv = { ...process.env }; delete cleanEnv.RUNNING_PI_STATE_DIR;
+const cleanEnv = { ...process.env };
+delete cleanEnv.PIDEX_STATE_DIR;
+delete cleanEnv.RUNNING_PI_STATE_DIR;
 let envHolder;
+let legacyLocked;
+const envWithPrecedence = { ...cleanEnv, PIDEX_STATE_DIR: envCanonicalState, RUNNING_PI_STATE_DIR: envLegacyState };
 try {
-  envHolder = spawn(process.execPath, ['--input-type=module', '--eval', envStateHolder, envState, envProject], { stdio: ['ignore', 'pipe', 'pipe'] });
-  let envHolderError = '';
-  envHolder.stderr.on('data', (chunk) => { envHolderError += chunk; });
+  // Legacy-only lock still blocks when PIDEX_STATE_DIR is absent.
+  legacyLocked = spawn(process.execPath, ['--input-type=module', '--eval', envStateHolder, envLegacyState, envProject], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let legacyHolderError = '';
+  legacyLocked.stderr.on('data', (chunk) => { legacyHolderError += chunk; });
   await new Promise((resolve) => setTimeout(resolve, 500));
-  const envLocked = await runCliSubprocess(envProject, 'env-locked-038', 'env-locked-family-038', JSON.stringify({ verdict: 'REJECTED', findings: [active, finding('F-env-locked')] }), { ...cleanEnv, RUNNING_PI_STATE_DIR: envState });
-  assert.equal(envLocked.code, 1, 'lock under RUNNING_PI_STATE_DIR blocks the CLI with zero writes (security F-2): ' + envLocked.error + envLocked.output);
+  const legacyLockedCode = await runCliSubprocess(envProject, 'env-locked-038', 'env-locked-family-038', JSON.stringify({ verdict: 'REJECTED', findings: [active, finding('F-env-legacy-locked')] }), { ...cleanEnv, RUNNING_PI_STATE_DIR: envLegacyState });
+  assert.equal(legacyLockedCode.code, 1, 'legacy RUNNING_PI_STATE_DIR lock blocks the CLI with zero writes: ' + legacyLockedCode.error + legacyLockedCode.output);
   assert.equal(existsSync(path.join(envProject, 'wiki', 'tbr', 'items')), false, 'blocked env-state CLI writes no TBR index items');
-  assert.equal(existsSync(path.join(envState, 'orchestrator-events', path.basename(envProject), 'env-locked-038.jsonl')), false, 'blocked env-state CLI appends no operator event under the env state root');
+  assert.equal(existsSync(path.join(envLegacyState, 'orchestrator-events', path.basename(envProject), 'env-locked-038.jsonl')), false, 'blocked legacy env lock blocks operator event under legacy state root');
+  await new Promise((resolve) => legacyLocked.on('close', resolve));
+  assert.equal(legacyHolderError, '', legacyHolderError);
+
+  // Conflicting env must prefer PIDEX_STATE_DIR; legacy lock no longer blocks.
+  const canonicalState = stateRootFromEnv(envWithPrecedence);
+  const conflictStateEvents = path.join(canonicalState, 'orchestrator-events', path.basename(envProject));
+  const precedenceRun = await runCliSubprocess(envProject, 'env-preferred-038', 'env-preferred-family-038', JSON.stringify({ verdict: 'REJECTED', findings: [active, finding('F-env-canonical-preferred')] }), envWithPrecedence);
+  assert.equal(precedenceRun.code, 0, 'PIDEX_STATE_DIR precedence allows legacy-only contention to continue: ' + precedenceRun.error + precedenceRun.output);
+  assert.equal(readdirSync(path.join(envProject, 'wiki', 'tbr', 'items')).length, 1, 'env-conflict CLI writes the TBR index item to the project root');
+  assert.equal(existsSync(conflictStateEvents), true, 'env-conflict CLI appends the operator event under canonical state root');
+  assert.equal(canonicalState, path.resolve(envCanonicalState), 'expected CLI state root resolves to PIDEX_STATE_DIR when both vars set');
+
+  // Canonical lock must block when held there.
+  const canonicalEventFile = path.join(canonicalState, 'orchestrator-events', path.basename(envProject), 'env-canonical-locked-038.jsonl');
+  envHolder = spawn(process.execPath, ['--input-type=module', '--eval', envStateHolder, canonicalState, envProject], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let canonicalHolderError = '';
+  envHolder.stderr.on('data', (chunk) => { canonicalHolderError += chunk; });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const canonicalLockedCode = await runCliSubprocess(envProject, 'env-canonical-locked-038', 'env-canonical-locked-family-038', JSON.stringify({ verdict: 'REJECTED', findings: [active, finding('F-env-canonical-locked')] }), envWithPrecedence);
+  assert.equal(canonicalLockedCode.code, 1, 'canonical PIDEX_STATE_DIR lock blocks the CLI with zero writes: ' + canonicalLockedCode.error + canonicalLockedCode.output);
+  // The precedence run above already wrote one TBR item; the blocked canonical
+  // run must add zero new items (the items dir itself persists from that run).
+  assert.equal(readdirSync(path.join(envProject, 'wiki', 'tbr', 'items')).length, 1, 'canonical lock-conflict CLI adds no TBR index items');
+  assert.equal(existsSync(canonicalEventFile), false, 'canonical lock-conflict CLI appends no operator event under canonical state root');
   await new Promise((resolve) => envHolder.on('close', resolve));
-  assert.equal(envHolderError, '', envHolderError);
-  // Default compat: without RUNNING_PI_STATE_DIR the CLI uses <repo>/state as before.
+  assert.equal(canonicalHolderError, '', canonicalHolderError);
+
+  // Default compat: without either override the CLI uses <repo>/state as before.
   const defaultRun = await runCliSubprocess(envProject, 'env-default-038', 'env-default-family-038', JSON.stringify({ verdict: 'REJECTED', findings: [active, finding('F-env-default')] }), cleanEnv);
-  assert.equal(defaultRun.code, 0, 'default (env unset) CLI path stays compatible (security F-2): ' + defaultRun.error + defaultRun.output);
-  assert.equal(readdirSync(path.join(envProject, 'wiki', 'tbr', 'items')).length, 1, 'default CLI writes the TBR index item into the project root');
+  assert.equal(defaultRun.code, 0, 'default (env unset) CLI path stays compatible: ' + defaultRun.error + defaultRun.output);
+  // Precedence run wrote one item; the default run adds a second. Count is
+  // cumulative across the env lanes.
+  assert.equal(readdirSync(path.join(envProject, 'wiki', 'tbr', 'items')).length, 2, 'default CLI writes the TBR index item into the project root');
   assert.equal(existsSync(path.join(path.resolve('state'), 'orchestrator-events', path.basename(envProject), 'env-default-038.jsonl')), true, 'default CLI appends the operator event under the repo state root');
-} finally { if (envHolder && envHolder.exitCode === null) envHolder.kill(); rmSync(envState, { recursive: true, force: true }); rmSync(envProject, { recursive: true, force: true }); rmSync(path.join(path.resolve('state'), 'orchestrator-events', path.basename(envProject)), { recursive: true, force: true }); }
+} finally {
+  if (legacyLocked && legacyLocked.exitCode === null) legacyLocked.kill();
+  if (envHolder && envHolder.exitCode === null) envHolder.kill();
+  rmSync(envCanonicalState, { recursive: true, force: true });
+  rmSync(envLegacyState, { recursive: true, force: true });
+  rmSync(envProject, { recursive: true, force: true });
+  rmSync(path.join(path.resolve('state'), 'orchestrator-events', path.basename(envProject)), { recursive: true, force: true });
+}
 
 console.log('orchestrator-events.mjs tests passed');

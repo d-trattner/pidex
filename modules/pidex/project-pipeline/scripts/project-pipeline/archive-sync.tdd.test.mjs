@@ -7,10 +7,29 @@ import path from 'node:path';
 import { classifyArchivePath, projectArchiveLockPath, resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
 import { writeTbr } from '../../../../../scripts/quality/tbr.mjs';
 import { acquireProjectTbrLock, projectTbrLockPath, releaseProjectTbrLock } from '../../../analysis-metrics-history/lib/tbr-lock.mjs';
+import { resolveStateRoot } from '../../../analysis-metrics-history/lib/state-root.mjs';
 
 const tbrIdentity = { planId: 'plan-059', runFamilyId: 'family-s3-carry', reviewGate: 'code-review' };
 const tbrFinding = { findingId: 'F-carry-immediate', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Carry immediate finding', shortDescription: 'Deferred from current gate.', originEpic: 'initiative-059', reviewArtifact: 'agents.output/code-review/059.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot extend current gate.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
-function syncStateDir(pidexRoot) { return process.env.RUNNING_PI_STATE_DIR ? path.resolve(process.env.RUNNING_PI_STATE_DIR) : path.join(path.resolve(pidexRoot), 'state'); }
+function syncStateDir(pidexRoot, env = process.env) { return resolveStateRoot({ root: path.resolve(pidexRoot), env }); }
+function withEnv(overrides, callback) {
+  const previous = {
+    PIDEX_STATE_DIR: process.env.PIDEX_STATE_DIR,
+    RUNNING_PI_STATE_DIR: process.env.RUNNING_PI_STATE_DIR,
+  };
+  for (const key of Object.keys(overrides)) {
+    if (overrides[key] === undefined) delete process.env[key];
+    else process.env[key] = overrides[key];
+  }
+  try {
+    return callback();
+  } finally {
+    if (previous.PIDEX_STATE_DIR === undefined) delete process.env.PIDEX_STATE_DIR;
+    else process.env.PIDEX_STATE_DIR = previous.PIDEX_STATE_DIR;
+    if (previous.RUNNING_PI_STATE_DIR === undefined) delete process.env.RUNNING_PI_STATE_DIR;
+    else process.env.RUNNING_PI_STATE_DIR = previous.RUNNING_PI_STATE_DIR;
+  }
+}
 function archiveInventory(archiveRoot) {
   const files = [];
   function walk(rel) {
@@ -126,16 +145,32 @@ test('unsafe retained TBR content aborts publication and leaves previous archive
 test('archive sync acquires the project TBR lock before the archive lock and fails closed on contention', () => {
   const pidexRoot = tmp();
   const projectId = 'pp-tbr-lock-order';
+  const canonicalState = path.join(tmp(), 'state-canonical');
+  const legacyState = path.join(tmp(), 'state-legacy');
+  mkdirSync(canonicalState, { recursive: true });
+  mkdirSync(legacyState, { recursive: true });
+  const env = { ...process.env, PIDEX_STATE_DIR: canonicalState, RUNNING_PI_STATE_DIR: legacyState };
   const { archive } = seedArchiveWithTbr(pidexRoot, projectId);
-  const stateDir = syncStateDir(pidexRoot);
-  const held = acquireProjectTbrLock({ stateDir, project: archive, lockTimeoutMs: 5000 });
-  assert.equal(held.held, true, 'test holder acquires the shared project TBR lock');
+  const stateDir = syncStateDir(pidexRoot, env);
+  assert.equal(stateDir, path.resolve(canonicalState), 'PIDEX_STATE_DIR precedence over RUNNING_PI_STATE_DIR is applied to archive lock path resolution');
+  const resolvedProjectLock = projectTbrLockPath({ stateDir, project: archive });
+  const resolvedArchiveLock = projectArchiveLockPath({ pidexRoot: stateDir, projectId });
+  assert.equal(existsSync(projectTbrLockPath({ stateDir: pidexRoot, project: archive })), false, 'stable tbr lock path assertion placeholder');
+
+  let held;
+  withEnv(env, () => {
+    held = acquireProjectTbrLock({ stateDir, project: archive, lockTimeoutMs: 5000 });
+    assert.equal(held.held, true, 'test holder acquires the shared project TBR lock');
+  });
   try {
-    const result = syncProjectArchive({ workspace: tmp(), pidexRoot, projectId, lockTimeoutMs: 100 });
+    const result = withEnv(env, () => syncProjectArchive({ workspace: tmp(), pidexRoot, projectId, lockTimeoutMs: 100 }));
     assert.equal(result.ok, false, 'contended project TBR lock fails closed');
     assert.match(result.error, /REVIEW_TBR_LOCK_(UNAVAILABLE|UNCERTAIN)/);
     assert.equal(existsSync(projectArchiveLockPath({ pidexRoot, projectId })), false, 'archive lock is never created when the project TBR lock is contended');
-  } finally { releaseProjectTbrLock(held.lock); }
+    assert.equal(existsSync(resolvedProjectLock), true, 'contention keeps project TBR lock path on expected canonical state-root authority');
+  } finally {
+    withEnv(env, () => releaseProjectTbrLock(held.lock));
+  }
   const ws = tmp();
   write(path.join(ws, 'wiki/index.md'), '# wiki again\n');
   assert.equal(syncProjectArchive({ workspace: ws, pidexRoot, projectId }).ok, true, 'sync proceeds once the project TBR lock is released');

@@ -69,6 +69,34 @@ assert.match(SKILL, /Ready to tag and release\? push \/ local \/ hold \/ abort/,
 // ---------------------------------------------------------------------------
 const SHARED_RULE = 'rules/shared/structured-review-outcome.md';
 assert.equal(existsSync(path.join(ROOT, SHARED_RULE)), true, `shared structured-review-outcome producer contract must exist: ${SHARED_RULE}`);
+function extractPidexProducerBlocks(source) {
+  const lines = source.split(/\r?\n/);
+  const openFence = '```pidex-review-outcome-v1';
+  const closeFence = '```';
+  const blocks = [];
+  let index = 0;
+  while (index < lines.length) {
+    if (lines[index] !== openFence) {
+      index += 1;
+      continue;
+    }
+    const nextClose = lines.indexOf(closeFence, index + 1);
+    if (nextClose === -1) return { ok: false, code: 'unterminated' };
+    blocks.push(lines.slice(index + 1, nextClose).join('\n'));
+    index = nextClose + 1;
+  }
+  return { ok: true, blocks };
+}
+
+function assertSingleProducerBlock(source) {
+  const extracted = extractPidexProducerBlocks(source);
+  assert.equal(extracted.ok, true, 'producer contract must contain a closed pidex-review-outcome-v1 fenced block');
+  assert.equal(extracted.blocks.length, 1, 'producer contract requires exactly one pidex-review-outcome-v1 block');
+  const parsed = JSON.parse(extracted.blocks[0]);
+  const checked = validateStructuredReviewOutcome(parsed, 'code-review', { archiveActive: true });
+  assert.equal(checked.ok, true, `shared rule JSON example must pass validator semantics at review2 (active findings need archive fields): ${checked.code || 'ok'}`);
+}
+
 const shared = read(SHARED_RULE);
 assert.match(shared, /pidex-review-outcome-v1/, 'producer contract names the exact fenced block tag');
 assert.match(shared, /exactly one/, 'producer contract requires exactly one bounded block');
@@ -91,11 +119,19 @@ for (const agent of REVIEWER_AGENTS) {
 // archive fields) and unsafe-content/path limits — so a reviewer copying it never
 // emits invalid output. The doc may not ship a template that validates as invalid.
 assert.doesNotMatch(shared, /\/tmp\/|\/home\/|C:\\Users/, 'producer contract example must not show absolute host paths');
-const exampleMatch = shared.match(/```pidex-review-outcome-v1\n([\s\S]*?)\n```/);
-assert.ok(exampleMatch, 'producer contract must include a fenced pidex-review-outcome-v1 JSON example');
-const sharedExample = JSON.parse(exampleMatch[1]);
-const exampleChecked = validateStructuredReviewOutcome(sharedExample, 'code-review', { archiveActive: true });
-assert.equal(exampleChecked.ok, true, `shared rule JSON example must pass validator semantics at review2 (archiveActive: active findings need archive fields): ${exampleChecked.code || 'ok'}`);
+assertSingleProducerBlock(shared);
+assertSingleProducerBlock(shared.replace(/\n/g, '\r\n'));
+const duplicateProducer = [
+  'header',
+  '```pidex-review-outcome-v1',
+  '{}',
+  '```',
+  '```pidex-review-outcome-v1',
+  '{}',
+  '```',
+].join('\n');
+assert.equal(extractPidexProducerBlocks(duplicateProducer).ok, true, 'duplicate fixture parses to two fenced blocks');
+assert.throws(() => assertSingleProducerBlock(duplicateProducer), /exactly one/ , 'duplicate pidex-review-outcome-v1 fences must be rejected');
 
 // ---------------------------------------------------------------------------
 // 3. Rendered rules receive the producer contract in every execution mode.

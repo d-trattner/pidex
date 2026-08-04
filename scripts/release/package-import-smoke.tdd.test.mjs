@@ -5,7 +5,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const peers = ['@earendil-works/pi-agent-core', '@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', 'typebox'];
 const requiredModules = new Set([
@@ -47,18 +46,40 @@ function linkPeer(consumer, specifier) {
   assert.equal(realpathSync(destination), realpathSync(source));
 }
 
+// npm >=11 restricts subpath exports to only "." and "./package.json", so
+// require.resolve('npm/bin/npm-cli.js') fails even where npm is installed. Derive
+// the bundled npm CLI deterministically from the running node installation,
+// shell-free: Windows ships npm at <nodeDir>/node_modules/npm; POSIX installs
+// (nodejs.org, nvm, system, Homebrew) at <prefix>/lib/node_modules/npm with
+// prefix = dirname(nodeDir). Spawning process.execPath + npm-cli.js avoids shell
+// resolution and Windows .cmd shim differences.
+function npmCliPath() {
+  const nodeDir = path.dirname(process.execPath);
+  const candidates = [
+    path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  throw new Error(`npm CLI not found under node installation ${nodeDir} (tried: ${candidates.join(', ')})`);
+}
 function run(command, args, options = {}) {
   const proc = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...options });
-  assert.equal(proc.status, 0, proc.stderr || proc.stdout);
+  const statusMessage = proc.error ? `${proc.error.code}: ${proc.error.message}` : '';
+  assert.equal(proc.status, 0, `${statusMessage}\n${proc.stderr}\n${proc.stdout}`);
   return proc;
 }
-
+function runNpm(args, options = {}) {
+  const proc = run(process.execPath, [npmCliPath(), ...args], { ...options });
+  return proc;
+}
 test('published tarball contains exact lifecycle closure and imports with real isolated peers', () => {
   const temp = mkdtempSync(path.join(os.tmpdir(), 'pidex-package-import-'));
   const consumer = path.join(temp, 'consumer');
   try {
     mkdirSync(consumer, { recursive: true });
-    const packed = run('npm', ['pack', '--json', '--pack-destination', temp], { cwd: root });
+    const packed = runNpm(['pack', '--json', '--pack-destination', temp], { cwd: root });
     const report = JSON.parse(packed.stdout)[0];
     const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
     assert.equal(report.version, manifest.version);
@@ -76,7 +97,7 @@ test('published tarball contains exact lifecycle closure and imports with real i
 
     writeFileSync(path.join(consumer, 'package.json'), '{"name":"pidex-package-consumer","private":true,"type":"module"}\n');
     const tarball = path.join(temp, report.filename);
-    run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', '--legacy-peer-deps', '--no-save', tarball], { cwd: consumer, env: { ...process.env, HOME: path.join(temp, 'home'), NODE_PATH: '' } });
+    runNpm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', '--legacy-peer-deps', '--no-save', tarball], { cwd: consumer, env: { ...process.env, HOME: path.join(temp, 'home'), NODE_PATH: '' } });
     for (const peer of peers) linkPeer(consumer, peer);
 
     const installedInNodeModules = path.join(consumer, 'node_modules', '@d-trattner', 'pidex');

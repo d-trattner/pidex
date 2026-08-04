@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, linkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, linkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { completeStructuredReviewOutcome, promoteTbrLocked } from '../../lib/review-lifecycle.mjs';
 import { acquireProjectArchiveLock, projectArchiveLockPath, resolveArchiveRoot } from '../../../../../modules/pidex/project-pipeline/scripts/project-pipeline/archive-sync.mjs';
-import { recordReviewCompletion, reserveReviewStart } from './event.mjs';
+import { readArtifactPortable, recordReviewCompletion, reserveReviewStart } from './event.mjs';
 import { canonicalProjectIdentity } from '../../lib/project-key.mjs';
 import { canonicalizeReviewOutcome, writeTbr } from '../../../../../scripts/quality/tbr.mjs';
 import { foldReviewHistory } from '../../../../../extensions/pidex/review-budget.ts';
@@ -391,6 +391,22 @@ try {
   symlinkSync(outside, path.join(project, 'agents.output', 'code-review', 'linked.md'));
   assert.deepEqual(complete(symlinkArtifact, 'family-symlink-artifact', 'REJECTED', 'agents.output/code-review/linked.md'), { status: 'denied', code: 'REVIEW_ARTIFACT_INVALID' }, 'symlinked artifact is never read');
 
+  // QA blocker (native-Windows correction): NTFS ADS / drive-like alternate
+  // syntax. Any ':' in the artifact path is rejected with REVIEW_ARTIFACT_INVALID
+  // before path resolution or open — `file.md:evil` must never reach the confined
+  // reader (an NTFS alternate data stream is a different byte stream than the
+  // named file). The colon-named file is created here on Linux (':' is a legal
+  // filename character) so rejection is proven to come from path validation, not
+  // ENOENT — and on Windows the same path would be an ADS read that passes every
+  // containment/digest check.
+  fresh('family-ads-colon');
+  const adsPath = { ...base, runFamilyId: 'family-ads-colon', attemptId: 'attempt-ads-colon' };
+  assert.equal(start(adsPath, 'family-ads-colon').status, 'accepted');
+  writeArtifact('agents.output/code-review/059.md:evil', fenced(payload()));
+  assert.deepEqual(complete(adsPath, 'family-ads-colon', 'REJECTED', 'agents.output/code-review/059.md:evil'), { status: 'denied', code: 'REVIEW_ARTIFACT_INVALID' }, 'colon-containing artifact path is rejected before path resolution/open');
+  assert.deepEqual(eventTypes('family-ads-colon', adsPath.attemptId), ['start_reserved', 'spawn_entered', 'spawn_accepted'], 'ADS-style path denial appends no completion events');
+  assert.deepEqual(tbrItems(), [], 'ADS-style path denial writes no TBR');
+
   // TBR write failure blocks completion with zero terminal append.
   fresh('family-tbr-failure');
   const tbrFailure = { ...base, runFamilyId: 'family-tbr-failure', attemptId: 'attempt-tbr-failure' };
@@ -519,6 +535,77 @@ try {
   const closedRetry = complete(closedIdentity, 'family-closed-retry', 'REJECTED');
   assert.deepEqual(closedRetry, { status: 'CLOSED_WITH_TBR', tbrIds: firstClose.tbrIds }, 'same-identity retry after closed terminal returns CLOSED_WITH_TBR with the same stable TBR IDs (security F-1 closed lane)');
   assert.equal(rows('family-closed-retry', closedIdentity.attemptId).length, 6, 'closed retry never rewrites semantic evidence');
+
+  // ---------------------------------------------------------------------------
+  // Plan 059 Slice A: native-Windows secure fallback (no numeric O_NOFOLLOW). The
+  // test seam PIDEX_ARTIFACT_FORCE_PORTABLE_READ forces the portable descriptor
+  // path on POSIX so the Windows security contract is exercised in CI; production
+  // runs are unaffected (seam absent -> numeric O_NOFOLLOW path retained).
+  process.env.PIDEX_ARTIFACT_FORCE_PORTABLE_READ = '1';
+  try {
+    // Valid fallback completion: the portable descriptor path reads the artifact,
+    // completes CHANGES_REQUESTED with the uniform six-event receipt, and binds
+    // the exact descriptor-byte digest.
+    fresh('family-sA-fallback-ok');
+    const fallbackOk = { ...base, runFamilyId: 'family-sA-fallback-ok', attemptId: 'attempt-sA-fallback-ok' };
+    assert.equal(start(fallbackOk, 'family-sA-fallback-ok').status, 'accepted');
+    const fallbackContent = fenced(payload());
+    writeArtifact('agents.output/code-review/059.md', fallbackContent);
+    assert.equal(complete(fallbackOk, 'family-sA-fallback-ok', 'REJECTED').status, 'CHANGES_REQUESTED', 'portable fallback completes a valid artifact');
+    assert.deepEqual(eventTypes('family-sA-fallback-ok', fallbackOk.attemptId), SIX_EVENTS, 'portable fallback uses the uniform six-event sequence');
+    assertReceipt('family-sA-fallback-ok', fallbackOk.attemptId, { identity: fallbackOk, intendedOutcome: 'CHANGES_REQUESTED', tbrIds: tbrItems().map((name) => name.slice(0, 16)), artifactDigest: artifactDigestOf(fallbackContent), outcomeDigest: outcomeDigestOf(payload()) });
+
+    // Symlink artifact stays denied on the portable path (no component symlink is
+    // ever followed): zero completion events.
+    fresh('family-sA-fallback-symlink');
+    const fallbackSymlink = { ...base, runFamilyId: 'family-sA-fallback-symlink', attemptId: 'attempt-sA-fallback-symlink' };
+    assert.equal(start(fallbackSymlink, 'family-sA-fallback-symlink').status, 'accepted');
+    symlinkSync(outside, path.join(project, 'agents.output', 'code-review', 'fallback-linked.md'));
+    assert.deepEqual(complete(fallbackSymlink, 'family-sA-fallback-symlink', 'REJECTED', 'agents.output/code-review/fallback-linked.md'), { status: 'denied', code: 'REVIEW_ARTIFACT_INVALID' }, 'symlinked artifact is never read on the portable path');
+    assert.deepEqual(eventTypes('family-sA-fallback-symlink', fallbackSymlink.attemptId), ['start_reserved', 'spawn_entered', 'spawn_accepted'], 'portable symlink denial appends no completion events');
+    assert.deepEqual(tbrItems(), [], 'portable symlink denial writes no TBR');
+
+    // Hardlinked artifact stays denied on the portable path (pre-lstat nlink > 1).
+    fresh('family-sA-fallback-hardlink');
+    const fallbackHardlink = { ...base, runFamilyId: 'family-sA-fallback-hardlink', attemptId: 'attempt-sA-fallback-hardlink' };
+    assert.equal(start(fallbackHardlink, 'family-sA-fallback-hardlink').status, 'accepted');
+    linkSync(outside, path.join(project, 'agents.output', 'code-review', 'fallback-hardlinked.md'));
+    assert.deepEqual(complete(fallbackHardlink, 'family-sA-fallback-hardlink', 'REJECTED', 'agents.output/code-review/fallback-hardlinked.md'), { status: 'denied', code: 'REVIEW_ARTIFACT_HARDLINK' }, 'hardlinked artifact is never read on the portable path');
+    assert.deepEqual(eventTypes('family-sA-fallback-hardlink', fallbackHardlink.attemptId), ['start_reserved', 'spawn_entered', 'spawn_accepted'], 'portable hardlink denial appends no completion events');
+    assert.deepEqual(tbrItems(), [], 'portable hardlink denial writes no TBR');
+
+    // Oversized artifact stays denied on the portable path before any parse.
+    fresh('family-sA-fallback-oversize');
+    const fallbackOversize = { ...base, runFamilyId: 'family-sA-fallback-oversize', attemptId: 'attempt-sA-fallback-oversize' };
+    assert.equal(start(fallbackOversize, 'family-sA-fallback-oversize').status, 'accepted');
+    writeArtifact('agents.output/code-review/059.md', `# big\n${'x'.repeat(600 * 1024)}\n`);
+    assert.deepEqual(complete(fallbackOversize, 'family-sA-fallback-oversize', 'REJECTED'), { status: 'denied', code: 'REVIEW_ARTIFACT_TOO_LARGE' }, 'portable fallback rejects oversize artifacts');
+    assert.deepEqual(eventTypes('family-sA-fallback-oversize', fallbackOversize.attemptId), ['start_reserved', 'spawn_entered', 'spawn_accepted'], 'portable oversize denial appends no completion events');
+    assert.deepEqual(tbrItems(), [], 'portable oversize denial writes no TBR');
+
+    // Non-regular artifact (directory) stays denied on the portable path.
+    fresh('family-sA-fallback-nonregular');
+    const fallbackNonregular = { ...base, runFamilyId: 'family-sA-fallback-nonregular', attemptId: 'attempt-sA-fallback-nonregular' };
+    assert.equal(start(fallbackNonregular, 'family-sA-fallback-nonregular').status, 'accepted');
+    mkdirSync(path.join(project, 'agents.output', 'code-review', 'not-a-file'), { recursive: true });
+    assert.deepEqual(complete(fallbackNonregular, 'family-sA-fallback-nonregular', 'REJECTED', 'agents.output/code-review/not-a-file'), { status: 'denied', code: 'REVIEW_ARTIFACT_INVALID' }, 'non-regular artifact is never read on the portable path');
+    assert.deepEqual(eventTypes('family-sA-fallback-nonregular', fallbackNonregular.attemptId), ['start_reserved', 'spawn_entered', 'spawn_accepted'], 'portable non-regular denial appends no completion events');
+    assert.deepEqual(tbrItems(), [], 'portable non-regular denial writes no TBR');
+
+    // Swap between the confinement walk (pre-lstat) and the descriptor open fails
+    // closed: the portable reader requires dev+ino identity between the walked
+    // inode and the opened descriptor, so a replaced path is never read.
+    const swapDir = mkdtempSync(path.join(os.tmpdir(), 'pidex-sA-swap-'));
+    try {
+      const swapArtifact = path.join(swapDir, 'artifact.md');
+      writeFileSync(swapArtifact, fenced(payload()));
+      const walked = lstatSync(swapArtifact);
+      rmSync(swapArtifact);
+      writeFileSync(swapArtifact, fenced(payload({ verdict: 'APPROVED', findings: [] })));
+      assert.notEqual(lstatSync(swapArtifact).ino, walked.ino, 'swap precondition: replaced path is a different inode');
+      assert.deepEqual(readArtifactPortable(swapDir, swapArtifact, walked), { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' }, 'path swapped after pre-lstat fails closed with dev+ino identity');
+    } finally { rmSync(swapDir, { recursive: true, force: true }); }
+  } finally { delete process.env.PIDEX_ARTIFACT_FORCE_PORTABLE_READ; }
 } finally { rmSync(state, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }); }
 
 console.log('structured completion boundary tests passed');

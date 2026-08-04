@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { closeSync, constants as fsConstants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmdirSync, rmSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
+import { closeSync, constants as fsConstants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmdirSync, rmSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
@@ -436,21 +436,60 @@ const STRUCTURED_ARTIFACT_MAX_BYTES = 512 * 1024;
 // file, size cap, nlink <= 1 so a hardlinked artifact cannot smuggle foreign bytes),
 // and a path re-lstat identity check against the opened descriptor (dev+ino) to
 // detect a swap after the walk. The digest is computed over the exact bytes read from
-// the descriptor, closing the stat/read TOCTOU. Where O_NOFOLLOW is unavailable the
-// read fails closed truthfully with REVIEW_ARTIFACT_NOFOLLOW_UNAVAILABLE rather than
-// claiming no-follow semantics it cannot provide.
+// the descriptor, closing the stat/read TOCTOU.
+//
+// Plan 059 Slice A (native-Windows correction): where numeric O_NOFOLLOW is
+// unavailable (Windows), the read does NOT reject all artifacts and never claims
+// no-follow semantics. The portable fallback re-verifies every confined component
+// by pre-lstat (symlink/junction/non-regular/hardlink/oversize all fail closed),
+// opens O_RDONLY, requires dev+ino identity between the walked inode and the
+// opened descriptor (a path swapped after the walk fails closed), reads the exact
+// bounded bytes from the descriptor, then verifies the opened inode is unchanged
+// (post-fstat) and the path still resolves to the same non-symlink regular
+// single-link file with the same dev+ino/size/mtime (post-lstat) plus canonical
+// realpath containment before and after. Any uncertainty fails closed with the
+// same typed codes as the POSIX path.
 function structuredArtifact(root, artifactPath) {
-  if (typeof artifactPath !== 'string' || !artifactPath || artifactPath.length > 1024 || path.isAbsolute(artifactPath) || path.win32.isAbsolute(artifactPath) || artifactPath.includes('\\') || artifactPath.split('/').includes('..')) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
+  // QA blocker fix (native-Windows correction): any ':' in the artifact path is
+  // rejected here, before path resolution or open — NTFS alternate data stream
+  // (`file.md:evil`) and drive-like alternate syntax (`C:evil`) can never reach
+  // the confined reader. PIDEX artifacts are review-outcome markdown relative
+  // paths; a colon has no legitimate use.
+  if (typeof artifactPath !== 'string' || !artifactPath || artifactPath.length > 1024 || path.isAbsolute(artifactPath) || path.win32.isAbsolute(artifactPath) || artifactPath.includes('\\') || artifactPath.includes(':') || artifactPath.split('/').includes('..')) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
   const resolved = path.resolve(root, artifactPath);
   const relative = path.relative(root, resolved);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
-  let current = root;
+  let current = root; let pre = null;
   for (const part of relative.split(path.sep)) {
     current = path.join(current, part);
     let stat; try { stat = lstatSync(current); } catch { return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' }; }
     if (stat.isSymbolicLink()) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
+    pre = stat;
   }
-  if (typeof fsConstants.O_NOFOLLOW !== 'number') return { ok: false, code: 'REVIEW_ARTIFACT_NOFOLLOW_UNAVAILABLE' };
+  // Test seam (Plan 059 Slice A): PIDEX_ARTIFACT_FORCE_PORTABLE_READ forces the
+  // portable no-O_NOFOLLOW path on POSIX so the native-Windows fallback contract
+  // is exercised in CI. Production-inert: absent by default, zero behavior change.
+  if (typeof fsConstants.O_NOFOLLOW === 'number' && process.env.PIDEX_ARTIFACT_FORCE_PORTABLE_READ !== '1') return readArtifactNofollow(resolved);
+  return readArtifactPortable(root, resolved, pre);
+}
+
+// Shared bounded descriptor read (Plan 059 Slice A): reads the exact bytes of
+// the already-open descriptor with a hard 512KiB bound, returning the exact byte
+// buffer so the digest is computed over descriptor bytes only (stat/read TOCTOU
+// closed). Used by both the POSIX no-follow path and the portable fallback.
+function readDescriptorBounded(fd) {
+  const chunks = []; const buffer = Buffer.alloc(64 * 1024); let total = 0; let offset = 0;
+  while (true) {
+    const n = readSync(fd, buffer, 0, buffer.length, offset);
+    if (n <= 0) break;
+    total += n; if (total > STRUCTURED_ARTIFACT_MAX_BYTES) return { ok: false, code: 'REVIEW_ARTIFACT_TOO_LARGE' };
+    chunks.push(Buffer.from(buffer.subarray(0, n))); offset += n;
+  }
+  return { ok: true, bytes: Buffer.concat(chunks) };
+}
+
+// POSIX descriptor path: numeric O_NOFOLLOW retained unchanged (Plan 059 Slice A).
+function readArtifactNofollow(resolved) {
   let fd;
   try { fd = openSync(resolved, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW); }
   catch { return { ok: false, code: 'REVIEW_ARTIFACT_UNAVAILABLE' }; }
@@ -462,15 +501,49 @@ function structuredArtifact(root, artifactPath) {
     let verify;
     try { verify = lstatSync(resolved); } catch { return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' }; }
     if (verify.dev !== opened.dev || verify.ino !== opened.ino) return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' };
-    const chunks = []; const buffer = Buffer.alloc(64 * 1024); let total = 0; let offset = 0;
-    while (true) {
-      const n = readSync(fd, buffer, 0, buffer.length, offset);
-      if (n <= 0) break;
-      total += n; if (total > STRUCTURED_ARTIFACT_MAX_BYTES) return { ok: false, code: 'REVIEW_ARTIFACT_TOO_LARGE' };
-      chunks.push(Buffer.from(buffer.subarray(0, n))); offset += n;
-    }
-    const bytes = Buffer.concat(chunks);
-    return { ok: true, text: bytes.toString('utf8'), sha256: createHash('sha256').update(bytes).digest('hex') };
+    const read = readDescriptorBounded(fd); if (!read.ok) return read;
+    return { ok: true, text: read.bytes.toString('utf8'), sha256: createHash('sha256').update(read.bytes).digest('hex') };
+  } finally { closeSync(fd); }
+}
+
+// Portable descriptor path (native Windows, no numeric O_NOFOLLOW): every
+// confined component and the artifact itself were already lstat-verified by the
+// caller's walk (pre). Fail closed on non-regular/single-link/oversize, require
+// dev+ino identity between the walked inode and the opened descriptor, read the
+// exact bounded bytes from the descriptor, then verify the opened inode is
+// unchanged (post-fstat) and the path still resolves to the same non-symlink
+// regular single-link file with the same dev+ino/size/mtime (post-lstat) plus
+// canonical realpath containment. Never claims O_NOFOLLOW semantics.
+export function readArtifactPortable(root, resolved, pre) {
+  if (!pre || pre.isSymbolicLink() || !pre.isFile()) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
+  if (pre.nlink > 1) return { ok: false, code: 'REVIEW_ARTIFACT_HARDLINK' };
+  if (pre.size > STRUCTURED_ARTIFACT_MAX_BYTES) return { ok: false, code: 'REVIEW_ARTIFACT_TOO_LARGE' };
+  let canonicalRoot; let canonicalBefore;
+  try { canonicalRoot = realpathSync(root); canonicalBefore = realpathSync(resolved); }
+  catch { return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' }; }
+  const beforeRelative = path.relative(canonicalRoot, canonicalBefore);
+  if (beforeRelative === '..' || beforeRelative.startsWith(`..${path.sep}`) || path.isAbsolute(beforeRelative)) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
+  let fd;
+  try { fd = openSync(resolved, fsConstants.O_RDONLY); }
+  catch { return { ok: false, code: 'REVIEW_ARTIFACT_UNAVAILABLE' }; }
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isFile()) return { ok: false, code: 'REVIEW_ARTIFACT_INVALID' };
+    if (opened.nlink > 1) return { ok: false, code: 'REVIEW_ARTIFACT_HARDLINK' };
+    if (opened.size > STRUCTURED_ARTIFACT_MAX_BYTES) return { ok: false, code: 'REVIEW_ARTIFACT_TOO_LARGE' };
+    if (opened.dev !== pre.dev || opened.ino !== pre.ino) return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' };
+    const read = readDescriptorBounded(fd); if (!read.ok) return read;
+    const after = fstatSync(fd);
+    if (after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.nlink !== opened.nlink || after.mtimeMs !== opened.mtimeMs) return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' };
+    let verify;
+    try { verify = lstatSync(resolved); } catch { return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' }; }
+    if (verify.isSymbolicLink() || !verify.isFile() || verify.nlink > 1) return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' };
+    if (verify.dev !== opened.dev || verify.ino !== opened.ino || verify.size !== opened.size || verify.mtimeMs !== opened.mtimeMs) return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' };
+    let canonicalAfter;
+    try { canonicalAfter = realpathSync(resolved); } catch { return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' }; }
+    const afterRelative = path.relative(canonicalRoot, canonicalAfter);
+    if (afterRelative === '..' || afterRelative.startsWith(`..${path.sep}`) || path.isAbsolute(afterRelative)) return { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' };
+    return { ok: true, text: read.bytes.toString('utf8'), sha256: createHash('sha256').update(read.bytes).digest('hex') };
   } finally { closeSync(fd); }
 }
 
