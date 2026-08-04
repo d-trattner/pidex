@@ -5,6 +5,9 @@ import process from 'node:process';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { safeProjectId } from './registry.mjs';
+import { readTbrTreeItems, renderIndex, renderTbrItem, validateTbrTree } from '../../../../../scripts/quality/tbr.mjs';
+import { acquireProjectTbrLock, releaseProjectTbrLock } from '../../../analysis-metrics-history/lib/tbr-lock.mjs';
+import { resolveStateRoot } from '../../../analysis-metrics-history/lib/state-root.mjs';
 
 const DEFAULT_LIMITS = { maxFiles: 5000, maxBytes: 50 * 1024 * 1024, maxFileBytes: 2 * 1024 * 1024, maxDepth: 16 };
 const BLOCKED_EXT = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.sh', '.bash', '.zsh', '.fish', '.ps1', '.bat', '.cmd', '.exe', '.dll', '.so', '.dylib', '.jar', '.py', '.rb', '.pl', '.php', '.wasm', '.pem', '.key', '.p12', '.pfx', '.env']);
@@ -213,6 +216,57 @@ function carryBrowserEvidence(archiveRoot, nextRoot) {
   }
 }
 
+function upsertCopied(report, rel, size, sha256Value) {
+  const existing = report.copied.findIndex((item) => item.path === rel);
+  const entry = { path: rel, size, sha256: sha256Value };
+  if (existing >= 0) report.copied[existing] = entry;
+  else report.copied.push(entry);
+}
+
+// Plan 059 Slice 3 (AD-5): strict carry-forward of PIDEX-owned wiki/tbr/** across
+// the atomic full archive replacement. The previous archive's wiki/tbr tree is
+// validated canonically (items + index; symlink/hardlink/nonregular/oversized/
+// collision fail closed) and merged into the staging root beneath wiki/tbr.
+// Merge rule: workspace bytes are authoritative for host-authority; the same
+// stable identity present in BOTH workspace and carried trees with different
+// canonical bytes aborts publication and preserves the previous archive (no
+// source silently wins). Every carried item and the regenerated index enter
+// report.copied with fresh size/hash so Project Mirror report/inventory equality
+// remains unchanged. Browser evidence carry is untouched.
+function reconcileTbrArchive({ archiveRoot, nextRoot, workspace, report, state }) {
+  const carried = existsSync(archiveRoot) ? validateTbrTree(archiveRoot) : { ok: true, items: new Map() };
+  const workspaceTree = validateTbrTree(workspace);
+  if (carried.items.size === 0 && workspaceTree.items.size === 0) return;
+  const targetTbrDir = path.join(nextRoot, 'wiki', 'tbr');
+  const targetItemsDir = path.join(targetTbrDir, 'items');
+  if (carried.items.size) {
+    for (const [stableId, carriedItem] of carried.items) {
+      const workspaceItem = workspaceTree.items.get(stableId);
+      if (workspaceItem && renderTbrItem(workspaceItem) !== renderTbrItem(carriedItem)) throw new Error(`tbr workspace conflict: ${stableId}`);
+    }
+    mkdirSync(targetItemsDir, { recursive: true });
+    for (const [stableId, carriedItem] of carried.items) {
+      if (workspaceTree.items.has(stableId)) continue;
+      const source = path.join(archiveRoot, 'wiki', 'tbr', 'items', carriedItem.file);
+      const stat = lstatSync(source);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1) throw new Error(`unsafe retained tbr item: ${stableId}`);
+      if (stat.size > 8192) throw new Error(`oversized retained tbr item: ${stableId}`);
+      const target = path.join(targetItemsDir, carriedItem.file);
+      copyFileSync(source, target);
+      const bytes = readFileSync(target);
+      upsertCopied(report, `wiki/tbr/items/${carriedItem.file}`, bytes.length, crypto.createHash('sha256').update(bytes).digest('hex'));
+      state.bytes_copied += bytes.length;
+    }
+  }
+  // Regenerate the canonical index over the union of staged items (workspace +
+  // carried), replacing any stale staged workspace index bytes.
+  const staged = readTbrTreeItems(nextRoot);
+  const indexText = renderIndex(staged.values());
+  mkdirSync(targetTbrDir, { recursive: true });
+  writeFileSync(path.join(targetTbrDir, 'index.md'), indexText);
+  upsertCopied(report, 'wiki/tbr/index.md', Buffer.byteLength(indexText, 'utf8'), crypto.createHash('sha256').update(indexText).digest('hex'));
+}
+
 export function syncProjectArchive(options = {}) {
   const workspace = path.resolve(options.workspace || '.');
   const archiveRoot = resolveArchiveRoot(options);
@@ -222,9 +276,22 @@ export function syncProjectArchive(options = {}) {
   let stageIdentity;
   let nextRoot;
   let lock;
+  let tbrLock;
+  // Plan 059 Slice 3 (AD-3/AD-5): every archive sync that validates/carries
+  // PIDEX-owned wiki/tbr must hold the shared project TBR serialization lock
+  // BEFORE the external archive lock — the same lock file the lifecycle
+  // completion boundary uses (lib/tbr-lock.mjs, no second lock framework). The
+  // lock is keyed by the canonical archive root identity (resolved-path key
+  // before first publication when the root does not exist yet).
+  const usesTbrLock = Boolean(options.pidexRoot && options.projectId && !options.unsafeAllowCustomArchiveRoot);
+  if (usesTbrLock) {
+    const stateDir = resolveStateRoot({ root: path.resolve(options.pidexRoot) });
+    tbrLock = acquireProjectTbrLock({ stateDir, project: archiveRoot, lockTimeoutMs: Number.isInteger(options.tbrLockTimeoutMs) ? options.tbrLockTimeoutMs : 1000 });
+    if (!tbrLock.held) return { ...report, ok: false, error: tbrLock.code };
+  }
   try { lock = acquireProjectArchiveLock({ ...options, archiveRoot, operation: 'sync' }); }
-  catch (error) { return { ...report, ok: false, error: error.message || String(error) }; }
-  if (!lock.ok) return { ...report, ok: false, error: lock.error };
+  catch (error) { if (tbrLock?.held) releaseProjectTbrLock(tbrLock.lock); return { ...report, ok: false, error: error.message || String(error) }; }
+  if (!lock.ok) { if (tbrLock?.held) releaseProjectTbrLock(tbrLock.lock); return { ...report, ok: false, error: lock.error }; }
   try {
     const archiveParent = trustedDirectoryIdentity(path.dirname(archiveRoot), { create: true });
     const stageRoot = mkdtempSync(path.join(archiveParent.path, `.${path.basename(archiveRoot)}.staging-`));
@@ -239,6 +306,7 @@ export function syncProjectArchive(options = {}) {
       walkSource(sourcePath, workspace, source, state);
     }
     carryBrowserEvidence(archiveRoot, nextRoot);
+    if (usesTbrLock) reconcileTbrArchive({ archiveRoot, nextRoot, workspace, report, state });
     report.bytes_copied = state.bytes_copied;
     report.files_copied = report.copied.length;
     report.files_skipped = report.skipped.length;
@@ -269,6 +337,7 @@ export function syncProjectArchive(options = {}) {
     return report;
   } finally {
     lock.release();
+    if (tbrLock?.held) releaseProjectTbrLock(tbrLock.lock);
   }
 }
 

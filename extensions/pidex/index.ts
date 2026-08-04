@@ -9,7 +9,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { foldReviewHistory, normalizeReviewPlan, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
-import { recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
+import { completeStructuredReviewOutcome, recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
+import { resolveStateRoot } from "../../modules/pidex/analysis-metrics-history/lib/state-root.mjs";
 
 type AgentFrontmatter = {
 	name?: string;
@@ -185,7 +186,10 @@ const SANDBOX_CONFIG_PATH = process.env.PIDEX_SANDBOX_CONFIG_FILE ?? path.join(P
 const SANDBOX_LOCAL_CONFIG_PATH = process.env.PIDEX_SANDBOX_LOCAL_CONFIG_FILE ?? path.join(PACKAGE_ROOT, "config", "sandbox.local.json");
 const DELEGATE_DIR = path.join(PACKAGE_ROOT, "scripts", "delegate");
 const SKILL_PATH = path.join(PACKAGE_ROOT, "skills", "pd", "SKILL.md");
-const STATE_DIR = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state");
+// Plan 059 Slice 4: single supported PIDEX state-root override resolved through the
+// shared helper (PIDEX_STATE_DIR > RUNNING_PI_STATE_DIR > <root>/state) so host
+// lifecycle, CLI, event pipeline, and the project TBR serialization lock agree.
+const STATE_DIR = resolveStateRoot({ root: PACKAGE_ROOT });
 const RUNS_DIR = path.join(STATE_DIR, "runs");
 const METRICS_DIR = path.join(STATE_DIR, "metrics");
 const PRICING_PATH = path.join(PACKAGE_ROOT, "config", "pricing.json");
@@ -462,7 +466,7 @@ function isTemporaryProjectDirectory(projectRoot: string): boolean {
 	return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
-export function listRecentPidexProjects(limit = 5, stateDir = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state")): RecentPidexProject[] {
+export function listRecentPidexProjects(limit = 5, stateDir = resolveStateRoot({ root: PACKAGE_ROOT })): RecentPidexProject[] {
 	const byCwd = new Map<string, RecentPidexProject>();
 	const historyFile = path.join(stateDir, "history.jsonl");
 	if (fs.existsSync(historyFile)) {
@@ -509,7 +513,7 @@ export function isLikelyPidexProjectDirectory(projectRoot: string): boolean {
 	return fs.existsSync(wikiIndex);
 }
 
-export function recentPidexProjectsPrompt(limit = 12, stateDir = process.env.PIDEX_STATE_DIR ?? path.join(PACKAGE_ROOT, "state")): string {
+export function recentPidexProjectsPrompt(limit = 12, stateDir = resolveStateRoot({ root: PACKAGE_ROOT })): string {
 	const recent = listRecentPidexProjects(limit, stateDir);
 	if (recent.length === 0) return "Recent PIDEX projects: none recorded.";
 	const lines = recent.map((item, index) => {
@@ -3624,7 +3628,7 @@ function isDirectReviewContext(params: any, result: any, lifecycle: { stateDir: 
 	} catch { return false; }
 }
 
-function completeReviewDispatch(agent: string, identity: Record<string, string>, result: any, lifecycle: { stateDir: string; pipelineId: string; project: string }, cwd: string, expectedContextFile?: string, params?: any): any {
+function completeReviewDispatch(agent: string, identity: Record<string, string>, result: any, lifecycle: { stateDir: string; pipelineId: string; project: string; archiveAuthority?: { pidexRoot: string; projectId: string; lockTimeoutMs?: number } }, cwd: string, expectedContextFile?: string, params?: any, structuredRequired = false): any {
 	if (!result || (result.exitCode ?? (result.ok === true ? 0 : 1)) !== 0) throw new Error("REVIEW_CHILD_FAILED");
 	const routing = extractRoutingBlock(String(result.finalText || ""));
 	const verdict = extractRoutingField(routing, "verdict") ?? result.routing?.verdict;
@@ -3634,6 +3638,39 @@ function completeReviewDispatch(agent: string, identity: Record<string, string>,
 		? isDirectReviewContext(params, result, lifecycle, expectedContextFile, contextFile)
 		: isHostReviewContext(cwd, contextFile);
 	if ((!routing && !result.routing) || !verdict || !routeTo || !localContext) throw new Error("REVIEW_ROUTING_INVALID");
+	// Plan 059 Slice 1: host-direct primary reviews complete through the canonical
+	// structured boundary, which reads the exact assigned artifact, enforces the
+	// pidex-review-outcome-v1 contract and terminal matrix, and agrees the ROUTING
+	// verdict. Prompt-only classification is never load-bearing. Corrections carry
+	// no structured payload and Project Pipeline adoption is Slice 3; both keep the
+	// legacy ROUTING path.
+	if (structuredRequired && !identity.reviewMode.startsWith("correction")) {
+		// Plan 059 Slice 3 (req 1/6): Project Pipeline completion passes the freshly
+		// reloaded registry-derived archive option when the registered authority kind
+		// is archive-only, so the boundary re-derives and re-validates the archive
+		// root before any write and holds the external archive lock across the TBR
+		// write + lifecycle completion (TBR -> archive -> selection -> gate).
+		const completion = completeStructuredReviewOutcome({
+			stateDir: lifecycle.stateDir,
+			project: lifecycle.project,
+			pipelineId: lifecycle.pipelineId,
+			identity: identity as Record<string, string>,
+			artifactPath: contextFile as string,
+			routingVerdict: verdict,
+			routeTo,
+			archive: lifecycle.archiveAuthority ? { pidexRoot: lifecycle.archiveAuthority.pidexRoot, projectId: lifecycle.archiveAuthority.projectId, lockTimeoutMs: lifecycle.archiveAuthority.lockTimeoutMs } : undefined,
+		});
+		// Plan 059 Slice 2 (item 7): typed completion status surfaced on the host boundary
+		// result — accepted | CHANGES_REQUESTED | USER_DECISION_REQUIRED | CLOSED_WITH_TBR |
+		// resumed — so the Slice 4 policy consumer can distinguish normal correction,
+		// user-decision-required expansion, approval, and terminal TBR close without
+		// re-deriving truth from prose. SKILL policy itself is untouched in this slice.
+		if (["accepted", "CHANGES_REQUESTED", "USER_DECISION_REQUIRED", "CLOSED_WITH_TBR", "resumed"].includes(completion.status)) return { ...result, reviewCompletion: completion };
+		if (completion.status === "TBR_WRITE_BLOCKED") throw new Error("TBR_WRITE_BLOCKED");
+		if (completion.status === "denied") throw new Error(completion.code || "REVIEW_OUTCOME_INVALID");
+		if (completion.status === "unavailable") throw new Error(completion.code || "REVIEW_LIFECYCLE_UNAVAILABLE");
+		throw new Error("REVIEW_COMPLETION_UNAVAILABLE");
+	}
 	const outcome = identity.reviewMode.startsWith("correction")
 		? verdict === "COMPLETE" && routeTo === ({ critic: "pidex-critic", "code-review": "pidex-code-reviewer", security: "pidex-security", qa: "pidex-qa" }[identity.reviewGate]) ? "READY_FOR_REVIEW" : null
 		: normalizeReviewVerdict(identity.reviewGate, verdict);
@@ -3701,7 +3738,7 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
 	const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted, reviewDispatch: true }) });
 	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
-	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params);
+	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params, true);
 }
 
 const PUBLIC_REVIEW_IDENTITY_KEYS = ["runFamilyId", "planId", "reviewGate", "reviewMode", "attemptId"].sort();
@@ -3738,7 +3775,7 @@ export const PidexAgentParams = Type.Object({
 
 const PROJECT_PIPELINE_REVIEW_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer"]);
 
-type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; project: string; projectId?: string; resolveCurrentProject?: () => string };
+type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; project: string; projectId?: string; archiveAuthority?: { pidexRoot: string; projectId: string; lockTimeoutMs?: number }; resolveCurrentProject?: () => string };
 
 export function executeProjectPipelineReviewBoundary(params: any, lifecycle: ProjectPipelineReviewLifecycle, start: () => any): any {
 	const suppliedIdentity = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
@@ -3762,17 +3799,25 @@ export function executeProjectPipelineReviewBoundary(params: any, lifecycle: Pro
 		catch { throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED"); }
 		if (currentProject !== lifecycle.project) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
 	}
-	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params);
+	// Plan 059 Slice 3 (req 1/2): Project Pipeline primary reviews complete through the
+	// canonical structured boundary (parity with host-direct) — exact assigned
+	// artifact, pidex-review-outcome-v1, terminal matrix, typed reviewCompletion.
+	// Corrections carry no structured payload and keep the legacy ROUTING path.
+	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params, true);
 }
 
-export function resolveProjectPipelineAuthorityRoot(projectId: string): string {
+export function resolveProjectPipelineAuthority(projectId: string): { root: string; kind: string } {
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) throw new Error("Project Pipeline authority helper missing; no host fallback was used.");
 	const proc = spawnSync(process.execPath, [PROJECT_PIPELINE_LIFECYCLE_SCRIPT, "resolve-authority", "--pidex-root", PACKAGE_ROOT, "--project-id", projectId, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
 	let parsed: any; try { parsed = JSON.parse(proc.stdout || "{}"); } catch { throw new Error("Project Pipeline authority resolution failed; no host fallback was used."); }
-	if (proc.status !== 0 || parsed?.ok !== true || typeof parsed?.project_root !== "string" || !path.isAbsolute(parsed.project_root)) throw new Error("Project Pipeline authority resolution failed; no host fallback was used.");
+	if (proc.status !== 0 || parsed?.ok !== true || typeof parsed?.project_root !== "string" || !path.isAbsolute(parsed.project_root) || !["host-path", "archive"].includes(String(parsed?.authority_kind))) throw new Error("Project Pipeline authority resolution failed; no host fallback was used.");
 	let canonical: string; try { canonical = fs.realpathSync.native(parsed.project_root); } catch { throw new Error("Project Pipeline authority resolution failed; no host fallback was used."); }
 	if (canonical !== parsed.project_root) throw new Error("Project Pipeline authority resolution changed; no host fallback was used.");
-	return canonical;
+	return { root: canonical, kind: String(parsed.authority_kind) };
+}
+
+export function resolveProjectPipelineAuthorityRoot(projectId: string): string {
+	return resolveProjectPipelineAuthority(projectId).root;
 }
 
 function validateProjectPipelineAgentParams(params: any): void {
@@ -3785,9 +3830,22 @@ export function runProjectPipelineAgentTool(params: any): any {
 	validateProjectPipelineAgentParams(params);
 	const suppliedIdentity = [params?.runFamilyId, params?.planId, params?.reviewGate, params?.reviewMode, params?.attemptId].some((value) => value !== undefined);
 	const trackedCandidate = PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params?.agent || "")) || (CORRECTION_OWNERS.has(String(params?.agent || "")) && (suppliedIdentity || extractPlanId(String(params?.task || "")) !== "unknown-plan"));
-	const project = trackedCandidate ? resolveProjectPipelineAuthorityRoot(String(params.projectId)) : path.resolve(params?.cwd || PACKAGE_ROOT);
+	const authority = trackedCandidate ? resolveProjectPipelineAuthority(String(params.projectId)) : undefined;
+	const project = authority?.root ?? path.resolve(params?.cwd || PACKAGE_ROOT);
 	const projectId = String(params.projectId);
-	const lifecycle = { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${projectId}-${params?.planId || "plan"}`, project, projectId, resolveCurrentProject: () => resolveProjectPipelineAuthorityRoot(projectId) };
+	// Plan 059 Slice 3 (req 1/6): the registered authority is reloaded per call
+	// (resolveProjectPipelineAuthority re-derives host-path vs registry-derived
+	// archive root from the current project record — no cwd/custom archive/URL
+	// fallback). Archive-only authority carries the fresh archive option into the
+	// completion boundary, which re-derives and re-validates it before any write.
+	const lifecycle: ProjectPipelineReviewLifecycle = {
+		stateDir: STATE_DIR,
+		pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${projectId}-${params?.planId || "plan"}`,
+		project,
+		projectId,
+		...(authority?.kind === "archive" ? { archiveAuthority: { pidexRoot: PACKAGE_ROOT, projectId } } : {}),
+		resolveCurrentProject: () => resolveProjectPipelineAuthorityRoot(projectId),
+	};
 	return executeProjectPipelineReviewBoundary(params, lifecycle, () => runProjectPipelineAgentToolUnchecked(params));
 }
 

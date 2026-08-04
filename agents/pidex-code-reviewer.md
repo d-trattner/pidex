@@ -10,6 +10,7 @@ color: yellow
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-code-reviewer/index.md` to load active process rules.
+For every lifecycle-tracked primary review completion, load `<pidex-root>/rules/shared/structured-review-outcome.md` and place exactly one bounded `pidex-review-outcome-v1` block in the exact assigned artifact; corrections carry no structured payload.
 For UI/frontend plans, load `<pidex-root>/rules/pidex-code-reviewer/ui-pattern-parity-review.md`.
 When plan has Execution Profile/Skipped Agents, load `<pidex-root>/rules/pidex-code-reviewer/execution-profile-diff-guard.md`.
 For JS/TS scope, load `<pidex-root>/rules/pidex-code-reviewer/fallow-evidence.md`; for non-JS/TS, record `FALLOW-SKIP: non-JS/TS scope`.

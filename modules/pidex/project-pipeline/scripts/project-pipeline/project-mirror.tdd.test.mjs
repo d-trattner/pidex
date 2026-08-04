@@ -6,6 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, saveProjectRecord } from './registry.mjs';
 import { projectMirrorLockPath, projectMirrorManifestPath, syncProjectMirror } from './project-mirror.mjs';
+import { syncProjectArchive } from './archive-sync.mjs';
+import { writeTbr } from '../../../../../scripts/quality/tbr.mjs';
+
+const tbrMirrorFinding = { findingId: 'F-mirror-immediate', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Mirror carried finding', shortDescription: 'Deferred from current gate.', originEpic: 'initiative-059', reviewArtifact: 'agents.output/code-review/059.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot extend current gate.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-mirror-')); }
 function write(file, text) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); }
@@ -287,4 +291,56 @@ test('destination symlinks and competing root lock fail closed', () => {
   const locked = syncProjectMirror({ pidexRoot: ctx2.pidexRoot, projectId: 'pp-mirror-lock-other' });
   assert.equal(locked.status, 'locked-or-stale');
   assert.equal(locked.degraded, true);
+});
+
+// Plan 059 Slice 3 (req 2): the mirror must never overwrite or delete unrelated
+// host-owned TBR bytes. A host wiki/tbr leaf whose bytes differ from the archive
+// (or that the mirror never wrote) is preserved as a conflict, never clobbered.
+test('host-owned TBR bytes are never overwritten or deleted by the mirror', () => {
+  const host = tmp();
+  const tbrLeaf = 'wiki/tbr/items/TBR-host-owned-000000000001-host-owned.md';
+  write(path.join(host, tbrLeaf), 'host-owned TBR bytes\n');
+  const ctx = setup({ controlRoot: host, archiveFiles: {
+    'wiki/index.md': '# Wiki\n',
+    [tbrLeaf]: 'archive TBR bytes\n',
+    'wiki/tbr/index.md': '# TBR Archive\n',
+  } });
+  const result = syncProjectMirror(ctx);
+  assert.equal(result.status, 'conflict');
+  assert.equal(readFileSync(path.join(host, tbrLeaf), 'utf8'), 'host-owned TBR bytes\n', 'unrelated host TBR bytes preserved on same-path conflict');
+  const hostExtra = 'wiki/tbr/items/TBR-host-extra-000000000002-extra.md';
+  write(path.join(host, hostExtra), 'extra host TBR\n');
+  const second = syncProjectMirror(ctx);
+  assert.equal(second.status, 'conflict');
+  assert.equal(existsSync(path.join(host, hostExtra)), true, 'host TBR absent from the archive is never deleted');
+  assert.equal(readFileSync(path.join(host, tbrLeaf), 'utf8'), 'host-owned TBR bytes\n', 'host TBR still preserved after second sync');
+});
+
+// Plan 059 Slice 3 (req 4): a carried wiki/tbr tree produced by archive sync
+// enters the unchanged report inventory, so the Project Mirror copies it to the
+// host with report/inventory equality remaining green.
+test('host mirror copies carried wiki/tbr with unchanged report inventory equality', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-mirror-tbr-carry';
+  const archiveRoot = path.join(pidexRoot, 'state', 'project-archives', projectId);
+  const workspace = tmp();
+  write(path.join(workspace, 'wiki/index.md'), '# wiki\n');
+  const seeded = writeTbr({ root: workspace, identity: { planId: 'plan-059', runFamilyId: 'family-s3-mirror', reviewGate: 'code-review' }, findings: [tbrMirrorFinding] });
+  assert.equal(seeded.ok, true);
+  assert.equal(syncProjectArchive({ workspace, pidexRoot, projectId }).ok, true);
+  const workspace2 = tmp();
+  write(path.join(workspace2, 'wiki/index.md'), '# wiki 2\n');
+  assert.equal(syncProjectArchive({ workspace: workspace2, pidexRoot, projectId }).ok, true, 'carry across replacement');
+  const host = tmp();
+  const record = createProjectRecord({ project_id: projectId, name: 'mirror-tbr', source_kind: 'empty', source_ref: '' });
+  record.status = 'ready'; record.archive.path = archiveRoot; record.control_project_path = host;
+  saveProjectRecord(pidexRoot, record);
+  const result = syncProjectMirror({ pidexRoot, projectId });
+  assert.equal(result.status, 'complete');
+  assert.equal(result.conflicts, 0);
+  const tbrDir = path.join(host, 'wiki', 'tbr');
+  assert.equal(existsSync(path.join(tbrDir, 'index.md')), true, 'carried TBR index mirrored to host');
+  assert.ok(readdirSync(path.join(tbrDir, 'items')).some((name) => name.endsWith('.md')), 'carried TBR item mirrored to host');
+  const mirrored = readFileSync(path.join(tbrDir, 'items', seeded.items[0].file), 'utf8');
+  assert.match(mirrored, /^sourceFindingId: F-mirror-immediate$/m, 'host receives the exact carried TBR bytes');
 });

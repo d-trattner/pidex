@@ -1,5 +1,5 @@
 const MODES = ['initial', 'correction1', 'review1', 'correction2', 'review2'];
-const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
+const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']);
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const PLAN = /^plan-\d{1,40}$/;
 const GATES = new Set(['critic', 'code-review', 'security', 'qa']);
@@ -9,7 +9,7 @@ const VERDICTS = {
   security: { APPROVED: 'APPROVED', APPROVED_WITH_CONTROLS: 'CHANGES_REQUESTED', REJECTED: 'CHANGES_REQUESTED' },
   qa: { COMPLETE: 'APPROVED', FAILED: 'CHANGES_REQUESTED' },
 };
-const CANONICAL_OUTCOMES = new Set(['APPROVED', 'accepted', 'CHANGES_REQUESTED', 'READY_FOR_REVIEW', 'SUBMITTED', 'closed']);
+const CANONICAL_OUTCOMES = new Set(['APPROVED', 'accepted', 'CHANGES_REQUESTED', 'READY_FOR_REVIEW', 'SUBMITTED', 'closed', 'USER_DECISION_REQUIRED']);
 
 export function normalizeReviewPlan(value) {
   const raw = String(value ?? '').trim();
@@ -70,7 +70,7 @@ function denied() { return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' };
 export function allowedCompletionOutcome(identity, outcome) {
   if (!validateReviewIdentity(identity).ok || typeof outcome !== 'string') return false;
   const normalized = CANONICAL_OUTCOMES.has(outcome) ? outcome : normalizeReviewVerdict(identity.reviewGate, outcome);
-  return normalized === 'CHANGES_REQUESTED' && identity.reviewMode === 'review2' || Boolean(nextAfter(identity.reviewMode, normalized));
+  return normalized === 'CHANGES_REQUESTED' && identity.reviewMode === 'review2' || normalized === 'USER_DECISION_REQUIRED' && !identity.reviewMode.startsWith('correction') || Boolean(nextAfter(identity.reviewMode, normalized));
 }
 
 export function foldReviewHistory(rows, requested) {
@@ -112,13 +112,42 @@ export function foldReviewHistory(rows, requested) {
       } else canonical.push(event);
     }
     const types = canonical.map((event) => event.event_type);
-    const expectedPrefix = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome'];
-    if (types.some((type, position) => type !== expectedPrefix[position])) return denied();
+    // Plan 059 Slice 2 (AD-1): dual sequence selected by the discriminator at index 3.
+    // types[3] === 'completion_prepared' is the new uniform receipt sequence
+    // (receipt after spawn_accepted, before spawn_returned). Legacy histories keep
+    // types[3] === 'spawn_returned' with unchanged five-event behavior and four-event
+    // returned uncertainty. No sidecar receipt store; the receipt is an event row.
+    const newSequence = types[3] === 'completion_prepared';
+    const expectedPrefix = newSequence
+      ? ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']
+      : ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome'];
+    if (types.length > expectedPrefix.length || types.some((type, position) => type !== expectedPrefix[position])) return denied();
     if (types.length === 1) return sameIdentity(active, requested) ? { status: 'resume_reserved', nextMode: expectedMode } : denied();
     if (types.length === 2) return { status: 'uncertain', code: 'SPAWN_ENTERED_UNCERTAIN' };
     if (types.length === 3) return sameIdentity(active, requested) ? { status: 'spawn_accepted', nextMode: expectedMode } : denied();
-    if (types.length === 4) return { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' };
-    const next = nextAfter(active.reviewMode, outcomeOf(canonical[4].metadata, active.reviewGate));
+    if (types.length === 4) {
+      // Prepared-only: receipt present, spawn_returned missing. Resumable under the
+      // exact same receipt (identity + digests + intended outcome + TBR IDs).
+      if (newSequence) return sameIdentity(active, requested) ? { status: 'prepared', nextMode: expectedMode } : denied();
+      return { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' };
+    }
+    if (types.length === 5) {
+      // Prepared + returned, outcome missing: still resumable under the same receipt.
+      if (newSequence) return sameIdentity(active, requested) ? { status: 'prepared', nextMode: expectedMode } : denied();
+      const next = nextAfter(active.reviewMode, outcomeOf(canonical[4].metadata, active.reviewGate));
+      if (!next) return denied();
+      if (next.terminal) {
+        if (index !== reviewRows.length) return denied();
+        return { status: 'terminal', terminal: next.terminal };
+      }
+      expectedMode = next.nextMode;
+      continue;
+    }
+    // New six-event sequence: terminal receipt/outcome agreement is required.
+    const outcome = outcomeOf(canonical[5].metadata, active.reviewGate);
+    if (canonical[3].metadata.intendedOutcome !== outcome) return denied();
+    if (outcome === 'USER_DECISION_REQUIRED') return { status: 'expansion_pending' };
+    const next = nextAfter(active.reviewMode, outcome);
     if (!next) return denied();
     if (next.terminal) {
       if (index !== reviewRows.length) return denied();

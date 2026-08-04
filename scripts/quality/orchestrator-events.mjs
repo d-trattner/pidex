@@ -5,8 +5,13 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { canonicalizeReviewOutcome, validateReviewOutcome, writeTbr } from './tbr.mjs';
+import { withProjectTbrLock } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
+import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const STATE = path.join(ROOT, 'state');
+// Plan 059 Slice 4: single supported state-root override resolved through the shared
+// helper (PIDEX_STATE_DIR > RUNNING_PI_STATE_DIR > <repo>/state) so the CLI TBR lock
+// and host lifecycle serialize on the same lock file; no env-name split can diverge.
+const STATE = resolveStateRoot({ root: ROOT });
 const OPERATOR_TYPES = new Set(['OpPreflight','OpContextPack','OpSpawn','OpRoute','OpGate','OpReview','OpUserCorrection','OpRuleAction','OpQualityReview','OpReleaseDecision','OpDecision']);
 function slug(v) { return String(v || 'unknown').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'unknown'; }
 function normalizePlan(v) { const raw = String(v || 'unknown-plan').trim() || 'unknown-plan'; const m = raw.match(/^(?:plan-)?(\d{1,3})$/i); return m ? `plan-${m[1].padStart(3, '0')}` : raw; }
@@ -19,6 +24,15 @@ function reviewEvent(identity, outcome) {
   return { semanticId, outcome };
 }
 function invoke(callback, value, event) { try { return typeof callback === 'function' && accepted(callback(value, event)); } catch { return false; } }
+// Operator-event transition helper for the CLI review-outcome path (AD-8).
+// The TBR index write is a shared-index writer (AD-3): the CALLER MUST HOLD the
+// project-scoped TBR serialization lock (withProjectTbrLock, same stateDir/project
+// as the canonical completion boundary) before invoking — production main()
+// acquires it; the raw helper accepts injected writers for fault-injection tests.
+// Statuses are truthful OPERATOR outcomes, never lifecycle claims: approval ->
+// accepted, non-final rejection -> CHANGES_REQUESTED. The lifecycle terminal
+// CLOSED_WITH_TBR is produced exclusively by completeStructuredReviewOutcome
+// (canonical boundary, review2 final close); this path never claims it.
 export function transitionReviewOutcome({ root, identity, outcome, write = writeTbr, appendOutcome, appendRoute, spawn }) {
   const checked = validateReviewOutcome(outcome, identity?.reviewGate);
   if (!checked.ok) return { status: 'TBR_WRITE_BLOCKED', code: checked.code };
@@ -28,7 +42,9 @@ export function transitionReviewOutcome({ root, identity, outcome, write = write
   if (!invoke(appendOutcome, checked.value, event)) return { status: 'TBR_WRITE_BLOCKED', code: 'TBR_OUTCOME_APPEND_FAILED' };
   if (!invoke(appendRoute, checked.value, event)) return { status: 'TBR_WRITE_BLOCKED', code: 'TBR_ROUTE_APPEND_FAILED' };
   if (!invoke(spawn, checked.value, event)) return { status: 'TBR_WRITE_BLOCKED', code: 'TBR_SPAWN_FAILED' };
-  return { status: 'CLOSED_WITH_TBR', items: written.items };
+  return checked.value.verdict === 'APPROVED'
+    ? { status: 'accepted', items: written.items }
+    : { status: 'CHANGES_REQUESTED', items: written.items };
 }
 export function main(argv = process.argv.slice(2)) {
   try {
@@ -48,7 +64,14 @@ export function main(argv = process.argv.slice(2)) {
       if (matches.length) return matches.some((row) => JSON.stringify(canonicalizeReviewOutcome(row.review_outcome)) === JSON.stringify(canonicalizeReviewOutcome(reviewOutcome))) ? { ok: true, duplicate: true } : false;
       writeFileSync(out, `${JSON.stringify({ ...record, review_outcome: reviewOutcome, review_semantic_id: event.semanticId })}\n`, { flag: 'a' }); return true;
     };
-    if (review) { const transition = transitionReviewOutcome({ root: project, identity: { planId: record.plan_key, runFamilyId: a.runFamilyId || record.pipeline_id, reviewGate: a.gate }, outcome: obj(a.reviewOutcomeJson, 'review-outcome-json'), appendOutcome: appendReviewOutcome, appendRoute: () => true, spawn: () => true }); if (transition.status === 'TBR_WRITE_BLOCKED') throw new Error('TBR_WRITE_BLOCKED'); } else append();
+    if (review) {
+      // AD-3/AD-8: the CLI review-outcome path is a shared-index writer and must
+      // serialize on the same project-scoped TBR lock the canonical completion
+      // boundary uses (stateDir = operator state root, project = target project).
+      // Lock-uncertain -> fail closed, nothing written, no operator event appended.
+      const transition = withProjectTbrLock({ stateDir: STATE, project }, (root) => transitionReviewOutcome({ root, identity: { planId: record.plan_key, runFamilyId: a.runFamilyId || record.pipeline_id, reviewGate: a.gate }, outcome: obj(a.reviewOutcomeJson, 'review-outcome-json'), appendOutcome: appendReviewOutcome, appendRoute: () => true, spawn: () => true }));
+      if (transition.status === 'TBR_WRITE_BLOCKED' || transition.ok === false) throw new Error('TBR_WRITE_BLOCKED');
+    } else append();
     console.log(out); return 0;
   } catch (error) { console.error(error.message); return 1; }
 }

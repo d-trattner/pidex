@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { closeReviewWithTbr, promoteTbr, renderTbrItem, validateReviewOutcome, writeTbr } from './tbr.mjs';
+import { closeReviewWithTbr, promoteTbr, renderTbrItem, validateReviewOutcome, validateTbrTree, writeTbr } from './tbr.mjs';
 
 const immediate = {
   findingId: 'F-canonical', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate',
@@ -107,12 +107,16 @@ try {
   assert.ok(Buffer.byteLength(original, 'utf8') <= 8192);
 
   writeFileSync(path.join(archiveRoot, 'wiki/tbr/index.md'), 'stale index\n');
-  const retry = writeTbr({ root: archiveRoot, identity: archiveIdentity, findings: [{ ...immediate, title: 'Slug must not change retry' }] });
+  const retry = writeTbr({ root: archiveRoot, identity: archiveIdentity, findings: [immediate] });
   assert.equal(retry.ok, true);
   assert.equal(retry.created, false);
-  assert.deepEqual(readdirSync(path.join(archiveRoot, 'wiki/tbr/items')), [firstName], 'retry preserves first path');
-  assert.equal(readFileSync(firstPath, 'utf8'), original, 'retry preserves immutable origin and first write time');
+  assert.deepEqual(readdirSync(path.join(archiveRoot, 'wiki/tbr/items')), [firstName], 'identical retry preserves first path');
+  assert.equal(readFileSync(firstPath, 'utf8'), original, 'identical retry preserves immutable bytes');
   assert.match(readFileSync(path.join(archiveRoot, 'wiki/tbr/index.md'), 'utf8'), /Canonical immediate finding/);
+  // Plan 059 Slice 2 (AD-4/R1): full canonical byte dedup — same stable ID with
+  // different canonical bytes fails closed with TBR_COLLISION instead of keeping the
+  // first copy.
+  assert.deepEqual(writeTbr({ root: archiveRoot, identity: archiveIdentity, findings: [{ ...immediate, title: 'Slug must not change retry' }] }), { ok: false, code: 'TBR_COLLISION' }, 'different bytes under the same stable ID collide');
   rmSync(path.join(archiveRoot, 'wiki/tbr/index.md'));
   assert.equal(writeTbr({ root: archiveRoot, identity: archiveIdentity, findings: [immediate] }).ok, true, 'retry rebuilds missing full index');
   assert.match(readFileSync(path.join(archiveRoot, 'wiki/tbr/index.md'), 'utf8'), /Canonical immediate finding/);
@@ -194,5 +198,46 @@ try {
   assert.deepEqual(writeTbr({ root: symlinkRoot, identity: archiveIdentity, findings: [immediate] }), { ok: false, code: 'TBR_PATH_INVALID' });
   assert.deepEqual(readdirSync(escaped), [], 'symlink path must not receive durable item');
 } finally { rmSync(symlinkRoot, { recursive: true, force: true }); rmSync(escaped, { recursive: true, force: true }); }
+
+// Plan 059 Slice 3 (AD-5): validateTbrTree is the canonical read-only validator
+// for a PIDEX-owned wiki/tbr tree (items + index) reused by archive carry
+// validation. It must accept only canonical trees and fail closed on stale
+// indexes, tampered items, duplicate stable IDs, symlinked components, and
+// missing roots.
+const validationRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-', ));
+try {
+  assert.equal(writeTbr({ root: validationRoot, identity: archiveIdentity, findings: [immediate] }).ok, true, 'seed canonical tree');
+  const validated = validateTbrTree(validationRoot);
+  assert.equal(validated.ok, true);
+  assert.equal(validated.items.size, 1, 'validated tree exposes the canonical item');
+  const [stableId] = [...validated.items.keys()];
+  assert.match(stableId, /^TBR-[a-f0-9]{12}$/);
+  assert.equal(validated.items.get(stableId).file.endsWith('.md'), true, 'validated item carries its canonical filename');
+  assert.equal(validateTbrTree(mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-empty-'))).ok, true, 'missing wiki/tbr tree validates empty');
+
+  const staleRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-stale-'));
+  assert.equal(writeTbr({ root: staleRoot, identity: archiveIdentity, findings: [immediate] }).ok, true);
+  writeFileSync(path.join(staleRoot, 'wiki', 'tbr', 'index.md'), 'stale index\n');
+  assert.throws(() => validateTbrTree(staleRoot), (error) => error?.code === 'TBR_INDEX_INVALID', 'stale index fails closed');
+
+  const tamperedRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-tampered-'));
+  assert.equal(writeTbr({ root: tamperedRoot, identity: archiveIdentity, findings: [immediate] }).ok, true);
+  const itemFile = readdirSync(path.join(tamperedRoot, 'wiki', 'tbr', 'items')).find((name) => name.endsWith('.md'));
+  writeFileSync(path.join(tamperedRoot, 'wiki', 'tbr', 'items', itemFile), '---\ntampered\n---\n');
+  assert.throws(() => validateTbrTree(tamperedRoot), (error) => error?.code === 'TBR_ITEM_INVALID', 'tampered item fails closed');
+
+  const collisionRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-collision-'));
+  assert.equal(writeTbr({ root: collisionRoot, identity: archiveIdentity, findings: [immediate] }).ok, true);
+  const first = readdirSync(path.join(collisionRoot, 'wiki', 'tbr', 'items')).find((name) => name.endsWith('.md'));
+  writeFileSync(path.join(collisionRoot, 'wiki', 'tbr', 'items', first.replace(/-canonical-immediate-finding\.md$/, '-other-title.md')), readFileSync(path.join(collisionRoot, 'wiki', 'tbr', 'items', first), 'utf8'));
+  assert.throws(() => validateTbrTree(collisionRoot), (error) => error?.code === 'TBR_COLLISION', 'duplicate stable ID fails closed');
+
+  const symlinkRoot2 = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-symlink-'));
+  const outside = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-validate-outside-'));
+  assert.equal(writeTbr({ root: symlinkRoot2, identity: archiveIdentity, findings: [immediate] }).ok, true);
+  rmSync(path.join(symlinkRoot2, 'wiki', 'tbr', 'items'), { recursive: true, force: true });
+  symlinkSync(outside, path.join(symlinkRoot2, 'wiki', 'tbr', 'items'));
+  assert.throws(() => validateTbrTree(symlinkRoot2), (error) => error?.code === 'TBR_PATH_INVALID', 'symlinked items directory fails closed');
+} finally { rmSync(validationRoot, { recursive: true, force: true }); }
 
 console.log('tbr.mjs tests passed');

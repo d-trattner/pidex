@@ -4,7 +4,9 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../../../.." && pwd -P)
-STATE_DIR="${PIDEX_STATE_DIR:-$ROOT/state}"
+# Plan 059 Slice 4: single supported state-root override — PIDEX_STATE_DIR canonical,
+# RUNNING_PI_STATE_DIR legacy alias, default <pidex-root>/state (matches lib/state-root.mjs).
+STATE_DIR="${PIDEX_STATE_DIR:-${RUNNING_PI_STATE_DIR:-$ROOT/state}}"
 HISTORY_FILE="$STATE_DIR/history.jsonl"
 EVENT=""
 declare -A KV

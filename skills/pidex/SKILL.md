@@ -1168,7 +1168,7 @@ pidex_agent(
 
 Provider overrides are exceptional debugging tools only. Prefer config-driven routing.
 
-**Review lifecycle calls:** normal same-parent reviewer/correction handoffs use minimal shape. Do not manually supply tuple fields or edit lifecycle state. Executable host boundary derives one pending identity from plan/current pointer/history; partial, ambiguous, or unmatched identity fails closed. A valid explicit full tuple remains supported; runtime boundary validates final ROUTING, local context, and durable completion before exposing route.
+**Review lifecycle calls:** normal same-parent reviewer/correction handoffs use minimal shape. Do not manually supply tuple fields or edit lifecycle state. Executable host boundary derives one pending identity from plan/current pointer/history; partial, ambiguous, or unmatched identity fails closed. A valid explicit full tuple remains supported; runtime boundary validates final ROUTING, local context, and durable completion before exposing route. Typed completion status (`reviewCompletion`) is authoritative over contradictory ROUTING text: `CLOSED_WITH_TBR` and `USER_DECISION_REQUIRED` override any rejection route and never auto-correct; route to the correction owner only on `CHANGES_REQUESTED`.
 
 **2. Pipeline sequence**
 
@@ -1313,7 +1313,7 @@ bash <pidex-root>/scripts/telegram/notify.sh \
 
 This notification is informational only: no buttons, no reply handling, no `pending-gate.json`. The user still answers in the Pi session.
 
-- **G1-G3, G5 (rejection/failure gates):** Present the agent's findings to the user directly in the terminal and ask for their decision.
+- **G1-G3, G5 (rejection/failure gates):** For lifecycle-tracked primary reviews, a valid in-contract rejection auto-routes the bounded correction without a user gate (rejected `initial` → `correction1`; rejected `review1` → `correction2`); the ordinary rejection count alone never asks the user. Ask the user directly only when the typed completion status is `USER_DECISION_REQUIRED` (scope/threat/acceptance/architecture/evidence expansion), when lifecycle/authority is uncertain or TBR terminalization fails (`TBR_WRITE_BLOCKED`), when repeated non-substantive stalls hit the bounded stall breaker, or at the G9/release/project boundary.
 - **G4 (release push):** Before asking, enforce post-devops UI preview: if UI involved/uncertain and preview before G4 is not approved, start G9 preview first. Only after approved preview ask the user in the terminal: "Ready to tag and release? push / local / hold / abort"
 - **G7 (agent instruction change):** Show the proposed changes and ask for approval in the terminal.
 - **G8 (destructive ops):** Ask for explicit confirmation before proceeding.
@@ -1375,19 +1375,24 @@ When an agent rejects, loop back to the upstream agent automatically:
 - **pidex-uat NOT APPROVED** → re-invoke pidex-implementer (implementation gap) or pidex-planner (plan was wrong) based on UAT findings
 - **G9 Preview REJECTED** → load `<pidex-root>/rules/orchestrator/g9-rejection-playwright-repro.md`; capture G9 Rejection Repro Contract; re-invoke pidex-implementer with user feedback and exact repro contract → pidex-code-reviewer → pidex-qa with mandatory live Playwright evidence for the rejected flow → pidex-uat → pidex-devops → post-devops G9 before G4 again only after evidence passes
 
-The first backward transition at a gate may auto-proceed. Apply this cumulative circuit breaker **before every later upstream spawn**:
+Valid in-contract rejections auto-proceed through the two bounded corrections: a rejected `initial` review auto-routes `correction1`, a rejected `review1` review auto-routes `correction2` — no user gate for the rejection count alone. A `review2` rejection is terminal: every remaining finding is archived, the lifecycle completes `closed`, the typed status is `CLOSED_WITH_TBR`, and the gate advances exactly once — no correction3, review3, or fourth reviewer exists.
 
-- Track substantive rejection count per **gate and plan**, regardless of whether each reviewer gives a different or adjacent reason. On the **second rejection at the same gate**, stop before spawning another planner, architect, implementer, or reviewer.
-- Track residual re-slices/partial implementation continuations per **gate and plan**. On the **second residual re-slice at the same gate**, stop even if neither artifact repeats identical wording.
-- If any rejection would expand the approved threat model, acceptance criteria, evidence matrix, or architecture rather than repair a defect inside the approved contract, stop immediately; do not wait for the numeric threshold.
-- Rate-limit aborts and format/stall recovery with no substantive new work do not increment these counters.
+The cumulative circuit breaker remains for genuine stops, never for an ordinary rejection count. Stop before the next upstream spawn only when:
+
+- the typed completion status is `USER_DECISION_REQUIRED` (scope, architecture, acceptance, evidence, or threat-model expansion): ask the user; no correction is spawned until an explicit decision; `expansion_pending` is non-spawnable;
+- lifecycle/authority is uncertain (lock owner uncertain/unavailable, malformed history, `REVIEW_PROJECT_AUTHORITY_CHANGED`) or TBR terminalization fails (`TBR_WRITE_BLOCKED`): fail closed, append no false terminal outcome;
+- repeated non-substantive stalls or residual re-slices with no substantive new work keep the bounded stall breaker per **gate and plan**;
+- any rejection would expand the approved threat model, acceptance criteria, evidence matrix, or architecture rather than repair a defect inside the approved contract: stop immediately; do not wait for any threshold;
+- a G9, release, or project-boundary decision is required.
+
+Rate-limit aborts and format/stall recovery with no substantive new work do not increment these counters.
 - Reset a gate's counters only after that gate approves or the user explicitly selects a new contract.
 
 When stopped, summarize user-visible progress, elapsed/rework cost when known, and the new obligations. Ask the user to choose exactly one: **(1) simplify/retain the approved contract, (2) accept and document residual risk, or (3) continue hardened remediation with an explicit cost warning**. Record the decision as an `OpDecision` before continuing. This circuit breaker overrides automatic `route_to: orchestrator`, backward auto-proceed, and adjacent-finding churn in every execution mode.
 
 ### Lifecycle-tracked review policy
 
-Each lifecycle-tracked review gate has its own executable aggregate policy: `critic`, `code-review`, `security`, and `qa` independently use initial → correction1 → review1 → correction2 → review2. Families, slices, remediations, and hardened choices aggregate within that gate only; a transition, approval, or exhaustion in one gate never consumes, closes, resets, or raises another gate's budget. Maximum three reviewer dispatches and two corrections per gate. Approval closes that gate. `review2` rejection remains returned uncertainty (`TBR_WRITE_BLOCKED`), so no correction3, review3, or fourth reviewer. No declared-mode split, legacy second-rejection override, or user choice may raise or reset a gate's budget. Nontracked review guidance remains unchanged.
+Each lifecycle-tracked review gate has its own executable aggregate policy: `critic`, `code-review`, `security`, and `qa` independently use initial → correction1 → review1 → correction2 → review2. Families, slices, remediations, and hardened choices aggregate within that gate only; a transition, approval, or exhaustion in one gate never consumes, closes, resets, or raises another gate's budget. Maximum three reviewer dispatches and two corrections per gate. Approval closes that gate. A valid `review2` in-contract rejection archives every remaining active and immediate finding, completes `closed`, and returns the typed status `CLOSED_WITH_TBR` — the gate advances exactly once, so no correction3, review3, or fourth reviewer exists. The typed completion status is authoritative over contradictory ROUTING text, and the ordinary rejection count alone never asks the user. No declared-mode split, legacy second-rejection override, or user choice may raise or reset a gate's budget. Nontracked review guidance remains unchanged.
 
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 

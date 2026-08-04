@@ -28,9 +28,9 @@ Existing lifecycle locks are never removed automatically from a stale owner obse
 
 ## Final rejection and returned uncertainty
 
-After review 2 rejects, PIDEX does not dispatch correction 3, review 3, or a fourth reviewer. If structured TBR serialization is unavailable at that point, PIDEX keeps durable returned uncertainty with `TBR_WRITE_BLOCKED`.
+After review 2 rejects, PIDEX terminalizes automatically: every remaining active and immediate finding is archived, the lifecycle completes `closed`, and the typed status is `CLOSED_WITH_TBR`. The gate advances exactly once; PIDEX never dispatches correction 3, review 3, or a fourth reviewer, and the ordinary rejection count alone never asks the user.
 
-This does not mean PIDEX automatically closes every TBR record. TBR serialization remains a separate operation and must succeed independently.
+`TBR_WRITE_BLOCKED` remains only a persistence/validation failure: if the TBR archive write or lifecycle validation cannot complete, PIDEX fails closed with the typed `TBR_WRITE_BLOCKED` status and appends no false terminal outcome; a same-identity retry resumes idempotently. Terminalization is automatic and durable, not a separate user-visible step.
 
 ## Interruptions and provider attempts
 

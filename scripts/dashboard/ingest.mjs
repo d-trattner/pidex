@@ -7,12 +7,13 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ANALYTICS = path.join(ROOT, 'dashboard');
 const DEFAULT_DB = path.join(ANALYTICS, 'data', 'pidex.sqlite');
 const PROVIDER_HISTORICAL_PATHS = ['claude', 'gemini', 'openrouter', 'spark'];
-const STATE_DIR = process.env.RUNNING_PI_STATE_DIR || path.join(ROOT, 'state');
+const STATE_DIR = resolveStateRoot({ root: ROOT });
 const METRICS_DIR = path.join(STATE_DIR, 'metrics');
 const PIPELINE_EVENTS_DIR = path.join(STATE_DIR, 'pipeline-events');
 

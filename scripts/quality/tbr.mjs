@@ -65,6 +65,9 @@ function safeFile(dir, name, limit = 8192) {
   if (path.basename(name) !== name) fail('TBR_PATH_INVALID');
   const file = path.join(dir, name), stat = lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > limit || path.dirname(realpathSync(file)) !== dir) fail(stat.size > limit ? 'TBR_ITEM_TOO_LARGE' : 'TBR_PATH_INVALID');
+  // Plan 059 Slice 3 (AD-5): a hardlinked retained item cannot smuggle foreign
+  // bytes under a canonical stable identity — fail closed on nlink > 1.
+  if (stat.nlink > 1) fail('TBR_PATH_INVALID');
   return file;
 }
 function optionalSafeFile(dir, name, limit = 8192) { return existsSync(path.join(dir, name)) ? safeFile(dir, name, limit) : null; }
@@ -98,7 +101,7 @@ function atomicWrite(dir, name, textBody, replace = false, limit = 8192) {
   const temporary = `${target}.${process.pid}.tmp`; writeFileSync(temporary, textBody, { mode: 0o600, flag: 'wx' }); renameSync(temporary, target);
   if (readFileSync(safeFile(dir, name, limit), 'utf8') !== textBody) fail('TBR_WRITE_FAILED');
 }
-function renderIndex(items) { const rows = [...items].sort((left, right) => left.stableTbrId.localeCompare(right.stableTbrId)).map((item) => `| ${item.stableTbrId} | ${item.status} | ${item.title} | ${item.findingClass} | ${item.proposedSeverity} | ${item.originPlan} | ${item.originGate} |`).join('\n'); return `# TBR Archive\n\n| ID | Status | Title | Class | Severity | Plan | Gate |\n|---|---|---|---|---|---|---|\n${rows}\n`; }
+export function renderIndex(items) { const rows = [...items].sort((left, right) => left.stableTbrId.localeCompare(right.stableTbrId)).map((item) => `| ${item.stableTbrId} | ${item.status} | ${item.title} | ${item.findingClass} | ${item.proposedSeverity} | ${item.originPlan} | ${item.originGate} |`).join('\n'); return `# TBR Archive\n\n| ID | Status | Title | Class | Severity | Plan | Gate |\n|---|---|---|---|---|---|---|\n${rows}\n`; }
 function writeIndex(root, items) { const dir = secureDir(root, ['wiki', 'tbr']); optionalSafeFile(dir, 'index.md', Infinity); atomicWrite(dir, 'index.md', renderIndex(items), true, Infinity); }
 function candidateName(stableTbrId) { return `${stableTbrId}.md`; }
 function candidateBody(item, promotedAt) { return `---\nStatus: Interview\nstableTbrId: ${item.stableTbrId}\nsourceTbr: [[../../tbr/items/${item.file.slice(0, -3)}]]\npromotedAt: ${promotedAt}\n---\n`; }
@@ -108,6 +111,49 @@ function readCandidate(dir, stableTbrId) {
   if (!match || !text(match[3], 40)) fail('TBR_COLLISION'); return { stableTbrId: match[1], source: match[2], promotedAt: match[3], body };
 }
 function codeFor(error) { return ['TBR_INVALID', 'TBR_ITEM_INVALID', 'TBR_ITEM_TOO_LARGE', 'TBR_PATH_INVALID', 'TBR_UNSAFE_CONTENT', 'TBR_COLLISION'].includes(error?.code) ? error.code : 'TBR_WRITE_FAILED'; }
+
+// Plan 059 Slice 3 (AD-5): canonical read-only item enumeration for a PIDEX-owned
+// wiki/tbr tree (items directory only, no index verification) reused by archive
+// carry reconciliation to regenerate the union index over staged items. Accepts
+// only canonical item trees; tampered items, duplicate stable IDs, symlinked or
+// untrusted components, and oversized items fail closed with the TBR_* taxonomy.
+export function readTbrTreeItems(root) {
+  const safeRoot = canonicalRoot(root);
+  const tbrDir = path.join(safeRoot, 'wiki', 'tbr');
+  if (!existsSync(tbrDir)) return new Map();
+  const tbrStat = lstatSync(tbrDir);
+  if (!tbrStat.isDirectory() || tbrStat.isSymbolicLink() || realpathSync(tbrDir) !== tbrDir) fail('TBR_PATH_INVALID');
+  const itemDir = path.join(tbrDir, 'items');
+  if (!existsSync(itemDir)) return new Map();
+  const itemStat = lstatSync(itemDir);
+  if (!itemStat.isDirectory() || itemStat.isSymbolicLink() || realpathSync(itemDir) !== itemDir) fail('TBR_PATH_INVALID');
+  return readCanonicalItems(itemDir);
+}
+
+// Plan 059 Slice 3 (AD-5): canonical read-only validator for a PIDEX-owned
+// wiki/tbr tree (items + index) reused by archive carry validation. Accepts only
+// canonical trees; stale indexes, tampered items, duplicate stable IDs, and
+// symlinked/untrusted components fail closed with the existing TBR_* taxonomy.
+// No directory is created and no bytes are written.
+export function validateTbrTree(root) {
+  try {
+    const items = readTbrTreeItems(root);
+    const safeRoot = canonicalRoot(root);
+    const tbrDir = path.join(safeRoot, 'wiki', 'tbr');
+    if (existsSync(tbrDir)) {
+      const indexFile = path.join(tbrDir, 'index.md');
+      if (existsSync(indexFile)) {
+        const indexStat = lstatSync(indexFile);
+        if (!indexStat.isFile() || indexStat.isSymbolicLink() || realpathSync(indexFile) !== indexFile) fail('TBR_PATH_INVALID');
+        if (readFileSync(indexFile, 'utf8') !== renderIndex(items.values())) fail('TBR_INDEX_INVALID');
+      }
+    }
+    return { ok: true, items };
+  } catch (error) {
+    if (error?.code && String(error.code).startsWith('TBR_')) throw error;
+    throw Object.assign(new Error('TBR_INDEX_INVALID'), { code: 'TBR_INDEX_INVALID' });
+  }
+}
 export function writeTbr({ root, identity, findings }) {
   try {
     if (!validIdentity(identity) || !Array.isArray(findings) || findings.length > 20) fail('TBR_INVALID');
@@ -117,7 +163,15 @@ export function writeTbr({ root, identity, findings }) {
     const safeRoot = canonicalRoot(root), dir = secureDir(safeRoot, ['wiki', 'tbr', 'items']), canonical = readCanonicalItems(dir); let created = false; const items = [];
     for (const candidate of requested) {
       const existing = canonical.get(candidate.stableTbrId);
-      if (existing) { for (const field of ['stableTbrId', 'originPlan', 'originRun', 'originGate', 'sourceFindingId']) if (existing[field] !== candidate[field]) fail('TBR_COLLISION'); items.push(existing); continue; }
+      if (existing) {
+        // Plan 059 Slice 2 (AD-4/R1): full canonical byte dedup. Same stable ID must
+        // render identical bytes; createdAt is first-write-bound (the retry reuses the
+        // stored value so crash retry stays idempotent), so the candidate is compared
+        // with the existing record's createdAt. Any other byte difference fails closed
+        // with TBR_COLLISION instead of silently keeping the first copy.
+        if (renderTbrItem(existing) !== renderTbrItem({ ...candidate, createdAt: existing.createdAt })) fail('TBR_COLLISION');
+        items.push(existing); continue;
+      }
       const file = `${candidate.stableTbrId}-${slug(candidate.title)}.md`; atomicWrite(dir, file, renderTbrItem(candidate)); const stored = { ...candidate, file }; canonical.set(candidate.stableTbrId, stored); items.push(stored); created = true;
     }
     writeIndex(safeRoot, canonical.values()); return { ok: true, created, items };

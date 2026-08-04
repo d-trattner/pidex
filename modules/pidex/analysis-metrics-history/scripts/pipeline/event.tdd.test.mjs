@@ -24,6 +24,47 @@ assert.equal(foldReviewHistory([{ event_type: 'start_reserved', metadata: tuple 
 assert.equal(foldReviewHistory([{ event_type: 'start_reserved', metadata: tuple }, { event_type: 'start_reserved', metadata: { ...tuple, attemptId: 'attempt-002' } }], tuple).status, 'denied');
 assert.deepEqual(foldReviewHistory([{ event_type: 'review_outcome', metadata: { ...tuple, verdict: 'APPROVED' } }], tuple), { status: 'terminal', terminal: 'accepted' });
 
+// Plan 059 Slice 2 — dual legacy/new fold sequences selected by discriminator types[3].
+const row = (event_type, metadata) => ({ event_type, metadata });
+const s2receipt = (overrides = {}) => ({ ...tuple, artifactDigest: 'a'.repeat(64), outcomeDigest: 'b'.repeat(64), intendedOutcome: 'APPROVED', tbrIds: ['TBR-0123456789ab'], ...overrides });
+const s2new = (intendedOutcome = 'APPROVED', base = tuple, after = []) => [row('start_reserved', base), row('spawn_entered', base), row('spawn_accepted', base), row('completion_prepared', s2receipt({ ...base, intendedOutcome, tbrIds: intendedOutcome === 'APPROVED' ? ['TBR-0123456789ab'] : [] })), ...after];
+const s2complete = (outcome, base = tuple) => s2new(outcome, base, [row('spawn_returned', base), row('review_outcome', { ...base, outcome })]);
+// New sequence: prepared-only (length 4) is resumable, never uncertain.
+assert.deepEqual(foldReviewHistory(s2new(), tuple), { status: 'prepared', nextMode: 'initial' }, 'prepared-only receipt state is resumable');
+// New sequence: prepared + returned, missing outcome (length 5) is resumable.
+assert.deepEqual(foldReviewHistory(s2new('APPROVED', tuple, [row('spawn_returned', tuple)]), tuple), { status: 'prepared', nextMode: 'initial' }, 'prepared+returned without outcome is resumable');
+// New sequence length 6: receipt intendedOutcome must equal final review outcome.
+assert.deepEqual(foldReviewHistory(s2complete('APPROVED'), tuple), { status: 'terminal', terminal: 'accepted' }, 'prepared six-event approval terminals accepted');
+// New sequence length 6: receipt/outcome disagreement fails closed.
+assert.equal(foldReviewHistory(s2new('APPROVED', tuple, [row('spawn_returned', tuple), row('review_outcome', { ...tuple, outcome: 'CHANGES_REQUESTED' })]), tuple).status, 'denied', 'receipt intendedOutcome must agree with final outcome');
+// New sequence length 6: initial rejection advances to correction1.
+assert.deepEqual(foldReviewHistory(s2complete('CHANGES_REQUESTED'), { ...tuple, reviewMode: 'correction1' }), { status: 'allowed', nextMode: 'correction1' }, 'prepared initial rejection advances one correction');
+// New sequence length 6: review2 closed terminals (full mode chain required).
+const s2chain = (finalMode, finalOutcome) => [
+  ...['initial', 'correction1', 'review1', 'correction2'].flatMap((mode) => s2complete(mode === 'initial' ? 'CHANGES_REQUESTED' : mode === 'correction1' ? 'READY_FOR_REVIEW' : mode === 'review1' ? 'CHANGES_REQUESTED' : 'SUBMITTED', { ...tuple, reviewMode: mode, attemptId: `attempt-${mode}` })),
+  ...s2complete(finalOutcome, { ...tuple, reviewMode: finalMode, attemptId: `attempt-${finalMode}` }),
+];
+assert.deepEqual(foldReviewHistory(s2chain('review2', 'closed'), { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2' }), { status: 'terminal', terminal: 'closed' }, 'prepared review2 rejection terminals closed');
+// Legacy five-event full chain with review2 closed still terminals without receipt.
+const legacyChain = [
+  ...['initial', 'correction1', 'review1', 'correction2'].flatMap((mode) => [row('start_reserved', { ...tuple, reviewMode: mode, attemptId: `attempt-${mode}` }), row('spawn_entered', { ...tuple, reviewMode: mode, attemptId: `attempt-${mode}` }), row('spawn_accepted', { ...tuple, reviewMode: mode, attemptId: `attempt-${mode}` }), row('spawn_returned', { ...tuple, reviewMode: mode, attemptId: `attempt-${mode}` }), row('review_outcome', { ...tuple, reviewMode: mode, attemptId: `attempt-${mode}`, outcome: mode === 'initial' ? 'CHANGES_REQUESTED' : mode === 'correction1' ? 'READY_FOR_REVIEW' : mode === 'review1' ? 'CHANGES_REQUESTED' : 'SUBMITTED' })]),
+  ...[row('start_reserved', { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2' }), row('spawn_entered', { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2' }), row('spawn_accepted', { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2' }), row('spawn_returned', { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2' }), row('review_outcome', { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2', outcome: 'closed' })],
+];
+assert.deepEqual(foldReviewHistory(legacyChain, { ...tuple, reviewMode: 'review2', attemptId: 'attempt-review2' }), { status: 'terminal', terminal: 'closed' }, 'legacy five-event review2 closed still terminals');
+// New sequence length 6: USER_DECISION_REQUIRED folds to non-spawnable expansion_pending.
+assert.deepEqual(foldReviewHistory(s2complete('USER_DECISION_REQUIRED'), tuple), { status: 'expansion_pending' }, 'expansion completion folds non-spawnable');
+// Legacy five-event sequences remain unchanged (no receipt agreement requirement).
+assert.deepEqual(foldReviewHistory([row('start_reserved', tuple), row('spawn_entered', tuple), row('spawn_accepted', tuple), row('spawn_returned', tuple), row('review_outcome', { ...tuple, outcome: 'APPROVED' })], tuple), { status: 'terminal', terminal: 'accepted' }, 'legacy five-event approval still terminals');
+// Legacy four-event unprepared uncertainty is preserved.
+assert.deepEqual(foldReviewHistory([row('start_reserved', tuple), row('spawn_entered', tuple), row('spawn_accepted', tuple), row('spawn_returned', tuple)], tuple), { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' }, 'legacy four-event returned uncertainty unchanged');
+// Legacy history carrying USER_DECISION_REQUIRED without a receipt is invalid (receipt required).
+assert.equal(foldReviewHistory([row('start_reserved', tuple), row('spawn_entered', tuple), row('spawn_accepted', tuple), row('spawn_returned', tuple), row('review_outcome', { ...tuple, outcome: 'USER_DECISION_REQUIRED' })], tuple).status, 'denied', 'expansion outcome without receipt is invalid');
+// Differing duplicate receipts fail closed; identical duplicate receipts collapse.
+assert.equal(foldReviewHistory(s2new().concat([row('completion_prepared', s2receipt({ intendedOutcome: 'CHANGES_REQUESTED' }))]), tuple).status, 'denied', 'differing duplicate receipt fails closed');
+assert.deepEqual(foldReviewHistory(s2new().concat([row('completion_prepared', s2receipt())]), tuple), { status: 'prepared', nextMode: 'initial' }, 'identical duplicate receipt collapses');
+// New sequence with an unexpected seventh event is invalid.
+assert.equal(foldReviewHistory([...s2complete('APPROVED').slice(0, 5), row('review_outcome', { ...tuple, outcome: 'CHANGES_REQUESTED' }), row('review_outcome', { ...tuple, outcome: 'APPROVED' })], tuple).status, 'denied', 'extra event beyond six-event sequence denied');
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const script = path.join(root, 'modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs');
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-pipeline-event-'));

@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { resolveStateRoot } from '../../lib/state-root.mjs';
 
 function parse(argv) {
   const out = { project: 'unknown', plan: 'unknown-plan', agent: 'unknown', provider: 'unknown', model: '', projectMode: '', inputTokens: '0', outputTokens: '0', durationMs: '0', exitCode: '0', source: 'manual', fallbackFrom: '', logFile: '', finalTextChars: '0' };
@@ -16,7 +17,7 @@ function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-
 function asInt(value, fallback = 0) { const n = Math.trunc(Number(value)); return Number.isFinite(n) ? n : fallback; }
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
-const stateDir = process.env.RUNNING_PI_STATE_DIR || path.join(root, 'state');
+const stateDir = resolveStateRoot({ root });
 const pricingFile = process.env.RUNNING_PI_PRICING_FILE || path.join(root, 'config', 'pricing.json');
 const args = parse(process.argv.slice(2));
 const allowNonCodex = String(process.env.PIDEX_RECORD_ALL_PROVIDERS || '0').toLowerCase();

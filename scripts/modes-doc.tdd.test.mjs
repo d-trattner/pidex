@@ -153,8 +153,8 @@ test('orchestrator enforces proportional minimal runs and a cumulative loop brea
   assert.match(pidexSkill, /minimal v1.*MVP.*small.*simple.*cheap.*quick.*single-lane/s);
   assert.match(pidexSkill, /one authoritative primary critic and one authoritative primary code reviewer/);
   assert.match(pidexSkill, /new threat tier, acceptance criterion, proof matrix, instrumentation subsystem, or evidence contract is \*\*scope expansion\*\*/);
-  assert.match(pidexSkill, /second rejection at the same gate/);
-  assert.match(pidexSkill, /second residual re-slice at the same gate/);
+  assert.doesNotMatch(pidexSkill, /second rejection at the same gate/, 'Plan 059 Slice 4: valid in-contract rejections auto-route the two bounded corrections; ordinary rejection count alone never asks the user');
+  assert.match(pidexSkill, /repeated non-substantive stalls or residual re-slices with no substantive new work keep the bounded stall breaker/, 'Plan 059 Slice 4: the bounded stall breaker remains for repeated non-substantive stalls per gate and plan');
   assert.match(pidexSkill, /simplify\/retain the approved contract.*accept and document residual risk.*continue hardened remediation/s);
   assert.match(pidexSkill, /circuit breaker overrides automatic `route_to: orchestrator`/);
   assert.match(parallelAgents, /Explicit proportional language.*minimal v1.*MVP.*single-lane.*suppresses these optional generic secondary lanes/s);

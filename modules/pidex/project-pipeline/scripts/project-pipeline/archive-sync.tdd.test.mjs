@@ -1,12 +1,146 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync, linkSync, unlinkSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { classifyArchivePath, projectArchiveLockPath, resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
+import { writeTbr } from '../../../../../scripts/quality/tbr.mjs';
+import { acquireProjectTbrLock, projectTbrLockPath, releaseProjectTbrLock } from '../../../analysis-metrics-history/lib/tbr-lock.mjs';
+
+const tbrIdentity = { planId: 'plan-059', runFamilyId: 'family-s3-carry', reviewGate: 'code-review' };
+const tbrFinding = { findingId: 'F-carry-immediate', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Carry immediate finding', shortDescription: 'Deferred from current gate.', originEpic: 'initiative-059', reviewArtifact: 'agents.output/code-review/059.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot extend current gate.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
+function syncStateDir(pidexRoot) { return process.env.RUNNING_PI_STATE_DIR ? path.resolve(process.env.RUNNING_PI_STATE_DIR) : path.join(path.resolve(pidexRoot), 'state'); }
+function archiveInventory(archiveRoot) {
+  const files = [];
+  function walk(rel) {
+    const full = path.join(archiveRoot, rel);
+    if (!existsSync(full)) return;
+    for (const entry of readdirSync(full, { withFileTypes: true })) {
+      const child = path.join(rel, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.isFile()) files.push(child.replaceAll('\\', '/'));
+    }
+  }
+  for (const prefix of ['agents.output', 'wiki']) walk(prefix);
+  return files.sort();
+}
+function seedArchiveWithTbr(pidexRoot, projectId) {
+  const archive = resolveArchiveRoot({ pidexRoot, projectId });
+  const workspace = tmp();
+  write(path.join(workspace, 'wiki/index.md'), '# wiki\n');
+  const seeded = writeTbr({ root: workspace, identity: tbrIdentity, findings: [tbrFinding] });
+  assert.equal(seeded.ok, true);
+  const first = syncProjectArchive({ workspace, pidexRoot, projectId });
+  assert.equal(first.ok, true);
+  return { archive, itemFile: seeded.items[0].file, itemBytes: readFileSync(path.join(archive, 'wiki', 'tbr', 'items', seeded.items[0].file)) };
+}
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-pipeline-archive-')); }
 function write(file, text) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, text); }
+
+test('archive sync carries PIDEX-owned wiki/tbr across full replacement with fresh report hashes and inventory equality', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-tbr-carry';
+  const archive = resolveArchiveRoot({ pidexRoot, projectId });
+  const workspace = tmp();
+  write(path.join(workspace, 'wiki/index.md'), '# wiki\n');
+  const seeded = writeTbr({ root: workspace, identity: tbrIdentity, findings: [tbrFinding] });
+  assert.equal(seeded.ok, true);
+  assert.equal(syncProjectArchive({ workspace, pidexRoot, projectId }).ok, true, 'first sync publishes workspace wiki/tbr');
+  const carriedPath = `wiki/tbr/items/${seeded.items[0].file}`;
+
+  const workspace2 = tmp();
+  write(path.join(workspace2, 'wiki/index.md'), '# wiki 2\n');
+  const second = syncProjectArchive({ workspace: workspace2, pidexRoot, projectId });
+  assert.equal(second.ok, true, 'second sync with no workspace wiki/tbr still succeeds');
+  assert.equal(existsSync(path.join(archive, carriedPath)), true, 'carried TBR item survives full archive replacement');
+  assert.equal(existsSync(path.join(archive, 'wiki/tbr/index.md')), true, 'carried TBR index survives full archive replacement');
+  const report = JSON.parse(readFileSync(path.join(archive, 'archive-sync-report.json'), 'utf8'));
+  const itemEntry = report.copied.find((entry) => entry.path === carriedPath);
+  assert.ok(itemEntry, 'carried TBR item enters unchanged report schema copied inventory');
+  const freshBytes = readFileSync(path.join(archive, carriedPath));
+  assert.equal(itemEntry.size, freshBytes.length, 'carried report size is fresh over staged bytes');
+  assert.equal(itemEntry.sha256, createHash('sha256').update(freshBytes).digest('hex'), 'carried report hash is fresh over staged bytes');
+  const indexEntry = report.copied.find((entry) => entry.path === 'wiki/tbr/index.md');
+  assert.ok(indexEntry && /^[a-f0-9]{64}$/.test(indexEntry.sha256), 'carried TBR index enters report.copied with fresh hash');
+  assert.equal(indexEntry.size, readFileSync(path.join(archive, 'wiki/tbr/index.md')).length, 'carried index report size matches staged bytes');
+  assert.deepEqual(report.copied.map((entry) => entry.path).sort(), archiveInventory(archive), 'Project Mirror inventory equality holds with carried TBRs (unchanged report schema)');
+
+  const workspace3 = tmp();
+  write(path.join(workspace3, 'wiki/index.md'), '# wiki 3\n');
+  assert.equal(syncProjectArchive({ workspace: workspace3, pidexRoot, projectId }).ok, true, 'third sync persists carried TBRs again');
+  assert.equal(existsSync(path.join(archive, carriedPath)), true, 'carried TBR persists across subsequent syncs');
+  assert.equal(existsSync(projectTbrLockPath({ stateDir: syncStateDir(pidexRoot), project: archive })), false, 'project TBR lock released after sync');
+});
+
+test('workspace and carried same stable TBR identity with different canonical bytes aborts and preserves previous archive', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-tbr-conflict';
+  const { archive, itemFile } = seedArchiveWithTbr(pidexRoot, projectId);
+  const carriedBytes = readFileSync(path.join(archive, 'wiki', 'tbr', 'items', itemFile), 'utf8');
+  const workspace2 = tmp();
+  write(path.join(workspace2, 'wiki/index.md'), '# wiki 2\n');
+  const changed = { ...tbrFinding, title: 'Different canonical bytes for the same stable identity' };
+  assert.equal(writeTbr({ root: workspace2, identity: tbrIdentity, findings: [changed] }).ok, true);
+  const second = syncProjectArchive({ workspace: workspace2, pidexRoot, projectId });
+  assert.equal(second.ok, false, 'same stable identity with different canonical bytes aborts publication');
+  assert.match(second.error, /tbr workspace conflict/, 'conflict error names the stable identity clash');
+  assert.equal(readFileSync(path.join(archive, 'wiki', 'tbr', 'items', itemFile), 'utf8'), carriedBytes, 'previous archive TBR bytes preserved authoritative');
+});
+
+test('unsafe retained TBR content aborts publication and leaves previous archive authoritative', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-tbr-unsafe';
+  for (const [label, mutate, expected] of [
+    ['tampered item', (itemDir, itemPath) => { writeFileSync(itemPath, '---\ntampered\n---\n'); }, /TBR_ITEM_INVALID/],
+    ['stale index', (itemDir, itemPath, archive) => { writeFileSync(path.join(archive, 'wiki', 'tbr', 'index.md'), 'stale index\n'); }, /TBR_INDEX_INVALID/],
+    ['hardlinked item', (itemDir, itemPath) => { const extra = path.join(itemDir, 'hardlink-extra.md'); linkSync(itemPath, extra); }, /TBR_PATH_INVALID/],
+    ['oversized item', (itemDir, itemPath) => { writeFileSync(itemPath, readFileSync(itemPath) + 'x'.repeat(9000)); }, /TBR_ITEM_TOO_LARGE/],
+    ['collision', (itemDir, itemPath) => { const name = path.basename(itemPath); const twin = path.join(itemDir, name.replace(/-carry-immediate-finding\.md$/, '-other-title.md')); writeFileSync(twin, readFileSync(itemPath)); }, /TBR_COLLISION/],
+  ]) {
+    const { archive, itemFile } = seedArchiveWithTbr(pidexRoot, `pp-tbr-unsafe-${projectId}-${label.replace(/[^a-z0-9]+/gi, '-')}`);
+    const itemDir = path.join(archive, 'wiki', 'tbr', 'items');
+    const itemPath = path.join(itemDir, itemFile);
+    mutate(itemDir, itemPath, archive);
+    const ws = tmp();
+    write(path.join(ws, 'wiki/index.md'), '# wiki next\n');
+    const result = syncProjectArchive({ workspace: ws, pidexRoot, projectId: `pp-tbr-unsafe-${projectId}-${label.replace(/[^a-z0-9]+/gi, '-')}` });
+    assert.equal(result.ok, false, `${label} aborts publication`);
+    assert.match(result.error, expected, `${label} fails closed with TBR taxonomy`);
+    assert.equal(existsSync(path.join(archive, 'wiki', 'tbr', 'items', itemFile)), true, `${label} leaves previous archive authoritative`);
+  }
+
+  const { archive, itemFile } = seedArchiveWithTbr(pidexRoot, 'pp-tbr-unsafe-symlink');
+  const outside = tmp();
+  write(path.join(outside, 'symlinked-item.md'), 'outside\n');
+  rmSync(path.join(archive, 'wiki', 'tbr', 'items'), { recursive: true, force: true });
+  symlinkSync(outside, path.join(archive, 'wiki', 'tbr', 'items'), 'dir');
+  const ws = tmp();
+  write(path.join(ws, 'wiki/index.md'), '# wiki next\n');
+  const result = syncProjectArchive({ workspace: ws, pidexRoot, projectId: 'pp-tbr-unsafe-symlink' });
+  assert.equal(result.ok, false, 'symlinked retained TBR items directory aborts publication');
+  assert.match(result.error, /TBR_PATH_INVALID/);
+});
+
+test('archive sync acquires the project TBR lock before the archive lock and fails closed on contention', () => {
+  const pidexRoot = tmp();
+  const projectId = 'pp-tbr-lock-order';
+  const { archive } = seedArchiveWithTbr(pidexRoot, projectId);
+  const stateDir = syncStateDir(pidexRoot);
+  const held = acquireProjectTbrLock({ stateDir, project: archive, lockTimeoutMs: 5000 });
+  assert.equal(held.held, true, 'test holder acquires the shared project TBR lock');
+  try {
+    const result = syncProjectArchive({ workspace: tmp(), pidexRoot, projectId, lockTimeoutMs: 100 });
+    assert.equal(result.ok, false, 'contended project TBR lock fails closed');
+    assert.match(result.error, /REVIEW_TBR_LOCK_(UNAVAILABLE|UNCERTAIN)/);
+    assert.equal(existsSync(projectArchiveLockPath({ pidexRoot, projectId })), false, 'archive lock is never created when the project TBR lock is contended');
+  } finally { releaseProjectTbrLock(held.lock); }
+  const ws = tmp();
+  write(path.join(ws, 'wiki/index.md'), '# wiki again\n');
+  assert.equal(syncProjectArchive({ workspace: ws, pidexRoot, projectId }).ok, true, 'sync proceeds once the project TBR lock is released');
+  assert.equal(existsSync(projectTbrLockPath({ stateDir, project: archive })), false, 'project TBR lock is released after the sync');
+});
 
 test('classifyArchivePath blocks executable and secret-like paths case-insensitively', () => {
   assert.equal(classifyArchivePath('agents.output/qa/report.md').ok, true);

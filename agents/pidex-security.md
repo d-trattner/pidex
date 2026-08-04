@@ -10,6 +10,7 @@ color: red
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-security/index.md` to load active process rules.
+For every lifecycle-tracked primary review completion, load `<pidex-root>/rules/shared/structured-review-outcome.md` and place exactly one bounded `pidex-review-outcome-v1` block in the exact assigned artifact; corrections carry no structured payload.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-security.md`, read that too.
 
 # Mission Statement

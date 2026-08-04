@@ -63,6 +63,16 @@ These features are not always part of the source-changing agent path, but they a
 ## Intentional differences
 
 - Host-direct should remain the least-boundary, lowest-overhead mode. Do not add mandatory preview, module-rule injection, or orchestration bottlenecks to host-direct unless a concrete feature requires them.
+
+## PIDEX runtime state root
+
+All PIDEX runtime state (runs, metrics, pipeline events, orchestrator events, history, project archives, TBR serialization locks) resolves through one shared resolver with a single supported override. Precedence: `PIDEX_STATE_DIR` > `RUNNING_PI_STATE_DIR` > `<root>/state`.
+
+- `PIDEX_STATE_DIR` is the canonical override and takes precedence.
+- `RUNNING_PI_STATE_DIR` remains a legacy alias honored only when the canonical variable is unset.
+- With neither variable set, the default is `<root>/state` (the PIDEX package root).
+
+The same precedence applies in every execution mode (host-direct, hardened-pipeline, project-pipeline) and to every consumer — host lifecycle extension, pipeline event stream, operator CLI, dashboard ingest, metrics record, and the project TBR serialization lock — so host lifecycle, CLI, and terminalization can never diverge under a single supported override.
 - Project Pipeline managed preview is mode-native because the app runs inside Docker and needs registry-owned port/URL handling.
 - Hardened-pipeline should use Docker as a programming harness only; host source remains main, and source changes copy back only after approval.
 - Hardened-pipeline managed preview is wanted as a host-project helper, not as proof that the Docker harness owns runtime preview state.

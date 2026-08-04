@@ -12,6 +12,18 @@ const requiredModules = new Set([
   'modules/pidex/analysis-metrics-history/lib/project-key.mjs',
   'modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs',
   'modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs',
+  // Plan 059 closure: shared TBR serialization lock, state-root resolver, and the
+  // Project Pipeline archive/registry helpers imported by the lifecycle boundary.
+  'modules/pidex/analysis-metrics-history/lib/tbr-lock.mjs',
+  'modules/pidex/analysis-metrics-history/lib/state-root.mjs',
+  'modules/pidex/project-pipeline/scripts/project-pipeline/archive-sync.mjs',
+  'modules/pidex/project-pipeline/scripts/project-pipeline/registry.mjs',
+]);
+// Plan 059 closure: canonical TBR/finding validators imported by event.mjs through
+// the structured completion boundary must ship with the package.
+const requiredScripts = new Set([
+  'scripts/quality/tbr.mjs',
+  'scripts/quality/structured-review.mjs',
 ]);
 
 function packageRootFor(specifier) {
@@ -50,10 +62,13 @@ test('published tarball contains exact lifecycle closure and imports with real i
     const report = JSON.parse(packed.stdout)[0];
     const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
     assert.equal(report.version, manifest.version);
-    assert.ok(report.unpackedSize < 700_000, `unpacked package budget exceeded: ${report.unpackedSize}`);
+    assert.ok(report.unpackedSize < 900_000, `unpacked package budget exceeded: ${report.unpackedSize}`);
     const modulePaths = report.files.map((item) => item.path).filter((item) => item.startsWith('modules/'));
     assert.deepEqual(new Set(modulePaths), requiredModules);
     assert.equal(modulePaths.length, requiredModules.size, 'module closure contains duplicate or unexpected entries');
+    const scriptPaths = report.files.map((item) => item.path).filter((item) => item.startsWith('scripts/quality/'));
+    assert.deepEqual(new Set(scriptPaths), requiredScripts, 'quality validator closure must ship for the lifecycle boundary import');
+    assert.equal(scriptPaths.length, requiredScripts.size, 'quality validator closure contains duplicate or unexpected entries');
     for (const item of report.files) {
       assert.equal(path.isAbsolute(item.path), false);
       assert.equal(item.path.split(/[\\/]/).includes('..'), false);

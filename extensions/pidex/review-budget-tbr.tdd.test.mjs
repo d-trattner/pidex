@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
@@ -39,6 +39,11 @@ await runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex',
 assert.deepEqual(ordinaryAttempts, [['pi', undefined], ['pi', 'pi'], ['codex', 'pi']], 'ordinary invalid Pi completion retries Pi then configured fallback');
 const eventBase = (stateDir, project) => path.join(stateDir, 'pipeline-events', canonicalProjectIdentity(project).projectKey);
 const bindCurrent = (stateDir, project, pipelineId, planId = 'plan-038') => { const base = eventBase(stateDir, project); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, `${planId}.current`), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(project).canonicalProject, pipeline_id: pipelineId, plan_key: planId })}\n`, { flag: 'a' }); };
+const structuredActiveFinding = { findingId: 'F-structured-active', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: true, severity: 'High', disposition: 'active' };
+const structuredTerminalActiveFinding = { ...structuredActiveFinding, title: 'Terminal assigned finding', shortDescription: 'Assigned finding needs archive proof before terminal close.', originEpic: 'initiative-059', reviewArtifact: 'agents.output/code-review/059.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'Terminal close preserves active finding evidence.', nextAnalysisOrDisconfirmingTest: 'Read terminal archive item.' };
+const structuredImmediateFinding = { findingId: 'F-structured-immediate', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Structured immediate finding', shortDescription: 'Deferred from current gate.', originEpic: 'initiative-059', reviewArtifact: 'agents.output/code-review/059.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot extend current gate.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
+const structuredPayload = (overrides = {}) => ({ schemaVersion: 'pidex-review-outcome-v1', verdict: 'REJECTED', contractDisposition: 'in_contract', findings: [structuredActiveFinding, structuredImmediateFinding], ...overrides });
+const structuredFenced = (value) => `# review evidence\n\n\`\`\`pidex-review-outcome-v1\n${JSON.stringify(value)}\n\`\`\`\n`;
 assert.equal(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }).allowed, true);
 assert.deepEqual(admitReviewDispatch('pidex-code-reviewer', identity, { status: 'allowed' }), { allowed: true });
 assert.equal(admitReviewDispatch('pidex-implementer', { ...identity, reviewMode: 'initial' }, { status: 'allowed' }).allowed, false);
@@ -51,7 +56,7 @@ const hostState = mkdtempSync(path.join(os.tmpdir(), 'pidex-host-review-state-')
 const hostProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-host-review-project-'));
 const hostContext = path.join(hostProject, 'agents.output', 'code-review', '038.md');
 mkdirSync(path.dirname(hostContext), { recursive: true });
-writeFileSync(hostContext, '# review\n');
+writeFileSync(hostContext, structuredFenced(structuredPayload()));
 bindCurrent(hostState, hostProject, 'host-pipeline');
 let hostChildren = 0;
 const hostOptions = {
@@ -88,7 +93,7 @@ try {
   const context = path.join(interruptedProject, 'agents.output', 'code-review', '038.md');
   mkdirSync(base, { recursive: true });
   mkdirSync(path.dirname(context), { recursive: true });
-  writeFileSync(context, '# review\n');
+  writeFileSync(context, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
   const resetRoot = (pipelineId) => {
     for (const name of readdirSync(base)) if (name.endsWith('.jsonl')) rmSync(path.join(base, name));
     bindCurrent(interruptedState, interruptedProject, pipelineId);
@@ -189,7 +194,7 @@ try {
   const pipelineId = 'family-16725';
   const contextFile = path.join(extendedPlanProject, 'agents.output', 'review', '16725.md');
   mkdirSync(path.dirname(contextFile), { recursive: true });
-  writeFileSync(contextFile, '# review evidence\n');
+  writeFileSync(contextFile, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
   bindCurrent(extendedPlanState, extendedPlanProject, pipelineId, 'plan-16725');
   let extendedPlanChildren = 0;
   const options = {
@@ -222,7 +227,7 @@ try {
   mkdirSync(lifecycleBase, { recursive: true });
   mkdirSync(path.dirname(lifecycleContext), { recursive: true });
   bindCurrent(lifecycleState, lifecycleProject, lifecyclePipeline);
-  writeFileSync(lifecycleContext, '# context\n');
+  writeFileSync(lifecycleContext, structuredFenced(structuredPayload()));
   const lifecycleOptions = {
     agentCwd: lifecycleProject,
     reviewLifecycle: { stateDir: lifecycleState, pipelineId: 'ignored-for-derived-identity' },
@@ -240,11 +245,15 @@ try {
   assert.match(initial.finalText, /REJECTED/);
   const correction = await executeHostAgentBoundary({ agent: 'pidex-implementer', task: 'Plan 038 correction' }, lifecycleOptions);
   assert.match(correction.finalText, /COMPLETE/);
+  writeFileSync(lifecycleContext, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
   const review1 = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 review1' }, lifecycleOptions);
   assert.match(review1.finalText, /APPROVED/);
   assert.equal(lifecycleChildren, 3, 'omitted tuples must derive one normal rejection/correction/review chain');
   const lifecycleRows = readFileSync(path.join(lifecycleBase, `${lifecyclePipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.planId === 'plan-038');
-  assert.deepEqual(lifecycleRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome', 'start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome', 'start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
+  // Plan 059 Slice 2 (AD-1): uniform fixed-position completion_prepared receipt for
+  // every new lifecycle completion — after spawn_accepted, before spawn_returned.
+  const s2Completion = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome'];
+  assert.deepEqual(lifecycleRows.map((row) => row.event_type), [...s2Completion, ...s2Completion, ...s2Completion]);
   assert.deepEqual(lifecycleRows.filter((row) => row.event_type === 'review_outcome').map((row) => row.metadata.outcome), ['CHANGES_REQUESTED', 'READY_FOR_REVIEW', 'APPROVED']);
   const rowsBeforeRejects = lifecycleRows.length;
   await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 partial', planId: 'plan-038' }, lifecycleOptions), /REVIEW_IDENTITY_INVALID/);
@@ -287,9 +296,12 @@ try {
   assert.equal(duplicate.created, false);
   const secondFinding = { ...rejected.value.immediateTbr[0], findingId: 'F-3', title: 'Second finding' };
   assert.equal(writeTbr({ root, identity, findings: [secondFinding] }).ok, true);
-  assert.equal(writeTbr({ root, identity, findings: [{ ...rejected.value.immediateTbr[0], title: 'Renamed finding' }] }).ok, true);
+  // Plan 059 Slice 2 (AD-4/R1): full canonical byte dedup — same stable ID with
+  // different canonical bytes fails closed with TBR_COLLISION instead of silently
+  // keeping the first copy (old 5-field identity-subset behavior).
+  assert.deepEqual(writeTbr({ root, identity, findings: [{ ...rejected.value.immediateTbr[0], title: 'Renamed finding' }] }), { ok: false, code: 'TBR_COLLISION' });
   const itemFiles = readdirSync(path.join(root, 'wiki/tbr/items')).sort();
-  assert.equal(itemFiles.length, 2, 'stable ID lookup must ignore retry slug changes');
+  assert.equal(itemFiles.length, 2, 'byte-colliding retry preserves the original item set');
   const index = readFileSync(path.join(root, 'wiki/tbr/index.md'), 'utf8');
   assert.match(index, /Deferred finding/);
   assert.match(index, /Second finding/);
@@ -359,7 +371,10 @@ let ppChildren = 0;
 const ppLifecycle = { stateDir: ppState, pipelineId: 'pp-pipeline', project: ppProject };
 const ppContext = path.join(ppProject, 'agents.output', 'code-review', '038.md');
 mkdirSync(path.dirname(ppContext), { recursive: true });
-writeFileSync(ppContext, '# review\n');
+// Plan 059 Slice 3 (req 1): Project Pipeline primary reviews now complete through the
+// canonical structured boundary — the exact assigned artifact must carry the
+// pidex-review-outcome-v1 payload (parity with host-direct).
+writeFileSync(ppContext, structuredFenced(structuredPayload()));
 bindCurrent(ppState, ppProject, 'pp-pipeline');
 const ppChild = () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' });
 try {
@@ -384,11 +399,16 @@ try {
   mkdirSync(path.dirname(ppCompletionContext), { recursive: true });
   mkdirSync(ppCompletionBase, { recursive: true });
   bindCurrent(ppCompletionState, ppCompletionProject, ppCompletionPipeline);
-  writeFileSync(ppCompletionContext, '# review\n');
+  // Plan 059 Slice 3 (req 1): PP primary reviews complete through the canonical
+  // structured boundary; the assigned artifact carries the structured payload
+  // (clean approval: no active findings) and the ROUTING verdict agrees.
+  writeFileSync(ppCompletionContext, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
   const ppResult = executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 direct review' }, { stateDir: ppCompletionState, pipelineId: 'ignored-for-derived-identity', project: ppCompletionProject, projectId: 'pp-unchanged', resolveCurrentProject: () => ppCompletionProject }, () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' }));
   assert.match(ppResult.finalText, /APPROVED/);
   const ppRows = readFileSync(path.join(ppCompletionBase, `${ppCompletionPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.planId === 'plan-038');
-  assert.deepEqual(ppRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome']);
+  // Plan 059 Slice 2 (AD-1): uniform completion_prepared receipt for every new
+  // lifecycle completion, including the Project Pipeline legacy ROUTING path.
+  assert.deepEqual(ppRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']);
 } finally { rmSync(ppCompletionState, { recursive: true, force: true }); rmSync(ppCompletionProject, { recursive: true, force: true }); }
 
 for (const explicitIdentity of [false, true]) {
@@ -523,7 +543,7 @@ try {
   mkdirSync(base, { recursive: true });
   writeFileSync(path.join(base, 'plan-038.current'), 'family-slug');
   writeFileSync(path.join(base, 'family-slug.jsonl'), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(slugProject).canonicalProject, pipeline_id: 'family-slug', plan_key: 'plan-038' })}\n`);
-  writeFileSync(context, '# context\n');
+  writeFileSync(context, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
   const result = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 review' }, {
     agentCwd: slugProject,
     reviewLifecycle: { stateDir: slugState, pipelineId: 'ignored' },
@@ -577,6 +597,14 @@ const resetDirectRoot = (pipelineId) => { const base = eventBase(directArtifactS
 try {
   mkdirSync(path.dirname(directArchive), { recursive: true });
   writeFileSync(directArchive, '# archive\n');
+  // Plan 059 Slice 3 (req 1): the direct PP boundary reads the exact assigned
+  // artifact from the canonical project root (the archive-mount in the direct
+  // flow) through the structured completion boundary — the artifact must carry
+  // the pidex-review-outcome-v1 payload. The archive_context_file path check
+  // (isDirectReviewContext) remains the authority for the reported archive path.
+  const directProjectContext = path.join(directArtifactProject, directExpected);
+  mkdirSync(path.dirname(directProjectContext), { recursive: true });
+  writeFileSync(directProjectContext, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
   resetDirectRoot('direct-artifact');
   const result = executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-artifact', project: directArtifactProject }, () => directResult());
   assert.equal(result.context_file, directExpected, 'direct reviewer accepts only exact canonical archived context');
@@ -600,6 +628,106 @@ try {
   resetDirectRoot('direct-routing-mismatch');
   assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-routing-mismatch', project: directArtifactProject }, () => directResult({ routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/other.md' } })), /REVIEW_ROUTING_INVALID/);
 } finally { rmSync(directArtifactState, { recursive: true, force: true }); rmSync(directArtifactProject, { recursive: true, force: true }); }
+
+// Plan 059 Slice 3 (req 1/2): Project Pipeline primary reviews complete through the
+// canonical structured boundary — freshly revalidated registry authority, exact
+// archived assigned artifact, post-child authority-change guard preserved, typed
+// reviewCompletion parity with host-direct. Host-authority PP writes TBRs only
+// beneath the canonical registered host root under the project TBR lock.
+const ppStructuredState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-structured-host-state-'));
+const ppStructuredHost = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-structured-host-project-'));
+const ppStructuredHostPipeline = 'family-pp-structured-host';
+const ppHostArchive = path.join(ppStructuredState, 'project-archives', 'pp-host-wired', 'agents.output', 'code-review', '059.md');
+try {
+  const hostContext = path.join(ppStructuredHost, 'agents.output', 'code-review', '059.md');
+  mkdirSync(path.dirname(hostContext), { recursive: true });
+  bindCurrent(ppStructuredState, ppStructuredHost, ppStructuredHostPipeline, 'plan-038');
+  writeFileSync(hostContext, structuredFenced(structuredPayload({ verdict: 'REJECTED' })));
+  mkdirSync(path.dirname(ppHostArchive), { recursive: true });
+  writeFileSync(ppHostArchive, structuredFenced(structuredPayload({ verdict: 'REJECTED' })));
+  const ppHostResult = executeProjectPipelineReviewBoundary(
+    { agent: 'pidex-code-reviewer', ...identity, projectId: 'pp-host-wired', expectedOutputPath: 'agents.output/code-review/059.md' },
+    { stateDir: ppStructuredState, pipelineId: ppStructuredHostPipeline, project: ppStructuredHost, projectId: 'pp-host-wired', resolveCurrentProject: () => ppStructuredHost },
+    () => ({ exitCode: 0, archive_sync_status: 'complete', context_file: 'agents.output/code-review/059.md', archive_context_file: ppHostArchive, routing: { verdict: 'REJECTED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/059.md' } }),
+  );
+  assert.equal(ppHostResult.reviewCompletion.status, 'CHANGES_REQUESTED', 'PP host-authority completion surfaces typed CHANGES_REQUESTED (parity with host-direct)');
+  assert.equal(ppHostResult.reviewCompletion.tbrIds.length, 1, 'PP host-authority typed result carries the stable TBR ID');
+  const hostTbrDir = path.join(ppStructuredHost, 'wiki', 'tbr', 'items');
+  assert.equal(readdirSync(hostTbrDir).length, 1, 'host-authority PP writes TBR only beneath the canonical registered host root');
+  assert.match(readFileSync(path.join(hostTbrDir, readdirSync(hostTbrDir)[0]), 'utf8'), /^sourceFindingId: F-structured-immediate$/m, 'host TBR item is the exact canonical rendered item');
+} finally { rmSync(ppStructuredState, { recursive: true, force: true }); rmSync(ppStructuredHost, { recursive: true, force: true }); }
+
+// Plan 059 Slice 3 (req 1/3/6): archive-only Project Pipeline completion holds the
+// project TBR lock then the external archive lock (global order), writes TBRs only
+// beneath the freshly registry-derived archive root, and fails closed when the
+// canonical project is not the registered archive authority (no cwd/custom/URL
+// fallback can become TBR authority).
+const ppArchivePidexRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-structured-archive-pidex-'));
+// Production shape: stateDir === <pidexRoot>/state. The registry-derived archive
+// authority lives beneath <pidexRoot>/state/project-archives (resolveArchiveRoot /
+// lifecycle.mjs record.archive.path), which is also what the direct-context check
+// (isDirectReviewContext: stateDir/project-archives/...) expects — one authority.
+const ppArchiveState = path.join(ppArchivePidexRoot, 'state');
+const ppArchiveRoot = path.join(ppArchiveState, 'project-archives', 'pp-archive-wired');
+const ppArchivePipeline = 'family-pp-structured-archive';
+const ppArchiveArtifact = path.join(ppArchiveRoot, 'agents.output', 'code-review', '059.md');
+try {
+  mkdirSync(path.dirname(ppArchiveArtifact), { recursive: true });
+  writeFileSync(ppArchiveArtifact, structuredFenced(structuredPayload({ verdict: 'REJECTED' })));
+  bindCurrent(ppArchiveState, ppArchiveRoot, ppArchivePipeline, 'plan-038');
+  const ppArchiveResult = executeProjectPipelineReviewBoundary(
+    { agent: 'pidex-code-reviewer', ...identity, projectId: 'pp-archive-wired', expectedOutputPath: 'agents.output/code-review/059.md' },
+    { stateDir: ppArchiveState, pipelineId: ppArchivePipeline, project: ppArchiveRoot, projectId: 'pp-archive-wired', archiveAuthority: { pidexRoot: ppArchivePidexRoot, projectId: 'pp-archive-wired' }, resolveCurrentProject: () => ppArchiveRoot },
+    () => ({ exitCode: 0, archive_sync_status: 'complete', context_file: 'agents.output/code-review/059.md', archive_context_file: ppArchiveArtifact, routing: { verdict: 'REJECTED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/059.md' } }),
+  );
+  assert.equal(ppArchiveResult.reviewCompletion.status, 'CHANGES_REQUESTED', 'PP archive-only completion surfaces typed CHANGES_REQUESTED');
+  assert.equal(ppArchiveResult.reviewCompletion.tbrIds.length, 1, 'PP archive-only typed result carries the stable TBR ID');
+  const archiveTbrDir = path.join(ppArchiveRoot, 'wiki', 'tbr', 'items');
+  assert.equal(readdirSync(archiveTbrDir).length, 1, 'archive-only PP writes TBR only beneath the registry-derived archive root');
+  assert.match(readFileSync(path.join(archiveTbrDir, readdirSync(archiveTbrDir)[0]), 'utf8'), /^sourceFindingId: F-structured-immediate$/m, 'archive TBR item is the exact canonical rendered item');
+  // Fresh registry authority, no fallback: a canonical project that is not the
+  // registered archive root fails closed before any completion event or TBR write.
+  const foreignProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-foreign-project-'));
+  try {
+    bindCurrent(ppArchiveState, foreignProject, 'family-pp-foreign', 'plan-038');
+    assert.throws(() => executeProjectPipelineReviewBoundary(
+      { agent: 'pidex-code-reviewer', ...identity, projectId: 'pp-archive-wired', expectedOutputPath: 'agents.output/code-review/059.md' },
+      { stateDir: ppArchiveState, pipelineId: 'family-pp-foreign', project: foreignProject, projectId: 'pp-archive-wired', archiveAuthority: { pidexRoot: ppArchivePidexRoot, projectId: 'pp-archive-wired' }, resolveCurrentProject: () => foreignProject },
+      () => ({ exitCode: 0, archive_sync_status: 'complete', context_file: 'agents.output/code-review/059.md', archive_context_file: ppArchiveArtifact, routing: { verdict: 'REJECTED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/059.md' } }),
+    ), /REVIEW_PROJECT_AUTHORITY_CHANGED/, 'archive authority mismatch fails closed at the PP boundary (fresh registry re-derivation, no cwd/custom fallback)');
+    assert.equal(existsSync(path.join(foreignProject, 'wiki', 'tbr')), false, 'no TBR bytes ever land outside the registered archive authority');
+  } finally { rmSync(foreignProject, { recursive: true, force: true }); }
+} finally { rmSync(ppArchiveState, { recursive: true, force: true }); }
+
+// Plan 059 Slice 3 (req 1): corrections remain compatible — they carry no structured
+// payload and keep the legacy ROUTING path with the uniform receipt.
+const ppCorrectionState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-correction-state-'));
+const ppCorrectionProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-correction-project-'));
+try {
+  const correctionBase = eventBase(ppCorrectionState, ppCorrectionProject);
+  mkdirSync(correctionBase, { recursive: true });
+  bindCurrent(ppCorrectionState, ppCorrectionProject, 'family-pp-correction', 'plan-038');
+  const seed = { ...identity, reviewMode: 'initial', attemptId: 'attempt-pp-seed' };
+  assert.equal(reserveReviewStart({ stateDir: ppCorrectionState, project: ppCorrectionProject, pipelineId: 'family-pp-correction', identity: seed, start: () => 'child' }).status, 'accepted');
+  assert.equal(recordReviewCompletion({ stateDir: ppCorrectionState, project: ppCorrectionProject, pipelineId: 'family-pp-correction', identity: seed, outcome: 'CHANGES_REQUESTED' }).status, 'CHANGES_REQUESTED');
+  const correction = { ...identity, reviewMode: 'correction1', attemptId: 'attempt-pp-correction' };
+  // Direct PP correction flow requires the full archived-result shape (context_file,
+  // archive_sync_status, archive_context_file) for the isDirectReviewContext check
+  // even though corrections complete through the legacy ROUTING path (no structured
+  // payload, no reviewCompletion).
+  const ppCorrectionArchive = path.join(ppCorrectionState, 'project-archives', 'pp-correct', 'agents.output', 'code-review', '059.md');
+  mkdirSync(path.dirname(ppCorrectionArchive), { recursive: true });
+  writeFileSync(ppCorrectionArchive, '# corrected\n');
+  const ppCorrectionResult = executeProjectPipelineReviewBoundary(
+    { agent: 'pidex-implementer', ...correction, projectId: 'pp-correct', expectedOutputPath: 'agents.output/code-review/059.md' },
+    { stateDir: ppCorrectionState, pipelineId: 'family-pp-correction', project: ppCorrectionProject, projectId: 'pp-correct', resolveCurrentProject: () => ppCorrectionProject },
+    () => ({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-code-reviewer\ncontext_file: agents.output/code-review/059.md\n-->', archive_sync_status: 'complete', context_file: 'agents.output/code-review/059.md', archive_context_file: ppCorrectionArchive, routing: { verdict: 'COMPLETE', route_to: 'pidex-code-reviewer', context_file: 'agents.output/code-review/059.md' } }),
+  );
+  assert.match(ppCorrectionResult.finalText, /COMPLETE/);
+  assert.equal(ppCorrectionResult.reviewCompletion, undefined, 'corrections keep the legacy contract: no structured reviewCompletion');
+  const correctionRows = readFileSync(path.join(correctionBase, 'family-pp-correction.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.attemptId === 'attempt-pp-correction');
+  assert.deepEqual(correctionRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome'], 'corrections complete with the uniform six-event receipt sequence');
+} finally { rmSync(ppCorrectionState, { recursive: true, force: true }); rmSync(ppCorrectionProject, { recursive: true, force: true }); }
 
 const aggregateState = mkdtempSync(path.join(os.tmpdir(), 'pidex-aggregate-review-state-'));
 const aggregateProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-aggregate-review-project-'));
@@ -673,5 +801,116 @@ try {
   assert.deepEqual([...new Set(correction2Rows.map((row) => `${row.metadata.runFamilyId}|${row.metadata.attemptId}`))], ['contender-a|attempt-contender-a-correction2'], 'root stream has one durable correction2 tuple');
   assert.deepEqual(reserveReviewStart({ stateDir: aggregateState, project: path.join(aggregateProject, 'missing'), pipelineId: 'ignored', identity: tuple('bad-canonical', 'initial'), start: () => 'child' }), { status: 'denied', code: 'REVIEW_CANONICAL_PROJECT_UNAVAILABLE' }, 'canonical project failure fails closed');
 } finally { rmSync(aggregateState, { recursive: true, force: true }); rmSync(aggregateProject, { recursive: true, force: true }); }
+
+// Plan 059 Slice 1 — host-direct tracer reads the exact assigned artifact payload.
+const structuredHostState = mkdtempSync(path.join(os.tmpdir(), 'pidex-structured-host-state-'));
+const structuredHostProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-structured-host-project-'));
+const structuredContext = path.join(structuredHostProject, 'agents.output', 'code-review', '059.md');
+const structuredBase = eventBase(structuredHostState, structuredHostProject);
+const s1Identity = (family) => ({ runFamilyId: family, planId: 'plan-059', reviewGate: 'code-review', reviewMode: 'initial', attemptId: `attempt-${family}` });
+const s1Reset = (pipelineId) => { mkdirSync(structuredBase, { recursive: true }); for (const name of readdirSync(structuredBase)) if (name.endsWith('.jsonl')) rmSync(path.join(structuredBase, name)); bindCurrent(structuredHostState, structuredHostProject, pipelineId, 'plan-059'); const wiki = path.join(structuredHostProject, 'wiki'); if (readdirSync(structuredHostProject).includes('wiki')) rmSync(wiki, { recursive: true, force: true }); };
+const s1Rows = (pipelineId, family) => readFileSync(path.join(structuredBase, `${pipelineId}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.planId === 'plan-059' && row.metadata?.runFamilyId === family);
+const s1Tbr = () => { const dir = path.join(structuredHostProject, 'wiki', 'tbr', 'items'); try { return readdirSync(dir).sort(); } catch { return []; } };
+let s1Children = 0;
+const s1Options = (pipelineId) => ({
+  agentCwd: structuredHostProject,
+  reviewLifecycle: { stateDir: structuredHostState, pipelineId },
+  loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+  resolveSandboxState: () => ({ enabled: false }),
+  runConfigured: async (params) => { s1Children += 1; params.onProcessStarted?.(); return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/059.md\n-->', stderr: '' }; },
+});
+try {
+  mkdirSync(path.dirname(structuredContext), { recursive: true });
+  // ROUTING/structured-verdict mismatch fails closed before any completion event.
+  s1Reset('family-s1-mismatch');
+  writeFileSync(structuredContext, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 verdict mismatch', ...s1Identity('family-s1-mismatch') }, s1Options('family-s1-mismatch')), /STRUCTURED_ROUTING_MISMATCH/);
+  assert.equal(s1Rows('family-s1-mismatch', 'family-s1-mismatch').some((row) => row.event_type === 'review_outcome'), false, 'mismatch appends no review outcome');
+
+  // Missing structured payload fails closed: prompt-only classification is not load-bearing.
+  s1Reset('family-s1-missing');
+  writeFileSync(structuredContext, '# prose-only review\n');
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 missing payload', ...s1Identity('family-s1-missing') }, s1Options('family-s1-missing')), /STRUCTURED_OUTCOME_MISSING/);
+  assert.equal(s1Rows('family-s1-missing', 'family-s1-missing').some((row) => row.event_type === 'review_outcome'), false, 'missing payload appends no review outcome');
+
+  // In-contract rejected host review archives immediate findings and completes
+  // CHANGES_REQUESTED with the uniform six-event receipt sequence (AD-1).
+  s1Reset('family-s1-rejected');
+  writeFileSync(structuredContext, structuredFenced(structuredPayload()));
+  const rejectedHost = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 rejected review', ...s1Identity('family-s1-rejected') }, s1Options('family-s1-rejected'));
+  assert.match(rejectedHost.finalText, /REJECTED/);
+  assert.deepEqual(s1Rows('family-s1-rejected', 'family-s1-rejected').map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome'], 'uniform six-event completion with fixed-position receipt');
+  assert.equal(s1Rows('family-s1-rejected', 'family-s1-rejected').at(-1).metadata.outcome, 'CHANGES_REQUESTED');
+  const rejectedReceipt = s1Rows('family-s1-rejected', 'family-s1-rejected').find((row) => row.event_type === 'completion_prepared').metadata;
+  assert.equal(rejectedReceipt.intendedOutcome, 'CHANGES_REQUESTED', 'receipt binds intended outcome');
+  assert.match(rejectedReceipt.artifactDigest, /^[a-f0-9]{64}$/, 'receipt binds the exact assigned-artifact digest');
+  assert.match(rejectedReceipt.outcomeDigest, /^[a-f0-9]{64}$/, 'receipt binds the canonical completion digest');
+  assert.equal(rejectedReceipt.tbrIds.length, 1, 'receipt binds the archived stable TBR ID');
+  assert.match(s1Tbr().map((name) => readFileSync(path.join(structuredHostProject, 'wiki', 'tbr', 'items', name), 'utf8')).join(''), /^sourceFindingId: F-structured-immediate$/m, 'host rejection archives the immediate finding');
+  // Plan 059 Slice 2 (item 7): typed completion status surfaced on the host boundary
+  // result for the Slice 4 policy consumer (SKILL policy untouched here).
+  assert.equal(rejectedHost.reviewCompletion.status, 'CHANGES_REQUESTED', 'typed completion status surfaces to the policy consumer');
+
+  // Expansion completes durably (AD-7): typed USER_DECISION_REQUIRED, six-event receipt
+  // sequence, zero TBR, non-spawnable expansion_pending fold. Retry resumes without a child.
+  s1Reset('family-s1-expansion');
+  writeFileSync(structuredContext, structuredFenced(structuredPayload({ contractDisposition: 'scope_expansion', findings: [structuredActiveFinding] })));
+  const expansionHost = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 expansion review', ...s1Identity('family-s1-expansion') }, s1Options('family-s1-expansion'));
+  assert.deepEqual(s1Rows('family-s1-expansion', 'family-s1-expansion').map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome'], 'expansion records durable returned review truth with the uniform receipt');
+  assert.equal(s1Rows('family-s1-expansion', 'family-s1-expansion').at(-1).metadata.outcome, 'USER_DECISION_REQUIRED');
+  const expansionReceipt = s1Rows('family-s1-expansion', 'family-s1-expansion').find((row) => row.event_type === 'completion_prepared').metadata;
+  assert.equal(expansionReceipt.intendedOutcome, 'USER_DECISION_REQUIRED', 'expansion receipt binds intended outcome');
+  assert.deepEqual(expansionReceipt.tbrIds, [], 'expansion receipt binds empty TBR IDs');
+  assert.deepEqual(s1Tbr(), [], 'expansion writes no TBR archive');
+  assert.equal(expansionHost.reviewCompletion.status, 'USER_DECISION_REQUIRED', 'expansion typed status surfaces to the policy consumer');
+  assert.equal(expansionHost.reviewCompletion.disposition, 'scope_expansion', 'expansion disposition surfaces with the typed status');
+  const s1ChildrenAfterExpansion = s1Children;
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 expansion retry', ...s1Identity('family-s1-expansion') }, s1Options('family-s1-expansion')), /REVIEW_DISPATCH_RESUMED/, 'expansion leaves the review non-spawnable: retry resumes without a child');
+  assert.equal(s1Children, s1ChildrenAfterExpansion, 'expansion spawns zero additional children and never a correction');
+
+  // Review2 terminal rejection through the host boundary: CLOSED_WITH_TBR typed result
+  // surfaced for the Slice 4 policy consumer, all findings archived, lifecycle closed.
+  const terminalState = mkdtempSync(path.join(os.tmpdir(), 'pidex-s2-terminal-host-state-'));
+  const terminalProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-s2-terminal-host-project-'));
+  const terminalContext = path.join(terminalProject, 'agents.output', 'code-review', '059.md');
+  const terminalBase = eventBase(terminalState, terminalProject);
+  mkdirSync(path.dirname(terminalContext), { recursive: true });
+  let terminalChildren = 0;
+  const terminalOptions = (mode) => ({
+    agentCwd: terminalProject,
+    reviewLifecycle: { stateDir: terminalState, pipelineId: 'terminal-host' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => {
+      terminalChildren += 1;
+      params.onProcessStarted?.();
+      const isCorrection = params.agent === 'pidex-implementer';
+      return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: isCorrection
+        ? '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-code-reviewer\ncontext_file: agents.output/code-review/059.md\n-->'
+        : `<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/059.md\n-->`, stderr: '' };
+    },
+  });
+  try {
+    mkdirSync(terminalBase, { recursive: true });
+    bindCurrent(terminalState, terminalProject, 'terminal-host', 'plan-059');
+    for (const mode of ['initial', 'correction1', 'review1', 'correction2']) {
+      if (!mode.startsWith('correction')) writeFileSync(terminalContext, structuredFenced(structuredPayload({ verdict: 'REJECTED' })));
+      const agent = mode.startsWith('correction') ? 'pidex-implementer' : 'pidex-code-reviewer';
+      await executeHostAgentBoundary({ agent, task: `Plan 059 ${mode}`, ...s1Identity('family-terminal'), reviewMode: mode, attemptId: `attempt-terminal-${mode}` }, terminalOptions(mode));
+    }
+    writeFileSync(terminalContext, structuredFenced(structuredPayload({ verdict: 'REJECTED', findings: [structuredTerminalActiveFinding, structuredImmediateFinding] })));
+    const terminalHost = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 review2 terminal', ...s1Identity('family-terminal'), reviewMode: 'review2', attemptId: 'attempt-terminal-review2' }, terminalOptions('review2'));
+    assert.match(terminalHost.finalText, /REJECTED/);
+    assert.equal(terminalHost.reviewCompletion.status, 'CLOSED_WITH_TBR', 'review2 terminal typed status surfaces to the policy consumer');
+    assert.equal(terminalHost.reviewCompletion.tbrIds.length, 2, 'typed result carries both stable TBR IDs');
+    const terminalRows = readFileSync(path.join(terminalBase, 'terminal-host.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.attemptId === 'attempt-terminal-review2');
+    assert.equal(terminalRows.at(-1).metadata.outcome, 'closed', 'review2 rejection lifecycle outcome is closed');
+    assert.equal(terminalRows.find((row) => row.event_type === 'completion_prepared').metadata.intendedOutcome, 'closed', 'terminal receipt binds closed');
+    // Terminal retry through the host boundary folds terminal and resumes without a child.
+    const childrenBeforeTerminalRetry = terminalChildren;
+    await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 059 review2 terminal retry', ...s1Identity('family-terminal'), reviewMode: 'review2', attemptId: 'attempt-terminal-review2' }, terminalOptions('review2')), /REVIEW_DISPATCH_RESUMED/, 'terminal retry resumes without a second child');
+    assert.equal(terminalChildren, childrenBeforeTerminalRetry, 'terminal retry spawns zero additional children');
+  } finally { rmSync(terminalState, { recursive: true, force: true }); rmSync(terminalProject, { recursive: true, force: true }); }
+} finally { rmSync(structuredHostState, { recursive: true, force: true }); rmSync(structuredHostProject, { recursive: true, force: true }); }
 
 console.log('review budget TBR tests passed');
