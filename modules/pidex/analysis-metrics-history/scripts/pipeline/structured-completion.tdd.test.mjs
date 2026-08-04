@@ -28,6 +28,7 @@ const SIX_EVENTS = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'comple
 
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-s2-state-'));
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-s2-project-'));
+const outsideDirectory = mkdtempSync(path.join(os.tmpdir(), 'pidex-s2-outside-dir-'));
 const eventsBase = path.join(state, 'pipeline-events', canonicalProjectIdentity(project).projectKey);
 const bindCurrent = (pipelineId) => { mkdirSync(eventsBase, { recursive: true }); for (const name of readdirSync(eventsBase)) if (name.endsWith('.jsonl')) rmSync(path.join(eventsBase, name)); writeFileSync(path.join(eventsBase, 'plan-059.current'), pipelineId); writeFileSync(path.join(eventsBase, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(project).canonicalProject, pipeline_id: pipelineId, plan_key: 'plan-059' })}\n`); };
 const resetTbr = () => { const wiki = path.join(project, 'wiki'); if (readdirSync(project).includes('wiki')) rmSync(wiki, { recursive: true, force: true }); };
@@ -247,16 +248,22 @@ try {
   fresh('family-contention-a');
   const contentionProject = project;
   const contentionState = state;
-  const childSource = `import { completeStructuredReviewOutcome, reserveReviewStart } from ${JSON.stringify(new URL('../../lib/review-lifecycle.mjs', import.meta.url).href)}; import { mkdirSync, writeFileSync } from 'node:fs'; import path from 'node:path'; const [stateDir, project, pipelineId, identityJson, verdict, artifactPath, artifact] = process.argv.slice(1); mkdirSync(path.join(project, path.dirname(artifactPath)), { recursive: true }); writeFileSync(path.join(project, artifactPath), artifact); const identity = JSON.parse(identityJson); const reservation = reserveReviewStart({ stateDir, project, pipelineId, identity, start: () => 'child' }); if (reservation.status !== 'accepted') { console.log(JSON.stringify(reservation)); process.exit(0); } const result = completeStructuredReviewOutcome({ stateDir, project, pipelineId, identity, artifactPath, routingVerdict: verdict, routeTo: 'pidex-implementer' }); console.log(JSON.stringify(result));`;
-  const runContender = (family, gate, artifactPath, artifact) => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['--input-type=module', '--eval', childSource, contentionState, contentionProject, 'family-contention-a', JSON.stringify({ ...base, runFamilyId: family, reviewGate: gate, attemptId: `attempt-${family}` }), 'REJECTED', artifactPath, artifact], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const childSource = `import { completeStructuredReviewOutcome } from ${JSON.stringify(new URL('../../lib/review-lifecycle.mjs', import.meta.url).href)}; const [stateDir, project, pipelineId, identityJson, artifactPath] = process.argv.slice(1); const identity = JSON.parse(identityJson); const result = completeStructuredReviewOutcome({ stateDir, project, pipelineId, identity, artifactPath, routingVerdict: 'REJECTED', routeTo: 'pidex-implementer' }); console.log(JSON.stringify(result));`;
+  const runContender = (identity, artifactPath) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '--eval', childSource, contentionState, contentionProject, 'family-contention-a', JSON.stringify(identity), artifactPath], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; let error = '';
     child.stdout.on('data', (chunk) => { output += chunk; }); child.stderr.on('data', (chunk) => { error += chunk; });
     child.on('error', reject); child.on('close', (code) => resolve({ code, output, error }));
   });
   const contendingFinding = (id) => ({ findingId: id, relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: `Contending finding ${id}`, shortDescription: 'Concurrent structured finding.', originEpic: 'initiative-059', reviewArtifact: 'agents.output/code-review/059.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot extend current gate.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' });
-  const contendA = runContender('family-contender-a', 'code-review', 'agents.output/code-review/059.md', fenced(payload({ findings: [active, contendingFinding('F-contender-a')] })));
-  const contendB = runContender('family-contender-b', 'security', 'agents.output/security/059.md', fenced(payload({ findings: [active, contendingFinding('F-contender-b')] })));
+  const contenderAIdentity = { ...base, runFamilyId: 'family-contention-a', reviewGate: 'code-review', attemptId: 'attempt-family-contender-a' };
+  const contenderBIdentity = { ...base, runFamilyId: 'family-contention-a', reviewGate: 'security', attemptId: 'attempt-family-contender-b' };
+  writeArtifact('agents.output/code-review/059.md', fenced(payload({ findings: [active, contendingFinding('F-contender-a')] })));
+  writeArtifact('agents.output/security/059.md', fenced(payload({ findings: [active, contendingFinding('F-contender-b')] })));
+  assert.equal(start(contenderAIdentity, 'family-contention-a').status, 'accepted', 'contender A reservation is established before the completion race');
+  assert.equal(start(contenderBIdentity, 'family-contention-a').status, 'accepted', 'contender B reservation is established before the completion race');
+  const contendA = runContender(contenderAIdentity, 'agents.output/code-review/059.md');
+  const contendB = runContender(contenderBIdentity, 'agents.output/security/059.md');
   const [resultA, resultB] = await Promise.all([contendA, contendB]);
   assert.equal(resultA.code, 0, resultA.error); assert.equal(resultB.code, 0, resultB.error);
   assert.equal(JSON.parse(resultA.output).status, 'CHANGES_REQUESTED', resultA.output);
@@ -412,7 +419,7 @@ try {
   const tbrFailure = { ...base, runFamilyId: 'family-tbr-failure', attemptId: 'attempt-tbr-failure' };
   assert.equal(start(tbrFailure, 'family-tbr-failure').status, 'accepted');
   writeArtifact('agents.output/code-review/059.md', fenced(payload()));
-  symlinkSync(outside, path.join(project, 'wiki'), 'dir');
+  symlinkSync(outsideDirectory, path.join(project, 'wiki'), process.platform === 'win32' ? 'junction' : 'dir');
   assert.deepEqual(complete(tbrFailure, 'family-tbr-failure', 'REJECTED'), { status: 'TBR_WRITE_BLOCKED', code: 'TBR_PATH_INVALID' }, 'TBR failure fails closed');
   assert.deepEqual(eventTypes('family-tbr-failure', tbrFailure.attemptId), ['start_reserved', 'spawn_entered', 'spawn_accepted'], 'TBR failure appends no completion events');
   rmSync(path.join(project, 'wiki'));
@@ -606,6 +613,6 @@ try {
       assert.deepEqual(readArtifactPortable(swapDir, swapArtifact, walked), { ok: false, code: 'REVIEW_ARTIFACT_CHANGED' }, 'path swapped after pre-lstat fails closed with dev+ino identity');
     } finally { rmSync(swapDir, { recursive: true, force: true }); }
   } finally { delete process.env.PIDEX_ARTIFACT_FORCE_PORTABLE_READ; }
-} finally { rmSync(state, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }); }
+} finally { rmSync(state, { recursive: true, force: true }); rmSync(project, { recursive: true, force: true }); rmSync(outsideDirectory, { recursive: true, force: true }); }
 
 console.log('structured completion boundary tests passed');
