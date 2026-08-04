@@ -120,7 +120,7 @@ for (const agent of REVIEWER_AGENTS) {
 // emits invalid output. The doc may not ship a template that validates as invalid.
 assert.doesNotMatch(shared, /\/tmp\/|\/home\/|C:\\Users/, 'producer contract example must not show absolute host paths');
 assertSingleProducerBlock(shared);
-assertSingleProducerBlock(shared.replace(/\n/g, '\r\n'));
+assertSingleProducerBlock(shared.replace(/\r?\n/g, '\r\n'));
 const duplicateProducer = [
   'header',
   '```pidex-review-outcome-v1',
