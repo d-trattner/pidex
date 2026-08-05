@@ -9,14 +9,13 @@ import { buildImage, DEFAULT_TAG, imageStatus } from './image.mjs';
 import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
-import { projectRunId, runProjectPipelineAgent } from './run-agent.mjs';
+import { projectPipelineRulePhase, projectRunId, renderProjectPipelineModuleRules, runProjectPipelineAgent } from './run-agent.mjs';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot } from './archive-sync.mjs';
 import { resolveProjectPipelineAuthority } from './project-authority.mjs';
 import { normalizePlan, recordPipelineEvent } from '../../../analysis-metrics-history/lib/review-lifecycle.mjs';
 import { isSafeSchema2VerdictRoute, loadPersistedSchema2EvidenceSnapshot, runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
-import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
 
 export const DEFAULT_PROJECT_PIPELINE_PHASES = Object.freeze([
   'pidex-planner',
@@ -49,17 +48,6 @@ const PHASE_OUTPUT_PREFIX = Object.freeze({
 });
 
 const BROWSER_SMOKE_REQUEST_SEGMENTS = Object.freeze({ 'pidex-qa': 'qa', 'pidex-uat': 'uat', 'pidex-devops': 'devops' });
-const AGENT_RULE_PHASE = Object.freeze({
-  'pidex-planner': 'planning',
-  'pidex-critic': 'critic-review',
-  'pidex-implementer': 'implementation',
-  'pidex-code-reviewer': 'code-review',
-  'pidex-security': 'security',
-  'pidex-qa': 'qa',
-  'pidex-uat': 'uat',
-  'pidex-devops': 'devops',
-});
-
 const PARALLEL_TRIGGER_BY_PRIMARY_AGENT = Object.freeze({
   'pidex-critic': 'after-plan',
   'pidex-code-reviewer': 'after-implementation',
@@ -246,10 +234,6 @@ export function buildPhaseTask({ phase, initialTask, previous, nextPhase, phaseI
   return lines.join('\n\n');
 }
 
-export function projectPipelineRulePhase(agent) {
-  return AGENT_RULE_PHASE[agent] || String(agent || '').replace(/^pidex-/, '');
-}
-
 function defaultEligibleParallelLanes({ pidexRoot, agent, trigger }) {
   const statusScript = path.join(pidexRoot, 'modules/pidex/parallel-agents/scripts/status.mjs');
   if (!existsSync(statusScript)) return [];
@@ -316,17 +300,7 @@ export function buildProjectPipelineAdjudicationTask({ trigger, primary, laneSum
   ].join('\n\n');
 }
 
-export function renderProjectPipelineModuleRules(options = {}) {
-  if (options.moduleRules === false) return '';
-  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
-  const context = { agent: options.agent, phase: projectPipelineRulePhase(options.agent), project: path.resolve(options.project || pidexRoot), mode: 'project-pipeline' };
-  if (options.moduleRuleRenderer) return options.moduleRuleRenderer({ ...options, ...context, pidexRoot }) || '';
-  const system = loadModuleSystem(pidexRoot);
-  const validation = validateSystem(system);
-  if (!validation.ok) throw new Error(`module validation failed for Project Pipeline rule injection: ${validation.errors.join('; ')}`);
-  if (!matchedAgentRules(system, context).length) return '';
-  return renderMatchedAgentRules(system, context, { maxBytes: options.maxBytes || 16 * 1024 }).trim();
-}
+export { projectPipelineRulePhase, renderProjectPipelineModuleRules };
 
 function walkJsonFiles(root, out = []) {
   if (!existsSync(root)) return out;
@@ -519,8 +493,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
   for (let i = 0; i < phases.length; i += 1) {
     const agent = phases[i];
     projectPipelineProgress(options, `running ${agent} (${i + 1}/${phases.length}) inside Project Sandbox`, { phase: agent, phase_index: i + 1, phase_count: phases.length, project_id: projectId });
-    const moduleRulesText = renderProjectPipelineModuleRules({ pidexRoot, agent, project: pidexRoot, moduleRules: options.moduleRules, moduleRuleRenderer: options.moduleRuleRenderer, maxBytes: options.moduleRulesMaxBytes });
-    const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length, moduleRulesText, projectId });
+    const task = buildPhaseTask({ phase: agent, initialTask: options.task || '', previous, nextPhase: phases[i + 1], phaseIndex: i, phaseCount: phases.length, projectId });
     let run;
     let retryCount = 0;
     const runAgentOnce = (phaseTask, extra = {}) => runProjectPipelineAgent({
@@ -532,6 +505,10 @@ export async function runProjectPipelineOrchestration(options = {}) {
       archiveWorkspace: options.archiveWorkspace,
       runner: options.runner,
       archiveCopyRunner: options.runner,
+      moduleRules: options.moduleRules,
+      moduleRuleRenderer: options.moduleRuleRenderer,
+      moduleSystem: options.moduleSystem,
+      moduleRulesMaxBytes: options.moduleRulesMaxBytes,
       ...extra,
     });
     try {

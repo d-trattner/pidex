@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildDockerExecArgs, diffWorkspaceManifests, extractRouting, normalizeExpectedArtifactPath, parseArgs, runProjectPipelineAgent, validateRouting } from './run-agent.mjs';
+import { buildDockerExecArgs, diffWorkspaceManifests, extractRouting, normalizeExpectedArtifactPath, parseArgs, prepareProjectPipelineAgentTask, runProjectPipelineAgent, validateRouting } from './run-agent.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
+import { loadModuleSystem } from '../../../../../scripts/modules/lib.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-run-agent-')); }
 function setup(root, id = 'pp-run-abc123') { const r = createProjectRecord({ project_id: id, name: 'demo' }); r.status = 'ready'; saveProjectRecord(root, r); return r; }
@@ -60,6 +61,12 @@ test('buildDockerExecArgs sets recursion guard env and workspace', () => {
   assert.equal(built.args.includes('PIDEX_PROJECT_ID=pp-run-def456'), true);
   assert.equal(built.args.includes('pidex-project-pp-run-def456'), true);
   assert.match(built.args.at(-1), /Task:\ndo it/);
+});
+
+test('correction child prompt routes COMPLETE back to the canonical reviewer', () => {
+  const record = createProjectRecord({ project_id: 'pp-correction-route', name: 'demo' });
+  const built = buildDockerExecArgs(record, { agent: 'pidex-implementer', task: 'fix D1', reviewGate: 'code-review', reviewMode: 'correction1', expectedOutputPath: 'agents.output/implementation/c1.md' });
+  assert.match(String(built.args.at(-1)), /verdict: COMPLETE[\s\S]*route_to: pidex-code-reviewer/);
 });
 
 test('runProjectPipelineAgent returns typed output and records run metadata', () => {
@@ -331,4 +338,61 @@ test('runProjectPipelineAgent recursion guard blocks nested project-pipeline exe
     if (old === undefined) delete process.env.PIDEX_PROJECT_PIPELINE_CHILD;
     else process.env.PIDEX_PROJECT_PIPELINE_CHILD = old;
   }
+});
+
+
+const developmentPidexRoot = path.resolve('.');
+const canonicalModuleSystem = () => loadModuleSystem(developmentPidexRoot);
+const ruleRecord = (agent = 'pidex-code-reviewer') => {
+  const record = createProjectRecord({ project_id: `pp-rules-${agent.replace(/^pidex-/, '')}`, name: 'rules' });
+  record.status = 'ready';
+  record.archive.path = path.join(developmentPidexRoot, 'state', 'project-archives', record.project_id);
+  return record;
+};
+function count(text, needle) { return text.split(needle).length - 1; }
+
+test('direct Project Pipeline code reviewer receives canonical structured producer contract exactly once', () => {
+  const task = prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord(), agent: 'pidex-code-reviewer', task: 'Review directly.', reviewGate: 'code-review', reviewMode: 'initial', moduleSystem: canonicalModuleSystem() });
+  assert.equal(count(task, '## Module-scoped rules active for this Project Pipeline phase'), 1);
+  assert.match(task, /Lifecycle review context: reviewGate=code-review; reviewMode=initial/);
+  assert.match(task, /Structured Review Outcome Contract/);
+  assert.match(task, /"schemaVersion": "pidex-review-outcome-v1"/);
+  assert.match(task, /```pidex-review-outcome-v1\r?\n\{/);
+});
+
+test('run-agent boundary injects direct reviewer rules into the child prompt', () => {
+  const root = tmp(); setup(root, 'pp-run-direct-rules'); let childPrompt = '';
+  const result = runProjectPipelineAgent({ pidexRoot: root, projectId: 'pp-run-direct-rules', agent: 'pidex-code-reviewer', task: 'Direct review', moduleSystem: canonicalModuleSystem(), archiveFromContainer: false,
+    runner: (args) => { childPrompt = String(args.at(-1)); return { status: 0, stdout: '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/direct.md\n-->', stderr: '' }; } });
+  assert.equal(result.ok, true);
+  assert.match(childPrompt, /"schemaVersion": "pidex-review-outcome-v1"/);
+  assert.match(childPrompt, /MUST use the literal key verdict:[\s\S]*Never use decision:/);
+  assert.equal(count(childPrompt, '## Module-scoped rules active for this Project Pipeline phase'), 1);
+});
+
+test('critic security and QA select their canonical reviewer producer rules', () => {
+  for (const agent of ['pidex-critic', 'pidex-security', 'pidex-qa']) {
+    const task = prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord(agent), agent, task: 'Validate.', moduleSystem: canonicalModuleSystem() });
+    assert.match(task, new RegExp(`Agent: ${agent}`));
+    assert.match(task, /"schemaVersion": "pidex-review-outcome-v1"/);
+  }
+});
+
+test('correction implementers do not receive reviewer-only structured producer requirements', () => {
+  const task = prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord('pidex-implementer'), agent: 'pidex-implementer', task: 'Apply correction1.', moduleSystem: canonicalModuleSystem() });
+  assert.doesNotMatch(task, /"schemaVersion": "pidex-review-outcome-v1"/);
+  assert.doesNotMatch(task, /Structured Review Outcome Contract/);
+});
+
+test('pre-injected orchestrator task remains single-copy at run-agent boundary', () => {
+  const options = { pidexRoot: developmentPidexRoot, record: ruleRecord(), agent: 'pidex-code-reviewer', moduleSystem: canonicalModuleSystem() };
+  const once = prepareProjectPipelineAgentTask({ ...options, task: 'Review orchestrated.' });
+  const twice = prepareProjectPipelineAgentTask({ ...options, task: once });
+  assert.equal(count(twice, '## Module-scoped rules active for this Project Pipeline phase'), 1);
+  assert.equal(count(twice, '"schemaVersion": "pidex-review-outcome-v1"'), 1);
+});
+
+test('invalid module configuration fails closed before child execution', () => {
+  const invalid = canonicalModuleSystem(); invalid.modules[0].manifest.id = '';
+  assert.throws(() => prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord(), agent: 'pidex-code-reviewer', task: 'Review.', moduleSystem: invalid }), /module validation failed for Project Pipeline rule injection/);
 });

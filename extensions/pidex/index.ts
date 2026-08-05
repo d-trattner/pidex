@@ -645,6 +645,16 @@ function safeProjectMirrorSummary(mirror: any): any {
 	};
 }
 
+function safeReviewCompletionSummary(value: any): any {
+	const status = String(value?.status || "");
+	if (!["accepted", "CHANGES_REQUESTED", "USER_DECISION_REQUIRED", "CLOSED_WITH_TBR", "resumed"].includes(status)) return undefined;
+	return {
+		status,
+		...(typeof value?.disposition === "string" ? { disposition: value.disposition } : {}),
+		...(Array.isArray(value?.tbrIds) ? { tbrIds: value.tbrIds.filter((id: any) => /^TBR-[a-f0-9]{12}$/.test(String(id))).slice(0, 20) } : {}),
+	};
+}
+
 function safeProjectPipelineHelperOutput(rawStdout: string, projectId: string, exitCode: number | null): { stdout: string; error?: string } {
 	try {
 		const parsed = JSON.parse(rawStdout || "{}");
@@ -3857,6 +3867,8 @@ function runProjectPipelineAgentToolUnchecked(params: any): any {
 	if (params.provider) args.push("--provider", String(params.provider));
 	if (params.model) args.push("--model", String(params.model));
 	if (params.effort) args.push("--effort", String(params.effort));
+	if (params.reviewGate) args.push("--review-gate", String(params.reviewGate));
+	if (params.reviewMode) args.push("--review-mode", String(params.reviewMode));
 	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent))) args.push("--review-write-fence");
 	const proc = spawnSync(process.execPath, args, { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 30 * 60_000, maxBuffer: 20 * 1024 * 1024 });
 	let result: any;
@@ -4140,8 +4152,8 @@ export default function runningPi(pi: ExtensionAPI) {
 					const projectResult = runProjectPipelineAgentTool(params);
 					const routingText = projectResult.routing ? `\n\n<!-- ROUTING\nverdict: ${projectResult.routing.verdict || "COMPLETE"}\nroute_to: ${projectResult.routing.route_to || "orchestrator"}\nreason: ${projectResult.routing.reason || "Project Pipeline agent complete"}\ncontext_file: ${projectResult.context_file}\n-->` : "";
 					return {
-						content: [{ type: "text", text: `Project Pipeline ${params.agent} complete in /workspace. context_file=${projectResult.context_file}${projectResult.routing_recovered ? "; routing recovered from exact artifact" : ""}${projectResult.project_mirror?.degraded ? `; archive complete; project mirror degraded (${projectResult.project_mirror.status})` : projectResult.project_mirror?.status ? `; project mirror ${projectResult.project_mirror.status}` : ""}${routingText}` }],
-						details: { ok: true, projectId: params.projectId, project_run_id: projectResult.project_run_id, context_file: projectResult.context_file, archive_context_file: projectResult.archive_context_file, project_mirror: safeProjectMirrorSummary(projectResult.project_mirror), sync_degraded: projectResult.project_mirror?.degraded === true, routing_recovered: projectResult.routing_recovered === true, write_fence: projectResult.write_fence?.status || null, no_fallback: true },
+						content: [{ type: "text", text: `Project Pipeline ${params.agent} complete in /workspace. context_file=${projectResult.context_file}${projectResult.reviewCompletion?.status ? `; review_completion=${projectResult.reviewCompletion.status}` : ""}${projectResult.routing_recovered ? "; routing recovered from exact artifact" : ""}${projectResult.project_mirror?.degraded ? `; archive complete; project mirror degraded (${projectResult.project_mirror.status})` : projectResult.project_mirror?.status ? `; project mirror ${projectResult.project_mirror.status}` : ""}${routingText}` }],
+						details: { ok: true, projectId: params.projectId, project_run_id: projectResult.project_run_id, context_file: projectResult.context_file, archive_context_file: projectResult.archive_context_file, project_mirror: safeProjectMirrorSummary(projectResult.project_mirror), sync_degraded: projectResult.project_mirror?.degraded === true, routing_recovered: projectResult.routing_recovered === true, write_fence: projectResult.write_fence?.status || null, reviewCompletion: safeReviewCompletionSummary(projectResult.reviewCompletion), no_fallback: true },
 					};
 				}
 				const result = await executeHostAgentBoundary(params, {

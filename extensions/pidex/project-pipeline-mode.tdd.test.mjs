@@ -616,7 +616,7 @@ console.log(JSON.stringify({ names: [...tools.keys()], result }));
 test('pidex_agent direct Project Pipeline call uses run-agent helper and never host fallback', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-agent-helper-'));
   const helper = path.join(dir, 'run-agent.mjs');
-  writeFileSync(helper, `console.log(JSON.stringify({ ok: true, project_run_id: 'pprun-direct', context_file: 'agents.output/parallel-agents/review.md', archive_context_file: '/archive/review.md', routing_recovered: false, write_fence: { status: 'complete' }, routing: { verdict: 'COMPLETE', route_to: 'orchestrator', reason: 'done', context_file: 'agents.output/parallel-agents/review.md' } }));\n`);
+  writeFileSync(helper, `console.log(JSON.stringify({ ok: true, project_run_id: 'pprun-direct', context_file: 'agents.output/parallel-agents/review.md', archive_context_file: '/archive/review.md', routing_recovered: false, write_fence: { status: 'complete' }, reviewCompletion: { status: 'CLOSED_WITH_TBR', tbrIds: ['TBR-0123456789ab'] }, routing: { verdict: 'COMPLETE', route_to: 'orchestrator', reason: 'done', context_file: 'agents.output/parallel-agents/review.md' } }));\n`);
   try {
     const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
 const mod = await import('./extensions/pidex/index.ts');
@@ -630,6 +630,8 @@ console.log(JSON.stringify(result));
     const parsed = JSON.parse(proc.stdout.trim().split(/\n/).at(-1));
     assert.equal(parsed.details.no_fallback, true);
     assert.equal(parsed.details.project_run_id, 'pprun-direct');
+    assert.deepEqual(parsed.details.reviewCompletion, { status: 'CLOSED_WITH_TBR', tbrIds: ['TBR-0123456789ab'] });
+    assert.match(parsed.content[0].text, /review_completion=CLOSED_WITH_TBR/);
     assert.match(parsed.content[0].text, /complete in \/workspace/);
     assert.match(parsed.content[0].text, /context_file=agents\.output\/parallel-agents\/review\.md/);
   } finally { rmSync(dir, { recursive: true, force: true }); }

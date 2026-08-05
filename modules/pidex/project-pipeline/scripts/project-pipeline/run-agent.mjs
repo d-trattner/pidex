@@ -7,10 +7,83 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { syncProjectArchive } from './archive-sync.mjs';
+import { resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
 import { syncProjectMirror } from './project-mirror.mjs';
+import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
 
 const CHILD_ENV = 'PIDEX_PROJECT_PIPELINE_CHILD';
+
+const PROJECT_PIPELINE_MODULE_RULES_HEADING = '## Module-scoped rules active for this Project Pipeline phase';
+const REVIEWER_AGENTS = new Set(['pidex-critic', 'pidex-code-reviewer', 'pidex-security', 'pidex-qa']);
+const REVIEWER_RULE_SUFFIX = Object.freeze({ 'pidex-critic': 'critic', 'pidex-code-reviewer': 'code-review', 'pidex-security': 'security', 'pidex-qa': 'qa' });
+const AGENT_RULE_PHASE = Object.freeze({
+  'pidex-planner': 'planning',
+  'pidex-critic': 'critic-review',
+  'pidex-implementer': 'implementation',
+  'pidex-code-reviewer': 'code-review',
+  'pidex-security': 'security',
+  'pidex-qa': 'qa',
+  'pidex-uat': 'uat',
+  'pidex-devops': 'devops',
+});
+
+export function projectPipelineRulePhase(agent) {
+  return AGENT_RULE_PHASE[agent] || String(agent || '').replace(/^pidex-/, '');
+}
+
+function registeredRuleAuthority(record, pidexRoot) {
+  if (record.source?.kind === 'host-path') {
+    if (!record.source.ref || !path.isAbsolute(record.source.ref)) throw new Error('invalid registered host-path authority for Project Pipeline rule injection');
+    return path.resolve(record.source.ref);
+  }
+  const expected = resolveArchiveRoot({ pidexRoot, projectId: record.project_id });
+  const registered = record.archive?.path ? path.resolve(record.archive.path) : expected;
+  if (registered !== expected) throw new Error('invalid registered archive authority for Project Pipeline rule injection');
+  return expected;
+}
+
+function requiredReviewerProducerRule(agent, matched, rendered) {
+  if (!REVIEWER_AGENTS.has(agent)) return;
+  const expectedId = `pidex.analysis-metrics-history.structured-review-outcome.${REVIEWER_RULE_SUFFIX[agent]}`;
+  if (!matched.some((entry) => entry.rule.id === expectedId)) throw new Error(`required reviewer module rule missing: ${expectedId}`);
+  if (!rendered.includes('```pidex-review-outcome-v1') || !rendered.includes('"schemaVersion": "pidex-review-outcome-v1"')) throw new Error(`required reviewer module rule rendering incomplete: ${expectedId}`);
+}
+
+export function renderProjectPipelineModuleRules(options = {}) {
+  if (options.moduleRules === false) return '';
+  const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+  const record = options.record;
+  const project = options.project ? path.resolve(options.project) : record ? registeredRuleAuthority(record, pidexRoot) : pidexRoot;
+  const context = { agent: options.agent, phase: projectPipelineRulePhase(options.agent), project, mode: 'project-pipeline' };
+  if (options.moduleRuleRenderer) {
+    const rendered = String(options.moduleRuleRenderer({ ...options, ...context, pidexRoot }) || '').trim();
+    requiredReviewerProducerRule(options.agent, [{ rule: { id: `pidex.analysis-metrics-history.structured-review-outcome.${REVIEWER_RULE_SUFFIX[options.agent] || String(options.agent || '').replace(/^pidex-/, '')}` } }], rendered);
+    return rendered;
+  }
+  const system = options.moduleSystem || loadModuleSystem(pidexRoot);
+  // Minimal unit fixtures deliberately have no PIDEX module tree. Real PIDEX roots
+  // always have manifests and therefore always validate and inject here.
+  if (!system.modules.length && !options.moduleSystem) return '';
+  const validation = validateSystem(system);
+  if (!validation.ok) throw new Error(`module validation failed for Project Pipeline rule injection: ${validation.errors.join('; ')}`);
+  const matched = matchedAgentRules(system, context);
+  const rendered = matched.length ? renderMatchedAgentRules(system, context, { maxBytes: options.moduleRulesMaxBytes || options.maxBytes || 16 * 1024 }).trim() : '';
+  requiredReviewerProducerRule(options.agent, matched, rendered);
+  return rendered;
+}
+
+export function prepareProjectPipelineAgentTask(options = {}) {
+  const task = String(options.task || '');
+  const rendered = renderProjectPipelineModuleRules(options);
+  if (!rendered) return task;
+  if (task.includes(PROJECT_PIPELINE_MODULE_RULES_HEADING)) {
+    requiredReviewerProducerRule(options.agent, [{ rule: { id: `pidex.analysis-metrics-history.structured-review-outcome.${REVIEWER_RULE_SUFFIX[options.agent] || String(options.agent || '').replace(/^pidex-/, '')}` } }], task);
+    return task;
+  }
+  const lifecycleContext = options.reviewMode || options.reviewGate ? `Lifecycle review context: reviewGate=${options.reviewGate || 'unknown'}; reviewMode=${options.reviewMode || 'unknown'}.` : '';
+  const rulesSection = lifecycleContext ? `${lifecycleContext}\n\n${rendered}` : rendered;
+  return [task, PROJECT_PIPELINE_MODULE_RULES_HEADING, rulesSection].join('\n\n');
+}
 
 function docker(args, opts = {}) {
   const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
@@ -134,8 +207,15 @@ export function projectRunId() {
   return `pprun-${stamp}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function correctionReviewRoute(reviewGate, reviewMode) {
+  return reviewMode?.startsWith('correction') ? ({ critic: 'pidex-critic', 'code-review': 'pidex-code-reviewer', security: 'pidex-security', qa: 'pidex-qa' }[reviewGate]) : undefined;
+}
+
 export function buildDockerExecArgs(record, params = {}) {
   const projectRun = params.project_run_id || projectRunId();
+  const correctionRoute = correctionReviewRoute(params.reviewGate, params.reviewMode);
+  const routeExample = correctionRoute || 'pidex-qa';
+  const routingKeyGuidance = REVIEWER_AGENTS.has(params.agent) ? 'For review agents, the ROUTING block MUST use the literal key verdict: matching the structured payload. Never use decision:, status:, or result: as an alias for verdict:.' : '';
   const payload = Buffer.from(JSON.stringify({ agent: params.agent, task: params.task, cwd: '/workspace', provider: params.providerOverride, model: params.modelOverride, effort: params.effortOverride, tools: params.tools || [] })).toString('base64');
   return {
     project_run_id: projectRun,
@@ -150,7 +230,7 @@ export function buildDockerExecArgs(record, params = {}) {
       record.docker.container_name,
       'pi',
       '--print',
-      `Run PIDEX project-pipeline child agent. Agent: ${params.agent}. Working directory is /workspace.${params.expectedInputPaths?.length ? ` Exact input artifact(s): ${params.expectedInputPaths.join(', ')}.` : ''}${params.expectedOutputPath ? ` Exact assigned output artifact: ${params.expectedOutputPath}. Write no other artifact path.` : ''} Task:\n${params.task || ''}\n\nWrite the required artifact under /workspace/agents.output/**. Finish with an HTML comment ROUTING block exactly like:\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-qa\nreason: short reason\ncontext_file: ${params.expectedOutputPath || 'agents.output/path/to/artifact.md'}\n-->\nThe context_file value must be a relative agents.output/** path, never an absolute path.`
+      `Run PIDEX project-pipeline child agent. Agent: ${params.agent}. Working directory is /workspace.${params.expectedInputPaths?.length ? ` Exact input artifact(s): ${params.expectedInputPaths.join(', ')}.` : ''}${params.expectedOutputPath ? ` Exact assigned output artifact: ${params.expectedOutputPath}. Write no other artifact path.` : ''} Task:\n${params.task || ''}\n\nWrite the required artifact under /workspace/agents.output/**. ${routingKeyGuidance} Finish with an HTML comment ROUTING block exactly like:\n<!-- ROUTING\nverdict: COMPLETE\nroute_to: ${routeExample}\nreason: short reason\ncontext_file: ${params.expectedOutputPath || 'agents.output/path/to/artifact.md'}\n-->\nThe context_file value must be a relative agents.output/** path, never an absolute path.`
     ]
   };
 }
@@ -161,6 +241,9 @@ export function runProjectPipelineAgent(options = {}) {
   if (process.env[CHILD_ENV] === '1') return { ok: false, exitCode: 2, error: 'project-pipeline-recursion-guard', reason: 'project-pipeline child must not docker-exec itself' };
   const project_run_id = options.project_run_id || projectRunId();
   const runner = options.runner || ((args) => docker(args));
+  let task;
+  try { task = prepareProjectPipelineAgentTask({ ...options, pidexRoot, record }); }
+  catch (error) { return { ok: false, exitCode: 2, error: 'module-rule-injection-failed', reason: error.message || String(error), project_run_id }; }
   let expectedOutputPath;
   let expectedInputPaths = [];
   try {
@@ -181,7 +264,7 @@ export function runProjectPipelineAgent(options = {}) {
     try { beforeManifest = captureWorkspaceManifest(record, runner, options.archiveWorkspace); }
     catch (error) { return { ok: false, exitCode: 1, error: 'write-fence-manifest-failed', reason: error.message || String(error), project_run_id }; }
   }
-  const built = buildDockerExecArgs(record, { ...options, expectedInputPaths, expectedOutputPath, project_run_id });
+  const built = buildDockerExecArgs(record, { ...options, task, expectedInputPaths, expectedOutputPath, project_run_id });
   const started = new Date().toISOString();
   record.status = 'running';
   record.runs = [...(record.runs || []), { project_run_id, agent: options.agent || '', container_exec_id: '', started_at: started, archive_sync_status: 'pending', image_digest: record.docker.image || '', config_bundle_hash: options.configBundleHash || '', credential_inventory_hash: options.credentialInventoryHash || '' }];
@@ -213,7 +296,7 @@ export function runProjectPipelineAgent(options = {}) {
           : artifactCheck;
         routing_recovered = routingCheck.ok;
       } else if (!options.requireExplicitRouting) {
-        routing = { verdict: 'COMPLETE', route_to: 'orchestrator', reason: 'routing recovered from exact expected artifact', context_file: expectedOutputPath };
+        routing = { verdict: 'COMPLETE', route_to: correctionReviewRoute(options.reviewGate, options.reviewMode) || 'orchestrator', reason: 'routing recovered from exact expected artifact', context_file: expectedOutputPath };
         routingCheck = { ok: true, context_file: expectedOutputPath };
         routing_recovered = true;
       }
@@ -310,6 +393,8 @@ export function parseArgs(argv) {
     else if (arg === '--provider') out.providerOverride = takeArg(argv, i++, arg);
     else if (arg === '--model') out.modelOverride = takeArg(argv, i++, arg);
     else if (arg === '--effort') out.effortOverride = takeArg(argv, i++, arg);
+    else if (arg === '--review-gate') out.reviewGate = takeArg(argv, i++, arg);
+    else if (arg === '--review-mode') out.reviewMode = takeArg(argv, i++, arg);
     else if (arg === '--expected-input') out.expectedInputPath = takeArg(argv, i++, arg);
     else if (arg === '--expected-output') out.expectedOutputPath = takeArg(argv, i++, arg);
     else if (arg === '--review-write-fence') out.reviewWriteFence = true;
@@ -325,7 +410,7 @@ export function parseArgs(argv) {
   return out;
 }
 
-function usage() { return 'Usage: run-agent.mjs --pidex-root PATH --project-id ID --agent pidex-* --task TEXT [--provider ID --model ID --effort LEVEL --expected-input agents.output/... --expected-output agents.output/... --review-write-fence] --json'; }
+function usage() { return 'Usage: run-agent.mjs --pidex-root PATH --project-id ID --agent pidex-* --task TEXT [--provider ID --model ID --effort LEVEL --review-gate GATE --review-mode MODE --expected-input agents.output/... --expected-output agents.output/... --review-write-fence] --json'; }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

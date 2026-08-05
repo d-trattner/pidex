@@ -188,7 +188,17 @@ test('runProjectPipelineOrchestration injects module-scoped rules into validatio
     phases: ['pidex-implementer', 'pidex-qa'],
     archiveWorkspace,
     runner,
-    moduleRuleRenderer: ({ agent, phase }) => (agent === 'pidex-qa' && phase === 'qa' ? '## Rendered module-scoped rules\n\n### Rule: pidex.project-pipeline.browser-smoke.qa-request\n\nQA must decide whether browser smoke is required.' : ''),
+    moduleRuleRenderer: ({ agent, phase }) => (agent === 'pidex-qa' && phase === 'qa' ? `## Rendered module-scoped rules
+
+### Rule: pidex.project-pipeline.browser-smoke.qa-request
+
+QA must decide whether browser smoke is required.
+
+\`\`\`pidex-review-outcome-v1
+{
+  "schemaVersion": "pidex-review-outcome-v1"
+}
+\`\`\`` : ''),
   });
   assert.equal(result.ok, true);
   assert.equal(prompts.length, 2);
