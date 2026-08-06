@@ -428,7 +428,7 @@ test('runProjectPipelineOrchestration retries once when a phase omits routing', 
     }
     return 'ok';
   };
-  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-retry', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-retry', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner, moduleRules: false });
   assert.equal(result.ok, true);
   assert.equal(qaAttempts, 2);
   assert.equal(result.runs.length, 1);
@@ -453,7 +453,7 @@ test('runProjectPipelineOrchestration stops fail-closed on failed phase', async 
     }
     return 'ok';
   };
-  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-fail', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-fail', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-qa'], archiveWorkspace, runner, moduleRules: false });
   assert.equal(result.ok, false);
   assert.equal(result.no_fallback, true);
   assert.equal(result.failed_agent, 'pidex-critic');
@@ -563,6 +563,7 @@ test('runProjectPipelineOrchestration auto-runs browser smoke bridge after QA an
     phases: ['pidex-qa'],
     archiveWorkspace,
     runner,
+    moduleRules: false,
     now: '2026-07-01T12:00:30.000Z',
     browserSmokeBridgeRunner: async (args) => {
       bridgeCalls.push(args);
@@ -614,6 +615,7 @@ test('runProjectPipelineOrchestration sanitizes browser smoke evidence when fina
     phases: ['pidex-qa'],
     archiveWorkspace,
     runner,
+    moduleRules: false,
     now: '2026-07-01T12:00:30.000Z',
     browserSmokeBridgeRunner: async () => ({ ok: true, status: 'BROWSER-SMOKE-PASS', status_reason: 'all-checks-passed', result_file: absoluteResult, preview_url: 'http://localhost:42080', preview_url_source: 'project-pipeline-registry', request_id: 'qa-browser-smoke-req' }),
   });
@@ -632,7 +634,7 @@ test('every schema2 status stops before verdict agent and next phase with typed 
     const record = seedRecord(pidexRoot, projectId); record.preview = { ports: { base: 42080, size: 20, container_base: 42080, host_bind: '127.0.0.1', generation: 1 }, processes: { preview: { status: 'running', operator_url: 'http://localhost:42080', host_port: 42080, container_port: 42080 } } }; saveProjectRecord(pidexRoot, record);
     let agentCalls = 0;
     const runner = (args) => { if (args[0] !== 'exec' || !args.includes('pi')) return 'ok'; agentCalls += 1; writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/artifact.md'), '# qa\n'); writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId), null, 2)}\n`); return { status: 0, stdout: '<!-- ROUTING\ncontext_file: agents.output/qa/artifact.md\n-->', stderr: '' }; };
-    const result = await runProjectPipelineOrchestration({ pidexRoot, projectId, task: 'schema2 hold', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, now: '2026-07-01T12:00:30.000Z', browserSmokeBridgeRunner: async () => ({ ok: status === 'PASS', status, status_reason: 'fixture', request_schema: 2 }) });
+    const result = await runProjectPipelineOrchestration({ pidexRoot, projectId, task: 'schema2 hold', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, moduleRules: false, now: '2026-07-01T12:00:30.000Z', browserSmokeBridgeRunner: async () => ({ ok: status === 'PASS', status, status_reason: 'fixture', request_schema: 2 }) });
     assert.equal(result.error, 'browser-smoke-evidence-infra');
     assert.equal(agentCalls, 1, status);
     rmSync(pidexRoot, { recursive: true, force: true });
@@ -691,7 +693,7 @@ test('runProjectPipelineOrchestration omits failed child raw output from public 
     if (args[0] === 'exec' && args.includes('pi')) return { status: 1, stdout: 'token=SECRET_DEMO_VALUE_1234567890', stderr: 'stderr secret' };
     return 'ok';
   };
-  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secret-fail', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner });
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secret-fail', task: 'ship it', phases: ['pidex-qa'], archiveWorkspace, runner, moduleRules: false });
   const serialized = JSON.stringify(result);
   assert.equal(result.ok, false);
   assert.equal(result.run.error, 'child-pi-failed');

@@ -557,6 +557,10 @@ export async function runProjectPipelineOrchestration(options = {}) {
           archiveWorkspace: options.archiveWorkspace,
           runner: options.runner,
           archiveCopyRunner: options.runner,
+          moduleRules: options.moduleRules,
+          moduleRuleRenderer: options.moduleRuleRenderer,
+          moduleSystem: options.moduleSystem,
+          moduleRulesMaxBytes: options.moduleRulesMaxBytes,
         });
         const laneSummary = { agent, ok: laneRun.ok, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, project_mirror: summarizeProjectMirror(laneRun.project_mirror), sync_degraded: laneRun.project_mirror?.degraded === true, routing_recovered: laneRun.routing_recovered === true, write_fence: laneRun.write_fence, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
         laneSummaries.push(laneSummary);
@@ -589,6 +593,10 @@ export async function runProjectPipelineOrchestration(options = {}) {
           archiveWorkspace: options.archiveWorkspace,
           runner: options.runner,
           archiveCopyRunner: options.runner,
+          moduleRules: options.moduleRules,
+          moduleRuleRenderer: options.moduleRuleRenderer,
+          moduleSystem: options.moduleSystem,
+          moduleRulesMaxBytes: options.moduleRulesMaxBytes,
         });
         const mergeSummary = { agent, ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: merge.project_run_id, archive_sync_status: merge.archive_sync_status, project_mirror: summarizeProjectMirror(merge.project_mirror), sync_degraded: merge.project_mirror?.degraded === true, routing_recovered: merge.routing_recovered === true, write_fence: merge.write_fence, parallel_trigger: parallelTrigger, parallel_role: 'merge', error: merge.error, reason: merge.reason, required_route: merge.routing?.route_to };
         runs.push(mergeSummary);

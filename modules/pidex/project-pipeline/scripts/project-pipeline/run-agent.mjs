@@ -61,9 +61,7 @@ export function renderProjectPipelineModuleRules(options = {}) {
     return rendered;
   }
   const system = options.moduleSystem || loadModuleSystem(pidexRoot);
-  // Minimal unit fixtures deliberately have no PIDEX module tree. Real PIDEX roots
-  // always have manifests and therefore always validate and inject here.
-  if (!system.modules.length && !options.moduleSystem) return '';
+  if (!system.modules.length) throw new Error('runtime module system missing or empty for Project Pipeline rule injection');
   const validation = validateSystem(system);
   if (!validation.ok) throw new Error(`module validation failed for Project Pipeline rule injection: ${validation.errors.join('; ')}`);
   const matched = matchedAgentRules(system, context);
@@ -76,10 +74,6 @@ export function prepareProjectPipelineAgentTask(options = {}) {
   const task = String(options.task || '');
   const rendered = renderProjectPipelineModuleRules(options);
   if (!rendered) return task;
-  if (task.includes(PROJECT_PIPELINE_MODULE_RULES_HEADING)) {
-    requiredReviewerProducerRule(options.agent, [{ rule: { id: `pidex.analysis-metrics-history.structured-review-outcome.${REVIEWER_RULE_SUFFIX[options.agent] || String(options.agent || '').replace(/^pidex-/, '')}` } }], task);
-    return task;
-  }
   const lifecycleContext = options.reviewMode || options.reviewGate ? `Lifecycle review context: reviewGate=${options.reviewGate || 'unknown'}; reviewMode=${options.reviewMode || 'unknown'}.` : '';
   const rulesSection = lifecycleContext ? `${lifecycleContext}\n\n${rendered}` : rendered;
   return [task, PROJECT_PIPELINE_MODULE_RULES_HEADING, rulesSection].join('\n\n');

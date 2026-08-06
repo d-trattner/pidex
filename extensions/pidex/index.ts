@@ -3831,6 +3831,7 @@ export function resolveProjectPipelineAuthorityRoot(projectId: string): string {
 }
 
 function validateProjectPipelineAgentParams(params: any): void {
+	if (params?.provider !== undefined || params?.model !== undefined || params?.effort !== undefined) throw new Error("Direct Project Pipeline pidex_agent calls reject caller-supplied provider, model, or effort.");
 	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
 	if (!isRelativeAgentsOutputPath(params?.expectedOutputPath)) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
 	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent)) && !isRelativeAgentsOutputPath(params?.expectedInputPath)) throw new Error(`Direct Project Pipeline review '${params.agent}' requires expectedInputPath.`);
@@ -3864,9 +3865,6 @@ function runProjectPipelineAgentToolUnchecked(params: any): any {
 	if (!fs.existsSync(PROJECT_PIPELINE_RUN_AGENT_SCRIPT)) throw new Error("Project Pipeline agent helper missing; update the canonical PIDEX runtime.");
 	const args = [PROJECT_PIPELINE_RUN_AGENT_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-id", String(params.projectId), "--agent", String(params.agent), "--task", String(params.task || ""), "--expected-output", String(params.expectedOutputPath), "--json"];
 	if (params.expectedInputPath) args.push("--expected-input", String(params.expectedInputPath));
-	if (params.provider) args.push("--provider", String(params.provider));
-	if (params.model) args.push("--model", String(params.model));
-	if (params.effort) args.push("--effort", String(params.effort));
 	if (params.reviewGate) args.push("--review-gate", String(params.reviewGate));
 	if (params.reviewMode) args.push("--review-mode", String(params.reviewMode));
 	if (PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params.agent))) args.push("--review-write-fence");
@@ -3874,7 +3872,11 @@ function runProjectPipelineAgentToolUnchecked(params: any): any {
 	let result: any;
 	try { result = JSON.parse(proc.stdout || "{}"); }
 	catch { throw new Error(`Project Pipeline agent helper returned invalid JSON (exit=${proc.status ?? 1}); no host fallback was used.`); }
-	if (proc.status !== 0 || result?.ok !== true) throw new Error(`Project Pipeline pidex_agent '${params.agent}' failed: ${result?.error || "agent-run-failed"}${result?.reason ? ` (${String(result.reason).slice(0, 500)})` : ""}; no host fallback was used.`);
+	if (proc.status !== 0 || result?.ok !== true) {
+		const error = String(result?.error || "agent-run-failed");
+		if (error === "module-rule-injection-failed") throw new Error("Project Pipeline agent failed: module-rule-injection-failed; no host fallback was used.");
+		throw new Error(`Project Pipeline pidex_agent '${params.agent}' failed: ${error}${result?.reason ? ` (${String(result.reason).slice(0, 500)})` : ""}; no host fallback was used.`);
+	}
 	return result;
 }
 

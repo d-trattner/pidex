@@ -9,6 +9,19 @@ import { copySelectedCredentials } from './credentials.mjs';
 import { runProjectPipelineAgent } from './run-agent.mjs';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
+const FLOW_SAFE_AGENT_FAILURE_CAUSES = new Set(['module-rule-injection-failed']);
+const FLOW_SAFE_ARCHIVE_SYNC_STATUSES = new Set(['pending', 'complete', 'failed']);
+const FLOW_SAFE_PROJECT_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+export function serializePublicRunFlowAgentFailure(run = {}) {
+  const cause = FLOW_SAFE_AGENT_FAILURE_CAUSES.has(run.error) ? run.error : 'agent-run-failed';
+  const safeRun = { ok: false, error: cause };
+  if (typeof run.exitCode === 'number' && Number.isFinite(run.exitCode)) safeRun.exitCode = run.exitCode;
+  if (typeof run.project_run_id === 'string' && FLOW_SAFE_PROJECT_RUN_ID.test(run.project_run_id)) safeRun.project_run_id = run.project_run_id;
+  if (FLOW_SAFE_ARCHIVE_SYNC_STATUSES.has(run.archive_sync_status)) safeRun.archive_sync_status = run.archive_sync_status;
+  return { cause, run: safeRun };
+}
+
 export function parseCredentialEntries(options = {}) {
   const entries = [];
   for (const [kind, source] of Object.entries(options.credentials || {})) {
@@ -59,11 +72,14 @@ export function runProjectPipelineFlow(options = {}) {
   if (!options.agent) return { ok: true, lifecycle, source, credentials, run: undefined, no_fallback: true };
   let run;
   try {
-    run = runProjectPipelineAgent({ pidexRoot, projectId, agent: options.agent, task: options.task || '', archiveFromContainer: true, runner: options.runner, archiveCopyRunner: options.runner });
-  } catch (error) {
-    return { ok: false, error: 'agent-run-failed', reason: error.message || String(error), lifecycle, source, credentials, no_fallback: true };
+    run = runProjectPipelineAgent({ pidexRoot, projectId, agent: options.agent, task: options.task || '', archiveFromContainer: true, moduleRules: options.moduleRules, runner: options.runner, archiveCopyRunner: options.runner });
+  } catch {
+    run = { ok: false, error: 'agent-run-failed' };
   }
-  if (!run.ok) return { ok: false, error: 'agent-run-failed', lifecycle, source, credentials, run, no_fallback: true };
+  if (!run.ok) {
+    const failure = serializePublicRunFlowAgentFailure(run);
+    return { ok: false, error: 'agent-run-failed', cause: failure.cause, ...(failure.cause === 'module-rule-injection-failed' ? { reason: failure.cause } : {}), lifecycle, source, credentials, run: failure.run, no_fallback: true };
+  }
   return { ok: true, lifecycle, source, credentials, run, archive_context_file: run.archive_context_file, no_fallback: true };
 }
 

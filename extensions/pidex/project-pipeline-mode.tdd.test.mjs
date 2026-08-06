@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -613,27 +613,52 @@ console.log(JSON.stringify({ names: [...tools.keys()], result }));
   }
 });
 
-test('pidex_agent direct Project Pipeline call uses run-agent helper and never host fallback', () => {
+test('pidex_agent direct Project Pipeline call rejects public route overrides before helper spawn', () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-agent-helper-'));
   const helper = path.join(dir, 'run-agent.mjs');
-  writeFileSync(helper, `console.log(JSON.stringify({ ok: true, project_run_id: 'pprun-direct', context_file: 'agents.output/parallel-agents/review.md', archive_context_file: '/archive/review.md', routing_recovered: false, write_fence: { status: 'complete' }, reviewCompletion: { status: 'CLOSED_WITH_TBR', tbrIds: ['TBR-0123456789ab'] }, routing: { verdict: 'COMPLETE', route_to: 'orchestrator', reason: 'done', context_file: 'agents.output/parallel-agents/review.md' } }));\n`);
+  const authorityHelper = path.join(dir, 'lifecycle.mjs');
+  const spawned = path.join(dir, 'spawned');
+  const authoritySpawned = path.join(dir, 'authority-spawned');
+  writeFileSync(helper, `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(spawned)}, process.env.PIDEX_PROJECT_AGENT_PAYLOAD || 'missing-payload');\nconsole.log(JSON.stringify({ ok: true }));\n`);
+  writeFileSync(authorityHelper, `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(authoritySpawned)}, 'authority-called');\nconsole.log(JSON.stringify({ ok: true, project_root: ${JSON.stringify(dir)}, authority_kind: 'host-path' }));\n`);
   try {
     const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+import assert from 'node:assert/strict';
 const mod = await import('./extensions/pidex/index.ts');
 const tools = new Map();
 mod.default({ on: () => {}, registerCommand: () => {}, registerTool: (tool) => tools.set(tool.name, tool), sendUserMessage: () => {} });
 const tool = tools.get('pidex_agent');
-const result = await tool.execute('call-1', { agent: 'pidex-planner', task: 'plan', cwd: process.cwd(), projectId: 'pp-demo', expectedOutputPath: 'agents.output/parallel-agents/review.md', provider: 'pi', model: 'deepseek/model' }, undefined, undefined, { cwd: process.cwd() });
-console.log(JSON.stringify(result));
+const base = { agent: 'pidex-critic', task: 'review', cwd: process.cwd(), projectId: 'pp-demo', expectedInputPath: 'agents.output/plans/review.md', expectedOutputPath: 'agents.output/parallel-agents/review.md' };
+for (const override of [{ provider: 'attacker-provider' }, { model: 'attacker-model' }, { effort: 'low' }]) {
+  await assert.rejects(tool.execute('call-1', { ...base, ...override }, undefined, undefined, { cwd: process.cwd() }), /reject caller-supplied provider, model, or effort/);
+}
+`], { cwd: process.cwd(), env: { ...process.env, PIDEX_CHILD: '0', PIDEX_PROJECT_PIPELINE_RUN_AGENT_SCRIPT: helper, PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: authorityHelper }, encoding: 'utf8' });
+    assert.equal(proc.status, 0, proc.stderr);
+    assert.equal(existsSync(authoritySpawned), false, 'public route override must fail before authority resolution');
+    assert.equal(existsSync(spawned), false, 'public route override must not spawn helper or construct child payload');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('pidex_agent direct Project Pipeline maps module rule injection failure to generic public error', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-agent-leak-'));
+  const helper = path.join(dir, 'run-agent.mjs');
+  const leakedPath = '/sensitive/install/root/modules/bad/module.json';
+  const ruleBytes = 'TOP-SECRET-RULE-BYTES';
+  writeFileSync(helper, `console.log(JSON.stringify({ ok: false, error: 'module-rule-injection-failed', reason: 'module validation failed: ${leakedPath}: id required; ${ruleBytes}' }));\n`);
+  try {
+    const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', `
+import assert from 'node:assert/strict';
+const mod = await import('./extensions/pidex/index.ts');
+const tools = new Map();
+mod.default({ on: () => {}, registerCommand: () => {}, registerTool: (tool) => tools.set(tool.name, tool), sendUserMessage: () => {} });
+const tool = tools.get('pidex_agent');
+await assert.rejects(tool.execute('call-1', { agent: 'pidex-planner', task: 'plan', cwd: process.cwd(), projectId: 'pp-demo', expectedOutputPath: 'agents.output/parallel-agents/review.md' }, undefined, undefined, { cwd: process.cwd() }), (error) => {
+  assert.match(String(error.message), /module-rule-injection-failed/);
+  assert.doesNotMatch(String(error.message), /sensitive|module validation|TOP-SECRET-RULE-BYTES|\\//);
+  return true;
+});
 `], { cwd: process.cwd(), env: { ...process.env, PIDEX_CHILD: '0', PIDEX_PROJECT_PIPELINE_RUN_AGENT_SCRIPT: helper }, encoding: 'utf8' });
     assert.equal(proc.status, 0, proc.stderr);
-    const parsed = JSON.parse(proc.stdout.trim().split(/\n/).at(-1));
-    assert.equal(parsed.details.no_fallback, true);
-    assert.equal(parsed.details.project_run_id, 'pprun-direct');
-    assert.deepEqual(parsed.details.reviewCompletion, { status: 'CLOSED_WITH_TBR', tbrIds: ['TBR-0123456789ab'] });
-    assert.match(parsed.content[0].text, /review_completion=CLOSED_WITH_TBR/);
-    assert.match(parsed.content[0].text, /complete in \/workspace/);
-    assert.match(parsed.content[0].text, /context_file=agents\.output\/parallel-agents\/review\.md/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
