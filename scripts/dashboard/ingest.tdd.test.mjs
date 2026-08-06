@@ -39,8 +39,11 @@ function all(dbPath, sql) {
 }
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-ingest-mjs-'));
+const inheritedPidexStateDir = process.env.PIDEX_STATE_DIR;
 try {
   const state = path.join(tmp, 'state');
+  const unrelatedParentState = path.join(tmp, 'unrelated-parent-state');
+  process.env.PIDEX_STATE_DIR = unrelatedParentState;
   const project = path.join(tmp, 'project');
   const dbPath = path.join(tmp, 'pidex.sqlite');
   const sandboxOnly = path.join(tmp, 'sandbox-only-host-project');
@@ -96,7 +99,7 @@ try {
     } finally { db.close(); }
   }
 
-  const report = runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  const report = runIngest(dbPath, project, { PIDEX_STATE_DIR: state });
   assert.equal(report.project_pipeline_registry, 2);
   assert.equal(report.agent_runs, 1);
   assert.equal(report.pipeline_events, 2);
@@ -141,7 +144,7 @@ try {
     } finally { db.close(); }
   }
 
-  runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  runIngest(dbPath, project, { PIDEX_STATE_DIR: state });
   assert.equal(value(dbPath, `select count(*) from projects where path = '${legacyWorkspacePath.replaceAll("'", "''")}'`), 0);
   const migratedSelectors = {
     artifacts: `t.path = '${path.join(tmp, 'legacy-artifact.md').replaceAll("'", "''")}'`,
@@ -154,9 +157,11 @@ try {
   }
   assert.equal(value(dbPath, "select project_path from pipeline_events where pipeline_id = 'legacy-pipeline'"), windowsProject);
   const projectCount = count(dbPath, 'projects');
-  runIngest(dbPath, project, { RUNNING_PI_STATE_DIR: state });
+  runIngest(dbPath, project, { PIDEX_STATE_DIR: state });
   assert.equal(count(dbPath, 'projects'), projectCount);
 } finally {
+  if (inheritedPidexStateDir === undefined) delete process.env.PIDEX_STATE_DIR;
+  else process.env.PIDEX_STATE_DIR = inheritedPidexStateDir;
   rmSync(tmp, { recursive: true, force: true });
 }
 

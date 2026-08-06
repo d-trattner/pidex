@@ -11,6 +11,22 @@ import { createProcessManager, expandPreviewCommandPort, redactPreviewLog, valid
 
 function tmpDir(prefix) { return mkdtempSync(path.join(os.tmpdir(), prefix)); }
 function portsBase() { return 45000 + Math.floor(Math.random() * 10000); }
+async function availablePort() {
+  const server = http.createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+function stopDetachedTestProcess(child) {
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { encoding: 'utf8', windowsHide: true });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    return;
+  }
+  process.kill(-child.pid, 'SIGKILL');
+}
+
 function managerFixture() {
   const root = tmpDir('pidex-process-root-');
   const stateRoot = path.join(root, 'cache', 'pidex-preview');
@@ -51,7 +67,7 @@ test('validateManagedStateRoot rejects state roots inside workspace and symlink 
 
 test('createProcessManager starts preview in workspace, records status/logs, then stops and frees port', async () => {
   const { manager, workspace } = managerFixture();
-  const port = portsBase();
+  const port = await availablePort();
   const result = await manager.start({ projectId: 'pp-demo-proc1', processName: 'preview', command: serverCommand(port, "console.log('TOKEN=abc123 secret=/pidex-secrets/auth.json')"), containerPort: port, env: { PORT: String(port) } });
   assert.equal(result.ok, true);
   assert.equal(result.status, 'running');
@@ -70,7 +86,7 @@ test('createProcessManager starts preview in workspace, records status/logs, the
 
 test('CLI-started preview survives request logging after start command exits', async () => {
   const { stateRoot, workspace, manager } = managerFixture();
-  const port = portsBase();
+  const port = await availablePort();
   const cli = fileURLToPath(new URL('./process.mjs', import.meta.url));
   const server = `const http=require('http');const server=http.createServer((req,res)=>{console.log('request '+req.url);res.end('ok')});server.listen(process.env.PORT,'0.0.0.0',()=>console.log('ready'));setInterval(()=>{},1000);`;
   const start = spawnSync(process.execPath, [cli, 'start', '--state-root', stateRoot, '--workspace', workspace, '--port', String(port), '--json', '--', process.execPath, '-e', server], { encoding: 'utf8' });
@@ -100,9 +116,9 @@ test('createProcessManager fails and cleans up when process exits early or never
 
 test('stop returns stopped when managed process exits but assigned port remains externally reserved', async () => {
   const { manager, stateRoot } = managerFixture();
-  const port = portsBase();
   const reserver = http.createServer((req, res) => res.end('reserved'));
-  await new Promise((resolve) => reserver.listen(port, '127.0.0.1', resolve));
+  await new Promise((resolve) => reserver.listen(0, '127.0.0.1', resolve));
+  const port = reserver.address().port;
   const sleeper = await import('node:child_process').then(({ spawn }) => spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { detached: true, stdio: 'ignore' }));
   sleeper.unref();
   const dir = path.join(stateRoot, 'preview');
@@ -143,7 +159,7 @@ test('stop returns stopped when managed PID remains observable but assigned app 
     assert.equal(stopped.status, 'stopped');
     assert.doesNotThrow(() => process.kill(sleeper.pid, 0));
   } finally {
-    process.kill(-sleeper.pid, 'SIGKILL');
+    stopDetachedTestProcess(sleeper);
   }
 });
 
@@ -158,7 +174,7 @@ test('stop refuses stale PID marker and does not kill unrelated process', async 
   assert.equal(stopped.ok, false);
   assert.equal(stopped.error_category, 'preview_stale_pid_owner_mismatch');
   assert.doesNotThrow(() => process.kill(sleeper.pid, 0));
-  process.kill(-sleeper.pid, 'SIGKILL');
+  stopDetachedTestProcess(sleeper);
 });
 
 test('redactPreviewLog bounds and redacts secret-like output', () => {

@@ -70,7 +70,7 @@ const script = path.join(root, 'modules/pidex/analysis-metrics-history/scripts/p
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-pipeline-event-'));
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-project-'));
 try {
-  const env = { ...process.env, RUNNING_PI_STATE_DIR: state, PIDEX_AUTO_PDQ: '0' };
+  const env = { ...process.env, PIDEX_STATE_DIR: state, PIDEX_AUTO_PDQ: '0' };
   assert.throws(() => resolvePlanReviewAuthority({ stateDir: state, project, planId: '12345' }), /REVIEW_AUTHORITY_NOT_FOUND/);
   const documentedStarted = spawnSync(process.execPath, [path.join(root, 'scripts/modules/run-check.mjs'), '--capability', 'analysis-metrics-history.record-event', '--agent', 'orchestrator', '--phase', 'planning', '--project', project, '--', '--project', project, '--plan', '12345', '--event', 'pipeline_started', '--status', 'running', '--actor', 'orchestrator', '--message', 'Started direct-mode pipeline', '--project-mode', 'host-direct', '--metadata-json', '{"entrypoint":"pidex-skill"}'], { encoding: 'utf8', env });
   assert.equal(documentedStarted.status, 0, documentedStarted.stderr || documentedStarted.stdout);
@@ -95,7 +95,8 @@ try {
 
   // Native-Windows fixture must stay beneath one owned temporary root.
   const testSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-  const nativeWindowsFixture = testSource.slice(testSource.indexOf('// Native-Windows fixture'), testSource.indexOf('\n\n  const started ='));
+  const nativeWindowsFixtureEnd = ['  const', ' started ='].join('');
+  const nativeWindowsFixture = testSource.slice(testSource.indexOf('// Native-Windows fixture'), testSource.indexOf(nativeWindowsFixtureEnd));
   const forbiddenWindowsHomeFixture = ['C:', 'Users', 'Daniel', 'pidex'].join('\\');
   assert.equal(testSource.includes(forbiddenWindowsHomeFixture), false, 'test must not contain a literal user-home fixture path');
   assert.match(nativeWindowsFixture, /rmSync\(windowsFixtureRoot, \{ recursive: true, force: true \}\)/, 'fixture cleanup must target owned root');

@@ -83,7 +83,10 @@ test('buildCredentialCopyOps sanitizes pi-settings before copy', () => {
 
 test('buildCredentialCopyOps passes hostile destination filenames as positional shell args', () => {
   const root = tmp();
-  const hostile = path.join(root, 'id_$(touch pwn)`echo bad` "quoted" key');
+  const hostileName = process.platform === 'win32'
+    ? 'id_$(touch pwn)`echo bad` & quoted key'
+    : 'id_$(touch pwn)`echo bad` "quoted" key';
+  const hostile = path.join(root, hostileName);
   write(hostile, 'PRIVATE KEY');
   const record = createProjectRecord({ project_id: 'pp-creds-hostile1', name: 'demo' });
   const result = buildCredentialCopyOps(record, [{ kind: 'ssh-key', source: hostile }]);
@@ -91,7 +94,7 @@ test('buildCredentialCopyOps passes hostile destination filenames as positional 
   assert.ok(op, 'expected exec-input operation');
   assert.equal(op[1], hostile);
   assert.equal(op.includes('cat > "$1" && chmod "$2" "$1"'), true);
-  assert.equal(op.at(-2), '/pidex-secrets/git/.ssh/id_$(touch pwn)`echo bad` "quoted" key');
+  assert.equal(op.at(-2), `/pidex-secrets/git/.ssh/${hostileName}`);
   assert.equal(op.at(-1), '600');
   assert.equal(JSON.stringify(op).includes('cat > "/pidex-secrets/git/.ssh/id_'), false);
   assert.equal(JSON.stringify(op).includes('$(touch pwn)`echo bad`'), true, 'hostile filename is data argument only');
