@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.1 - 2026-08-07
+
+- Public documentation and status alignment only. No runtime, dependency, or support-status expansion.
+
 ## 0.4.0 - 2026-08-07
 
 - Fixed Windows/Node 26 lifecycle lock creation: lock ownership now uses one exclusive write-capable descriptor, raw lifecycle I/O failures remain visible, and lifecycle plus Review Boundary identifiers accept strict bounded numeric identities through 40 digits while retaining legacy zero-padding.

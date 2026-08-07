@@ -195,6 +195,7 @@ Additional native Windows Project Pipeline evidence, refreshed on 2026-06-29, 20
 - Project Pipeline Docker helper calls now guard Git Bash/MSYS path conversion internally, so operators should not need to remember `MSYS_NO_PATHCONV=1` for PIDEX-managed Docker calls.
 - Windows-specific fixes were required for LF shell checkout, Bash path tests, Docker image auto-build, archive path normalization, credential staging through the cache volume, safe Project Pipeline passthrough args, Pi settings sanitization inside Docker, preview port adoption, preview `$PORT` expansion, and Vite default preview command handling.
 - `/pd` and `/pidex` delegate-auth preflight invokes `check-auth.sh` from the PIDEX root with cwd-relative script/config argv entries. This avoids Bash consuming native Windows backslashes and preserves spaces/non-ASCII path components. Launch/setup failure is reported separately from a checker that ran and rejected credentials; neither silently selects another provider.
+- Final Plan059 acceptance passed focused native-Windows readiness/full-check coverage and a real archive-only Project Pipeline run through terminalization. This is focused evidence only; it does not promote general native-Windows support.
 
 ## Recommended Windows approach today
 

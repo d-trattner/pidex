@@ -18,7 +18,9 @@ PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary 
 
 Lifecycle-tracked Critic, Code Review, Security, and QA work uses bounded review budgets: a fixed number of review dispatches per project, plan, and gate. The limit prevents review loops without limiting normal planning, implementation, tokens, cost, or time.
 
-PIDEX v0.3 is an evidence-driven reliability release. Controlled test-server fixtures, all-role screening, and independent holdouts selected the current GPT-5.6 catalog: Balanced combines Sol for quality-critical reasoning and review, Terra for implementation and operations, and Luna for retrospectives; Lowcost uses Terra for bounded Code Review and QA where repeated holdouts retained the core outcome with materially lower token use; All-Sol remains selective rather than the default. Spark was tested across the role matrix but was not competitive as a general profile. UAT was its only eligible offload, and one slower role-specific route did not justify a separate profile and fallback lifecycle.
+PIDEX v0.4 is an evidence-driven reliability release. It bounds lifecycle-tracked review work to two automatic corrections before durable `CLOSED_WITH_TBR` terminalization, adds strict browser-smoke schema 2 verdict handling and constrained rich checks, hardens focused native-Windows file behavior, and injects matched module rules directly into Project Pipeline agents. Linux, focused native-Windows, and real Project Pipeline acceptance passed for this release; native-Windows support remains experimental rather than broadly supported.
+
+Controlled test-server fixtures, all-role screening, and independent holdouts selected the current GPT-5.6 catalog: Balanced combines Sol for quality-critical reasoning and review, Terra for implementation and operations, and Luna for retrospectives; Lowcost uses Terra for bounded Code Review and QA where repeated holdouts retained the core outcome with materially lower token use; All-Sol remains selective rather than the default. Spark was tested across the role matrix but was not competitive as a general profile. UAT was its only eligible offload, and one slower role-specific route did not justify a separate profile and fallback lifecycle.
 
 The executable limits were motivated by real-project evidence, not fixture behavior alone. One anonymized project run reached 218 specialist dispatches, 23.86 specialist-hours, 4,870 turns, 11,371 tool calls, and approximately USD 225.76 in estimated specialist cost before manual termination. A fresh real-project acceptance run then completed with one approved initial dispatch per applicable gate, no family-budget reset, no correction loop, and no leaked fixture process. These results are why PIDEX enforces cumulative authority and one-shot tracked review dispatches instead of relying on model restraint or prompt-only circuit breakers.
 
@@ -85,7 +87,7 @@ See [Windows status](readme/windows.md) for support boundaries and the PowerShel
 
 ## Install
 
-PIDEX v0.3 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the Windows bootstrap. Other runtime paths are not supported yet.
+PIDEX v0.4 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the experimental Windows bootstrap. Other runtime paths are not supported yet.
 
 ### Install modes
 

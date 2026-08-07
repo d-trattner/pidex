@@ -13,7 +13,8 @@ In Project Pipeline mode, the project source lives and runs inside persistent Do
 - Management command: `/pdproject`.
 - In-container multi-agent orchestration: local facade and `/pd` bridge wired with phase-specific role prompts.
 - Safe run/archive browsing: `runs`, `show-run`, and `artifacts` are available.
-- Project Pipeline browser-smoke: QA/UAT/devops can request deterministic host-side browser checks through module-scoped rules; the host bridge resolves the managed preview URL from the Project Pipeline registry and writes archive evidence under `browser-smoke/**`.
+- Project Pipeline browser-smoke: QA/UAT/devops can request deterministic host-side browser checks through module-scoped rules; schema 1 remains compatible for simple checks, while schema 2 uses closed request/verdict shapes for constrained viewport, interaction, layout, accessibility, and console checks. Invalid or non-feature schema 2 outcomes fail closed rather than becoming feature verdicts; the host bridge resolves the managed preview URL from the Project Pipeline registry and writes archive evidence under `browser-smoke/**`.
+- Direct-agent module rules: matched, rendered module rules are injected into in-container phase prompts. Missing, unsafe, or incomplete required rule rendering fails the Project Pipeline run without host fallback.
 - External Docker hosts: deferred.
 - PR automation/review branches: deferred.
 - Dashboard/archive browsing UI: deferred.
