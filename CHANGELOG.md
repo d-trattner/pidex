@@ -2,8 +2,14 @@
 
 ## Unreleased
 
-- Fixed Windows/Node 26 lifecycle lock creation by durably writing lock ownership through one exclusive write-capable descriptor, and stopped Review Boundary identity derivation from masking raw lifecycle I/O failures as `REVIEW_IDENTITY_INVALID`.
-- Aligned lifecycle and Review Boundary numeric plan identities through 40 digits, allowing generated IDs such as `plan-16725` while retaining legacy zero-padding and strict bounded validation.
+## 0.4.0 - 2026-08-07
+
+- Fixed Windows/Node 26 lifecycle lock creation: lock ownership now uses one exclusive write-capable descriptor, raw lifecycle I/O failures remain visible, and lifecycle plus Review Boundary identifiers accept strict bounded numeric identities through 40 digits while retaining legacy zero-padding.
+- Hardened browser-smoke schema 2 validation and verdict handling with constrained checks, host-state and path confinement, lifecycle-authority correction, and preserved archive evidence.
+- Added bounded review terminalization: typed review outcomes, at most two automatic corrections, crash-safe completion receipts, canonical durable TBR serialization with deduplication and locking, `CLOSED_WITH_TBR` closure, and exact-once continuation without a third correction/review.
+- Hardened native-Windows review and TBR file handling: reject symlinks, junctions, hardlinks, swaps, nonregular or oversized files, and ADS; verify no-follow fallback behavior; canonicalize state roots; and preserve CRLF-safe fixtures plus deterministic lock-contention coverage.
+- Added direct Project Pipeline module-rule injection with hardened closure and fence parsing, public-override rejection, redacted diagnostics, failure envelopes, and TBR retention/lock composition.
+- Completed Linux, native-Windows, and real Project Pipeline acceptance coverage with isolated full-check fixtures.
 
 ## 0.3.0 - 2026-07-23
 
