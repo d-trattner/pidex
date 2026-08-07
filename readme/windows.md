@@ -78,6 +78,18 @@ wsl -e /bin/bash -lc "echo bash-ok"
 
 This is separate from Docker Desktop. Docker Desktop can run Linux containers for Project Pipeline, but it does not provide a general `/bin/bash` environment for Pi's host command tool.
 
+## Mapped-drive and UNC project aliases
+
+Project-boundary checks use native filesystem evidence for existing Windows paths so mapped-drive and UNC spellings of one tree can compare as one identity. Unavailable or conflicting evidence blocks tool execution; this does not freeze project roots, prevent remaps between decisions, or provide handle-level race protection.
+
+Native acceptance requires explicit controlled-share inputs and reviewed SHA:
+
+```powershell
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path extensions ('pidex' + '/windows-alias-acceptance.ps1')) -UncProjectRoot '\\server\share\fixture' -DriveName Z -ExistingRelativePath README.md -OutsideUncPath '\\server\other\outside.md' -SiblingUncProjectRoot '\\server\share\sibling' -UnavailableRelativePath .pidex-alias-unavailable -ExpectedSha <40-hex-sha>
+```
+
+Harness creates then removes only its requested temporary drive mapping, emits SHA plus path-form labels, and never accepts credentials as arguments.
+
 ## Known risky or unsupported areas on Windows
 
 These areas need more evidence before PIDEX can make a stronger Windows support claim:

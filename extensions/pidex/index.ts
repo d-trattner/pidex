@@ -3391,40 +3391,129 @@ function pathWithin(root: string, target: string): boolean {
 	return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
-function normalizeHostPath(value: string, cwd: string): string {
-	let raw = String(value || "").trim();
-	if (/^\/[a-zA-Z]\//.test(raw)) raw = `${raw[1]}:/${raw.slice(3)}`;
-	if (/^\/mnt\/[a-zA-Z]\//.test(raw)) raw = `${raw[5]}:/${raw.slice(7)}`;
-	const resolved = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(cwd, raw);
-	try { return fs.existsSync(resolved) ? fs.realpathSync.native(resolved) : path.resolve(resolved); } catch { return path.resolve(resolved); }
+export type ProjectBoundaryPathEvidenceAdapter = {
+	platform: string;
+	pathApi: any;
+	lstatSync: (value: string) => { isDirectory: () => boolean; isSymbolicLink?: () => boolean };
+	realpathNative: (value: string) => string;
+};
+
+type ProjectBoundaryPathIdentity =
+	| { tag: "success"; canonicalPath: string; lexicalPath: string; evidenceKind: "existing" | "ancestor-reconstructed" }
+	| { tag: "failure"; category: string; stage: string };
+
+type ProjectBoundaryPathPurpose = "existing-root" | "existing-target" | "prospective-write";
+
+function defaultProjectBoundaryPathEvidence(): ProjectBoundaryPathEvidenceAdapter {
+	return { platform: process.platform, pathApi: path, lstatSync: fs.lstatSync, realpathNative: fs.realpathSync.native };
 }
 
-function boundaryPathWithin(root: string, target: string): boolean {
-	const rootResolved = path.resolve(root);
-	const targetResolved = path.resolve(target);
-	if (process.platform === "win32") {
-		const rel = path.win32.relative(rootResolved.toLowerCase(), targetResolved.toLowerCase());
-		return rel === "" || (!rel.startsWith("..") && !path.win32.isAbsolute(rel));
+function identityFailure(category: string, stage: string): ProjectBoundaryPathIdentity {
+	return { tag: "failure", category, stage };
+}
+
+function classifyWin32AbsolutePath(value: string): string | undefined {
+	const native = String(value || "").replaceAll("/", "\\");
+	let ordinary: string;
+	if (/^\\\\\?\\[A-Za-z]:\\/.test(native)) ordinary = native.slice(4);
+	else if (/^\\\\\?\\UNC\\[^\\]+\\[^\\]+(?:\\|$)/i.test(native)) ordinary = `\\\\${native.slice(8)}`;
+	else ordinary = native;
+	if (/^[A-Za-z]:\\/.test(ordinary)) return ordinary;
+	if (/^\\\\(?![?.]\\)[^\\]+\\[^\\]+(?:\\|$)/.test(ordinary)) return ordinary;
+	return undefined;
+}
+
+function normalizeEvidencePath(value: string, adapter: ProjectBoundaryPathEvidenceAdapter): string | undefined {
+	const canonical = String(value || "");
+	const normalized = adapter.platform === "win32" ? classifyWin32AbsolutePath(canonical) : canonical;
+	return normalized && adapter.pathApi.isAbsolute(normalized) ? adapter.pathApi.resolve(normalized) : undefined;
+}
+
+function lexicalBoundaryPath(value: string, cwd: string, adapter: ProjectBoundaryPathEvidenceAdapter): string | ProjectBoundaryPathIdentity {
+	let raw = String(value || "");
+	if (!raw.trim() || raw.includes("\0")) return identityFailure("invalid-input", "lexicalization");
+	if (adapter.platform === "win32") {
+		if (/^\/[a-zA-Z]\//.test(raw)) raw = `${raw[1]}:/${raw.slice(3)}`;
+		if (/^\/mnt\/[a-zA-Z]\//.test(raw)) raw = `${raw[5]}:/${raw.slice(7)}`;
+		const native = raw.replaceAll("/", "\\");
+		if (/^[A-Za-z]:\\/.test(native) || native.startsWith("\\\\") || native.startsWith("\\??\\")) {
+			const classified = classifyWin32AbsolutePath(native);
+			if (!classified) return identityFailure("unsupported-namespace", "namespace-classification");
+			raw = classified;
+		}
+	}
+	const resolved = adapter.pathApi.resolve(cwd, raw);
+	return adapter.pathApi.isAbsolute(resolved) ? resolved : identityFailure("invalid-input", "lexicalization");
+}
+
+function validReconstructionSegment(segment: string, adapter: ProjectBoundaryPathEvidenceAdapter): boolean {
+	if (!segment || segment === "." || segment === ".." || segment.includes("\0") || /[\\/]/.test(segment) || adapter.pathApi.isAbsolute(segment)) return false;
+	if (adapter.platform !== "win32") return true;
+	if (segment.includes(":") || /[. ]$/.test(segment)) return false;
+	const device = segment.replace(/[. ]+$/, "").split(".")[0].toUpperCase();
+	return !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(device);
+}
+
+export function resolveProjectBoundaryPathIdentity(value: string, cwd: string, purpose: ProjectBoundaryPathPurpose, injected?: ProjectBoundaryPathEvidenceAdapter): ProjectBoundaryPathIdentity {
+	const adapter = injected ?? defaultProjectBoundaryPathEvidence();
+	const lexical = lexicalBoundaryPath(value, cwd, adapter);
+	if (typeof lexical !== "string") return lexical;
+	let candidate = lexical;
+	const suffix: string[] = [];
+	for (;;) {
+		let stat: { isDirectory: () => boolean; isSymbolicLink?: () => boolean };
+		try {
+			stat = adapter.lstatSync(candidate);
+		} catch (error: any) {
+			if (error?.code !== "ENOENT") return identityFailure("permission-io-denial", "evidence-probe");
+			if (purpose !== "prospective-write") return identityFailure(purpose === "existing-root" ? "absent-required-root" : "absent-required-target", "evidence-probe");
+			const parent = adapter.pathApi.dirname(candidate);
+			if (parent === candidate) return identityFailure("root-exhaustion", "evidence-probe");
+			suffix.unshift(adapter.pathApi.basename(candidate));
+			candidate = parent;
+			continue;
+		}
+		if (suffix.length && !stat.isDirectory()) return identityFailure("non-directory-ancestor", "evidence-probe");
+		let canonicalAncestor: string | undefined;
+		try { canonicalAncestor = normalizeEvidencePath(adapter.realpathNative(candidate), adapter); }
+		catch { return identityFailure(stat.isSymbolicLink?.() ? "broken-link" : "existing-but-unresolvable", "native-realpath"); }
+		if (!canonicalAncestor) return identityFailure("canonical-mismatch", "native-realpath");
+		if (!suffix.length) return { tag: "success", canonicalPath: canonicalAncestor, lexicalPath: lexical, evidenceKind: "existing" };
+		if (!suffix.every((segment) => validReconstructionSegment(segment, adapter))) return identityFailure("invalid-prospective-segment", "remainder-validation");
+		return { tag: "success", canonicalPath: adapter.pathApi.join(canonicalAncestor, ...suffix), lexicalPath: lexical, evidenceKind: "ancestor-reconstructed" };
+	}
+}
+
+function boundaryPathWithin(root: string, target: string, adapter: ProjectBoundaryPathEvidenceAdapter): boolean {
+	const rootResolved = adapter.pathApi.resolve(root);
+	const targetResolved = adapter.pathApi.resolve(target);
+	if (adapter.platform === "win32") {
+		const rel = adapter.pathApi.relative(rootResolved.toLowerCase(), targetResolved.toLowerCase());
+		return rel === "" || (!rel.startsWith("..") && !adapter.pathApi.isAbsolute(rel));
 	}
 	return pathWithin(rootResolved, targetResolved);
 }
 
-function allowedPidexRuntimeWrite(pidexRoot: string, target: string): boolean {
-	const rel = path.relative(path.resolve(pidexRoot), path.resolve(target)).replaceAll("\\", "/");
+function projectBoundaryBlock(toolName: string, pathForm: string, category: string, stage: string): { block: true; reason: string } {
+	return { block: true, reason: `PIDEX project boundary blocks ${toolName} ${pathForm}: ${category}/${stage}.` };
+}
+
+function allowedPidexRuntimeWrite(pidexRoot: string, target: string, adapter: ProjectBoundaryPathEvidenceAdapter): boolean {
+	const rel = adapter.pathApi.relative(adapter.pathApi.resolve(pidexRoot), adapter.pathApi.resolve(target)).replaceAll("\\", "/");
 	return /^(state\/(runs|metrics|modules|pipeline-events|orchestrator-events|provider-limits|sandbox)(\/|$))/.test(rel);
 }
 
 type ProjectBoundaryContext = { active: true; projectRoot: string; pidexRoot: string; startedCwd: string };
 
-function readProjectBoundaryContext(ctx: any): ProjectBoundaryContext | undefined {
+function readProjectBoundaryContext(ctx: any, adapter: ProjectBoundaryPathEvidenceAdapter): ProjectBoundaryContext | undefined {
 	const raw = process.env[PIDEX_PROJECT_BOUNDARY_ENV];
 	if (raw) {
 		try {
 			const parsed = JSON.parse(raw);
-			if (parsed?.active && parsed.projectRoot) return { active: true, projectRoot: path.resolve(String(parsed.projectRoot)), pidexRoot: path.resolve(String(parsed.pidexRoot || PACKAGE_ROOT)), startedCwd: path.resolve(String(parsed.startedCwd || parsed.projectRoot)) };
+			if (parsed?.active && parsed.projectRoot) return { active: true, projectRoot: String(parsed.projectRoot), pidexRoot: String(parsed.pidexRoot || PACKAGE_ROOT), startedCwd: String(parsed.startedCwd || parsed.projectRoot) };
 		} catch {}
 	}
-	const cwd = path.resolve(String(ctx?.cwd || process.cwd()));
+	const cwd = adapter.pathApi.resolve(String(ctx?.cwd || process.cwd()));
 	return { active: true, projectRoot: resolveProjectRoot(cwd), pidexRoot: PACKAGE_ROOT, startedCwd: cwd };
 }
 
@@ -3435,29 +3524,32 @@ function toolPathCandidate(input: any): string | undefined {
 	return undefined;
 }
 
-export function inspectProjectBoundaryToolCall(event: any, ctx: any): { block: boolean; reason: string } | undefined {
-	const boundary = readProjectBoundaryContext(ctx);
+export function inspectProjectBoundaryToolCall(event: any, ctx: any, injected?: ProjectBoundaryPathEvidenceAdapter): { block: boolean; reason: string } | undefined {
+	const adapter = injected ?? defaultProjectBoundaryPathEvidence();
+	const boundary = readProjectBoundaryContext(ctx, adapter);
 	if (!boundary) return undefined;
 	const toolName = String(event?.toolName || "");
-	const cwd = path.resolve(String(ctx?.cwd || boundary.startedCwd || boundary.projectRoot));
-	if (toolName === "read") {
+	const cwd = adapter.pathApi.resolve(String(ctx?.cwd || boundary.startedCwd || boundary.projectRoot));
+	if (toolName === "read" || toolName === "write" || toolName === "edit") {
 		const raw = toolPathCandidate(event?.input);
-		const blocked = sensitiveSandboxPath(raw);
-		if (blocked) return { block: true, reason: `PIDEX project boundary blocks reads of env/secret/runtime paths: ${blocked}` };
-		if (!raw) return undefined;
-		const resolved = normalizeHostPath(raw, cwd);
-		if (boundaryPathWithin(boundary.projectRoot, resolved) || boundaryPathWithin(boundary.pidexRoot, resolved)) return undefined;
-		return { block: true, reason: `PIDEX project boundary blocks read outside project/PIDEX roots. target=${resolved}; project_root=${boundary.projectRoot}; pidex_root=${boundary.pidexRoot}` };
-	}
-	if (toolName === "write" || toolName === "edit") {
-		const raw = toolPathCandidate(event?.input);
-		if (!raw) return { block: true, reason: `PIDEX project boundary blocks ${toolName} without an explicit file path.` };
-		const resolved = normalizeHostPath(raw, cwd);
-		const blocked = sensitiveSandboxPath(resolved);
-		if (blocked) return { block: true, reason: `PIDEX project boundary blocks ${toolName} to env/secret/runtime path: ${blocked}` };
-		if (boundaryPathWithin(boundary.projectRoot, resolved)) return undefined;
-		if (boundaryPathWithin(boundary.pidexRoot, resolved) && allowedPidexRuntimeWrite(boundary.pidexRoot, resolved)) return undefined;
-		return { block: true, reason: `PIDEX project boundary blocks ${toolName} outside run project root. target=${resolved}; project_root=${boundary.projectRoot}` };
+		if (!raw) return toolName === "read" ? undefined : { block: true, reason: `PIDEX project boundary blocks ${toolName} without an explicit file path.` };
+		const rawSensitive = sensitiveSandboxPath(raw);
+		if (rawSensitive) return projectBoundaryBlock(toolName, "raw-path", "sensitive-path", "raw-policy");
+		const projectRoot = resolveProjectBoundaryPathIdentity(boundary.projectRoot, cwd, "existing-root", adapter);
+		if (projectRoot.tag === "failure") return projectBoundaryBlock(toolName, "project-root", projectRoot.category, projectRoot.stage);
+		const pidexRoot = resolveProjectBoundaryPathIdentity(boundary.pidexRoot, cwd, "existing-root", adapter);
+		if (pidexRoot.tag === "failure") return projectBoundaryBlock(toolName, "pidex-root", pidexRoot.category, pidexRoot.stage);
+		const target = resolveProjectBoundaryPathIdentity(raw, cwd, toolName === "write" ? "prospective-write" : "existing-target", adapter);
+		if (target.tag === "failure") return projectBoundaryBlock(toolName, "target-path", target.category, target.stage);
+		if (sensitiveSandboxPath(target.lexicalPath)) return projectBoundaryBlock(toolName, "lexical-path", "sensitive-path", "lexical-policy");
+		if (sensitiveSandboxPath(target.canonicalPath)) return projectBoundaryBlock(toolName, "canonical-path", "sensitive-path", "canonical-policy");
+		if (toolName === "read") {
+			if (boundaryPathWithin(projectRoot.canonicalPath, target.canonicalPath, adapter) || boundaryPathWithin(pidexRoot.canonicalPath, target.canonicalPath, adapter)) return undefined;
+			return projectBoundaryBlock(toolName, "outside-project-or-pidex", "outside-project-or-pidex", "comparison");
+		}
+		if (boundaryPathWithin(projectRoot.canonicalPath, target.canonicalPath, adapter)) return undefined;
+		if (boundaryPathWithin(pidexRoot.canonicalPath, target.canonicalPath, adapter) && allowedPidexRuntimeWrite(pidexRoot.canonicalPath, target.canonicalPath, adapter)) return undefined;
+		return projectBoundaryBlock(toolName, "outside-project-or-pidex", "outside-project-or-pidex", "comparison");
 	}
 	if (toolName === "bash") {
 		const command = String(event?.input?.command || "");
