@@ -4,8 +4,9 @@ import { chmodSync, mkdtempSync, mkdirSync, symlinkSync, unlinkSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const guard = path.join(repoRoot, 'scripts/modules/reference-guard.mjs');
 
 function fixture() {

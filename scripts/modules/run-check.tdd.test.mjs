@@ -401,11 +401,24 @@ test('run-check allows explicit safe absolute roots in passthrough policy', () =
   const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   manifest.capabilities[0].command.passthrough = true;
-  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^[A-Za-z0-9_./:-]+$'], allow_absolute_project_paths: true, allowed_absolute_roots: ['__PIDEX_ROOT__'] };
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^[A-Za-z0-9_./:\\u005c-]+$'], allow_absolute_project_paths: true, allowed_absolute_roots: ['__PIDEX_ROOT__'] };
   writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log(process.argv.slice(2).join(' '));\n");
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   const out = execFileSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', root, project], { cwd: process.cwd(), encoding: 'utf8' });
   assert.match(out, new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('run-check fixture admits Windows separators without broadening root confinement', () => {
+  const { root, project } = makeModuleFixture();
+  const manifestPath = path.join(root, 'modules/pidex/release-safety/module.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  manifest.capabilities[0].command.passthrough = true;
+  manifest.capabilities[0].command.passthrough_policy = { allowed_patterns: ['^[A-Za-z0-9_./:\\u005c-]+$'], allow_absolute_project_paths: true, allowed_absolute_roots: ['__PIDEX_ROOT__'] };
+  writeFileSync(path.join(root, 'scripts/release/reference-integrity.mjs'), "console.log(process.argv.at(-1));\n");
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  const windowsShapedRoot = root.replaceAll('/', '\\');
+  const out = execFileSync(process.execPath, ['scripts/modules/run-check.mjs', '--pidex-root', root, '--capability', 'release.reference-integrity', '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--', windowsShapedRoot], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.match(out, new RegExp(windowsShapedRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('run-check allows contextual multiline task values without broadening other args', () => {
