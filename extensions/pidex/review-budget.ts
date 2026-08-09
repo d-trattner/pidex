@@ -1,5 +1,9 @@
 const MODES = ['initial', 'correction1', 'review1', 'correction2', 'review2'];
-const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']);
+const EVENT_TYPES = new Set(['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome', 'physical_outcome', 'review_hold', 'review_resume_authorized', 'review_resume_consumed']);
+// BD-62-03/SEC-1: FAILED_TO_START_TRANSIENT is pre-acceptance-only (exact 3-event
+// grammar, checked literally at the 3-event branch below). The accepted 5-event
+// failure fold accepts post-acceptance outcomes only.
+const POST_ACCEPTANCE_PHYSICAL_OUTCOMES = new Set(['FAILED_TO_RUN', 'TIMED_OUT', 'TURN_LIMIT_HIT', 'MALFORMED_COMPLETION']);
 const IDENTIFIER = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const PLAN = /^plan-\d{1,40}$/;
 const GATES = new Set(['critic', 'code-review', 'security', 'qa']);
@@ -67,6 +71,181 @@ function nextAfter(mode, outcome) {
 
 function denied() { return { status: 'denied', code: 'REVIEW_HISTORY_INVALID' }; }
 
+const PHYSICAL_PREFIX = ['start_reserved', 'spawn_entered', 'spawn_accepted'];
+const PHYSICAL_FAILED_PREFIX = ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'physical_outcome'];
+function startsWith(types, prefix) { return prefix.every((type, index) => types[index] === type); }
+// Shared completion/terminal fold for a semantic review outcome (physical + legacy).
+// Expansion (USER_DECISION_REQUIRED) is a valid terminal only for receipt-bound
+// six-event/physical completions; the legacy five-event branch has no receipt so
+// expansion there is an unknown permutation and fails closed via nextAfter.
+function nextOutcome(active, outcome, completedStatus, extra = {}, allowExpansion = false) {
+  if (allowExpansion && outcome === 'USER_DECISION_REQUIRED') return { status: 'expansion_pending' };
+  const next = nextAfter(active.reviewMode, outcome);
+  if (!next) return denied();
+  if (next.terminal) return { status: 'terminal', terminal: next.terminal };
+  return { status: completedStatus, nextMode: next.nextMode, ...extra };
+}
+
+function physicalOf(metadata) {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const generation = metadata.physicalGeneration;
+  const ordinal = metadata.physicalOrdinal;
+  const physicalAttemptId = metadata.physicalAttemptId;
+  if (!Number.isInteger(generation) || generation < 0 || !Number.isInteger(ordinal) || ordinal < 0 || ordinal > 1 || !/^[a-f0-9]{64}$/.test(String(physicalAttemptId || ''))) return null;
+  return { physicalGeneration: generation, physicalOrdinal: ordinal, physicalAttemptId };
+}
+
+function foldPhysicalAttempt(events, active) {
+  const first = events[0];
+  const physical = physicalOf(first.metadata);
+  if (!physical || !sameIdentity(first.identity, active)) return denied();
+  if (events.some((event) => !sameIdentity(event.identity, active) || JSON.stringify(physicalOf(event.metadata)) !== JSON.stringify(physical))) return denied();
+  const types = events.map((event) => event.event_type);
+  if (types.length <= PHYSICAL_PREFIX.length && startsWith(types, PHYSICAL_PREFIX)) {
+    if (types.length === 1) return { status: 'resume_reserved', nextMode: active.reviewMode, ...physical };
+    if (types.length === 2) return { status: 'uncertain', code: 'SPAWN_ENTERED_UNCERTAIN' };
+    return { status: 'physical_accepted', nextMode: active.reviewMode, ...physical };
+  }
+  if (types.length === 3 && types[0] === 'start_reserved' && types[1] === 'spawn_entered' && types[2] === 'physical_outcome' && events[2].metadata.outcome === 'FAILED_TO_START_TRANSIENT') return { status: 'physical_failed', nextMode: active.reviewMode, ...physical, outcome: events[2].metadata.outcome };
+  if (types.length === 5 && startsWith(types, PHYSICAL_FAILED_PREFIX) && POST_ACCEPTANCE_PHYSICAL_OUTCOMES.has(events[4].metadata.outcome)) return { status: 'physical_failed', nextMode: active.reviewMode, ...physical, outcome: events[4].metadata.outcome };
+  if (types.length === 4 && startsWith(types, PHYSICAL_PREFIX) && types[3] === 'review_hold' && events[3].metadata.status === 'REVIEW_ABORTED') return { status: 'abort_hold', nextMode: active.reviewMode, ...physical };
+  if (types.length === 6 && startsWith(types, PHYSICAL_FAILED_PREFIX) && types[5] === 'review_hold' && events[5].metadata.status === 'PRIMARY_REVIEW_UNAVAILABLE') return { status: 'primary_hold', nextMode: active.reviewMode, ...physical, holdId: events[5].metadata.holdId };
+  // MINOR-3: six-event completion requires the exact fixed-position
+  // completion_prepared receipt at index 3; spawn_returned there leaves a
+  // trailing unknown event and is an unknown permutation: denied.
+  const completionIndex = types[3] === 'completion_prepared' ? 5 : 4;
+  if ((types.length === 5 || types.length === 6) && startsWith(types, PHYSICAL_PREFIX) && (types.length === 5 ? types[3] === 'spawn_returned' : types[3] === 'completion_prepared') && types[completionIndex - 1] === 'spawn_returned' && types[completionIndex] === 'review_outcome') {
+    return nextOutcome(active, outcomeOf(events[completionIndex].metadata, active.reviewGate), 'physical_completed', physical, true);
+  }
+  return denied();
+}
+
+// Fold one identity segment's physical attempts: failed ord 0 -> retry ord 1,
+// failed ord 1 -> exhausted, hold/resume -> generation + 1 (raw segment state).
+function physicalKey(physical) { return `${physical.physicalGeneration}:${physical.physicalOrdinal}:${physical.physicalAttemptId}`; }
+function foldPhysicalAttempts(reviewRows, active) {
+  let index = 0;
+  let expected = { physicalGeneration: 0, physicalOrdinal: 0 };
+  let last;
+  while (index < reviewRows.length) {
+    const first = physicalOf(reviewRows[index].metadata);
+    if (!first || first.physicalGeneration !== expected.physicalGeneration || first.physicalOrdinal !== expected.physicalOrdinal) return denied();
+    const key = physicalKey(first);
+    const events = [];
+    while (index < reviewRows.length) {
+      const physical = physicalOf(reviewRows[index].metadata);
+      if (!physical || physicalKey(physical) !== key) break;
+      events.push(reviewRows[index++]);
+    }
+    const state = foldPhysicalAttempt(events, active);
+    if (state.status === 'denied' || state.status === 'uncertain') return state;
+    last = state;
+    if (state.status === 'physical_failed') {
+      if (state.physicalOrdinal === 0) { expected = { physicalGeneration: state.physicalGeneration, physicalOrdinal: 1 }; if (index === reviewRows.length) return { status: 'physical_retry', nextMode: active.reviewMode, ...expected }; continue; }
+      if (index === reviewRows.length) return { ...state, status: 'physical_exhausted', nextMode: active.reviewMode };
+      return denied();
+    }
+    if (state.status === 'abort_hold') {
+      return index === reviewRows.length ? state : denied();
+    }
+    if (state.status === 'primary_hold') {
+      if (index === reviewRows.length) return state;
+      const authorized = reviewRows[index++]; const consumed = reviewRows[index++];
+      if (!authorized || !consumed || authorized.event_type !== 'review_resume_authorized' || consumed.event_type !== 'review_resume_consumed' || physicalOf(authorized.metadata) || physicalOf(consumed.metadata) || !sameIdentity(authorized.identity, active) || !sameIdentity(consumed.identity, active) || authorized.metadata.holdId !== state.holdId || consumed.metadata.holdId !== state.holdId) return denied();
+      expected = { physicalGeneration: state.physicalGeneration + 1, physicalOrdinal: 0 };
+      if (index === reviewRows.length) return denied();
+      continue;
+    }
+    if (index !== reviewRows.length) return denied();
+    if (state.status === 'physical_accepted' || state.status === 'resume_reserved' || state.status === 'terminal' || state.status === 'expansion_pending') return state;
+    if (state.status === 'physical_completed') return state;
+    return denied();
+  }
+  return last || denied();
+}
+
+// Single-identity physical history: legal mode order requires the initial mode;
+// any later single-mode history is an unknown permutation and fails closed.
+function foldPhysicalHistory(reviewRows, requested) {
+  if (requested.reviewMode !== 'initial') return denied();
+  const state = foldPhysicalAttempts(reviewRows, requested);
+  if (state.status === 'physical_completed') return requested.reviewMode === state.nextMode ? { status: 'allowed', nextMode: state.nextMode } : denied();
+  return state;
+}
+
+// Legacy (non-physical) fold of one mode segment (Plan 059 branch semantics).
+function foldLegacySegment(events, active) {
+  const canonical = [];
+  for (const event of events) {
+    const prior = canonical.find((item) => item.event_type === event.event_type);
+    if (prior) {
+      if (JSON.stringify(prior.metadata) !== JSON.stringify(event.metadata)) return denied();
+    } else canonical.push(event);
+  }
+  const types = canonical.map((event) => event.event_type);
+  const newSequence = types[3] === 'completion_prepared';
+  const expectedPrefix = newSequence
+    ? ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']
+    : ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome'];
+  if (types.length > expectedPrefix.length || types.some((type, position) => type !== expectedPrefix[position])) return denied();
+  if (types.length === 1) return { status: 'resume_reserved', nextMode: active.reviewMode };
+  if (types.length === 2) return { status: 'uncertain', code: 'SPAWN_ENTERED_UNCERTAIN' };
+  if (types.length === 3) return { status: 'spawn_accepted', nextMode: active.reviewMode };
+  if (types.length === 4) {
+    if (newSequence) return { status: 'prepared', nextMode: active.reviewMode };
+    return { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' };
+  }
+  if (types.length === 5) {
+    if (newSequence) return { status: 'prepared', nextMode: active.reviewMode };
+    return nextOutcome(active, outcomeOf(canonical[4].metadata, active.reviewGate), 'completed');
+  }
+  const outcome = outcomeOf(canonical[5].metadata, active.reviewGate);
+  if (canonical[3].metadata.intendedOutcome !== outcome) return denied();
+  return nextOutcome(active, outcome, 'completed', {}, true);
+}
+
+// Shared mode-segment walker: groups rows by identity in legal mode order and
+// delegates the per-segment fold; denied/uncertain/terminal fan-out and the final
+// allowed check are identical for legacy and physical histories. advance returns
+// false (deny), true (advance expectedMode), or a final state to return.
+function foldModeSegments(reviewRows, requested, foldSegment, advance) {
+  let expectedMode = 'initial';
+  let index = 0;
+  while (index < reviewRows.length) {
+    const first = reviewRows[index];
+    if (first.identity.reviewMode !== expectedMode) return denied();
+    const active = first.identity;
+    const segment = [];
+    while (index < reviewRows.length && sameIdentity(reviewRows[index].identity, active)) segment.push(reviewRows[index++]);
+    const state = foldSegment(segment, active);
+    if (state.status === 'denied' || state.status === 'uncertain') return state;
+    if (state.status === 'terminal' || state.status === 'expansion_pending') return index !== reviewRows.length ? denied() : state;
+    const outcome = advance(state, active, index === reviewRows.length, requested);
+    if (outcome === false) return denied();
+    if (outcome === true) { expectedMode = state.nextMode; continue; }
+    return outcome;
+  }
+  return requested.reviewMode === expectedMode ? { status: 'allowed', nextMode: expectedMode } : denied();
+}
+
+// Multi-mode physical folding: mode segments in legal order, advancing the
+// expected mode only on semantic review_outcome; mixed legacy+physical rows
+// inside one mode and unknown permutations fail closed.
+function foldPhysicalMultiMode(reviewRows, requested) {
+  return foldModeSegments(reviewRows, requested, (segment, active) => {
+    // resume authorized/consumed rows are structurally non-physical (holdId-bound)
+    // and belong to the physical segment; any other non-physical row is mixed and
+    // fails closed.
+    const structuralRows = segment.filter((row) => !['review_resume_authorized', 'review_resume_consumed'].includes(row.event_type));
+    const physicalRows = structuralRows.filter((row) => physicalOf(row.metadata));
+    if (physicalRows.length !== 0 && physicalRows.length !== structuralRows.length) return denied();
+    return physicalRows.length === structuralRows.length ? foldPhysicalAttempts(segment, active) : foldLegacySegment(segment, active);
+  }, (state, active, atEnd, requested) => {
+    if (state.status === 'physical_completed' || state.status === 'completed') return true;
+    return atEnd && sameIdentity(active, requested) ? state : false;
+  });
+}
+
 export function allowedCompletionOutcome(identity, outcome) {
   if (!validateReviewIdentity(identity).ok || typeof outcome !== 'string') return false;
   const normalized = CANONICAL_OUTCOMES.has(outcome) ? outcome : normalizeReviewVerdict(identity.reviewGate, outcome);
@@ -75,7 +254,7 @@ export function allowedCompletionOutcome(identity, outcome) {
 
 export function foldReviewHistory(rows, requested) {
   if (!validateReviewIdentity(requested).ok || !Array.isArray(rows)) return denied();
-  const reviewRows = [];
+  let reviewRows = [];
   for (const row of rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row) || !row.metadata || row.metadata.planId !== requested.planId || row.metadata.reviewGate !== requested.reviewGate) continue;
     if (!EVENT_TYPES.has(row.event_type)) return denied();
@@ -84,6 +263,13 @@ export function foldReviewHistory(rows, requested) {
     reviewRows.push({ event_type: row.event_type, metadata: row.metadata, identity });
   }
   if (!reviewRows.length) return requested.reviewMode === 'initial' ? { status: 'allowed', nextMode: 'initial' } : denied();
+  if (reviewRows.some((row) => physicalOf(row.metadata))) {
+    if (reviewRows.every((row) => sameIdentity(row.identity, requested))) return foldPhysicalHistory(reviewRows, requested);
+    // CRITICAL-1: never strip physical fields from non-requested rows (that
+    // degraded physical retry/hold/abort into inert legacy spawn_accepted);
+    // fold each mode segment in legal order instead.
+    return foldPhysicalMultiMode(reviewRows, requested);
+  }
   if (reviewRows.length === 1 && reviewRows[0].event_type === 'review_outcome' && sameIdentity(reviewRows[0].identity, requested)) {
     const terminal = nextAfter(requested.reviewMode, outcomeOf(reviewRows[0].metadata, requested.reviewGate));
     if (terminal?.terminal) return { status: 'terminal', terminal: terminal.terminal };
@@ -94,66 +280,8 @@ export function foldReviewHistory(rows, requested) {
     }
   }
 
-  let expectedMode = 'initial';
-  let index = 0;
-  while (index < reviewRows.length) {
-    const first = reviewRows[index];
-    if (first.identity.reviewMode !== expectedMode) return denied();
-    const active = first.identity;
-    const events = [];
-    while (index < reviewRows.length && sameIdentity(reviewRows[index].identity, active)) {
-      events.push(reviewRows[index++]);
-    }
-    const canonical = [];
-    for (const event of events) {
-      const prior = canonical.find((item) => item.event_type === event.event_type);
-      if (prior) {
-        if (JSON.stringify(prior.metadata) !== JSON.stringify(event.metadata)) return denied();
-      } else canonical.push(event);
-    }
-    const types = canonical.map((event) => event.event_type);
-    // Plan 059 Slice 2 (AD-1): dual sequence selected by the discriminator at index 3.
-    // types[3] === 'completion_prepared' is the new uniform receipt sequence
-    // (receipt after spawn_accepted, before spawn_returned). Legacy histories keep
-    // types[3] === 'spawn_returned' with unchanged five-event behavior and four-event
-    // returned uncertainty. No sidecar receipt store; the receipt is an event row.
-    const newSequence = types[3] === 'completion_prepared';
-    const expectedPrefix = newSequence
-      ? ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']
-      : ['start_reserved', 'spawn_entered', 'spawn_accepted', 'spawn_returned', 'review_outcome'];
-    if (types.length > expectedPrefix.length || types.some((type, position) => type !== expectedPrefix[position])) return denied();
-    if (types.length === 1) return sameIdentity(active, requested) ? { status: 'resume_reserved', nextMode: expectedMode } : denied();
-    if (types.length === 2) return { status: 'uncertain', code: 'SPAWN_ENTERED_UNCERTAIN' };
-    if (types.length === 3) return sameIdentity(active, requested) ? { status: 'spawn_accepted', nextMode: expectedMode } : denied();
-    if (types.length === 4) {
-      // Prepared-only: receipt present, spawn_returned missing. Resumable under the
-      // exact same receipt (identity + digests + intended outcome + TBR IDs).
-      if (newSequence) return sameIdentity(active, requested) ? { status: 'prepared', nextMode: expectedMode } : denied();
-      return { status: 'uncertain', code: 'SPAWN_RETURNED_UNCERTAIN' };
-    }
-    if (types.length === 5) {
-      // Prepared + returned, outcome missing: still resumable under the same receipt.
-      if (newSequence) return sameIdentity(active, requested) ? { status: 'prepared', nextMode: expectedMode } : denied();
-      const next = nextAfter(active.reviewMode, outcomeOf(canonical[4].metadata, active.reviewGate));
-      if (!next) return denied();
-      if (next.terminal) {
-        if (index !== reviewRows.length) return denied();
-        return { status: 'terminal', terminal: next.terminal };
-      }
-      expectedMode = next.nextMode;
-      continue;
-    }
-    // New six-event sequence: terminal receipt/outcome agreement is required.
-    const outcome = outcomeOf(canonical[5].metadata, active.reviewGate);
-    if (canonical[3].metadata.intendedOutcome !== outcome) return denied();
-    if (outcome === 'USER_DECISION_REQUIRED') return { status: 'expansion_pending' };
-    const next = nextAfter(active.reviewMode, outcome);
-    if (!next) return denied();
-    if (next.terminal) {
-      if (index !== reviewRows.length) return denied();
-      return { status: 'terminal', terminal: next.terminal };
-    }
-    expectedMode = next.nextMode;
-  }
-  return requested.reviewMode === expectedMode ? { status: 'allowed', nextMode: expectedMode } : denied();
+  return foldModeSegments(reviewRows, requested, foldLegacySegment, (state, active, _atEnd, requested) => {
+    if (state.status === 'resume_reserved' || state.status === 'spawn_accepted' || state.status === 'prepared') return sameIdentity(active, requested) ? state : false;
+    return true;
+  });
 }

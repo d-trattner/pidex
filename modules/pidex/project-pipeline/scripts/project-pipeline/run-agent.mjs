@@ -81,8 +81,12 @@ export function prepareProjectPipelineAgentTask(options = {}) {
 
 function docker(args, opts = {}) {
   const proc = dockerSpawnSync(args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...opts });
-  return { status: proc.status ?? 1, stdout: proc.stdout || '', stderr: proc.stderr || '' };
+  return { status: proc.status ?? 1, stdout: proc.stdout || '', stderr: proc.stderr || '', spawnError: proc.error ? String(proc.error.message || proc.error) : String(proc.spawnError || '') };
 }
+
+// SEC-2/BD-62-07: sandbox/docker infrastructure denial is a deterministic
+// non-retryable class. Only genuine transient child failures keep `child-pi-failed`.
+const DOCKER_INFRA_DENIAL_PATTERN = /Cannot connect to the Docker daemon|Error response from daemon|is not running|No such container|No such image|docker: command not found|connection refused|permission denied while trying to connect to the Docker daemon socket|failed to create shim|oci runtime/i;
 
 export function copyArchiveWorkspaceFromContainer(record, runner = docker) {
   const temp = mkdtempSync(path.join(tmpdir(), 'pidex-project-archive-'));
@@ -124,7 +128,18 @@ export function validateRouting(routing) {
   if (!routing) return { ok: false, reason: 'routing-missing' };
   if (!routing.context_file) return { ok: false, reason: 'context-file-missing' };
   try { return { ok: true, context_file: normalizeExpectedArtifactPath(routing.context_file) }; }
-  catch { return { ok: false, reason: `context-file-invalid:${routing.context_file}` }; }
+  catch { return { ok: false, reason: `context-file-invalid:${sanitizeReason(routing.context_file)}` }; }
+}
+
+// SEC-3: child-controlled or error-derived reason strings are sanitized and
+// bounded at the owning seam before they reach run entries, lane summaries,
+// adjudication inventories, metrics, or public results. Stable typed codes like
+// `context-file-invalid` survive; control characters are stripped and the value
+// is capped (default 200 chars) so raw output/path/prompt/credential fragments
+// cannot be persisted or forwarded unredacted.
+function sanitizeReason(value, cap = 200) {
+  const text = String(value ?? '').replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim();
+  return text.length > cap ? text.slice(0, cap) : text;
 }
 
 const MANIFEST_EXCLUDED_NAMES = new Set(['.git', 'node_modules', '.pnpm-store', '.cache']);
@@ -157,8 +172,17 @@ function localWorkspaceManifest(root) {
 
 const CONTAINER_FILE_SCRIPT = String.raw`
 const fs=require('fs'); const p=require('path'); const rel=process.argv[1];
-try { const full=p.join('/workspace',rel); const st=fs.lstatSync(full); if(!st.isFile()) throw new Error('not-file'); const real=fs.realpathSync(full); if(!real.startsWith('/workspace/')) throw new Error('escape'); const text=fs.readFileSync(real,'utf8'); process.stdout.write(JSON.stringify({exists:true,nonempty:text.trim().length>0,text:text.slice(0,2097152)})); }
-catch(e){ process.stdout.write(JSON.stringify({exists:false,nonempty:false,text:''})); }
+try {
+  const full=p.join('/workspace',rel); const st=fs.lstatSync(full);
+  if(st.isSymbolicLink()){ process.stdout.write(JSON.stringify({exists:false,nonempty:false,text:'',kind:'symlink'})); }
+  else if(!st.isFile()){ process.stdout.write(JSON.stringify({exists:false,nonempty:false,text:'',kind:st.isDirectory()?'directory':'other'})); }
+  else {
+    const real=fs.realpathSync(full);
+    if(!real.startsWith('/workspace/')) throw new Error('escape');
+    const text=fs.readFileSync(real,'utf8');
+    process.stdout.write(JSON.stringify({exists:true,nonempty:text.trim().length>0,text:text.slice(0,2097152),kind:'file'}));
+  }
+} catch(e){ process.stdout.write(JSON.stringify({exists:false,nonempty:false,text:'',kind:e&&e.message==='escape'?'escape':'absent'})); }
 `;
 
 const CONTAINER_MANIFEST_SCRIPT = String.raw`
@@ -183,11 +207,62 @@ function readWorkspaceArtifact(record, relativePath, runner, archiveWorkspace) {
   try { return JSON.parse(proc.stdout || '{}'); } catch { return { exists: false, nonempty: false, text: '' }; }
 }
 
+// QA-FIND-1/BD-62-12/AC-62-13: distinguish path absence from path existence with
+// a non-regular type. lstat (no-follow) is used so symlinks, directories, sockets,
+// devices, or other non-regular entries at an assigned output are never confused
+// with an absent path, and a regular file whose real path escapes the workspace
+// root (linked intermediate components) is classified as 'escape' and denied.
+function workspacePathKind(record, relativePath, runner, archiveWorkspace) {
+  if (archiveWorkspace) {
+    const full = path.join(archiveWorkspace, ...relativePath.split('/'));
+    let stat;
+    try { stat = lstatSync(full); } catch { return 'absent'; }
+    if (stat.isSymbolicLink()) return 'symlink';
+    if (stat.isDirectory()) return 'directory';
+    if (stat.isFile()) {
+      try {
+        const realRoot = realpathSync(archiveWorkspace);
+        const real = realpathSync(full);
+        const relative = path.relative(realRoot, real);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) return 'escape';
+      } catch { return 'escape'; }
+      return 'file';
+    }
+    return 'other';
+  }
+  const proc = runner(['exec', '--user', 'node', '--workdir', '/workspace', record.docker.container_name, 'node', '-e', CONTAINER_FILE_SCRIPT, relativePath]);
+  if (proc.status !== 0) return 'absent';
+  try {
+    const parsed = JSON.parse(proc.stdout || '{}');
+    return parsed.kind || (parsed.exists ? 'file' : 'absent');
+  } catch { return 'absent'; }
+}
+
 function captureWorkspaceManifest(record, runner, archiveWorkspace) {
   if (archiveWorkspace) return localWorkspaceManifest(archiveWorkspace);
   const proc = runner(['exec', '--user', 'node', '--workdir', '/workspace', record.docker.container_name, 'node', '-e', CONTAINER_MANIFEST_SCRIPT]);
   if (proc.status !== 0) throw new Error('workspace manifest capture failed');
   return JSON.parse(proc.stdout || '{}');
+}
+
+function artifactProvenance(record, relativePath, runner, archiveWorkspace) {
+  try {
+    if (archiveWorkspace) {
+      const full = path.join(archiveWorkspace, ...relativePath.split('/')); const stat = lstatSync(full);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 2 * 1024 * 1024) return null;
+      return { path: relativePath, type: 'regular', size: stat.size, digest: hashBuffer(readFileSync(full)) };
+    }
+    const proc = runner(['exec', '--user', 'node', '--workdir', '/workspace', record.docker.container_name, 'node', '-e', "const fs=require('fs'),c=require('crypto'),p=process.argv[1];try{const s=fs.lstatSync('/workspace/'+p);if(!s.isFile()||s.isSymbolicLink()||s.size>2097152)throw 0;console.log(JSON.stringify({path:p,type:'regular',size:s.size,digest:c.createHash('sha256').update(fs.readFileSync('/workspace/'+p)).digest('hex')}))}catch{process.exit(1)}", relativePath]);
+    return proc.status === 0 ? JSON.parse(proc.stdout || '') : null;
+  } catch { return null; }
+}
+
+function validRetryArtifact(record, options, expectedOutputPath, runner) {
+  if (!options.retryOfProjectRunId) return false;
+  const prior = (record.runs || []).find((run) => run.project_run_id === options.retryOfProjectRunId);
+  if (!prior || !prior.error || prior.expected_output_path !== expectedOutputPath || !prior.artifact_provenance) return false;
+  const current = artifactProvenance(record, expectedOutputPath, runner, options.archiveWorkspace);
+  return Boolean(current && JSON.stringify(current) === JSON.stringify(prior.artifact_provenance));
 }
 
 export function diffWorkspaceManifests(before = {}, after = {}, allowedPath) {
@@ -237,7 +312,7 @@ export function runProjectPipelineAgent(options = {}) {
   const runner = options.runner || ((args) => docker(args));
   let task;
   try { task = prepareProjectPipelineAgentTask({ ...options, pidexRoot, record }); }
-  catch (error) { return { ok: false, exitCode: 2, error: 'module-rule-injection-failed', reason: error.message || String(error), project_run_id }; }
+  catch (error) { return { ok: false, exitCode: 2, error: 'module-rule-injection-failed', reason: sanitizeReason(error.message || String(error)), project_run_id }; }
   let expectedOutputPath;
   let expectedInputPaths = [];
   try {
@@ -245,25 +320,38 @@ export function runProjectPipelineAgent(options = {}) {
     const rawInputs = options.expectedInputPaths || (options.expectedInputPath ? [options.expectedInputPath] : []);
     expectedInputPaths = rawInputs.map(normalizeExpectedArtifactPath);
   } catch (error) {
-    return { ok: false, exitCode: 2, error: 'expected-artifact-path-invalid', reason: error.message || String(error), project_run_id };
+    return { ok: false, exitCode: 2, error: 'expected-artifact-path-invalid', reason: sanitizeReason(error.message || String(error)), project_run_id };
   }
   for (const input of expectedInputPaths) {
     const checked = readWorkspaceArtifact(record, input, runner, options.archiveWorkspace);
-    if (!checked.exists) return { ok: false, exitCode: 1, error: 'expected-input-missing', reason: `expected input not found in /workspace: ${input}`, project_run_id };
+    if (!checked.exists) return { ok: false, exitCode: 1, error: 'expected-input-missing', reason: sanitizeReason(`expected input not found in /workspace: ${input}`), project_run_id };
   }
-  if (expectedOutputPath && readWorkspaceArtifact(record, expectedOutputPath, runner, options.archiveWorkspace).exists) return { ok: false, exitCode: 1, error: 'expected-output-exists', reason: `refusing to overwrite expected output: ${expectedOutputPath}`, project_run_id };
+  // QA-FIND-1/BD-62-12/AC-62-13: path-kind probe (lstat, no-follow) immediately
+  // before launch. Absent is fine; a regular file must satisfy provenance-bound
+  // retry replacement; any existing non-regular entry (symlink/directory/socket/
+  // device/other, or a regular file escaping the workspace root) denies before the
+  // child starts — never treated as absent, never followed, never degraded.
+  if (expectedOutputPath) {
+    const outputKind = workspacePathKind(record, expectedOutputPath, runner, options.archiveWorkspace);
+    if (outputKind === 'file') {
+      if (!validRetryArtifact(record, options, expectedOutputPath, runner)) return { ok: false, exitCode: 1, error: options.retryOfProjectRunId ? 'retry-artifact-provenance-invalid' : 'expected-output-exists', reason: sanitizeReason(`refusing to overwrite expected output: ${expectedOutputPath}`), project_run_id };
+    } else if (outputKind !== 'absent') {
+      return { ok: false, exitCode: 1, error: options.retryOfProjectRunId ? 'retry-artifact-provenance-invalid' : 'expected-output-non-regular', reason: sanitizeReason(`refusing to overwrite expected output: ${expectedOutputPath} (${outputKind})`), project_run_id };
+    }
+  }
   let beforeManifest;
   if (options.reviewWriteFence) {
     if (!expectedOutputPath) return { ok: false, exitCode: 2, error: 'write-fence-output-required', reason: 'review write fence requires expectedOutputPath', project_run_id };
     try { beforeManifest = captureWorkspaceManifest(record, runner, options.archiveWorkspace); }
-    catch (error) { return { ok: false, exitCode: 1, error: 'write-fence-manifest-failed', reason: error.message || String(error), project_run_id }; }
+    catch (error) { return { ok: false, exitCode: 1, error: 'write-fence-manifest-failed', reason: sanitizeReason(error.message || String(error)), project_run_id }; }
   }
   const built = buildDockerExecArgs(record, { ...options, task, expectedInputPaths, expectedOutputPath, project_run_id });
   const started = new Date().toISOString();
   record.status = 'running';
-  record.runs = [...(record.runs || []), { project_run_id, agent: options.agent || '', container_exec_id: '', started_at: started, archive_sync_status: 'pending', image_digest: record.docker.image || '', config_bundle_hash: options.configBundleHash || '', credential_inventory_hash: options.credentialInventoryHash || '' }];
+  record.runs = [...(record.runs || []), { project_run_id, retry_of_project_run_id: options.retryOfProjectRunId || '', expected_output_path: expectedOutputPath || '', agent: options.agent || '', container_exec_id: '', started_at: started, archive_sync_status: 'pending', image_digest: record.docker.image || '', config_bundle_hash: options.configBundleHash || '', credential_inventory_hash: options.credentialInventoryHash || '' }];
   saveProjectRecord(pidexRoot, record);
   const proc = runner(built.args);
+  const dockerInfraDenied = Boolean(proc?.spawnError) || DOCKER_INFRA_DENIAL_PATTERN.test(proc?.stderr || '');
   const finalText = `${proc.stdout || ''}${proc.stderr ? `\nSTDERR:\n${proc.stderr}` : ''}`;
   let write_fence;
   if (options.reviewWriteFence) {
@@ -271,14 +359,14 @@ export function runProjectPipelineAgent(options = {}) {
       const afterManifest = captureWorkspaceManifest(record, runner, options.archiveWorkspace);
       write_fence = { status: 'complete', ...diffWorkspaceManifests(beforeManifest, afterManifest, expectedOutputPath) };
     } catch (error) {
-      write_fence = { status: 'failed', unauthorized_paths: [], reason: error.message || String(error) };
+      write_fence = { status: 'failed', unauthorized_paths: [], reason: sanitizeReason(error.message || String(error)) };
     }
   }
   let routing = extractRouting(finalText);
   let routingCheck = validateRouting(routing);
   let routing_recovered = false;
   const expectedArtifact = expectedOutputPath ? readWorkspaceArtifact(record, expectedOutputPath, runner, options.archiveWorkspace) : undefined;
-  if (expectedOutputPath && routingCheck.ok && routingCheck.context_file !== expectedOutputPath) routingCheck = { ok: false, reason: `context-file-mismatch:${routingCheck.context_file}` };
+  if (expectedOutputPath && routingCheck.ok && routingCheck.context_file !== expectedOutputPath) routingCheck = { ok: false, reason: `context-file-mismatch:${sanitizeReason(routingCheck.context_file)}` };
   if (expectedOutputPath && !routingCheck.ok && (routingCheck.reason === 'routing-missing' || routingCheck.reason === 'context-file-missing')) {
     if (expectedArtifact?.exists && expectedArtifact.nonempty) {
       const artifactRouting = extractRouting(expectedArtifact.text);
@@ -286,7 +374,7 @@ export function runProjectPipelineAgent(options = {}) {
         const artifactCheck = validateRouting(artifactRouting);
         routing = artifactRouting;
         routingCheck = artifactCheck.ok && artifactCheck.context_file !== expectedOutputPath
-          ? { ok: false, reason: `context-file-mismatch:${artifactCheck.context_file}` }
+          ? { ok: false, reason: `context-file-mismatch:${sanitizeReason(artifactCheck.context_file)}` }
           : artifactCheck;
         routing_recovered = routingCheck.ok;
       } else if (!options.requireExplicitRouting) {
@@ -305,16 +393,18 @@ export function runProjectPipelineAgent(options = {}) {
     if (routingCheck.ok) runEntry.context_file = routingCheck.context_file;
   }
   let failure;
-  if (proc.status !== 0) failure = { exitCode: proc.status, error: 'child-pi-failed' };
+  if (proc.status !== 0) failure = dockerInfraDenied ? { exitCode: proc.status, error: 'sandbox-unavailable', reason: 'project sandbox infra denied docker exec' } : { exitCode: proc.status, error: 'child-pi-failed' };
   else if (options.reviewWriteFence && write_fence?.status !== 'complete') failure = { exitCode: 1, error: 'write-fence-manifest-failed', reason: write_fence?.reason };
   else if (write_fence?.unauthorized_paths?.length) failure = { exitCode: 1, error: 'write-fence-violation', reason: 'review lane changed paths outside its assigned artifact' };
-  else if (expectedOutputPath && (!expectedArtifact?.exists || !expectedArtifact.nonempty)) failure = { exitCode: 1, error: 'expected-output-missing', reason: `expected output missing or empty: ${expectedOutputPath}` };
+  else if (expectedOutputPath && (!expectedArtifact?.exists || !expectedArtifact.nonempty)) failure = { exitCode: 1, error: 'expected-output-missing', reason: sanitizeReason(`expected output missing or empty: ${expectedOutputPath}`) };
   else if (!routingCheck.ok) failure = { exitCode: 1, error: 'routing-invalid', reason: routingCheck.reason };
   if (failure) {
+    failure.reason = sanitizeReason(failure.reason || '');
     if (runEntry) {
       runEntry.error = failure.error;
       runEntry.reason = failure.reason || '';
       runEntry.archive_sync_status = 'failed';
+      if (expectedOutputPath) runEntry.artifact_provenance = artifactProvenance(record, expectedOutputPath, runner, options.archiveWorkspace);
       delete runEntry.context_file;
     }
     loaded.status = 'ready';
@@ -352,7 +442,7 @@ export function runProjectPipelineAgent(options = {}) {
       missingRecord.status = 'sync-failed';
       saveProjectRecord(pidexRoot, missingRecord);
       if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
-      return { ok: false, exitCode: 1, error: 'archive-context-missing', reason: `routed context file not found in archive: ${routingCheck.context_file}`, finalText, routing, archiveSyncReport };
+      return { ok: false, exitCode: 1, error: 'archive-context-missing', reason: sanitizeReason(`routed context file not found in archive: ${routingCheck.context_file}`), finalText, routing, archiveSyncReport };
     }
     project_mirror = syncProjectMirror({ pidexRoot, projectId: record.project_id, internalDisposable: options.internalDisposable === true });
     const mirrorRecord = loadProjectRecord(pidexRoot, record.project_id);

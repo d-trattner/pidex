@@ -294,6 +294,88 @@ function lifecycleErrorResult(error) {
   return { status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' };
 }
 
+// Shared selection -> gate -> root mutation context (DRY): acquires the canonical
+// lock pair in order and binds the review root. Releases both on any acquisition
+// failure so callers never manage partial lock state; a thrown acquisition error
+// is also cleaned up here before propagation.
+function reviewMutationContext(stateDir, project, identity) {
+  let selection; let gate;
+  try {
+    selection = takeSelectionLock(stateDir, project, identity.planId);
+    if (!selection.held) return { error: { status: 'unavailable', code: selection.code } };
+    const authority = resolvePipelineAuthority({ stateDir, project, planId: identity.planId });
+    gate = reviewLock(authority, identity);
+    const held = acquireLockOrdered('gate', () => takeLock(gate, identity.attemptId, identity, 'REVIEW_LOCK_UNAVAILABLE'));
+    if (!held.held) { releaseLockOrdered('selection', selection.lock); return { error: { status: 'unavailable', code: held.code } }; }
+    return { selection, gate, root: bindReviewRoot(authority, identity) };
+  } catch (error) {
+    if (gate) releasePair(gate, selection.lock); else if (selection?.held) releaseLockOrdered('selection', selection.lock);
+    throw error;
+  }
+}
+
+// Pre-acceptance transient launch failure is recorded exactly once per attempt
+// with the fixed nullable evidence shape and a retryable/exhausted typed result.
+const FAILED_TO_START_EVIDENCE = { exitCode: null, timedOut: false, turnLimitHit: false, finalTextPresent: false, routingPresent: false, artifactPresent: false };
+function recordFailedToStart(root, reservation, physical) {
+  appendReviewEvent(root.stream, 'physical_outcome', { ...reservation.metadata, outcome: 'FAILED_TO_START_TRANSIENT', evidence: FAILED_TO_START_EVIDENCE });
+  const attempt = reservation.physical || physical || {};
+  return { status: attempt.physicalOrdinal === 1 ? 'exhausted' : 'retryable', outcome: 'FAILED_TO_START_TRANSIENT', ...attempt };
+}
+
+// Shared pre-spawn state classification + physical reservation for both start
+// seams (host async + Project Pipeline sync): same fold contract, same events.
+function reserveStateResult(state, resume) {
+  if (state.status === 'denied' || state.status === 'uncertain') return state;
+  if (state.status === 'abort_hold') return { status: 'held', reviewCompletion: { status: 'REVIEW_ABORTED' } };
+  if (state.status === 'primary_hold' && !resume) return { status: 'held', reviewCompletion: { status: 'PRIMARY_REVIEW_UNAVAILABLE', holdId: state.holdId } };
+  if (resume && state.status !== 'primary_hold') return { status: 'denied', code: 'REVIEW_RESUME_INVALID' };
+  if (state.status === 'physical_accepted') return { ...state, status: 'uncertain', code: 'REVIEW_PHYSICAL_ACCEPTED_UNCERTAIN' };
+  if (state.status === 'physical_exhausted') return { status: 'exhausted', ...state };
+  if (state.status === 'terminal' || state.status === 'spawn_accepted' || state.status === 'prepared' || state.status === 'expansion_pending') return { status: 'resumed', ...(state.status === 'terminal' ? { terminal: state.terminal } : {}) };
+  return null;
+}
+function reviewStartReservation(root, identity, state, physical, resume) {
+  const reservation = resume ? consumeReviewHold(root, identity, state, resume) : physicalReservation(identity, state, physical);
+  if (!reservation.ok) return { denied: reservation.retry ? { status: 'retryable', ...reservation.retry } : { status: 'denied', code: resume ? 'REVIEW_RESUME_INVALID' : 'REVIEW_PHYSICAL_ATTEMPT_INVALID' } };
+  if (state.status === 'allowed' || state.status === 'resume_reserved' || state.status === 'physical_retry' || resume) appendReviewEvent(root.stream, 'start_reserved', reservation.metadata);
+  appendReviewEvent(root.stream, 'spawn_entered', reservation.metadata);
+  return { reservation };
+}
+
+const IDENTITY_MATCH_KEYS = ['runFamilyId', 'planId', 'reviewGate', 'reviewMode', 'attemptId'];
+function matchesIdentity(metadata, identity) { return Boolean(metadata) && IDENTITY_MATCH_KEYS.every((key) => metadata[key] === identity[key]); }
+
+// BD-62-03: FAILED_TO_START_TRANSIENT is valid only in the exact pre-acceptance
+// 3-event grammar (start_reserved -> spawn_entered -> physical_outcome). The
+// post-acceptance record seam accepts only outcomes that follow spawn_accepted.
+const POST_ACCEPTANCE_PHYSICAL_OUTCOMES = new Set(['FAILED_TO_RUN', 'TIMED_OUT', 'TURN_LIMIT_HIT', 'MALFORMED_COMPLETION']);
+export function deriveReviewPhysicalAttempt(identity, physicalGeneration, physicalOrdinal) {
+  if (!validateReviewIdentity(identity).ok || !Number.isInteger(physicalGeneration) || physicalGeneration < 0 || !Number.isInteger(physicalOrdinal) || physicalOrdinal < 0 || physicalOrdinal > 1) return null;
+  const physicalAttemptId = createHash('sha256').update([identity.runFamilyId, identity.planId, identity.reviewGate, identity.reviewMode, identity.attemptId, physicalGeneration, physicalOrdinal].join('|')).digest('hex');
+  return { physicalGeneration, physicalOrdinal, physicalAttemptId };
+}
+function samePhysical(left, right) { return Boolean(left && right && left.physicalGeneration === right.physicalGeneration && left.physicalOrdinal === right.physicalOrdinal && left.physicalAttemptId === right.physicalAttemptId); }
+function physicalReservation(identity, state, physical) {
+  if (!physical) return { ok: true, metadata: identity };
+  const expected = deriveReviewPhysicalAttempt(identity, physical.physicalGeneration, physical.physicalOrdinal);
+  if (!samePhysical(expected, physical)) return { ok: false };
+  if (state.status === 'allowed' && expected.physicalGeneration === 0 && expected.physicalOrdinal === 0) return { ok: true, metadata: { ...identity, ...expected } };
+  if (state.status === 'physical_retry') {
+    if (expected.physicalGeneration === state.physicalGeneration && expected.physicalOrdinal === state.physicalOrdinal) return { ok: true, metadata: { ...identity, ...expected } };
+    return { ok: false, retry: { physicalGeneration: state.physicalGeneration, physicalOrdinal: state.physicalOrdinal } };
+  }
+  return { ok: false };
+}
+function consumeReviewHold(root, identity, state, resume) {
+  if (!resume || resume.resumeConfirmed !== true || !/^hold-[a-f0-9]{32}$/.test(String(resume.resumeHoldId || '')) || state.status !== 'primary_hold' || resume.resumeHoldId !== state.holdId) return { ok: false };
+  const physical = deriveReviewPhysicalAttempt(identity, state.physicalGeneration + 1, 0);
+  if (!physical) return { ok: false };
+  appendReviewEvent(root.stream, 'review_resume_authorized', { ...identity, holdId: state.holdId });
+  appendReviewEvent(root.stream, 'review_resume_consumed', { ...identity, holdId: state.holdId });
+  return { ok: true, metadata: { ...identity, ...physical }, physical };
+}
+
 export function resolvePlanReviewAuthority({ stateDir, project, planId }) {
   return withLockContext(() => {
     const normalizedPlan = normalizePlan(planId);
@@ -303,102 +385,142 @@ export function resolvePlanReviewAuthority({ stateDir, project, planId }) {
   });
 }
 
-export function reserveReviewStart({ stateDir, project, pipelineId, identity, start }) {
+// Shared lock-context mutation wrapper: acquires selection -> gate -> root, runs
+// the mutation, releases the pair, and maps lifecycle failures. Callers never
+// manage partial lock state and cannot skip release.
+function withReviewMutation(stateDir, project, identity, mutate) {
   return withLockContext(() => {
-    if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return { status: 'denied' };
-    let selection; let gate; let gateHeld = false;
+    let result;
     try {
-      selection = takeSelectionLock(stateDir, project, identity.planId); if (!selection.held) return { status: 'unavailable', code: selection.code };
-      const authority = resolvePipelineAuthority({ stateDir, project, planId: identity.planId });
-      gate = reviewLock(authority, identity); const held = acquireLockOrdered('gate', () => takeLock(gate, identity.attemptId, identity, 'REVIEW_LOCK_UNAVAILABLE')); if (!held.held) { releaseLockOrdered('selection', selection.lock); return { status: 'unavailable', code: held.code }; } gateHeld = true;
-      const root = bindReviewRoot(authority, identity); let result;
-      if (root.code) result = { status: 'denied', code: root.code };
-      else {
-        const state = foldReviewHistory(root.rows, identity);
-        if (state.status === 'denied' || state.status === 'uncertain') result = state;
-        else if (state.status === 'terminal' || state.status === 'spawn_accepted' || state.status === 'prepared' || state.status === 'expansion_pending') result = { status: 'resumed', ...(state.status === 'terminal' ? { terminal: state.terminal } : {}) };
-        else {
-          if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(root.stream, 'start_reserved', identity);
-          appendReviewEvent(root.stream, 'spawn_entered', identity); const started = start();
-          if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
-          appendReviewEvent(root.stream, 'spawn_accepted', identity); result = { status: 'accepted', started };
-        }
-      }
-      if (!releasePair(gate, selection.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' };
+      const ctx = reviewMutationContext(stateDir, project, identity);
+      if (ctx.error) return ctx.error;
+      result = ctx.root.code ? { status: 'denied', code: ctx.root.code } : mutate(ctx);
+      if (!releasePair(ctx.gate, ctx.selection.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' };
       return result;
-    } catch (error) { if (gateHeld || selection?.held) releasePair(gateHeld ? gate : null, selection?.lock); return lifecycleErrorResult(error); }
+    } catch (error) { return lifecycleErrorResult(error); }
   });
 }
 
-export function reserveReviewStartAsync({ stateDir, project, pipelineId, identity, start }) {
+// Shared pre-dispatch classification + reservation for both start seams: returns
+// a terminal/denied result or the reserved attempt to launch.
+function reviewStartClassified(ctx, identity, physical, resume) {
+  const state = foldReviewHistory(ctx.root.rows, identity);
+  const classified = reserveStateResult(state, resume);
+  if (classified) return { result: classified };
+  const reserved = reviewStartReservation(ctx.root, identity, state, physical, resume);
+  if (reserved.denied) return { result: reserved.denied };
+  return { reservation: reserved.reservation };
+}
+
+export function reserveReviewStart({ stateDir, project, pipelineId, identity, physical, resume, start }) {
+  if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return { status: 'denied' };
+  return withReviewMutation(stateDir, project, identity, (ctx) => {
+    const classified = reviewStartClassified(ctx, identity, physical, resume);
+    if (classified.result) return classified.result;
+    let started;
+    try { started = start(); }
+    catch { return recordFailedToStart(ctx.root, classified.reservation, physical); }
+    if (started && typeof started.then === 'function') throw new Error('OS-start seam must return synchronously');
+    appendReviewEvent(ctx.root.stream, 'spawn_accepted', classified.reservation.metadata);
+    return { status: 'accepted', started, ...(classified.reservation.physical || physical || {}) };
+  });
+}
+
+export function reserveReviewStartAsync({ stateDir, project, pipelineId, identity, physical, resume, start }) {
   return withLockContext(() => {
     if (!validateReviewIdentity(identity).ok || typeof start !== 'function') return Promise.resolve({ status: 'denied' });
-    let selection; let gate; let gateHeld = false;
     try {
-      selection = takeSelectionLock(stateDir, project, identity.planId); if (!selection.held) return Promise.resolve({ status: 'unavailable', code: selection.code });
-      const authority = resolvePipelineAuthority({ stateDir, project, planId: identity.planId });
-      gate = reviewLock(authority, identity); const held = acquireLockOrdered('gate', () => takeLock(gate, identity.attemptId, identity, 'REVIEW_LOCK_UNAVAILABLE')); if (!held.held) { releaseLockOrdered('selection', selection.lock); return Promise.resolve({ status: 'unavailable', code: held.code }); } gateHeld = true;
-      const root = bindReviewRoot(authority, identity); if (root.code) { releasePair(gate, selection.lock); return Promise.resolve({ status: 'denied', code: root.code }); }
-      const state = foldReviewHistory(root.rows, identity);
-      if (state.status === 'denied' || state.status === 'uncertain') { releasePair(gate, selection.lock); return Promise.resolve(state); }
-      if (state.status === 'terminal' || state.status === 'spawn_accepted' || state.status === 'prepared' || state.status === 'expansion_pending') { releasePair(gate, selection.lock); return Promise.resolve({ status: 'resumed', ...(state.status === 'terminal' ? { terminal: state.terminal } : {}) }); }
-      if (state.status === 'allowed' || state.status === 'resume_reserved') appendReviewEvent(root.stream, 'start_reserved', identity);
-      appendReviewEvent(root.stream, 'spawn_entered', identity);
+      const ctx = reviewMutationContext(stateDir, project, identity);
+      if (ctx.error) return Promise.resolve(ctx.error);
+      const releaseThen = (value) => { releasePair(ctx.gate, ctx.selection.lock); return Promise.resolve(value); };
+      if (ctx.root.code) return releaseThen({ status: 'denied', code: ctx.root.code });
+      const classified = reviewStartClassified(ctx, identity, physical, resume);
+      if (classified.result) return releaseThen(classified.result);
+      const reservation = classified.reservation;
+      const attemptMetadata = reservation.physical || physical || {};
       return new Promise((resolve) => {
         let child; let signalled = false; let finished = false;
-        const finish = (result) => { if (finished) return; finished = true; if (!releasePair(gate, selection.lock)) { resolve({ status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }); return; } resolve(result); };
-        const processStarted = () => { if (signalled) throw new Error('REVIEW_SPAWN_ACCEPTANCE_DUPLICATE'); signalled = true; try { appendReviewEvent(root.stream, 'spawn_accepted', identity); if (child !== undefined) finish({ status: 'accepted', started: child }); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
-        try { child = start(processStarted); if (signalled && !finished) finish({ status: 'accepted', started: child }); Promise.resolve(child).catch(() => { if (!signalled) finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); }); }
-        catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); }
+        const finish = (result) => { if (finished) return; finished = true; if (!releasePair(ctx.gate, ctx.selection.lock)) { resolve({ status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }); return; } resolve(result); };
+        const accepted = (started) => finish({ status: 'accepted', started, ...attemptMetadata });
+        const failToStart = () => { try { finish(recordFailedToStart(ctx.root, reservation, physical)); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
+        const processStarted = () => { if (signalled) throw new Error('REVIEW_SPAWN_ACCEPTANCE_DUPLICATE'); signalled = true; try { appendReviewEvent(ctx.root.stream, 'spawn_accepted', reservation.metadata); if (child !== undefined) accepted(child); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
+        try { child = start(processStarted); if (signalled && !finished) accepted(child); Promise.resolve(child).catch(() => { if (!signalled) failToStart(); }); }
+        catch { failToStart(); }
       });
-    } catch (error) { if (gateHeld || selection?.held) releasePair(gateHeld ? gate : null, selection?.lock); return Promise.resolve(lifecycleErrorResult(error)); }
+    } catch (error) { return Promise.resolve(lifecycleErrorResult(error)); }
   });
+}
+
+export function resumeReviewHold({ stateDir, project, pipelineId, identity, resumeHoldId, resumeConfirmed, start }) {
+  if (resumeConfirmed !== true || !/^hold-[a-f0-9]{32}$/.test(String(resumeHoldId || ''))) return { status: 'denied', code: 'REVIEW_RESUME_INVALID' };
+  return reserveReviewStart({ stateDir, project, pipelineId, identity, resume: { resumeHoldId, resumeConfirmed }, start });
+}
+
+export function recordReviewPhysicalOutcome({ stateDir, project, pipelineId, identity, physical, outcome, evidence = {} }) {
+  if (!validateReviewIdentity(identity).ok || !POST_ACCEPTANCE_PHYSICAL_OUTCOMES.has(outcome)) return { status: 'denied', code: 'REVIEW_PHYSICAL_OUTCOME_INVALID' };
+  const expected = deriveReviewPhysicalAttempt(identity, physical?.physicalGeneration, physical?.physicalOrdinal);
+  if (!samePhysical(expected, physical)) return { status: 'denied', code: 'REVIEW_PHYSICAL_ATTEMPT_INVALID' };
+  const safeEvidence = { exitCode: Number.isInteger(evidence.exitCode) ? evidence.exitCode : null, timedOut: evidence.timedOut === true, turnLimitHit: evidence.turnLimitHit === true, finalTextPresent: evidence.finalTextPresent === true, routingPresent: evidence.routingPresent === true, artifactPresent: evidence.artifactPresent === true };
+  return withReviewMutation(stateDir, project, identity, (ctx) => {
+    const state = foldReviewHistory(ctx.root.rows, identity);
+    const duplicate = ctx.root.rows.find((candidate) => candidate?.event_type === 'physical_outcome' && candidate?.metadata?.outcome === outcome && samePhysical(candidate.metadata, physical) && matchesIdentity(candidate.metadata, identity));
+    if (duplicate) return JSON.stringify(duplicate.metadata.evidence || {}) === JSON.stringify(safeEvidence) ? { status: physical.physicalOrdinal === 0 ? 'retryable' : 'exhausted' } : { status: 'denied', code: 'REVIEW_PHYSICAL_OUTCOME_CONFLICT' };
+    if (state.status !== 'physical_accepted' || !samePhysical(state, physical)) return { status: 'denied', code: 'REVIEW_PHYSICAL_OUTCOME_INVALID' };
+    appendReviewEvent(ctx.root.stream, 'spawn_returned', { ...identity, ...physical });
+    appendReviewEvent(ctx.root.stream, 'physical_outcome', { ...identity, ...physical, outcome, evidence: safeEvidence });
+    return { status: physical.physicalOrdinal === 0 ? 'retryable' : 'exhausted', outcome };
+  });
+}
+
+export function recordReviewHold({ stateDir, project, pipelineId, identity, physical, status }) {
+  if (!validateReviewIdentity(identity).ok || !['PRIMARY_REVIEW_UNAVAILABLE', 'REVIEW_ABORTED'].includes(status)) return { status: 'denied', code: 'REVIEW_HOLD_INVALID' };
+  const expected = deriveReviewPhysicalAttempt(identity, physical?.physicalGeneration, physical?.physicalOrdinal);
+  if (!samePhysical(expected, physical) || (status === 'PRIMARY_REVIEW_UNAVAILABLE' && physical.physicalOrdinal !== 1)) return { status: 'denied', code: 'REVIEW_HOLD_INVALID' };
+  return withReviewMutation(stateDir, project, identity, (ctx) => {
+    const state = foldReviewHistory(ctx.root.rows, identity);
+    if (status === 'REVIEW_ABORTED' && state.status === 'abort_hold') return { status };
+    if (status === 'PRIMARY_REVIEW_UNAVAILABLE' && state.status === 'primary_hold') return { status, holdId: state.holdId };
+    if ((status === 'REVIEW_ABORTED' && state.status !== 'physical_accepted') || (status === 'PRIMARY_REVIEW_UNAVAILABLE' && (state.status !== 'physical_exhausted' || !samePhysical(state, physical)))) return { status: 'denied', code: `REVIEW_HOLD_STATE_${state.status}` };
+    const holdId = status === 'PRIMARY_REVIEW_UNAVAILABLE' ? `hold-${createHash('sha256').update(JSON.stringify({ identity, physical, status })).digest('hex').slice(0, 32)}` : undefined;
+    appendReviewEvent(ctx.root.stream, 'review_hold', { ...identity, ...physical, status, ...(holdId ? { holdId } : {}) });
+    return holdId ? { status, holdId } : { status };
+  });
+}
+
+export function recordReviewAbortHold({ stateDir, project, pipelineId, identity, physical }) {
+  return recordReviewHold({ stateDir, project, pipelineId, identity, physical, status: 'REVIEW_ABORTED' });
 }
 
 export function recordReviewCompletion({ stateDir, project, pipelineId, identity, outcome, receipt: receiptExtra }) {
-  return withLockContext(() => {
-    if (!validateReviewIdentity(identity).ok || !allowedCompletionOutcome(identity, outcome)) return { status: 'denied' };
-    let selection; let gate; let gateHeld = false;
-    try {
-      selection = takeSelectionLock(stateDir, project, identity.planId); if (!selection.held) return { status: 'unavailable', code: selection.code };
-      const authority = resolvePipelineAuthority({ stateDir, project, planId: identity.planId });
-      gate = reviewLock(authority, identity); const held = acquireLockOrdered('gate', () => takeLock(gate, identity.attemptId, identity, 'REVIEW_LOCK_UNAVAILABLE')); if (!held.held) { releaseLockOrdered('selection', selection.lock); return { status: 'unavailable', code: held.code }; } gateHeld = true;
-      const root = bindReviewRoot(authority, identity); let result;
-      if (root.code) result = { status: 'denied', code: root.code };
-      else {
-        const state = foldReviewHistory(root.rows, identity);
-        if (state.status === 'terminal') result = state.terminal === canonicalTerminalStatus(outcome) ? { status: 'resumed', terminal: state.terminal } : { status: 'denied' };
-        else if (state.status === 'uncertain') result = state;
-        else if (state.status === 'expansion_pending') result = outcome === 'USER_DECISION_REQUIRED' ? { status: 'USER_DECISION_REQUIRED' } : { status: 'denied' };
-        else if (state.status === 'prepared') {
-          // Plan 059 Slice 2 crash rule: prepared-only and prepared+returned states resume
-          // under the exact same receipt (identity + artifact digest + outcome digest +
-          // intended outcome + TBR IDs); a differing duplicate receipt fails closed.
-          const receipt = receiptMetadata(identity, outcome, receiptExtra);
-          const existing = existingReceipt(root.rows, identity);
-          if (!existing || JSON.stringify(existing) !== JSON.stringify(receipt)) result = { status: 'denied', code: 'REVIEW_RECEIPT_MISMATCH' };
-          else {
-            const identityRows = root.rows.filter((candidate) => candidate?.metadata && ['runFamilyId', 'planId', 'reviewGate', 'reviewMode', 'attemptId'].every((key) => candidate.metadata[key] === identity[key]));
-            if (!identityRows.some((candidate) => candidate.event_type === 'spawn_returned')) appendReviewEvent(root.stream, 'spawn_returned', identity);
-            if (!identityRows.some((candidate) => candidate.event_type === 'review_outcome')) appendReviewEvent(root.stream, 'review_outcome', { ...identity, outcome });
-            result = { status: outcome };
-          }
-        }
-        else if (state.status !== 'spawn_accepted') result = { status: 'denied' };
-        else if (identity.reviewMode === 'review2' && outcome === 'CHANGES_REQUESTED') { appendReviewEvent(root.stream, 'spawn_returned', identity); result = { status: 'TBR_WRITE_BLOCKED' }; }
-        else {
-          // Uniform fixed-position receipt for every new lifecycle completion: after
-          // spawn_accepted, before spawn_returned. Binds canonical identity, exact
-          // artifact digest, canonical completion digest, intended outcome, stable TBR IDs.
-          appendReviewEvent(root.stream, 'completion_prepared', receiptMetadata(identity, outcome, receiptExtra));
-          appendReviewEvent(root.stream, 'spawn_returned', identity);
-          appendReviewEvent(root.stream, 'review_outcome', { ...identity, outcome });
-          result = { status: outcome };
-        }
-      }
-      if (!releasePair(gate, selection.lock)) return { status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' };
-      return result;
-    } catch (error) { if (gateHeld || selection?.held) releasePair(gateHeld ? gate : null, selection?.lock); return lifecycleErrorResult(error); }
+  if (!validateReviewIdentity(identity).ok || !allowedCompletionOutcome(identity, outcome)) return { status: 'denied' };
+  return withReviewMutation(stateDir, project, identity, (ctx) => {
+    const state = foldReviewHistory(ctx.root.rows, identity);
+    if (state.status === 'terminal') return state.terminal === canonicalTerminalStatus(outcome) ? { status: 'resumed', terminal: state.terminal } : { status: 'denied' };
+    if (state.status === 'uncertain') return state;
+    if (state.status === 'expansion_pending') return outcome === 'USER_DECISION_REQUIRED' ? { status: 'USER_DECISION_REQUIRED' } : { status: 'denied' };
+    if (state.status === 'prepared') {
+      // Plan 059 Slice 2 crash rule: prepared-only and prepared+returned states resume
+      // under the exact same receipt (identity + artifact digest + outcome digest +
+      // intended outcome + TBR IDs); a differing duplicate receipt fails closed.
+      const receipt = receiptMetadata(identity, outcome, receiptExtra);
+      const existing = existingReceipt(ctx.root.rows, identity);
+      if (!existing || JSON.stringify(existing) !== JSON.stringify(receipt)) return { status: 'denied', code: 'REVIEW_RECEIPT_MISMATCH' };
+      const identityRows = ctx.root.rows.filter((candidate) => matchesIdentity(candidate.metadata, identity));
+      if (!identityRows.some((candidate) => candidate.event_type === 'spawn_returned')) appendReviewEvent(ctx.root.stream, 'spawn_returned', identity);
+      if (!identityRows.some((candidate) => candidate.event_type === 'review_outcome')) appendReviewEvent(ctx.root.stream, 'review_outcome', { ...identity, outcome });
+      return { status: outcome };
+    }
+    if (state.status !== 'spawn_accepted' && state.status !== 'physical_accepted') return { status: 'denied' };
+    const physical = state.status === 'physical_accepted' ? deriveReviewPhysicalAttempt(identity, state.physicalGeneration, state.physicalOrdinal) : null;
+    const metadata = physical ? { ...identity, ...physical } : identity;
+    if (identity.reviewMode === 'review2' && outcome === 'CHANGES_REQUESTED') { appendReviewEvent(ctx.root.stream, 'spawn_returned', metadata); return { status: 'TBR_WRITE_BLOCKED' }; }
+    // Uniform fixed-position receipt for every new lifecycle completion: after
+    // spawn_accepted, before spawn_returned. Binds canonical identity, exact
+    // artifact digest, canonical completion digest, intended outcome, stable TBR IDs.
+    appendReviewEvent(ctx.root.stream, 'completion_prepared', { ...receiptMetadata(identity, outcome, receiptExtra), ...(physical || {}) });
+    appendReviewEvent(ctx.root.stream, 'spawn_returned', metadata);
+    appendReviewEvent(ctx.root.stream, 'review_outcome', { ...metadata, outcome });
+    return { status: outcome };
   });
 }
 
@@ -422,8 +544,8 @@ function receiptMetadata(identity, outcome, extra = {}) {
 }
 function existingReceipt(rows, identity) {
   for (const candidate of rows) {
-    if (candidate?.event_type !== 'completion_prepared' || !candidate.metadata) continue;
-    if (['runFamilyId', 'planId', 'reviewGate', 'reviewMode', 'attemptId'].every((key) => candidate.metadata[key] === identity[key])) return candidate.metadata;
+    if (candidate?.event_type !== 'completion_prepared' || !matchesIdentity(candidate.metadata, identity)) continue;
+    return candidate.metadata;
   }
   return null;
 }

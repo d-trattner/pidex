@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { foldReviewHistory, validateReviewIdentity } from '../../../../../extensions/pidex/review-budget.ts';
-import { normalizePlan, recordPipelineEvent, recordReviewCompletion, reserveReviewStart, resolvePlanReviewAuthority } from './event.mjs';
+import { deriveReviewPhysicalAttempt, normalizePlan, recordPipelineEvent, recordReviewCompletion, recordReviewPhysicalOutcome, reserveReviewStart, resolvePlanReviewAuthority } from './event.mjs';
 import { canonicalProjectIdentity } from '../../lib/project-key.mjs';
 
 const tuple = { runFamilyId: 'family-001', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-001' };
@@ -180,6 +180,12 @@ try {
   const reviewRows = readFileSync(jsonl, 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.runFamilyId === tuple.runFamilyId);
   assert.deepEqual(reviewRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted']);
   assert.equal(existsSync(path.join(projectBase, `.review-${tuple.runFamilyId}.lock`)), false);
+  const physicalTuple = { ...tuple, reviewGate: 'qa', runFamilyId: 'family-physical-idempotency', attemptId: 'attempt-physical-idempotency' };
+  const physical = deriveReviewPhysicalAttempt(physicalTuple, 0, 0);
+  assert.equal(reserveReviewStart({ stateDir: state, project, pipelineId, identity: physicalTuple, physical, start: () => 'physical-child' }).status, 'accepted');
+  assert.equal(recordReviewPhysicalOutcome({ stateDir: state, project, pipelineId, identity: physicalTuple, physical, outcome: 'FAILED_TO_RUN', evidence: { exitCode: 1, finalTextPresent: false } }).status, 'retryable');
+  assert.equal(recordReviewPhysicalOutcome({ stateDir: state, project, pipelineId, identity: physicalTuple, physical, outcome: 'FAILED_TO_RUN', evidence: { exitCode: 1, finalTextPresent: false } }).status, 'retryable', 'canonical-identical physical outcome is idempotent');
+  assert.equal(recordReviewPhysicalOutcome({ stateDir: state, project, pipelineId, identity: physicalTuple, physical, outcome: 'FAILED_TO_RUN', evidence: { exitCode: 2, finalTextPresent: false } }).status, 'denied', 'same physical outcome with different canonical evidence fails closed');
   rmSync(reviewCurrent);
   assert.deepEqual(reserveReviewStart({ stateDir: state, project, pipelineId, identity: { ...tuple, runFamilyId: 'family-missing-pointer', attemptId: 'attempt-missing-pointer' }, start: () => { throw new Error('missing current pointer must not start'); } }), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' });
   writeFileSync(reviewCurrent, pipelineId);

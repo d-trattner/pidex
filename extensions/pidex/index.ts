@@ -9,7 +9,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { foldReviewHistory, normalizeReviewPlan, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
-import { completeStructuredReviewOutcome, recordReviewCompletion, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
+import { completeStructuredReviewOutcome, deriveReviewPhysicalAttempt, recordReviewAbortHold, recordReviewCompletion, recordReviewHold, recordReviewPhysicalOutcome, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 import { resolveStateRoot } from "../../modules/pidex/analysis-metrics-history/lib/state-root.mjs";
 
 type AgentFrontmatter = {
@@ -55,6 +55,7 @@ type RpResult = {
 	aborted?: boolean;
 	turnLimitHit?: boolean;
 	warnings?: string[];
+	reviewCompletion?: { status: string; holdId?: string };
 };
 
 type ParallelSecondaryRoute = {
@@ -324,7 +325,7 @@ function resolveRoute(config: RoutingConfig, agentName: string): AgentRoute {
 	};
 }
 
-type HostAgentRequest = { agent: string; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string; runFamilyId?: string; planId?: string; reviewGate?: string; reviewMode?: string; attemptId?: string };
+type HostAgentRequest = { agent: string; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string; runFamilyId?: string; planId?: string; reviewGate?: string; reviewMode?: string; attemptId?: string; resumeHoldId?: string; resumeConfirmed?: boolean };
 
 export function validateHostAgentRequestShape(params: HostAgentRequest): { secondary: boolean } {
 	const hasManualRoute = params.provider !== undefined || params.model !== undefined || params.effort !== undefined;
@@ -3041,7 +3042,7 @@ export async function runConfiguredProviderAttempts(
 		missingRouting = result.exitCode === 0 && result.finalText && !hasRoutingBlock(result.finalText);
 		shouldFallback = result.exitCode !== 0 || !result.finalText || missingRouting;
 	}
-	if (shouldFallback && !params.reviewDispatch && !result.setupError && params.fallbackEnabled && params.fallbackProvider && params.fallbackProvider !== params.provider) {
+	if (shouldFallback && !params.reviewDispatch && !result.setupError && !params.retrySameProvider && params.fallbackEnabled && params.fallbackProvider && params.fallbackProvider !== params.provider) {
 		params.onConfiguredFallback?.(Boolean(missingRouting));
 		result = await runProvider(params.fallbackProvider, params.provider);
 	}
@@ -3650,6 +3651,21 @@ function reviewDispatchFor(agent: string, identity: Record<string, unknown>, _ta
 	return !secondary && (REVIEWER_AGENTS.has(agent) || (CORRECTION_OWNERS.has(agent) && Object.values(identity).some((value) => value !== undefined)));
 }
 
+// Shared review-dispatch resolution for both seams: derives identity from the
+// task/authority when no explicit identity is supplied; both seams must resolve
+// identically so retry/hold authority cannot drift.
+function resolveReviewDispatch(params: any, suppliedIdentity: any, agent: string, task: string, lifecycle: { stateDir: string; pipelineId: string }, project: string, secondary: boolean): { reviewDispatch: boolean; resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined } {
+	let reviewDispatch = reviewDispatchFor(agent, suppliedIdentity, task, secondary);
+	let resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined;
+	if (!secondary && CORRECTION_OWNERS.has(agent) && !Object.values(suppliedIdentity).some((value) => value !== undefined) && extractPlanId(task) !== "unknown-plan") {
+		resolvedReview = resolveReviewIdentity(params, lifecycle, project);
+		reviewDispatch = Boolean(resolvedReview);
+	}
+	if (reviewDispatch && !resolvedReview) resolvedReview = resolveReviewIdentity(params, lifecycle, project);
+	if (reviewDispatch && !resolvedReview) throw new Error("REVIEW_IDENTITY_INVALID");
+	return { reviewDispatch, resolvedReview };
+}
+
 function derivedAttemptId(runFamilyId: string, reviewGate: string, reviewMode: string): string {
 	return `attempt-${createHash("sha256").update(`${runFamilyId}|${reviewGate}|${reviewMode}`).digest("hex").slice(0, 16)}`;
 }
@@ -3783,18 +3799,58 @@ function completeReviewDispatch(agent: string, identity: Record<string, string>,
 	return result;
 }
 
+// Shared physical retry/hold dispatch for both review seams (host async + Project
+// Pipeline sync): resume validation, reservation status fan-out, physical attempt
+// derivation, and child-failure classification stay identical across seams so
+// retry authority and typed hold outcomes cannot drift between them.
+function reviewResumeFrom(params: any, extraInvalid?: boolean): { resumeHoldId: string; resumeConfirmed: boolean } | undefined {
+	const resumeFieldsSupplied = params.resumeHoldId !== undefined || params.resumeConfirmed !== undefined;
+	if (resumeFieldsSupplied && (extraInvalid || params.resumeConfirmed !== true || typeof params.resumeHoldId !== "string" || !/^hold-[a-f0-9]{32}$/.test(params.resumeHoldId))) throw new Error("REVIEW_RESUME_INVALID");
+	return resumeFieldsSupplied ? { resumeHoldId: params.resumeHoldId, resumeConfirmed: params.resumeConfirmed } : undefined;
+}
+
+// Fan-out on a resolved reservation: held/uncertain/retryable/exhausted return
+// typed seam results; accepted returns null so the caller dispatches the child.
+function reviewReservationStatus(identity: Record<string, string>, reservation: any, held: (reviewCompletion: any) => any, uncertain: () => any, exhausted: (physical: any) => any): { retry: number } | { done: any } | null {
+	if (reservation.status === "held") return { done: held(reservation.reviewCompletion) };
+	if (reservation.status === "uncertain") return { done: uncertain() };
+	if (reservation.status === "retryable") return { retry: true, generation: reservation.physicalGeneration };
+	if (reservation.status === "exhausted") {
+		const exhaustedPhysical = deriveReviewPhysicalAttempt(identity, reservation.physicalGeneration, reservation.physicalOrdinal);
+		if (!exhaustedPhysical) throw new Error("REVIEW_PHYSICAL_ATTEMPT_INVALID");
+		return { done: exhausted(exhaustedPhysical) };
+	}
+	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
+	return null;
+}
+function reviewPhysicalOf(identity: Record<string, string>, reservation: any, requestedPhysical: any): any {
+	const physical = reservation.physical ?? (Number.isInteger(reservation.physicalGeneration) && Number.isInteger(reservation.physicalOrdinal) ? deriveReviewPhysicalAttempt(identity, reservation.physicalGeneration, reservation.physicalOrdinal) : requestedPhysical);
+	if (!physical) throw new Error("REVIEW_PHYSICAL_ATTEMPT_INVALID");
+	return physical;
+}
+
+// Shared child-failure classification (SEC-2): setup/auth/config/identity/sandbox/
+// write-fence denials are deterministic and must never consume the automatic
+// physical retry; only typed child/routing failures classify. Typed hold control
+// results stop the seam instead of retrying (AC-62-15). Same evidence contract
+// for both seams.
+function reviewChildFailure(lifecycle: any, identity: Record<string, string>, physical: any, physicalOrdinal: number, code: string, result: any, artifactPresentOf: (result: any) => boolean): { rethrow: true } | { retry: number } | { done: any } {
+	if (!['REVIEW_CHILD_FAILED', 'REVIEW_ROUTING_INVALID', 'REVIEW_OUTCOME_INVALID'].includes(code)) return { rethrow: true };
+	if (code === 'REVIEW_OUTCOME_INVALID') return { rethrow: true };
+	if (result?.aborted) return { done: { ...result, reviewCompletion: recordReviewAbortHold({ ...lifecycle, identity, physical }) } };
+	if (result?.setupError) throw new Error("REVIEW_SETUP_DENIED");
+	const outcome = code === 'REVIEW_ROUTING_INVALID' ? 'MALFORMED_COMPLETION' : result?.timedOut ? 'TIMED_OUT' : result?.turnLimitHit ? 'TURN_LIMIT_HIT' : 'FAILED_TO_RUN';
+	const recorded = recordReviewPhysicalOutcome({ ...lifecycle, identity, physical, outcome, evidence: { exitCode: result?.exitCode, timedOut: result?.timedOut, turnLimitHit: result?.turnLimitHit, finalTextPresent: Boolean(result?.finalText), routingPresent: Boolean(extractRoutingBlock(String(result?.finalText || ''))), artifactPresent: artifactPresentOf(result) } });
+	if (recorded.status !== 'retryable' && recorded.status !== 'exhausted') throw new Error(recorded.code || 'REVIEW_LIFECYCLE_UNAVAILABLE');
+	if (physicalOrdinal === 1) return { done: { ...result, reviewCompletion: recordReviewHold({ ...lifecycle, identity, physical, status: 'PRIMARY_REVIEW_UNAVAILABLE' }) } };
+	return { retry: true, generation: physical.physicalGeneration };
+}
+
 export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
 	const request = validateHostAgentRequestShape(params);
 	const suppliedIdentity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
-	let reviewDispatch = reviewDispatchFor(params.agent, suppliedIdentity, params.task, request.secondary);
 	const configuredLifecycle = options.reviewLifecycle ?? { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${path.basename(options.agentCwd)}-${params.planId}` };
-	let resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined;
-	if (!request.secondary && CORRECTION_OWNERS.has(params.agent) && !Object.values(suppliedIdentity).some((value) => value !== undefined) && extractPlanId(params.task) !== "unknown-plan") {
-		resolvedReview = resolveReviewIdentity(params, configuredLifecycle, options.agentCwd);
-		reviewDispatch = Boolean(resolvedReview);
-	}
-	if (reviewDispatch && !resolvedReview) resolvedReview = resolveReviewIdentity(params, configuredLifecycle, options.agentCwd);
-	if (reviewDispatch && !resolvedReview) throw new Error("REVIEW_IDENTITY_INVALID");
+	const { reviewDispatch, resolvedReview } = resolveReviewDispatch(params, suppliedIdentity, params.agent, params.task, configuredLifecycle, options.agentCwd, request.secondary);
 	const identity = resolvedReview?.identity ?? suppliedIdentity;
 	const eligibleLanes = request.secondary
 		? (options.loadEligibleLanes ?? ((requestParams) => {
@@ -3838,9 +3894,30 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	if (!reviewDispatch) return await runner(runParams);
 	if (options.signal?.aborted) throw new Error("REVIEW_DISPATCH_ABORTED");
 	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
-	const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted, reviewDispatch: true }) });
-	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
-	return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params, true);
+	const hostHeld = (reviewCompletion: any) => ({ agent: params.agent, provider: route.provider, exitCode: 0, stderr: "", finalText: "", reviewCompletion });
+	let physicalGeneration = 0;
+	let resume = reviewResumeFrom(params, request.secondary);
+	for (const physicalOrdinal of [0, 1]) {
+		const requestedPhysical = resume ? undefined : deriveReviewPhysicalAttempt(identity, physicalGeneration, physicalOrdinal);
+		if (!resume && !requestedPhysical) throw new Error("REVIEW_PHYSICAL_ATTEMPT_INVALID");
+		const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, physical: requestedPhysical, resume, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted, reviewDispatch: true }) });
+		const status = reviewReservationStatus(identity, reservation, (c) => hostHeld(c), () => hostHeld({ status: "REVIEW_DISPATCH_UNCERTAIN" }), (p) => hostHeld(recordReviewHold({ ...lifecycle, identity, physical: p, status: "PRIMARY_REVIEW_UNAVAILABLE" })));
+		if (status?.retry) { physicalGeneration = status.generation; resume = undefined; continue; }
+		if (status?.done) return status.done;
+		const physical = reviewPhysicalOf(identity, reservation, requestedPhysical);
+		try {
+			return completeReviewDispatch(params.agent, identity as Record<string, string>, await reservation.started, lifecycle, options.agentCwd, undefined, params, true);
+		} catch (error: any) {
+			const failure = reviewChildFailure(lifecycle, identity, physical, physicalOrdinal, String(error?.message || error), await reservation.started, (r) => {
+				const reportedContext = extractRoutingField(extractRoutingBlock(String(r?.finalText || '')), 'context_file');
+				return isRelativeAgentsOutputPath(reportedContext) && fs.existsSync(path.join(options.agentCwd, ...reportedContext.split('/')));
+			});
+			if (failure.rethrow) throw error;
+			if (failure.retry) { physicalGeneration = failure.generation; resume = undefined; continue; }
+			return failure.done;
+		}
+	}
+	throw new Error("REVIEW_DISPATCH_DENIED");
 }
 
 const PUBLIC_REVIEW_IDENTITY_KEYS = ["runFamilyId", "planId", "reviewGate", "reviewMode", "attemptId"].sort();
@@ -3867,6 +3944,8 @@ export const PidexAgentParams = Type.Object({
 	model: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	effort: Type.Optional(Type.String({ description: "Rejected for host-direct and hardened-pipeline calls. Routes resolve from configured primary or laneId." })),
 	tools: Type.Optional(Type.Array(Type.String(), { description: "Optional Pi tool allowlist override (only used by provider=pi/subagent)." })),
+	resumeHoldId: Type.Optional(Type.String({ description: "Trusted-orchestrator single-use Primary hold ID. Requires resumeConfirmed:true." })),
+	resumeConfirmed: Type.Optional(Type.Boolean({ description: "Literal true only. Trusted orchestrator confirms intervening affirmative user response." })),
 	reviewIdentity: Type.Optional(Type.Object({
 		runFamilyId: Type.String(), planId: Type.String(),
 		reviewGate: Type.Union([Type.Literal("critic"), Type.Literal("code-review"), Type.Literal("security"), Type.Literal("qa")]),
@@ -3881,31 +3960,41 @@ type ProjectPipelineReviewLifecycle = { stateDir: string; pipelineId: string; pr
 
 export function executeProjectPipelineReviewBoundary(params: any, lifecycle: ProjectPipelineReviewLifecycle, start: () => any): any {
 	const suppliedIdentity = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
-	let reviewDispatch = reviewDispatchFor(String(params?.agent || ""), suppliedIdentity, String(params?.task || ""));
-	let resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined;
-	if (CORRECTION_OWNERS.has(String(params?.agent || "")) && !Object.values(suppliedIdentity).some((value) => value !== undefined) && extractPlanId(String(params?.task || "")) !== "unknown-plan") {
-		resolvedReview = resolveReviewIdentity(params, lifecycle, lifecycle.project);
-		reviewDispatch = Boolean(resolvedReview);
-	}
+	const { reviewDispatch, resolvedReview } = resolveReviewDispatch(params, suppliedIdentity, String(params?.agent || ""), String(params?.task || ""), lifecycle, lifecycle.project, false);
 	if (!reviewDispatch) return start();
-	resolvedReview ??= resolveReviewIdentity(params, lifecycle, lifecycle.project);
-	if (!resolvedReview) throw new Error("REVIEW_IDENTITY_INVALID");
-	const identity = resolvedReview.identity;
+	const identity = resolvedReview!.identity;
 	const effectiveLifecycle = { ...lifecycle, pipelineId: resolvedReview.pipelineId };
-	const reservation = reserveReviewStart({ ...effectiveLifecycle, identity, start });
-	if (reservation.status !== "accepted") throw new Error(reservation.status === "resumed" ? "REVIEW_DISPATCH_RESUMED" : reservation.code || "REVIEW_DISPATCH_DENIED");
-	if (lifecycle.projectId) {
-		if (!lifecycle.resolveCurrentProject) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
-		let currentProject: string;
-		try { currentProject = lifecycle.resolveCurrentProject(); }
-		catch { throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED"); }
-		if (currentProject !== lifecycle.project) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
+	const pipelineHeld = (reviewCompletion: any) => ({ exitCode: 0, reviewCompletion });
+	let physicalGeneration = 0;
+	let resume = reviewResumeFrom(params);
+	for (const physicalOrdinal of [0, 1]) {
+		const requestedPhysical = resume ? undefined : deriveReviewPhysicalAttempt(identity, physicalGeneration, physicalOrdinal);
+		if (!resume && !requestedPhysical) throw new Error("REVIEW_PHYSICAL_ATTEMPT_INVALID");
+		const reservation = reserveReviewStart({ ...effectiveLifecycle, identity, physical: requestedPhysical, resume, start });
+		const status = reviewReservationStatus(identity, reservation, (c) => pipelineHeld(c), () => pipelineHeld({ status: "REVIEW_DISPATCH_UNCERTAIN" }), (p) => pipelineHeld(recordReviewHold({ ...effectiveLifecycle, identity, physical: p, status: "PRIMARY_REVIEW_UNAVAILABLE" })));
+		if (status?.retry) { physicalGeneration = status.generation; resume = undefined; continue; }
+		if (status?.done) return status.done;
+		if (lifecycle.projectId) {
+			if (!lifecycle.resolveCurrentProject) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
+			let currentProject: string;
+			try { currentProject = lifecycle.resolveCurrentProject(); }
+			catch { throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED"); }
+			if (currentProject !== lifecycle.project) throw new Error("REVIEW_PROJECT_AUTHORITY_CHANGED");
+		}
+		const physical = reviewPhysicalOf(identity, reservation, requestedPhysical);
+		try {
+			return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params, true);
+		} catch (error: any) {
+			const failure = reviewChildFailure(effectiveLifecycle, identity, physical, physicalOrdinal, String(error?.message || error), reservation.started, () => {
+				const expectedArtifact = String(params?.expectedOutputPath || '');
+				return isRelativeAgentsOutputPath(expectedArtifact) && fs.existsSync(path.join(lifecycle.project, ...expectedArtifact.split('/')));
+			});
+			if (failure.rethrow) throw error;
+			if (failure.retry) { physicalGeneration = failure.generation; resume = undefined; continue; }
+			return failure.done;
+		}
 	}
-	// Plan 059 Slice 3 (req 1/2): Project Pipeline primary reviews complete through the
-	// canonical structured boundary (parity with host-direct) — exact assigned
-	// artifact, pidex-review-outcome-v1, terminal matrix, typed reviewCompletion.
-	// Corrections carry no structured payload and keep the legacy ROUTING path.
-	return completeReviewDispatch(String(params.agent), identity, reservation.started, effectiveLifecycle, lifecycle.project, params?.expectedOutputPath, params, true);
+	throw new Error("REVIEW_DISPATCH_DENIED");
 }
 
 export function resolveProjectPipelineAuthority(projectId: string): { root: string; kind: string } {

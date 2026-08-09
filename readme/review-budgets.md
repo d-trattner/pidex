@@ -32,11 +32,15 @@ After review 2 rejects, PIDEX terminalizes automatically: every remaining active
 
 `TBR_WRITE_BLOCKED` remains only a persistence/validation failure: if the TBR archive write or lifecycle validation cannot complete, PIDEX fails closed with the typed `TBR_WRITE_BLOCKED` status and appends no false terminal outcome; a same-identity retry resumes idempotently. Terminalization is automatic and durable, not a separate user-visible step.
 
-## Interruptions and provider attempts
+## Interruptions and physical provider attempts
 
-Lifecycle-tracked review dispatches get one provider attempt. They do not retry or fall back to another provider.
+Every automatic generation has fixed maximum: `initial physical execution + one automatic retry`. A retry is retryable only for bounded transient launch failure, accepted-child nonzero exit, timeout, turn limit, or malformed completion (no final text, incomplete stream, invalid/missing ROUTING, invalid assigned artifact). Auth, identity, lifecycle lock/I/O, security, write-fence, configuration, project-authority, deterministic input failure, and user abort do not retry. Unknown classification fails closed.
 
-A dispatch aborted before it starts uses zero attempts. Once a review dispatch is accepted, it is one-shot, including if it is interrupted. Ordinary non-review work keeps its normal retry/fallback behavior.
+Ordinary host work executes at most two physical providers total. Its second/final execution is same-provider retry or configured fallback, never both. Lifecycle-tracked Primary keeps configured route/model for retry. Exhausted Primary becomes typed `PRIMARY_REVIEW_UNAVAILABLE`; main/adjudicator becomes typed essential hold. These results stop orchestration; they are not completion or phase success.
+
+Trusted outer orchestrator shows hold and asks user. Only after an intervening affirmative user response may it submit exact single-use `resumeHoldId + resumeConfirmed:true`, bound to held identity; no provider/model override, automatic resume, or resume slash command exists. Exhausted advisory Secondary is `DEGRADED_FAILED`: preserve safe reason and attempt summaries, continue Primary/other lanes, and never treat missing findings as approval.
+
+A dispatch aborted before it starts uses zero physical executions. Accepted failure records distinct physical outcome (`FAILED_TO_RUN`, `TIMED_OUT`, `TURN_LIMIT_HIT`, or `MALFORMED_COMPLETION`) without consuming reviewer/correction budget.
 
 ## What this limit does not cover
 

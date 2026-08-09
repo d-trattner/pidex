@@ -36,7 +36,7 @@ await assert.rejects(() => runConfiguredProviderAttempts({ provider: 'pi', fallb
 assert.equal(preAbortedAttempts, 0, 'pre-aborted review attempts no provider');
 const ordinaryAttempts = [];
 await runConfiguredProviderAttempts({ provider: 'pi', fallbackProvider: 'codex', retrySameProvider: true, fallbackEnabled: true }, async (provider, fallbackFrom) => { ordinaryAttempts.push([provider, fallbackFrom]); return invalidCompletion({ provider }); });
-assert.deepEqual(ordinaryAttempts, [['pi', undefined], ['pi', 'pi'], ['codex', 'pi']], 'ordinary invalid Pi completion retries Pi then configured fallback');
+assert.deepEqual(ordinaryAttempts, [['pi', undefined], ['pi', 'pi']], 'ordinary invalid Pi completion uses initial plus one retry, never a third fallback execution');
 const eventBase = (stateDir, project) => path.join(stateDir, 'pipeline-events', canonicalProjectIdentity(project).projectKey);
 const bindCurrent = (stateDir, project, pipelineId, planId = 'plan-038') => { const base = eventBase(stateDir, project); mkdirSync(base, { recursive: true }); writeFileSync(path.join(base, `${planId}.current`), pipelineId); writeFileSync(path.join(base, `${pipelineId}.jsonl`), `${JSON.stringify({ event_type: 'pipeline_started', project_path: canonicalProjectIdentity(project).canonicalProject, pipeline_id: pipelineId, plan_key: planId })}\n`, { flag: 'a' }); };
 const structuredActiveFinding = { findingId: 'F-structured-active', relation: 'assigned', class: 'Product', reproductionState: 'reproduced', causedByCorrection: true, severity: 'High', disposition: 'active' };
@@ -104,7 +104,7 @@ try {
     let providers = 0;
     let processStarts = 0;
     let trackedReviewDispatch;
-    await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: `Plan 038 ${label}`, ...identity, runFamilyId: `family-${label}`, attemptId: `attempt-${label}` }, {
+    const dispatch = () => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: `Plan 038 ${label}`, ...identity, runFamilyId: `family-${label}`, attemptId: `attempt-${label}` }, {
       agentCwd: interruptedProject,
       reviewLifecycle: { stateDir: interruptedState, pipelineId: `interrupted-${label}` },
       loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
@@ -116,11 +116,55 @@ try {
         processStarts += 1;
         return result;
       },
-    }), /REVIEW_CHILD_FAILED/);
-    assert.equal(providers, 1, `${label} review starts one provider`);
-    assert.equal(processStarts, 1, `${label} review signals one process start`);
+    });
+    if (label === 'aborted') {
+      const aborted = await dispatch();
+      assert.equal(aborted.reviewCompletion.status, 'REVIEW_ABORTED', 'accepted user abort persists typed durable stop');
+    } else {
+      const held = await dispatch();
+      assert.equal(held.reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE', 'retry exhaustion returns typed Primary hold');
+      assert.match(held.reviewCompletion.holdId, /^hold-[a-f0-9]{32}$/);
+    }
+    assert.equal(providers, label === 'aborted' ? 1 : 2, `${label} keeps bounded execution budget`);
+    assert.equal(processStarts, label === 'aborted' ? 1 : 2, `${label} records each accepted physical execution`);
     assert.equal(trackedReviewDispatch, true, `${label} review suppresses generic retry/fallback`);
   }
+
+  resetRoot('interrupted-invalid-outcome');
+  let invalidOutcomeProviders = 0;
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 invalid deterministic outcome', ...identity, runFamilyId: 'family-invalid-outcome', attemptId: 'attempt-invalid-outcome' }, {
+    agentCwd: interruptedProject,
+    reviewLifecycle: { stateDir: interruptedState, pipelineId: 'interrupted-invalid-outcome' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => { invalidOutcomeProviders += 1; params.onProcessStarted?.(); return reviewResult({ finalText: '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->' }); },
+  }), /REVIEW_OUTCOME_INVALID/);
+  assert.equal(invalidOutcomeProviders, 1, 'deterministic invalid review outcome never launches retry child');
+
+  resetRoot('interrupted-setup-denied');
+  let setupDeniedProviders = 0;
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 setup denial', ...identity, runFamilyId: 'family-setup-denied', attemptId: 'attempt-setup-denied' }, {
+    agentCwd: interruptedProject,
+    reviewLifecycle: { stateDir: interruptedState, pipelineId: 'interrupted-setup-denied' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => { setupDeniedProviders += 1; params.onProcessStarted?.(); return reviewResult({ exitCode: 1, finalText: '', setupError: true }); },
+  }), /REVIEW_SETUP_DENIED/);
+  assert.equal(setupDeniedProviders, 1, 'host setup/auth/config denial never consumes automatic retry');
+  const setupDeniedRows = readFileSync(path.join(base, 'interrupted-setup-denied.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.event_type === 'physical_outcome');
+  assert.equal(setupDeniedRows.length, 0, 'setup denial appends no retryable physical outcome');
+
+  resetRoot('interrupted-malformed-artifact');
+  const malformedArtifact = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 malformed artifact evidence', ...identity, runFamilyId: 'family-malformed-artifact', attemptId: 'attempt-malformed-artifact' }, {
+    agentCwd: interruptedProject,
+    reviewLifecycle: { stateDir: interruptedState, pipelineId: 'interrupted-malformed-artifact' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => { params.onProcessStarted?.(); return reviewResult({ exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\ncontext_file: agents.output/code-review/038.md\n-->' }); },
+  });
+  assert.equal(malformedArtifact.reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
+  const malformedRows = readFileSync(path.join(base, 'interrupted-malformed-artifact.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.event_type === 'physical_outcome');
+  assert.equal(malformedRows.length, 2); assert.equal(malformedRows.every((row) => row.metadata.evidence.artifactPresent === true), true, 'malformed completion preserves existing artifact evidence');
 
   resetRoot('interrupted-pre-aborted');
   const controller = new AbortController();
@@ -168,6 +212,47 @@ try {
   });
   assert.equal(ordinaryProviders, 1, 'ordinary non-review still delegates through configured retry/fallback runner');
 } finally { rmSync(interruptedState, { recursive: true, force: true }); rmSync(interruptedProject, { recursive: true, force: true }); }
+
+const resumeState = mkdtempSync(path.join(os.tmpdir(), 'pidex-resume-hold-state-'));
+const resumeProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-resume-hold-project-'));
+try {
+  const context = path.join(resumeProject, 'agents.output', 'code-review', '038.md');
+  mkdirSync(path.dirname(context), { recursive: true });
+  writeFileSync(context, structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
+  bindCurrent(resumeState, resumeProject, 'resume-hold-pipeline');
+  let launches = 0;
+  const resumeIdentity = { ...identity, runFamilyId: 'family-resume-hold', attemptId: 'attempt-resume-hold' };
+  const resumeOptions = {
+    agentCwd: resumeProject,
+    reviewLifecycle: { stateDir: resumeState, pipelineId: 'resume-hold-pipeline' },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => {
+      launches += 1; params.onProcessStarted?.();
+      return launches <= 2
+        ? { agent: params.agent, provider: 'pi', exitCode: 1, finalText: '', stderr: '' }
+        : { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->', stderr: '' };
+    },
+  };
+  const held = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 hold then resume', ...resumeIdentity }, resumeOptions);
+  assert.equal(held.reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
+  const stable = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 held stable', ...resumeIdentity }, resumeOptions);
+  assert.equal(stable.reviewCompletion.holdId, held.reviewCompletion.holdId, 'ordinary call returns stable durable hold');
+  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 malformed resume', ...resumeIdentity, resumeHoldId: held.reviewCompletion.holdId, resumeConfirmed: 'true' }, resumeOptions), /REVIEW_RESUME_INVALID/);
+  assert.equal(launches, 2, 'malformed resume confirmation starts no child');
+  const concurrentResumes = await Promise.allSettled([
+    executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 confirmed resume one', ...resumeIdentity, resumeHoldId: held.reviewCompletion.holdId, resumeConfirmed: true }, resumeOptions),
+    executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 confirmed resume two', ...resumeIdentity, resumeHoldId: held.reviewCompletion.holdId, resumeConfirmed: true }, resumeOptions),
+  ]);
+  assert.equal(concurrentResumes.filter((result) => result.status === 'fulfilled').length, 1, 'concurrent confirmed resume consumes one hold once');
+  assert.equal(concurrentResumes.find((result) => result.status === 'fulfilled').value.exitCode, 0, 'one confirmed resume starts next-generation child');
+  assert.match(String(concurrentResumes.find((result) => result.status === 'rejected').reason), /REVIEW_RESUME_INVALID/, 'duplicate concurrent resume fails closed');
+  assert.equal(launches, 3, 'concurrent same-hold resumes launch exactly one child');
+  const resumeRows = readFileSync(path.join(eventBase(resumeState, resumeProject), 'resume-hold-pipeline.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter((row) => row.metadata?.attemptId === resumeIdentity.attemptId);
+  assert.equal(resumeRows.filter((row) => row.event_type === 'review_resume_authorized').length, 1, 'one authorization event');
+  assert.equal(resumeRows.filter((row) => row.event_type === 'review_resume_consumed').length, 1, 'one consumption event');
+  assert.equal(resumeRows.filter((row) => row.event_type === 'spawn_accepted').length, 3, 'exactly one resumed child accepted');
+} finally { rmSync(resumeState, { recursive: true, force: true }); rmSync(resumeProject, { recursive: true, force: true }); }
 
 const lifecycleIoRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-io-error-'));
 const lifecycleIoProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-lifecycle-io-project-'));
@@ -273,7 +358,8 @@ try {
   bindCurrent(lifecycleState, lifecycleProject, returnedIdentity.runFamilyId);
   assert.equal(reserveReviewStart({ stateDir: lifecycleState, project: lifecycleProject, pipelineId: returnedIdentity.runFamilyId, identity: returnedIdentity, start: () => 'returned-child' }).status, 'accepted');
   writeFileSync(path.join(lifecycleBase, `${returnedIdentity.runFamilyId}.jsonl`), `${JSON.stringify({ event_type: 'spawn_returned', metadata: returnedIdentity })}\n`, { flag: 'a' });
-  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 returned-only review' }, lifecycleOptions), /SPAWN_RETURNED_UNCERTAIN/);
+  const returnedOnly = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', task: 'Plan 038 returned-only review' }, lifecycleOptions);
+  assert.equal(returnedOnly.reviewCompletion.status, 'REVIEW_DISPATCH_UNCERTAIN', 'returned-only lifecycle state returns typed uncertainty hold');
   assert.equal(lifecycleChildren, childrenBeforeResume, 'returned-only retry must not run a child');
 } finally { rmSync(lifecycleState, { recursive: true, force: true }); rmSync(lifecycleProject, { recursive: true, force: true }); }
 
@@ -410,6 +496,21 @@ try {
   // lifecycle completion, including the Project Pipeline legacy ROUTING path.
   assert.deepEqual(ppRows.map((row) => row.event_type), ['start_reserved', 'spawn_entered', 'spawn_accepted', 'completion_prepared', 'spawn_returned', 'review_outcome']);
 } finally { rmSync(ppCompletionState, { recursive: true, force: true }); rmSync(ppCompletionProject, { recursive: true, force: true }); }
+
+const ppSetupState = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-setup-state-'));
+const ppSetupProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-pp-setup-project-'));
+try {
+  const ppSetupBase = eventBase(ppSetupState, ppSetupProject);
+  mkdirSync(ppSetupBase, { recursive: true });
+  mkdirSync(path.join(ppSetupProject, 'agents.output', 'code-review'), { recursive: true });
+  writeFileSync(path.join(ppSetupProject, 'agents.output', 'code-review', '038.md'), '# review\n');
+  bindCurrent(ppSetupState, ppSetupProject, 'pp-setup-pipeline');
+  let ppSetupChildren = 0;
+  assert.throws(() => executeProjectPipelineReviewBoundary({ agent: 'pidex-code-reviewer', ...identity }, { stateDir: ppSetupState, pipelineId: 'pp-setup-pipeline', project: ppSetupProject }, () => { ppSetupChildren += 1; return { exitCode: 1, finalText: '', setupError: true }; }), /REVIEW_SETUP_DENIED/);
+  assert.equal(ppSetupChildren, 1, 'sync seam setup/auth/config denial never consumes automatic retry');
+  const ppSetupRows = readFileSync(path.join(ppSetupBase, 'pp-setup-pipeline.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.event_type === 'physical_outcome');
+  assert.equal(ppSetupRows.length, 0, 'sync seam setup denial appends no retryable physical outcome');
+} finally { rmSync(ppSetupState, { recursive: true, force: true }); rmSync(ppSetupProject, { recursive: true, force: true }); }
 
 for (const explicitIdentity of [false, true]) {
   const changedState = mkdtempSync(path.join(os.tmpdir(), `pidex-pp-authority-${explicitIdentity ? 'explicit' : 'omitted'}-state-`));
@@ -560,13 +661,14 @@ const foreignContext = path.join(mkdtempSync(path.join(os.tmpdir(), 'pidex-forei
 writeFileSync(foreignContext, '# foreign\n');
 bindCurrent(artifactState, artifactProject, 'artifact-pipeline');
 try {
-  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
+  const held = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
     agentCwd: artifactProject,
     reviewLifecycle: { stateDir: artifactState, pipelineId: 'artifact-pipeline' },
     loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
     resolveSandboxState: () => ({ enabled: false }),
     runConfigured: async (params) => { params.onProcessStarted?.(); return { agent: 'pidex-code-reviewer', provider: 'pi', exitCode: 0, finalText: `<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: ${foreignContext}\n-->`, stderr: '' }; },
-  }), /REVIEW_ROUTING_INVALID/);
+  });
+  assert.equal(held.reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE', 'invalid external artifact retries once then holds');
 } finally { rmSync(artifactState, { recursive: true, force: true }); rmSync(artifactProject, { recursive: true, force: true }); rmSync(path.dirname(foreignContext), { recursive: true, force: true }); }
 
 const symlinkArtifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-symlink-artifact-state-'));
@@ -577,13 +679,14 @@ try {
   mkdirSync(path.join(symlinkArtifactProject, 'agents.output'), { recursive: true });
   symlinkSync(symlinkArtifactForeign, path.join(symlinkArtifactProject, 'agents.output', 'link'), 'dir');
   bindCurrent(symlinkArtifactState, symlinkArtifactProject, 'symlink-artifact');
-  await assert.rejects(() => executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
+  const held = await executeHostAgentBoundary({ agent: 'pidex-code-reviewer', ...identity }, {
     agentCwd: symlinkArtifactProject,
     reviewLifecycle: { stateDir: symlinkArtifactState, pipelineId: 'symlink-artifact' },
     loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
     resolveSandboxState: () => ({ enabled: false }),
     runConfigured: async (params) => { params.onProcessStarted?.(); return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: '<!-- ROUTING\nverdict: APPROVED\nroute_to: pidex-implementer\ncontext_file: agents.output/link/review.md\n-->', stderr: '' }; },
-  }), /REVIEW_ROUTING_INVALID/);
+  });
+  assert.equal(held.reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE', 'symlinked artifact retries once then holds');
 } finally { rmSync(symlinkArtifactState, { recursive: true, force: true }); rmSync(symlinkArtifactProject, { recursive: true, force: true }); rmSync(symlinkArtifactForeign, { recursive: true, force: true }); }
 
 const directArtifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-direct-artifact-state-'));
@@ -612,21 +715,21 @@ try {
   const foreignArchive = path.join(directArtifactProject, 'foreign.md');
   writeFileSync(foreignArchive, '# foreign\n');
   resetDirectRoot('direct-foreign');
-  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-foreign', project: directArtifactProject }, () => directResult({ archive_context_file: foreignArchive })), /REVIEW_ROUTING_INVALID/);
+  assert.equal(executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-foreign', project: directArtifactProject }, () => directResult({ archive_context_file: foreignArchive })).reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
 
   const archiveForeign = path.join(directArtifactProject, 'archive-foreign.md');
   writeFileSync(archiveForeign, '# archive foreign\n');
   rmSync(directArchive);
   symlinkSync(archiveForeign, directArchive, 'file');
   resetDirectRoot('direct-symlink');
-  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-symlink', project: directArtifactProject }, () => directResult()), /REVIEW_ROUTING_INVALID/);
+  assert.equal(executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-symlink', project: directArtifactProject }, () => directResult()).reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
   rmSync(directArchive);
   writeFileSync(directArchive, '# archive\n');
 
   resetDirectRoot('direct-returned-mismatch');
-  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-returned-mismatch', project: directArtifactProject }, () => directResult({ context_file: 'agents.output/code-review/other.md' })), /REVIEW_ROUTING_INVALID/);
+  assert.equal(executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-returned-mismatch', project: directArtifactProject }, () => directResult({ context_file: 'agents.output/code-review/other.md' })).reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
   resetDirectRoot('direct-routing-mismatch');
-  assert.throws(() => executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-routing-mismatch', project: directArtifactProject }, () => directResult({ routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/other.md' } })), /REVIEW_ROUTING_INVALID/);
+  assert.equal(executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId: 'direct-routing-mismatch', project: directArtifactProject }, () => directResult({ routing: { verdict: 'APPROVED', route_to: 'pidex-implementer', context_file: 'agents.output/code-review/other.md' } })).reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
 } finally { rmSync(directArtifactState, { recursive: true, force: true }); rmSync(directArtifactProject, { recursive: true, force: true }); }
 
 // Plan 059 Slice 3 (req 1/2): Project Pipeline primary reviews complete through the
@@ -912,5 +1015,81 @@ try {
     assert.equal(terminalChildren, childrenBeforeTerminalRetry, 'terminal retry spawns zero additional children');
   } finally { rmSync(terminalState, { recursive: true, force: true }); rmSync(terminalProject, { recursive: true, force: true }); }
 } finally { rmSync(structuredHostState, { recursive: true, force: true }); rmSync(structuredHostProject, { recursive: true, force: true }); }
+
+// ==== Correction2 MAJOR-1/MINOR-2: direct multi-mode physical fixtures (host seam) ====
+const multiHostState = mkdtempSync(path.join(os.tmpdir(), 'pidex-multi-host-state-'));
+const multiHostProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-multi-host-project-'));
+const multiHostContext = path.join(multiHostProject, 'agents.output', 'code-review', '038.md');
+try {
+  mkdirSync(path.dirname(multiHostContext), { recursive: true });
+  writeFileSync(multiHostContext, structuredFenced(structuredPayload()));
+  bindCurrent(multiHostState, multiHostProject, 'multi-host-pipeline');
+  const multiHostBase = eventBase(multiHostState, multiHostProject);
+  let scenario;
+  const runMultiHost = async (params) => {
+    scenario.children += 1;
+    params.onProcessStarted?.();
+    if (scenario.failures > 0) { scenario.failures -= 1; return { agent: params.agent, provider: 'pi', exitCode: 1, finalText: '', stderr: '' }; }
+    if (scenario.abort) return { agent: params.agent, provider: 'pi', exitCode: 1, finalText: '', stderr: '', aborted: true };
+    const isCorrection = params.agent === 'pidex-implementer';
+    return { agent: params.agent, provider: 'pi', exitCode: 0, finalText: isCorrection
+      ? '<!-- ROUTING\nverdict: COMPLETE\nroute_to: pidex-code-reviewer\ncontext_file: agents.output/code-review/038.md\n-->'
+      : '<!-- ROUTING\nverdict: REJECTED\nroute_to: pidex-implementer\ncontext_file: agents.output/code-review/038.md\n-->', stderr: '' };
+  };
+  const multiHostOptions = () => ({ agentCwd: multiHostProject, reviewLifecycle: { stateDir: multiHostState, pipelineId: 'multi-host-pipeline' }, loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }), resolveSandboxState: () => ({ enabled: false }), runConfigured: runMultiHost });
+  const multiHostCall = (mode, extra = {}) => executeHostAgentBoundary({ agent: mode.startsWith('correction') ? 'pidex-implementer' : 'pidex-code-reviewer', task: 'Plan 038 multi-host ' + mode, ...identity, runFamilyId: 'family-multi-host', reviewMode: mode, attemptId: 'attempt-multi-host-' + mode, ...extra }, multiHostOptions());
+  const multiRows = (mode) => readFileSync(path.join(multiHostBase, 'multi-host-pipeline.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.metadata?.planId === 'plan-038' && row.metadata?.runFamilyId === 'family-multi-host' && row.metadata?.reviewMode === mode);
+  scenario = { children: 0, failures: 0, abort: false };
+  const initial = await multiHostCall('initial');
+  assert.match(initial.finalText, /REJECTED/);
+  scenario = { children: 0, failures: 2, abort: false };
+  const correctionHold = await multiHostCall('correction1');
+  assert.equal(correctionHold.reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE', 'correction-mode exhaustion holds durably (host seam)');
+  assert.match(correctionHold.reviewCompletion.holdId, /^hold-[a-f0-9]{32}$/);
+  assert.deepEqual(multiRows('correction1').filter((row) => row.event_type === 'physical_outcome').map((row) => row.metadata.outcome), ['FAILED_TO_RUN', 'FAILED_TO_RUN'], 'correction-mode failures durably recorded');
+  assert.equal(multiRows('correction1').filter((row) => row.event_type === 'review_outcome').length, 0, 'correction failure never consumes reviewer budget');
+  scenario = { children: 0, failures: 0, abort: false };
+  const stable = await multiHostCall('correction1');
+  assert.equal(stable.reviewCompletion.holdId, correctionHold.reviewCompletion.holdId, 'correction-mode hold is stable');
+  assert.equal(scenario.children, 0, 'stable hold call starts no child');
+  scenario = { children: 0, failures: 0, abort: false };
+  const resumedCorrection = await multiHostCall('correction1', { resumeHoldId: correctionHold.reviewCompletion.holdId, resumeConfirmed: true });
+  assert.match(resumedCorrection.finalText, /COMPLETE/);
+  scenario = { children: 0, failures: 1, abort: false };
+  const review1 = await multiHostCall('review1');
+  assert.match(review1.finalText, /REJECTED/);
+  assert.equal(multiRows('review1').filter((row) => row.event_type === 'physical_outcome').length, 1);
+  assert.equal(multiRows('review1').filter((row) => row.event_type === 'spawn_accepted').length, 2, 'review retry starts two accepted children');
+  scenario = { children: 0, failures: 0, abort: true };
+  const abortedCorrection = await multiHostCall('correction2');
+  assert.equal(abortedCorrection.reviewCompletion.status, 'REVIEW_ABORTED', 'correction-mode abort persists typed stop (host seam)');
+  scenario = { children: 0, failures: 0, abort: true };
+  const postAbort = await multiHostCall('correction2');
+  assert.equal(postAbort.reviewCompletion.status, 'REVIEW_ABORTED', 'post-abort call returns stable typed stop');
+  assert.equal(scenario.children, 0, 'post-abort call starts no child');
+} finally { rmSync(multiHostState, { recursive: true, force: true }); rmSync(multiHostProject, { recursive: true, force: true }); }
+
+// MINOR-2: sync seam artifact evidence is real file presence under the canonical root.
+const syncArtifactState = mkdtempSync(path.join(os.tmpdir(), 'pidex-sync-artifact-state-'));
+const syncArtifactProject = mkdtempSync(path.join(os.tmpdir(), 'pidex-sync-artifact-project-'));
+const syncArtifactPipeline = 'sync-artifact-pipeline';
+const syncArtifactBase = eventBase(syncArtifactState, syncArtifactProject);
+const syncArtifactParams = { agent: 'pidex-code-reviewer', ...identity, projectId: 'pp-sync-artifact', expectedOutputPath: 'agents.output/code-review/038.md' };
+const syncArtifactLifecycle = { stateDir: syncArtifactState, pipelineId: syncArtifactPipeline, project: syncArtifactProject, projectId: 'pp-sync-artifact', resolveCurrentProject: () => syncArtifactProject };
+try {
+  mkdirSync(syncArtifactBase, { recursive: true });
+  const syncArtifactRows = () => readFileSync(path.join(syncArtifactBase, `${syncArtifactPipeline}.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.event_type === 'physical_outcome');
+  const resetSyncArtifact = () => { for (const name of readdirSync(syncArtifactBase)) if (name.endsWith('.jsonl')) rmSync(path.join(syncArtifactBase, name)); bindCurrent(syncArtifactState, syncArtifactProject, syncArtifactPipeline); };
+  const syncFailure = () => executeProjectPipelineReviewBoundary(syncArtifactParams, syncArtifactLifecycle, () => ({ exitCode: 1, finalText: '', stderr: '' }));
+  resetSyncArtifact();
+  assert.equal(syncFailure().reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE', 'sync seam physical failure retries once then holds');
+  assert.deepEqual(syncArtifactRows().map((row) => row.metadata.evidence.artifactPresent), [false, false], 'sync seam reports missing artifact');
+  const presentContext = path.join(syncArtifactProject, 'agents.output', 'code-review', '038.md');
+  mkdirSync(path.dirname(presentContext), { recursive: true });
+  writeFileSync(presentContext, '# present artifact\n');
+  resetSyncArtifact();
+  assert.equal(syncFailure().reviewCompletion.status, 'PRIMARY_REVIEW_UNAVAILABLE');
+  assert.deepEqual(syncArtifactRows().map((row) => row.metadata.evidence.artifactPresent), [true, true], 'sync seam reports present artifact truthfully');
+} finally { rmSync(syncArtifactState, { recursive: true, force: true }); rmSync(syncArtifactProject, { recursive: true, force: true }); }
 
 console.log('review budget TBR tests passed');

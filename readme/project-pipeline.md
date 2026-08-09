@@ -38,6 +38,8 @@ Project source is not mirrored back to the host by PIDEX. If you want source cha
 - Project Pipeline mode is explicit per project.
 - Missing mode asks once instead of silently falling back.
 - Project Pipeline failures do not automatically fall back to host-direct or hardened-pipeline.
+- Every essential phase has at most initial physical execution plus one retry. Retryable accepted-child failures include nonzero exit, timeout, turn limit, and malformed/incomplete completion; exhaustion persists `ESSENTIAL_PHASE_UNAVAILABLE` hold and stops before next phase. Missing output is never approval.
+- Advisory Secondary failure retries once then persists `DEGRADED_FAILED` with safe reason and attempt summaries. Primary/other lanes continue; adjudicator receives successful/retried/degraded inventory and labels degraded lanes `no_findings_available`, never approval. Security, write-fence, sandbox, and project-authority denials abort/hold overall run instead of degrading.
 - Host archive sync is limited to `agents.output/**` and `wiki/**` with safe-copy filters.
 - Every normal `/pd` Project Pipeline project requires a safe host-project mirror of those filtered trees; missing/unsafe/conflicting roots are reported as degraded, never as fully synchronized.
 - Source files, `.env`, secrets, runtime files, and executable/code-like archive paths are not synced back as artifacts.

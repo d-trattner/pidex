@@ -276,11 +276,14 @@ export function buildProjectPipelineSecondaryLaneTask({ lane, trigger, primary, 
 
 export function buildProjectPipelineAdjudicationTask({ trigger, primary, laneSummaries = [], nextPhase, outputPath, initialTask = '' }) {
   const successful = laneSummaries.filter((lane) => lane.ok && lane.context_file);
+  const inventory = laneSummaries.map((lane) => `${lane.parallel_lane_id || 'unknown'}: ${lane.status || (lane.ok ? 'SUCCESS' : 'DEGRADED_FAILED')}; reason=${lane.safe_reason || 'none'}; ${lane.ok ? 'findings_available' : 'no_findings_available; not_approval'}`);
   return [
     `Project Pipeline parallel review adjudication for ${trigger}.`,
     'You are running inside the persistent Project Sandbox at /workspace as the primary configured reviewer.',
     'Read the primary and every successful secondary review artifact listed below. Do not rely on summaries alone.',
     `Primary review artifact: ${primary?.context_file || 'missing'}`,
+    'Lane inventory (missing/degraded lanes supply no approval or findings):',
+    ...inventory,
     ...successful.map((lane) => `Secondary review artifact (${lane.parallel_lane_id || 'unknown'}): ${lane.context_file}`),
     `Assigned merge artifact: ${outputPath}`,
     'Write only the assigned merge artifact. Deduplicate findings and classify each as accepted, rejected-no-evidence, duplicate, contradicted, deferred, or needs-primary-review.',
@@ -408,12 +411,25 @@ export function buildBrowserSmokeVerdictTask({ phase, initialTask, previous, res
   ].filter(Boolean).join('\n\n');
 }
 
-function shouldRetryRoutingFailure(run) {
-  return run?.ok === false && run?.error === 'routing-invalid' && (run?.reason === 'routing-missing' || run?.reason === 'context-file-missing');
+function retryRoutingTask(task) {
+  return `${task}\n\nMANDATORY RETRY INSTRUCTION:\nPrevious attempt did not produce a valid ROUTING block. Produce one complete assigned artifact and exactly one valid ROUTING HTML comment containing context_file under agents.output/**. Never repair or execute incomplete streamed tool JSON.`;
 }
 
-function retryRoutingTask(task) {
-  return `${task}\n\nMANDATORY RETRY INSTRUCTION:\nPrevious attempt did not produce a valid ROUTING block. You must finish this retry with exactly one ROUTING HTML comment containing context_file under agents.output/**. Do not omit ROUTING.`;
+const RETRYABLE_RUN_ERRORS = new Set(['child-pi-failed', 'expected-output-missing', 'routing-invalid', 'failed-to-start-transient', 'timed-out', 'turn-limit-hit', 'malformed-completion']);
+function retryableExecutionFailure(run) { return run?.ok === false && RETRYABLE_RUN_ERRORS.has(run.error); }
+// SEC-2/BD-62-03: deterministic auth/config/setup/sandbox/write-fence/project-authority/
+// security denials never retry and never degrade an advisory lane; overall abort/hold.
+const DETERMINISTIC_LANE_DENIALS = new Set(['write-fence-violation', 'write-fence-manifest-failed', 'write-fence-output-required', 'sandbox-unavailable', 'project-pipeline-recursion-guard', 'module-rule-injection-failed', 'expected-artifact-path-invalid', 'expected-input-missing', 'expected-output-exists', 'expected-output-non-regular', 'retry-artifact-provenance-invalid']);
+function safeFailureReason(run) { return typeof run?.error === 'string' && /^[a-z0-9-]{1,80}$/.test(run.error) ? run.error : 'execution-failed'; }
+function executeTwoPhysicalAttempts(runOnce, task) {
+  let run = runOnce(task); let retryCount = 0;
+  if (retryableExecutionFailure(run)) { retryCount = 1; run = runOnce(retryRoutingTask(task), { retryOfProjectRunId: run.project_run_id }); }
+  return { run, retryCount };
+}
+function essentialHold({ pidexRoot, record, pipelineId, planKey, agent, runs, run, kind = 'phase', attempts = 2, laneInventory }) {
+  const hold = { status: 'ESSENTIAL_PHASE_UNAVAILABLE', kind, agent, reason: safeFailureReason(run), attempts, resume_required: true, ...(laneInventory ? { lane_inventory: laneInventory } : {}) };
+  appendProjectPipelineTelemetryEvent({ pidexRoot, record, pipelineId, planKey, eventType: 'pipeline_hold', status: 'held', message: `Project Pipeline ${kind} held: ${agent}`, metadata: { hold, runs } });
+  return hold;
 }
 
 export function ensureProjectImage(options = {}) {
@@ -512,11 +528,7 @@ export async function runProjectPipelineOrchestration(options = {}) {
       ...extra,
     });
     try {
-      run = runAgentOnce(task);
-      if (shouldRetryRoutingFailure(run) && options.retryRouting !== false) {
-        retryCount = 1;
-        run = runAgentOnce(retryRoutingTask(task));
-      }
+      ({ run, retryCount } = executeTwoPhysicalAttempts(runAgentOnce, task));
     } catch (error) {
       appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase threw: ${agent}`, metadata: { failed_agent: agent, reason: error.message || String(error), runs } });
       return { ok: false, error: 'agent-run-failed', failed_agent: agent, reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
@@ -526,8 +538,8 @@ export async function runProjectPipelineOrchestration(options = {}) {
     projectPipelineProgress(options, `${agent} ${run.ok ? 'complete' : 'failed'}${run.context_file ? ` context_file=${run.context_file}` : ''}`, { phase: agent, status: run.ok ? 'complete' : 'failed', project_id: projectId });
     appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: runSummary });
     if (!run.ok) {
-      appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline phase failed: ${agent}`, metadata: { failed_agent: agent, runs } });
-      return { ok: false, error: 'agent-run-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
+      const hold = essentialHold({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, agent, runs, run, attempts: retryCount + 1 });
+      return { ok: false, error: 'essential-phase-held', hold, failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(run), no_fallback: true };
     }
     previous = { agent, context_file: run.context_file, archive_context_file: run.archive_context_file, project_run_id: run.project_run_id };
 
@@ -541,12 +553,12 @@ export async function runProjectPipelineOrchestration(options = {}) {
         const laneOutputPath = projectPipelineParallelArtifactPath({ ...laneWithRun, trigger: parallelTrigger });
         projectPipelineProgress(options, `running secondary ${agent} lane ${lane.lane_id || 'unknown'} for ${parallelTrigger}`, { phase: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, project_id: projectId });
         const laneTask = buildProjectPipelineSecondaryLaneTask({ lane: laneWithRun, trigger: parallelTrigger, primary: previous, initialTask: options.task || '' });
-        const laneRun = runProjectPipelineAgent({
+        const laneRunOnce = (laneTaskOverride = laneTask, extra = {}) => runProjectPipelineAgent({
           pidexRoot,
           projectId,
-          project_run_id: laneProjectRunId,
+          project_run_id: extra.retryOfProjectRunId ? undefined : laneProjectRunId,
           agent,
-          task: laneTask,
+          task: laneTaskOverride,
           providerOverride: lane.runner_provider,
           modelOverride: lane.runner_model,
           effortOverride: lane.effort,
@@ -561,30 +573,34 @@ export async function runProjectPipelineOrchestration(options = {}) {
           moduleRuleRenderer: options.moduleRuleRenderer,
           moduleSystem: options.moduleSystem,
           moduleRulesMaxBytes: options.moduleRulesMaxBytes,
+          ...extra,
         });
-        const laneSummary = { agent, ok: laneRun.ok, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, project_mirror: summarizeProjectMirror(laneRun.project_mirror), sync_degraded: laneRun.project_mirror?.degraded === true, routing_recovered: laneRun.routing_recovered === true, write_fence: laneRun.write_fence, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
+        const { run: laneRun, retryCount: laneRetryCount } = executeTwoPhysicalAttempts(laneRunOnce, laneTask);
+        if (DETERMINISTIC_LANE_DENIALS.has(laneRun.error)) {
+          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review lane deterministic denial: ${lane.lane_id || 'unknown'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, error: laneRun.error, runs } });
+          return { ok: false, error: laneRun.error, failed_agent: agent, parallel_lane_id: lane.lane_id, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+        }
+        const degraded = !laneRun.ok;
+        const laneSummary = { agent, ok: laneRun.ok, status: degraded ? 'DEGRADED_FAILED' : (laneRetryCount ? 'RETRIED_SUCCESS' : 'SUCCESS'), safe_reason: degraded ? safeFailureReason(laneRun) : '', attempts: laneRetryCount + 1, context_file: laneRun.context_file, archive_context_file: laneRun.archive_context_file, project_run_id: laneRun.project_run_id, archive_sync_status: laneRun.archive_sync_status, project_mirror: summarizeProjectMirror(laneRun.project_mirror), sync_degraded: laneRun.project_mirror?.degraded === true, routing_recovered: laneRun.routing_recovered === true, write_fence: laneRun.write_fence, parallel_lane_id: lane.lane_id, parallel_trigger: parallelTrigger, parallel_role: 'secondary', error: laneRun.error, reason: laneRun.reason };
         laneSummaries.push(laneSummary);
         runs.push(laneSummary);
         projectPipelineProgress(options, `secondary ${agent} lane ${lane.lane_id || 'unknown'} ${laneRun.ok ? 'complete' : 'failed'}`, { phase: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, status: laneRun.ok ? 'complete' : 'failed', project_id: projectId });
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: laneSummary, source: 'parallel_agents' });
-        if (laneRun.error === 'write-fence-violation' || laneRun.error === 'write-fence-manifest-failed') {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review write fence failed: ${lane.lane_id || 'unknown'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, parallel_lane_id: lane.lane_id, runs } });
-          return { ok: false, error: laneRun.error, failed_agent: agent, parallel_lane_id: lane.lane_id, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
-        }
+        if (degraded) appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'parallel_lane_degraded', status: 'DEGRADED_FAILED', message: `Parallel advisory lane degraded: ${lane.lane_id || 'unknown'}`, metadata: { parallel_lane_id: lane.lane_id, safe_reason: laneSummary.safe_reason, attempts: laneSummary.attempts } });
       }
       const successfulLanes = laneSummaries.filter((lane) => lane.ok && lane.context_file);
-      if (successfulLanes.length) {
+      if (laneSummaries.length) {
         const mergeProjectRunId = projectRunId();
         const mergeOutputPath = projectPipelineMergeArtifactPath(parallelTrigger, mergeProjectRunId);
         const nextPhase = phases[i + 1] || 'orchestrator';
         projectPipelineProgress(options, `running parallel adjudication for ${parallelTrigger}`, { phase: 'parallel-merge', parallel_trigger: parallelTrigger, project_id: projectId });
         const adjudicationTask = buildProjectPipelineAdjudicationTask({ trigger: parallelTrigger, primary: previous, laneSummaries, nextPhase, outputPath: mergeOutputPath, initialTask: options.task || '' });
-        const merge = runProjectPipelineAgent({
+        const mergeRunOnce = (mergeTask = adjudicationTask, extra = {}) => runProjectPipelineAgent({
           pidexRoot,
           projectId,
-          project_run_id: mergeProjectRunId,
+          project_run_id: extra.retryOfProjectRunId ? undefined : mergeProjectRunId,
           agent,
-          task: adjudicationTask,
+          task: mergeTask,
           expectedInputPaths: [previous.context_file, ...successfulLanes.map((lane) => lane.context_file)],
           expectedOutputPath: mergeOutputPath,
           requireExplicitRouting: true,
@@ -597,13 +613,15 @@ export async function runProjectPipelineOrchestration(options = {}) {
           moduleRuleRenderer: options.moduleRuleRenderer,
           moduleSystem: options.moduleSystem,
           moduleRulesMaxBytes: options.moduleRulesMaxBytes,
+          ...extra,
         });
-        const mergeSummary = { agent, ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: merge.project_run_id, archive_sync_status: merge.archive_sync_status, project_mirror: summarizeProjectMirror(merge.project_mirror), sync_degraded: merge.project_mirror?.degraded === true, routing_recovered: merge.routing_recovered === true, write_fence: merge.write_fence, parallel_trigger: parallelTrigger, parallel_role: 'merge', error: merge.error, reason: merge.reason, required_route: merge.routing?.route_to };
+        const { run: merge, retryCount: mergeRetryCount } = executeTwoPhysicalAttempts(mergeRunOnce, adjudicationTask);
+        const mergeSummary = { agent, ok: merge.ok, context_file: merge.context_file, archive_context_file: merge.archive_context_file, project_run_id: merge.project_run_id, archive_sync_status: merge.archive_sync_status, project_mirror: summarizeProjectMirror(merge.project_mirror), sync_degraded: merge.project_mirror?.degraded === true, routing_recovered: merge.routing_recovered === true, write_fence: merge.write_fence, retry_count: mergeRetryCount, parallel_trigger: parallelTrigger, parallel_role: 'merge', error: merge.error, reason: merge.reason, required_route: merge.routing?.route_to };
         runs.push(mergeSummary);
         appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: mergeSummary, source: 'parallel_agents_merge' });
         if (!merge.ok) {
-          appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Parallel review adjudication failed: ${parallelTrigger}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, runs } });
-          return { ok: false, error: merge.error || 'parallel-adjudication-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
+          const hold = essentialHold({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, agent, runs, run: merge, kind: 'adjudicator', attempts: mergeRetryCount + 1, laneInventory: laneSummaries });
+          return { ok: false, error: 'essential-phase-held', hold, failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
         }
         if (merge.routing?.route_to !== nextPhase) {
           appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'blocked', message: `Parallel review requires correction: ${merge.routing?.route_to || 'orchestrator'}`, metadata: { failed_agent: agent, parallel_trigger: parallelTrigger, required_route: merge.routing?.route_to || 'orchestrator', runs } });
@@ -629,26 +647,30 @@ export async function runProjectPipelineOrchestration(options = {}) {
           if (nonFeature) return { ok: false, error: `browser-smoke-${String(nonFeature.status).toLowerCase()}`, failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
           if (evidence.length !== 1 || browserSmokeResults.length !== 1) return { ok: false, error: 'browser-smoke-evidence-infra', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
           const expectedContext = `${phaseOutputPrefix(agent)}browser-smoke-verdict.md`;
-          const verdictRun = runAgentOnce(buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: evidence, request_schema: 2 }), { expectedOutputPath: expectedContext, requireExplicitRouting: true });
-          const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
+          const verdictRunOnce = (verdictTask, extra = {}) => runAgentOnce(verdictTask, { ...extra, expectedOutputPath: expectedContext, requireExplicitRouting: true });
+          const { run: verdictRun, retryCount: verdictRetryCount } = executeTwoPhysicalAttempts(verdictRunOnce, buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: evidence, request_schema: 2 }));
+          const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, retry_count: verdictRetryCount, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
           runs.push(verdictSummary);
           appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
           const expectedRoute = evidence[0].status === 'PASS' ? 'orchestrator' : 'pidex-implementer';
           const postSync = (options.schema2EvidencePostSyncLoader || loader)({ pidexRoot, projectId, record: telemetryRecord, request_file: schema2Results[0].request_file, request_id: schema2Results[0].request_id });
-          if (!verdictRun.ok || verdictRun.routing?.route_to !== expectedRoute || verdictRun.context_file !== expectedContext || !postSync?.ok) return { ok: false, error: 'browser-smoke-verdict-infra', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), no_fallback: true };
+          if (!verdictRun.ok || verdictRun.routing?.route_to !== expectedRoute || verdictRun.context_file !== expectedContext || !postSync?.ok) {
+            const hold = essentialHold({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, agent, runs, run: verdictRun, kind: 'browser-smoke-verdict', attempts: verdictRetryCount + 1 });
+            return { ok: false, error: 'essential-phase-held', hold, failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), no_fallback: true };
+          }
           if (evidence[0].status === 'FAILED_FEATURE') return { ok: false, error: 'browser-smoke-feature-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, no_fallback: true };
           previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
         } else {
           const sandboxResults = browserSmokeResults.map((item) => sanitizeBrowserSmokeResultForSandbox(item, { pidexRoot, projectId }));
           runSummary.browser_smoke_results = sandboxResults;
           const verdictTask = buildBrowserSmokeVerdictTask({ phase: agent, initialTask: options.task || '', previous, results: sandboxResults });
-          const verdictRun = runAgentOnce(verdictTask);
-          const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
+          const { run: verdictRun, retryCount: verdictRetryCount } = executeTwoPhysicalAttempts(runAgentOnce, verdictTask);
+          const verdictSummary = { agent, ok: verdictRun.ok, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id, archive_sync_status: verdictRun.archive_sync_status, project_mirror: summarizeProjectMirror(verdictRun.project_mirror), sync_degraded: verdictRun.project_mirror?.degraded === true, retry_count: verdictRetryCount, browser_smoke_verdict_for: run.project_run_id, error: verdictRun.error, reason: verdictRun.reason };
           runs.push(verdictSummary);
           appendProjectPipelineMetric({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, agent, run: verdictSummary, source: 'project_pipeline_browser_smoke_verdict' });
           if (!verdictRun.ok) {
-            appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_failed', status: 'failed', message: `Project Pipeline browser-smoke verdict failed: ${agent}`, metadata: { failed_agent: agent, browser_smoke_results: sandboxResults, runs } });
-            return { ok: false, error: 'browser-smoke-verdict-failed', failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
+            const hold = essentialHold({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, agent, runs, run: verdictRun, kind: 'browser-smoke-verdict', attempts: verdictRetryCount + 1 });
+            return { ok: false, error: 'essential-phase-held', hold, failed_agent: agent, lifecycle: setup.lifecycle, source: setup.source, credentials, runs, run: summarizeRunForPublicResult(verdictRun), browser_smoke_results: sandboxResults, no_fallback: true };
           }
           previous = { agent, context_file: verdictRun.context_file, archive_context_file: verdictRun.archive_context_file, project_run_id: verdictRun.project_run_id };
         }

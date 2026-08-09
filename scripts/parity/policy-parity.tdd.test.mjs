@@ -33,6 +33,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 const SKILL = read('skills/pidex/SKILL.md');
 const REVIEW_BUDGETS = read('readme/review-budgets.md');
+const PROJECT_PIPELINE = read('readme/project-pipeline.md');
 const MODES = read('readme/modes.md');
 const REVIEWER_AGENTS = ['pidex-critic', 'pidex-code-reviewer', 'pidex-security', 'pidex-qa'];
 const REVIEWER_PHASES = { 'pidex-critic': 'critic-review', 'pidex-code-reviewer': 'code-review', 'pidex-security': 'security', 'pidex-qa': 'qa' };
@@ -55,6 +56,15 @@ assert.match(SKILL, /non-substantive stalls/, 'SKILL must keep the repeated non-
 assert.match(SKILL, /typed (?:completion )?status is authoritative/, 'SKILL must declare typed completion status authoritative over ROUTING text');
 assert.match(SKILL, /review2/, 'SKILL lifecycle policy still covers review2');
 assert.doesNotMatch(SKILL, /(?:spawn|dispatch|invoke|route|request)\s+(?:a\s+)?(?:correction\s*3|review\s*3)/i, 'no instruction may request correction3/review3');
+assert.match(SKILL, /PRIMARY_REVIEW_UNAVAILABLE/, 'SKILL must name the typed essential hold');
+assert.match(SKILL, /resumeHoldId \+ resumeConfirmed:true/, 'SKILL must require exact single-use outer-orchestrator resume fields');
+assert.match(SKILL, /intervening affirmative user response/, 'SKILL must prohibit same-turn/automatic essential resume');
+assert.doesNotMatch(SKILL, /\/resume\b/i, 'SKILL must not offer a resume slash command');
+assert.match(SKILL, /DEGRADED_FAILED/, 'SKILL must name advisory Secondary degradation');
+assert.match(REVIEW_BUDGETS, /initial physical execution \+ one automatic retry/, 'review budget docs must cap physical execution at two');
+assert.match(REVIEW_BUDGETS, /resumeHoldId \+ resumeConfirmed:true/, 'review budget docs must bind exact hold resume fields');
+assert.match(PROJECT_PIPELINE, /DEGRADED_FAILED/, 'Project Pipeline docs must expose advisory degradation');
+assert.match(PROJECT_PIPELINE, /ESSENTIAL_PHASE_UNAVAILABLE/, 'Project Pipeline docs must expose essential phase hold');
 assert.match(SKILL, /No declared-mode split, legacy second-rejection override, or user choice may raise or reset a gate's budget/, 'budget non-reset prohibition retained');
 
 // G9/release/user authority unchanged.

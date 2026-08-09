@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
@@ -339,6 +339,72 @@ test('runProjectPipelineOrchestration runs configured secondary lane and merge b
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
+test('parallel adjudicator retries once and succeeds without heuristic merge', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-adjudicator-retry');
+  let mergeCalls = 0; let implementerCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1)); const adjudicator = prompt.includes('parallel review adjudication');
+    if (adjudicator && ++mergeCalls === 1) return { status: 1, stdout: 'truncated merge', stderr: '' };
+    const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'unknown'; if (agent === 'pidex-implementer') implementerCalls += 1;
+    const context = prompt.match(/(?:Assigned|Exact assigned output) artifact(?: path)?: ([^\s]+\.md)/)?.[1] || `agents.output/${agent}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: ${adjudicator ? 'pidex-implementer' : 'orchestrator'}\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-adjudicator-retry', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'], archiveWorkspace, runner, moduleRules: false, parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'secondary-a', agent, runner_provider: 'pi', runner_model: 'model' }] : [] });
+  assert.equal(result.ok, true); assert.equal(mergeCalls, 2); assert.equal(implementerCalls, 1);
+  assert.equal(result.runs.find((run) => run.parallel_role === 'merge').retry_count, 1);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('exhausted parallel adjudicator persists durable adjudicator hold with complete lane inventory', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-adjudicator-hold');
+  let mergeCalls = 0; let implementerCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1)); const adjudicator = prompt.includes('parallel review adjudication');
+    if (adjudicator) { mergeCalls += 1; return { status: 1, stdout: 'truncated merge', stderr: '' }; }
+    const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'unknown'; if (agent === 'pidex-implementer') implementerCalls += 1;
+    const context = prompt.match(/(?:Assigned|Exact assigned output) artifact(?: path)?: ([^\s]+\.md)/)?.[1] || `agents.output/${agent}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-adjudicator-hold', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'], archiveWorkspace, runner, moduleRules: false, parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'secondary-a', agent, runner_provider: 'pi', runner_model: 'model' }] : [] });
+  assert.equal(result.ok, false); assert.equal(result.error, 'essential-phase-held'); assert.equal(result.hold.kind, 'adjudicator'); assert.equal(result.hold.attempts, 2);
+  assert.equal(result.hold.lane_inventory.length, 1); assert.equal(result.hold.lane_inventory[0].status, 'SUCCESS');
+  assert.equal(mergeCalls, 2); assert.equal(implementerCalls, 0);
+  const events = readJsonlRecursive(path.join(pidexRoot, 'state', 'pipeline-events'));
+  assert.equal(events.some((event) => event.event_type === 'pipeline_hold' && event.metadata?.hold?.kind === 'adjudicator'), true);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('parallel adjudicator security denial does not retry and stops before progression', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-adjudicator-denial');
+  let mergeCalls = 0; let implementerCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1)); const adjudicator = prompt.includes('parallel review adjudication');
+    if (adjudicator) {
+      mergeCalls += 1;
+      const assigned = prompt.match(/Assigned merge artifact: ([^\s]+\.md)/)?.[1];
+      mkdirSync(path.join(archiveWorkspace, path.dirname(assigned)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, assigned), '# merge\n');
+      writeFileSync(path.join(archiveWorkspace, 'agents.output/parallel-agents/unowned.md'), '# unauthorized write\n');
+      return { status: 0, stdout: `<!-- ROUTING\nroute_to: pidex-implementer\ncontext_file: ${assigned}\n-->` };
+    }
+    const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'unknown'; if (agent === 'pidex-implementer') implementerCalls += 1;
+    const context = prompt.match(/(?:Assigned|Exact assigned output) artifact(?: path)?: ([^\s]+\.md)/)?.[1] || `agents.output/${agent}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-adjudicator-denial', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'], archiveWorkspace, runner, moduleRules: false, parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'secondary-a', agent, runner_provider: 'pi', runner_model: 'model' }] : [] });
+  assert.equal(result.ok, false); assert.equal(result.error, 'essential-phase-held'); assert.equal(result.hold.reason, 'write-fence-violation');
+  assert.equal(result.hold.attempts, 1); assert.equal(mergeCalls, 1); assert.equal(implementerCalls, 0);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
 test('parallel adjudication blocks the next phase when it routes back', async () => {
   const pidexRoot = tmp();
   const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
@@ -392,7 +458,8 @@ test('terminal parallel adjudication requires explicit routing and cannot synthe
     parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'pidex-critic:deepseek:model', agent, provider: 'deepseek', model: 'model', runner_provider: 'pi', runner_model: 'deepseek/model' }] : [],
   });
   assert.equal(result.ok, false);
-  assert.equal(result.error, 'routing-invalid');
+  assert.equal(result.error, 'essential-phase-held');
+  assert.equal(result.hold.kind, 'adjudicator');
   assert.equal(result.runs.at(-1).parallel_role, 'merge');
   rmSync(pidexRoot, { recursive: true, force: true });
 });
@@ -433,6 +500,106 @@ test('runProjectPipelineOrchestration retries once when a phase omits routing', 
   assert.equal(qaAttempts, 2);
   assert.equal(result.runs.length, 1);
   assert.equal(result.runs[0].retry_count, 1);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('Project Pipeline essential phase retries once then returns a durable typed hold without phase progression', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-essential-hold');
+  let calls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    calls += 1;
+    return { status: 1, stdout: 'child exited during incomplete tool JSON: {"tool":', stderr: '' };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-essential-hold', task: 'ship it', phases: ['pidex-planner', 'pidex-qa'], archiveWorkspace, runner, moduleRules: false });
+  assert.equal(calls, 2);
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'essential-phase-held');
+  assert.equal(result.hold.status, 'ESSENTIAL_PHASE_UNAVAILABLE');
+  assert.equal(result.failed_agent, 'pidex-planner');
+  assert.equal(result.runs.length, 1);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('Project Pipeline advisory lane retries once, degrades, and adjudicates exact inventory', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-secondary-degraded');
+  let secondaryCalls = 0; let adjudicationPrompt = '';
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1));
+    if (prompt.includes('configured secondary review lane')) { secondaryCalls += 1; return { status: 1, stdout: 'failed secondary', stderr: '' }; }
+    const adjudication = prompt.includes('parallel review adjudication');
+    if (adjudication) adjudicationPrompt = prompt;
+    const context = prompt.match(/Exact assigned output artifact: ([^\s]+\.md)/)?.[1] || `agents.output/${prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'unknown'}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: ${adjudication ? 'pidex-implementer' : 'orchestrator'}\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secondary-degraded', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'], archiveWorkspace, runner, moduleRules: false, parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'secondary-a', agent, runner_provider: 'pi', runner_model: 'model' }] : [] });
+  assert.equal(result.ok, true); assert.equal(secondaryCalls, 2);
+  const secondary = result.runs.find((run) => run.parallel_role === 'secondary');
+  assert.equal(secondary.status, 'DEGRADED_FAILED'); assert.equal(secondary.safe_reason, 'child-pi-failed');
+  assert.match(adjudicationPrompt, /secondary-a: DEGRADED_FAILED; reason=child-pi-failed; no_findings_available; not_approval/);
+  const laneAttempts = loadProjectRecord(pidexRoot, 'pp-orch-secondary-degraded').runs.filter((run) => run.expected_output_path.includes('parallel-agents') && !run.expected_output_path.endsWith('-merge.md'));
+  assert.equal(laneAttempts.length, 2, 'initial and retry lane attempts stay durable');
+  assert.notEqual(laneAttempts[0].project_run_id, laneAttempts[1].project_run_id, 'retry has a distinct physical project run id');
+  assert.equal(laneAttempts[1].retry_of_project_run_id, laneAttempts[0].project_run_id, 'retry preserves prior attempt provenance');
+  assert.equal(laneAttempts.every((run) => run.archive_sync_status === 'failed' && run.error === 'child-pi-failed'), true, 'both failed attempts remain terminal instead of hybrid or pending');
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('Project Pipeline security lane denial never retries or degrades', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-secondary-security'); let secondaryCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1));
+    if (prompt.includes('configured secondary review lane')) { secondaryCalls += 1; mkdirSync(path.join(archiveWorkspace, 'agents.output/parallel-agents'), { recursive: true }); writeFileSync(path.join(archiveWorkspace, 'agents.output/parallel-agents/unowned.md'), '# unauthorized\n'); return { status: 0, stdout: '<!-- ROUTING\ncontext_file: agents.output/parallel-agents/other.md\n-->' }; }
+    const context = `agents.output/${prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'unknown'}/artifact.md`; mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n'); return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-secondary-security', task: 'ship it', phases: ['pidex-planner', 'pidex-critic'], archiveWorkspace, runner, moduleRules: false, parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'secondary-security', agent, runner_provider: 'pi', runner_model: 'model' }] : [] });
+  assert.equal(secondaryCalls, 1); assert.equal(result.ok, false); assert.equal(result.error, 'write-fence-violation');
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('Project Pipeline advisory lane sandbox denial aborts overall and never degrades', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-lane-sandbox-denial');
+  let secondaryCalls = 0; let implementerCalls = 0; let adjudicationRan = false;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1));
+    if (prompt.includes('configured secondary review lane')) { secondaryCalls += 1; return { status: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?' }; }
+    if (prompt.includes('parallel review adjudication')) { adjudicationRan = true; return { status: 0, stdout: '', stderr: '' }; }
+    const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'unknown'; if (agent === 'pidex-implementer') implementerCalls += 1;
+    const context = prompt.match(/(?:Assigned|Exact assigned output) artifact(?: path)?: ([^\s]+\.md)/)?.[1] || `agents.output/${agent}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-lane-sandbox-denial', task: 'ship it', phases: ['pidex-planner', 'pidex-critic', 'pidex-implementer'], archiveWorkspace, runner, moduleRules: false, parallelLaneProvider: ({ agent }) => agent === 'pidex-critic' ? [{ lane_id: 'secondary-sandbox', agent, runner_provider: 'pi', runner_model: 'model' }] : [] });
+  assert.equal(secondaryCalls, 1, 'sandbox denial never consumes the advisory lane retry');
+  assert.equal(result.ok, false); assert.equal(result.error, 'sandbox-unavailable');
+  assert.equal(implementerCalls, 0, 'overall run stops before the next essential phase');
+  assert.equal(adjudicationRan, false, 'no adjudication after a deterministic sandbox denial');
+  assert.equal(result.runs.some((run) => run.parallel_role === 'secondary' && run.status === 'DEGRADED_FAILED'), false, 'advisory lane is never represented as degraded for a sandbox denial');
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('Project Pipeline essential phase sandbox denial never retries and holds with attempts 1', async () => {
+  const pidexRoot = tmp(); const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true }); seedRecord(pidexRoot, 'pp-orch-essential-sandbox-denial');
+  let calls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    calls += 1;
+    return { status: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?' };
+  };
+  const result = await runProjectPipelineOrchestration({ pidexRoot, projectId: 'pp-orch-essential-sandbox-denial', task: 'ship it', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false });
+  assert.equal(calls, 1, 'sandbox denial never consumes the essential-phase retry');
+  assert.equal(result.ok, false); assert.equal(result.error, 'essential-phase-held');
+  assert.equal(result.hold.status, 'ESSENTIAL_PHASE_UNAVAILABLE'); assert.equal(result.hold.reason, 'sandbox-unavailable');
+  assert.equal(result.hold.attempts, 1, 'deterministic denial holds after one attempt, not two');
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
@@ -594,11 +761,10 @@ test('runProjectPipelineOrchestration sanitizes browser smoke evidence when fina
   const record = seedRecord(pidexRoot, projectId);
   record.preview = { ports: { base: 42080, size: 20, container_base: 42080, host_bind: '127.0.0.1', generation: 7 }, processes: { preview: { status: 'running', operator_url: 'http://localhost:42080', host_port: 42080, container_port: 42080 } } };
   saveProjectRecord(pidexRoot, record);
-  let attempt = 0;
+  let verdictAttempts = 0;
   const runner = (args) => {
     if (args[0] === 'exec' && args.includes('pi')) {
-      attempt += 1;
-      if (attempt === 2) return { status: 1, stdout: 'verdict failed', stderr: '' };
+      if (String(args.at(-1)).includes('browser-smoke final verdict')) { verdictAttempts += 1; return { status: 1, stdout: 'verdict failed', stderr: '' }; }
       const context = 'agents.output/qa/artifact.md';
       mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true });
       writeFileSync(path.join(archiveWorkspace, context), '# qa\n');
@@ -620,7 +786,9 @@ test('runProjectPipelineOrchestration sanitizes browser smoke evidence when fina
     browserSmokeBridgeRunner: async () => ({ ok: true, status: 'BROWSER-SMOKE-PASS', status_reason: 'all-checks-passed', result_file: absoluteResult, preview_url: 'http://localhost:42080', preview_url_source: 'project-pipeline-registry', request_id: 'qa-browser-smoke-req' }),
   });
   assert.equal(result.ok, false);
-  assert.equal(result.error, 'browser-smoke-verdict-failed');
+  assert.equal(result.error, 'essential-phase-held');
+  assert.equal(result.hold.kind, 'browser-smoke-verdict');
+  assert.equal(verdictAttempts, 2);
   assert.equal(result.browser_smoke_results[0].result_file, 'browser-smoke/qa-browser-smoke-req/browser-smoke-result.json');
   assert.doesNotMatch(JSON.stringify(result.browser_smoke_results), new RegExp(pidexRoot.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.doesNotMatch(JSON.stringify(result.browser_smoke_results), /state\/project-archives/);
@@ -681,6 +849,116 @@ test('schema2 unsafe route stops before verdict or next phase without public or 
   assert.equal(calls, 1);
   assert.doesNotMatch(prompts.join('\n'), /SEC057_REJECTED_PUBLIC_TASK_LEAK/);
   assert.doesNotMatch(JSON.stringify(result), /SEC057_REJECTED_PUBLIC_TASK_LEAK/);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('browser-smoke verdict retry succeeds once and advances exactly once', async () => {
+  const pidexRoot = tmp(); const projectId = 'pp-orch-browser-verdict-retry'; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true }); seedRecord(pidexRoot, projectId);
+  let verdictCalls = 0; let uatCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1)); const verdict = prompt.includes('browser-smoke final verdict');
+    if (verdict) {
+      verdictCalls += 1;
+      if (verdictCalls === 1) return { status: 1, stdout: 'truncated verdict stream', stderr: '' };
+      assert.match(prompt, /Previous attempt did not produce a valid ROUTING block/);
+    }
+    const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-qa';
+    const context = verdict ? 'agents.output/qa/browser-smoke-verdict.md' : `agents.output/${agent}/artifact.md`;
+    if (agent === 'pidex-uat') uatCalls += 1;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    if (agent === 'pidex-qa' && !verdict) writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId))}\n`);
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId, task: 'browser verdict retry', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, moduleRules: false,
+    browserSmokeBridgeRunner: async () => ({ request_schema: 2, request_file: 'ignored', request_id: 'req' }),
+    schema2EvidenceLoader: () => ({ ok: true, snapshot: { status: 'PASS', status_reason: 'fixture', result_ref: 'browser-smoke/req/result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/' }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'fixture' }] } } }),
+    schema2EvidencePostSyncLoader: () => ({ ok: true }),
+  });
+  assert.equal(result.ok, true); assert.equal(verdictCalls, 2); assert.equal(uatCalls, 1);
+  const verdict = result.runs.find((run) => run.browser_smoke_verdict_for);
+  assert.equal(verdict.retry_count, 1);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('exhausted browser-smoke verdict returns durable essential hold without next-phase advancement', async () => {
+  const pidexRoot = tmp(); const projectId = 'pp-orch-browser-verdict-hold'; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true }); seedRecord(pidexRoot, projectId);
+  let verdictCalls = 0; let uatCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    const prompt = String(args.at(-1)); const verdict = prompt.includes('browser-smoke final verdict');
+    if (verdict) { verdictCalls += 1; return { status: 1, stdout: 'truncated verdict stream', stderr: '' }; }
+    const agent = prompt.match(/Agent: (pidex-[a-z0-9-]+)/)?.[1] || 'pidex-qa';
+    if (agent === 'pidex-uat') uatCalls += 1;
+    const context = `agents.output/${agent}/artifact.md`;
+    mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true }); writeFileSync(path.join(archiveWorkspace, context), '# artifact\n');
+    if (agent === 'pidex-qa') writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId))}\n`);
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId, task: 'browser verdict hold', phases: ['pidex-qa', 'pidex-uat'], archiveWorkspace, runner, moduleRules: false,
+    browserSmokeBridgeRunner: async () => ({ request_schema: 2, request_file: 'ignored', request_id: 'req' }),
+    schema2EvidenceLoader: () => ({ ok: true, snapshot: { status: 'PASS', status_reason: 'fixture', result_ref: 'browser-smoke/req/result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/' }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'fixture' }] } } }),
+  });
+  assert.equal(result.ok, false); assert.equal(result.error, 'essential-phase-held'); assert.equal(result.hold.kind, 'browser-smoke-verdict');
+  assert.equal(verdictCalls, 2); assert.equal(uatCalls, 0);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('browser-smoke verdict artifact-authority denial does not retry', async () => {
+  const pidexRoot = tmp(); const projectId = 'pp-orch-browser-verdict-denial'; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true }); seedRecord(pidexRoot, projectId);
+  writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-verdict.md'), '# unowned verdict\n');
+  let agentCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    agentCalls += 1;
+    const context = 'agents.output/qa/artifact.md';
+    writeFileSync(path.join(archiveWorkspace, context), '# qa\n');
+    writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId))}\n`);
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId, task: 'browser verdict denial', phases: ['pidex-qa'], archiveWorkspace, runner, moduleRules: false,
+    browserSmokeBridgeRunner: async () => ({ request_schema: 2, request_file: 'ignored', request_id: 'req' }),
+    schema2EvidenceLoader: () => ({ ok: true, snapshot: { status: 'PASS', status_reason: 'fixture', result_ref: 'browser-smoke/req/result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/' }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'fixture' }] } } }),
+  });
+  assert.equal(result.ok, false); assert.equal(result.error, 'essential-phase-held'); assert.equal(result.hold.reason, 'expected-output-exists');
+  assert.equal(result.hold.attempts, 1); assert.equal(agentCalls, 1);
+  rmSync(pidexRoot, { recursive: true, force: true });
+});
+
+test('browser-smoke verdict symlink at assigned output denies before launch and never retries', async () => {
+  // QA-FIND-1 / BD-62-12 / AC-62-13 at orchestration level: a symlink at the
+  // assigned verdict output must deny pre-launch with the new typed code, never
+  // launch the verdict child, and stop overall without retry or degradation.
+  const pidexRoot = tmp(); const projectId = 'pp-orch-browser-verdict-symlink'; const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+  mkdirSync(path.join(archiveWorkspace, 'agents.output/qa'), { recursive: true }); seedRecord(pidexRoot, projectId);
+  writeFileSync(path.join(archiveWorkspace, 'agents.output/outside-target.md'), '# outside\n');
+  symlinkSync(path.join(archiveWorkspace, 'agents.output/outside-target.md'), path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-verdict.md'));
+  let verdictCalls = 0; let agentCalls = 0;
+  const runner = (args) => {
+    if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+    agentCalls += 1;
+    const prompt = String(args.at(-1)); const verdict = prompt.includes('browser-smoke final verdict');
+    if (verdict) { verdictCalls += 1; throw new Error('verdict child must never launch against a symlink'); }
+    const context = 'agents.output/qa/artifact.md';
+    writeFileSync(path.join(archiveWorkspace, context), '# qa\n');
+    writeFileSync(path.join(archiveWorkspace, 'agents.output/qa/browser-smoke-request.json'), `${JSON.stringify(browserSmokeRequest(projectId))}\n`);
+    return { status: 0, stdout: `<!-- ROUTING\nroute_to: orchestrator\ncontext_file: ${context}\n-->` };
+  };
+  const result = await runProjectPipelineOrchestration({
+    pidexRoot, projectId, task: 'browser verdict symlink', phases: ['pidex-qa'], archiveWorkspace, runner, moduleRules: false,
+    browserSmokeBridgeRunner: async () => ({ request_schema: 2, request_file: 'ignored', request_id: 'req' }),
+    schema2EvidenceLoader: () => ({ ok: true, snapshot: { status: 'PASS', status_reason: 'fixture', result_ref: 'browser-smoke/req/result.json', screenshot_refs: [], request: { viewports: [{ id: 'desktop', width: 1280, height: 800, route: '/' }] }, result: { viewports: [{ id: 'desktop', width: 1280, height: 800, status: 'PASS', status_reason: 'fixture' }] } } }),
+  });
+  assert.equal(result.ok, false); assert.equal(result.error, 'essential-phase-held'); assert.equal(result.hold.kind, 'browser-smoke-verdict');
+  assert.equal(result.hold.reason, 'expected-output-non-regular'); assert.equal(result.hold.attempts, 1, 'deterministic denial holds after one attempt, not two');
+  assert.equal(verdictCalls, 0, 'verdict child never launched against symlinked assigned output');
+  assert.equal(agentCalls, 1, 'only the main phase child launched');
   rmSync(pidexRoot, { recursive: true, force: true });
 });
 
