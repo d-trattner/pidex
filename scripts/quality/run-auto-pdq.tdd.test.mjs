@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const script = path.join(root, 'scripts', 'quality', 'run-auto-pdq.mjs');
-const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-auto-pdq-project-'));
+const eventScript = path.join(root, 'modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs');
+const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-manual-pdq-project-'));
 const pipelineId = `auto-pdq-test-${process.pid}-${Date.now()}`;
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -34,7 +35,10 @@ function readEventually(file, timeoutMs = 10000) {
 
 const cleanup = [];
 try {
-  const cp = spawnSync(process.execPath, [script, '--project', project, '--plan', '7', '--pipeline-id', pipelineId, '--terminal-event', 'pipeline_completed'], { cwd: root, encoding: 'utf8' });
+  assert.doesNotMatch(readFileSync(eventScript, 'utf8'), /run-auto-pdq|PIDEX_AUTO_PDQ/, 'terminal event boundary must not retain automatic PDQ dispatch scaffolding');
+  const denied = spawnSync(process.execPath, [script, '--project', project, '--plan', '7'], { cwd: root, encoding: 'utf8' });
+  assert.equal(denied.status, 2); assert.match(denied.stderr, /MANUAL_CONFIRMATION_REQUIRED/);
+  const cp = spawnSync(process.execPath, [script, '--manual', '--project', project, '--plan', '7', '--pipeline-id', pipelineId, '--terminal-event', 'manual'], { cwd: root, encoding: 'utf8' });
   assert.equal(cp.status, 0, cp.stderr || cp.stdout);
   const lines = cp.stdout.trim().split(/\r?\n/).filter(Boolean);
   assert.ok(lines.length >= 1, cp.stdout);
@@ -46,8 +50,8 @@ try {
   const row = rows.find((item) => item.operator_type === 'OpQualityReview' && item.pipeline_id === pipelineId);
   assert.ok(row, 'OpQualityReview row not found');
   assert.equal(row.plan_key, 'plan-007');
-  assert.equal(row.source, 'auto-pdq');
-  assert.equal(row.logical_decision.trigger, 'pipeline_completed');
+  assert.equal(row.source, 'manual-pdq');
+  assert.equal(row.logical_decision.trigger, 'manual');
   assert.deepEqual(row.plans_reviewed, ['plan-007']);
   if (reportOut) {
     assert.equal(row.physical_action.json_report, reportOut.json);

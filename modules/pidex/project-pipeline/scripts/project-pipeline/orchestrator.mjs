@@ -16,6 +16,7 @@ import { resolveProjectPipelineAuthority } from './project-authority.mjs';
 import { normalizePlan, recordPipelineEvent } from '../../../analysis-metrics-history/lib/review-lifecycle.mjs';
 import { isSafeSchema2VerdictRoute, loadPersistedSchema2EvidenceSnapshot, runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
+import { traceProjectPipelineExposure } from './rule-exposure-tracer.mjs';
 
 export const DEFAULT_PROJECT_PIPELINE_PHASES = Object.freeze([
   'pidex-planner',
@@ -677,11 +678,61 @@ export async function runProjectPipelineOrchestration(options = {}) {
       }
     }
   }
-  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_completed', status: 'complete', metadata: { runs } });
   const anyMirrorDegraded = runs.some((item) => item.project_mirror?.degraded === true);
   const latestProjectMirrorStatus = runs.at(-1)?.project_mirror?.status;
-  projectPipelineProgress(options, anyMirrorDegraded ? `Project Pipeline complete ${projectId}; archive complete; project mirror degraded` : `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId, any_mirror_degraded: anyMirrorDegraded, latest_project_mirror_status: latestProjectMirrorStatus });
-  return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, latest_project_mirror_status: latestProjectMirrorStatus, any_mirror_degraded: anyMirrorDegraded, no_fallback: true };
+  let ruleExposure;
+  const exposureEnv = options.ruleExposureEnv || process.env;
+  const stateRootClass = (exposureEnv?.PIDEX_STATE_DIR || exposureEnv?.RUNNING_PI_STATE_DIR) ? 'external' : 'default';
+  const nonAttestationFlag = telemetryRecord.is_test_project === true
+    ? 'test_project'
+    : telemetryRecord.is_test_project !== false
+      ? 'unknown_test_state'
+      : anyMirrorDegraded
+        ? 'mirror_degraded'
+        : null;
+  if (nonAttestationFlag) {
+    ruleExposure = { quality: 'non_attested', quality_flags: [nonAttestationFlag], usable_for_evidence: false, state_root_class: stateRootClass };
+  } else try {
+    const traced = (options.ruleExposureTracer || traceProjectPipelineExposure)({
+      pidexRoot,
+      env: exposureEnv,
+      run: {
+        run_id: telemetryPipelineId,
+        plan_id: telemetryPlan,
+        project_scope: telemetryRecord.project_id,
+        pipeline_version: 'project-pipeline-v1',
+        model_identity: options.modelIdentity || null,
+        config_fingerprint: options.configFingerprint || null,
+        correlation_id: telemetryPipelineId,
+      },
+      terminal_outcome_ref: previous?.project_run_id,
+    });
+    const durabilityUnconfirmed = traced.publication?.state === 'COMMITTED_UNCONFIRMED'
+      && traced.publication.reason === 'RECOVERY_DURABILITY_UNCONFIRMED'
+      && traced.publication.usable === false
+      && traced.publication.parent_sync === 'unsupported';
+    ruleExposure = {
+      exposure: {
+        exposure_id: traced.exposure.exposure_id,
+        snapshot_id: traced.exposure.snapshot_id,
+        quality: durabilityUnconfirmed ? 'recorder_degraded' : traced.exposure.quality,
+        quality_flags: durabilityUnconfirmed ? ['durability_unconfirmed'] : traced.exposure.quality_flags,
+        usable_for_evidence: false,
+      },
+      artifacts: {
+        reconciliation_id: typeof traced.artifacts?.reconciliation_id === 'string' && traced.artifacts.reconciliation_id.startsWith('reconciliation:') ? traced.artifacts.reconciliation_id : null,
+        snapshot_id: typeof traced.artifacts?.snapshot_id === 'string' && traced.artifacts.snapshot_id.startsWith('snapshot:') ? traced.artifacts.snapshot_id : null,
+        exposure_id: typeof traced.artifacts?.exposure_id === 'string' && traced.artifacts.exposure_id.startsWith('exposure:') ? traced.artifacts.exposure_id : null,
+      },
+      state_root_class: traced.state_root_class === 'external' ? 'external' : 'default',
+    };
+  } catch {
+    ruleExposure = { quality: 'recorder_degraded', quality_flags: ['recorder_failure'], usable_for_evidence: false, state_root_class: stateRootClass };
+  }
+  const exposureQuality = ruleExposure.exposure?.quality || ruleExposure.quality;
+  appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_completed', status: 'complete', metadata: { runs, exposure_quality: exposureQuality, rule_exposure: ruleExposure } });
+  projectPipelineProgress(options, anyMirrorDegraded ? `Project Pipeline complete ${projectId}; archive complete; project mirror degraded` : `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId, anyMirrorDegraded, latest_project_mirror_status: latestProjectMirrorStatus, exposure_quality: exposureQuality, rule_exposure: ruleExposure });
+  return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, latest_project_mirror_status: latestProjectMirrorStatus, any_mirror_degraded: anyMirrorDegraded, rule_exposure: ruleExposure, no_fallback: true };
 }
 
 export function parseArgs(argv) {

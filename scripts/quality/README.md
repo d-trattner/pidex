@@ -65,7 +65,7 @@ Phase 2 notes:
 - `OpContextPack` is emitted by `pidex_agent` as a skeleton context/task-size event before `OpSpawn`.
 - `OpPreflight` is emitted by `/pidex`/`/pd` kickoff as a low-confidence skeleton before the interactive interview completes.
 - `OpReview` is emitted by review-class agents (`pidex-critic`, `pidex-code-reviewer`, `pidex-security`, `pidex-qa`, `pidex-uat`) as a skeleton verdict/finding event.
-- `OpQualityReview` is emitted by auto-PDQ after terminal pipeline events.
+- `OpQualityReview` is emitted only by an explicit `/pdq` or `run-auto-pdq.mjs --manual` review; terminal events do not dispatch PDQ automatically.
 - `OpUserCorrection` is manual for now; do not infer corrections from arbitrary chat text.
 
 Record a user correction manually:
@@ -154,7 +154,7 @@ node scripts/quality/operator-decisions.mjs record \
   --evidence-path agents.output/planner/<artifact>.md
 ```
 
-Record an auto-PDQ/manual backfill decision:
+Record a manual PDQ/backfill decision:
 
 ```bash
 node scripts/quality/operator-decisions.mjs record \
@@ -177,7 +177,7 @@ Phase 3 starts with conservative contract helpers in `scripts/quality/operator-c
 Current contract-backed classifications cover:
 
 - `OpPreflight`: required after post-Phase-2B `pipeline_started`; valid skip reasons are `continuation-existing-plan` and `already-covered`.
-- `OpQualityReview`: required after terminal pipeline events; valid skip/manual evidence reasons are `auto-pdq-disabled`, `optional-hooks-disabled`, `terminal-event-backfill`, and `report-logic-regeneration-pending`.
+- `OpQualityReview`: expected after terminal pipeline events, but produced only by explicit manual review; valid historical/current skip/manual evidence reasons remain `auto-pdq-disabled`, `optional-hooks-disabled`, `terminal-event-backfill`, and `report-logic-regeneration-pending`. Resolution must use manual review/backfill or explicit evidence, never restoration of an automatic hook.
 - `OpReview`: required after post-Phase-2B review-agent metric rows; valid skip/manual evidence reasons include `not-applicable`, `already-covered`, `docs-only`, `manual-review-done-outside-pidex`, `provider-quota-limited`, `operator-approved-risk`, and `duplicate-signal`.
 - `OpGate`: required when a metric row contains a real gate; valid skip/manual evidence reasons include `not-applicable`, `already-covered`, `no-ui-change`, `manual-review-done-outside-pidex`, `operator-approved-risk`, and `expectation-wrong`.
 - `OpRoute`: required when a metric row contains `route_to`; valid override/manual evidence reasons include `already-covered`, `duplicate-signal`, `operator-approved-risk`, `expectation-wrong`, and `manual-review-done-outside-pidex`.
@@ -185,3 +185,9 @@ Current contract-backed classifications cover:
 - `OpContextPack`: required when a post-Phase-2B agent metric row exists; valid manual/backfill reasons include `already-covered`, `duplicate-signal`, `expectation-wrong`, and `provider-quota-limited`.
 
 When a matching `OpDecision` exists, PDQ reports a `valid_skip` finding, counts it as observed structured evidence, and excludes it from trace gap counts. Other operator expectations still use the legacy conservative classification until their contracts are added.
+
+## Manual pending-only correction governance
+
+`contract-correction-detector.mjs` can propose a bounded `allowed_skip_reasons` correction for `OpPreflight` or `OpQualityReview` after repeated explicit decisions. `contract-governor.mjs run` records those proposals only when invoked manually. It has no background hook, model delegate, approval, apply, evaluator, or normal agent-metric path.
+
+Use `--dry-run` first. A non-dry run writes only pending correction-ledger rows and governance run artifacts. Approval and supersession remain explicit operator actions through `operator-contracts-admin.mjs`. Version-2 local overrides reject `required_when` and every patch field except bounded `allowed_skip_reasons` for the two supported operators.

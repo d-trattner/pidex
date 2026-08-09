@@ -150,10 +150,13 @@ type QualityLatestPayload = {
 
 type ContractGovernorPayload = {
   ok: boolean;
-  effective_config: { enabled?: boolean; hot_mode?: boolean; auto_apply?: string; mode?: string; model?: string | null };
-  runs: Array<Record<string, any>>;
-  pending: Array<Record<string, any>>;
-  approved: Array<Record<string, any>>;
+  status?: 'pending' | 'descriptive' | 'degraded' | 'unavailable';
+  capability?: string;
+  error_code?: string;
+  effective_config?: { version?: number; capability?: string; max_proposals_per_run?: number };
+  runs?: Array<Record<string, any>>;
+  pending?: Array<Record<string, any>>;
+  approved?: Array<Record<string, any>>;
   corrections?: Array<Record<string, any>>;
 };
 
@@ -190,6 +193,8 @@ function QualityPage() {
   const latestQuality = qualityLatestQuery.data?.latest ?? null;
   const governor = governorQuery.data;
   const governorLatest = governor?.runs?.[0];
+  const governorState = governorQuery.isError ? 'unavailable' : (governor?.status || (governor?.ok ? 'pending' : 'unavailable'));
+  const governorStateCopy = governorState === 'pending' ? 'Pending-only governance is available for explicit manual proposals.' : governorState === 'degraded' ? 'Governance evidence is degraded and unavailable for action.' : governorState === 'descriptive' ? 'Governance is descriptive only and unavailable for action.' : 'Governance state is unavailable; no action or approval is inferred.';
   const scopeLabel = project || 'All projects';
   const scopeDescription = project ? `${project} · latest project PDQ report` : `All projects · aggregate across ${includeTestProjects ? 'all' : 'non-test'} latest reports`;
   const loading = qualityQuery.isLoading || modelQuery.isLoading || qualityLatestQuery.isLoading;
@@ -407,28 +412,30 @@ function QualityPage() {
       <article className="glass-card glass quality-card quality-card-full">
         <div className="card-heading-row">
           <div>
-            <h3>Background governance</h3>
-            <p className="muted">Contract governor is non-pipeline automation for PDQ expectation corrections. It is visible here but excluded from normal route-graph metrics.</p>
-            {governor?.effective_config?.hot_mode ? <p className="metric-bad"><strong>Hot mode active:</strong> low-risk local contract corrections may auto-apply.</p> : null}
+            <h3>Manual contract governance</h3>
+            <p className="muted">The governor is manual and pending-only. It can propose local expectation corrections but cannot approve, apply, delegate, or validate them.</p>
           </div>
           <HelpPopover
-            title="Background governance"
-            shows="Contract governor status, pending contract-correction proposals, local overrides, and evaluator outcomes."
-            source="/api/quality/contract-governor reading state/quality/contract-governor and state/quality/contract-corrections.jsonl."
-            reading="Pending proposals are suggested expectation corrections; applied/validated rows show local contract overrides under monitoring."
-            improve="Review pending proposals, keep hot mode off until pending-only runs are clean, and investigate rollback recommendations."
-            caveats="Governor runs are background governance, not normal pipeline agent runs."
+            title="Manual contract governance"
+            shows="Pending correction proposals, manual correction history, and exact pending-only run outcomes."
+            source="/api/quality/contract-governor reading governance run records and the append-only correction ledger."
+            reading="Pending proposals require a separate explicit operator approval. Historical labels without a baseline are shown as inconclusive."
+            improve="Review proposal evidence and use the operator-contract admin command only for supported local skip-reason changes."
+            caveats="No background dispatch, model review, auto-apply, or autonomous validation is available."
           />
         </div>
+        <div role="status" aria-live="polite" className={`settings-warning${governorState === 'pending' ? '' : ' active'}`}>
+          <strong>{governorState}</strong> · {governorStateCopy}
+        </div>
         <div className="grid quality-metrics-grid" style={{ gap: 12 }}>
-          <div className="glass-card glass quality-metric-card"><p className="muted">Governor</p><p className="metric-value">{governor?.effective_config?.enabled ? 'enabled' : 'off'}</p></div>
-          <div className="glass-card glass quality-metric-card"><p className="muted">Hot mode</p><p className={`metric-value ${governor?.effective_config?.hot_mode ? 'metric-bad' : ''}`}>{governor?.effective_config?.hot_mode ? 'on' : 'off'}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Capability</p><p className="metric-value">pending-only</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Automatic writes</p><p className="metric-value">off</p></div>
           <div className="glass-card glass quality-metric-card"><p className="muted">Pending</p><p className="metric-value">{governor?.pending?.length || 0}</p></div>
-          <div className="glass-card glass quality-metric-card"><p className="muted">Applied/approved</p><p className="metric-value">{governor?.approved?.length || 0}</p></div>
-          <div className="glass-card glass quality-metric-card"><p className="muted">Last proposals</p><p className="metric-value">{safeNumber(governorLatest?.proposals_reviewed)}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Manual history</p><p className="metric-value">{governor?.approved?.length || 0}</p></div>
+          <div className="glass-card glass quality-metric-card"><p className="muted">Last proposals</p><p className="metric-value">{safeNumber(governorLatest?.proposals_pending)}</p></div>
           <div className="glass-card glass quality-metric-card"><p className="muted">Last outcome</p><p className="metric-value">{governorLatest?.status || '—'}</p></div>
         </div>
-        {governorLatest ? <p className="muted" style={{ marginTop: 10 }}>Last run: {governorLatest.timestamp ? new Date(String(governorLatest.timestamp)).toLocaleString() : '—'} · duration {safeNumber(governorLatest.duration_ms)}ms · model {governorLatest.model || 'deterministic'} · auto-applied {safeNumber(governorLatest.auto_applied)}</p> : <p className="muted" style={{ marginTop: 10 }}>No governor runs recorded yet.</p>}
+        {governorLatest ? <p className="muted" style={{ marginTop: 10 }}>Last manual run: {governorLatest.timestamp ? new Date(String(governorLatest.timestamp)).toLocaleString() : '—'} · duration {safeNumber(governorLatest.duration_ms)}ms · pending {safeNumber(governorLatest.proposals_pending)} · duplicates {safeNumber(governorLatest.duplicates)}</p> : <p className="muted" style={{ marginTop: 10 }}>No manual pending-only runs recorded yet.</p>}
         {(governor?.pending || []).length ? (
           <div style={{ marginTop: 12, overflowX: 'auto' }}>
             <h4>Pending proposals</h4>
@@ -439,9 +446,9 @@ function QualityPage() {
         ) : null}
         {(governor?.approved || []).length ? (
           <div style={{ marginTop: 12, overflowX: 'auto' }}>
-            <h4>Approved / monitored local overrides</h4>
-            <table className="table"><thead><tr><th>Correction</th><th>Operator</th><th>Status</th><th>Monitoring</th><th>Rollback</th></tr></thead><tbody>
-              {(governor?.approved || []).slice(0, 8).map((row, idx) => <tr key={`${row.id || 'approved'}-${idx}`}><td>{row.id || '—'}</td><td>{row.operator_type || '—'}</td><td>{row.status || '—'}</td><td>{row.monitoring_status || '—'}</td><td>{row.rollback_recommended ? 'recommended' : 'no'}</td></tr>)}
+            <h4>Manual correction history</h4>
+            <table className="table"><thead><tr><th>Correction</th><th>Operator</th><th>Source status</th><th>Assessment</th><th>Reason</th></tr></thead><tbody>
+              {(governor?.approved || []).slice(0, 8).map((row, idx) => <tr key={`${row.id || 'approved'}-${idx}`}><td>{row.id || '—'}</td><td>{row.operator_type || '—'}</td><td>{row.source_status || row.status || '—'}</td><td>{row.assessment || row.monitoring_status || '—'}</td><td>{row.assessment_reason || row.reason || '—'}</td></tr>)}
             </tbody></table>
           </div>
         ) : null}

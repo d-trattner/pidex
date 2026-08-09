@@ -1,50 +1,107 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { detectContractCorrections } from './contract-correction-detector.mjs';
+import { acquireGovernorLock } from './contract-governor.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-assert.deepEqual(detectContractCorrections({ report: { summary: { operator_trace: { findings: [] } } }, opDecisions: [] }), []);
-const report = { generated_at: '2026-01-01T00:00:00Z', project_path: '/tmp/project', summary: { operator_trace: { findings: [
-  { type: 'instrumentation_missing', operator_type: 'OpQualityReview', plan_key: 'plan-001', severity: 'low', reason: 'A terminal pipeline event exists, but no structured OpQualityReview event or explicit skip was found.', contract_id: 'operator.OpQualityReview.terminal-pdq' },
-  { type: 'instrumentation_missing', operator_type: 'OpQualityReview', plan_key: 'plan-002', severity: 'low', reason: 'A terminal pipeline event exists, but no structured OpQualityReview event or explicit skip was found.', contract_id: 'operator.OpQualityReview.terminal-pdq' },
-  { type: 'instrumentation_missing', operator_type: 'OpQualityReview', plan_key: 'plan-003', severity: 'low', reason: 'A terminal pipeline event exists, but no structured OpQualityReview event or explicit skip was found.', contract_id: 'operator.OpQualityReview.terminal-pdq' }
-] } } };
-assert.equal(detectContractCorrections({ report, reportFile: 'r.json', opDecisions: [] }).length, 1);
-
-const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-governor-'));
+const script = path.join(ROOT, 'scripts/quality/contract-governor.mjs');
+const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-governor-v2-'));
+const project = path.join(tmp, 'project');
+function run(args = [], env = {}) { return spawnSync(process.execPath, [script, ...args, '--root', tmp, '--project', project], { encoding: 'utf8', env: { ...process.env, ...env } }); }
 try {
-  const project = path.join(tmp, 'project'); mkdirSync(project, { recursive: true }); mkdirSync(path.join(tmp, 'state/quality'), { recursive: true }); mkdirSync(path.join(tmp, 'config'), { recursive: true });
-  writeFileSync(path.join(tmp, 'config/contract-governor.json'), JSON.stringify({ version: 1, enabled: true, mode: 'deterministic-only', auto_apply: 'off', hot_mode: false, max_proposals_per_run: 5 }), 'utf8');
-  const reportFile = path.join(tmp, 'state/quality/report.json'); writeFileSync(reportFile, JSON.stringify({ ...report, project_path: project }), 'utf8');
-  const cp = spawnSync(process.execPath, [path.join(ROOT, 'scripts/quality/contract-governor.mjs'), 'run', '--root', tmp, '--project', project, '--report', reportFile], { encoding: 'utf8' });
-  assert.equal(cp.status, 0, cp.stderr || cp.stdout);
-  const result = JSON.parse(cp.stdout);
-  assert.equal(result.proposals_reviewed, 1);
-  assert.equal(result.auto_applied, 0);
-  assert.equal(JSON.parse(readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8').trim().split(/\r?\n/)[0]).status, 'pending');
-
+  mkdirSync(path.join(tmp, 'config'), { recursive: true });
+  mkdirSync(project, { recursive: true });
+  writeFileSync(path.join(tmp, 'config/contract-governor.json'), JSON.stringify({ version: 2, capability: 'manual-pending-only', max_proposals_per_run: 5 }));
+  const reportFile = path.join(tmp, 'report.json');
+  writeFileSync(reportFile, JSON.stringify({ generated_at: '2026-01-01T00:00:00Z', project_path: project, summary: { operator_trace: { findings: [] } } }));
   mkdirSync(path.join(tmp, 'state/orchestrator-events/test'), { recursive: true });
-  writeFileSync(path.join(tmp, 'state/orchestrator-events/test/events.jsonl'), `${JSON.stringify({ timestamp: '2026-01-01T00:01:00Z', operator_type: 'OpDecision', decision_type: 'expectation_correction', target_operator: 'OpQualityReview', plan_key: 'plan-001', reason: 'expectation-wrong', confidence: 'high', project_path: project, contract_patch: { required_when: 'terminal pipeline event exists and auto-PDQ hooks were enabled' } })}\n`, 'utf8');
-  writeFileSync(path.join(tmp, 'config/contract-governor.local.json'), JSON.stringify({ enabled: true, mode: 'deterministic-only', auto_apply: 'low-risk', hot_mode: true }), 'utf8');
-  const cp2 = spawnSync(process.execPath, [path.join(ROOT, 'scripts/quality/contract-governor.mjs'), 'run', '--root', tmp, '--project', project, '--report', reportFile], { encoding: 'utf8', env: { ...process.env, PIDEX_CONTRACT_GOVERNOR_HOT_MODE: '1' } });
-  assert.equal(cp2.status, 0, cp2.stderr || cp2.stdout);
-  assert.equal(JSON.parse(cp2.stdout).auto_applied, 1);
-  assert.ok(readFileSync(path.join(tmp, 'config/operator-contracts.local.json'), 'utf8').includes('approved'));
-  const gateReportFile = path.join(tmp, 'state/quality/gate-report.json');
-  writeFileSync(gateReportFile, JSON.stringify({ ...report, project_path: project, summary: { operator_trace: { findings: [] } } }), 'utf8');
-  writeFileSync(path.join(tmp, 'state/orchestrator-events/test/gate.jsonl'), `${JSON.stringify({ timestamp: '2026-01-01T00:02:00Z', operator_type: 'OpDecision', decision_type: 'expectation_correction', target_operator: 'OpGate', plan_key: 'plan-001', reason: 'expectation-wrong', confidence: 'high', project_path: project, contract_patch: { required_when: 'never' } })}\n`, 'utf8');
-  const cpForbidden = spawnSync(process.execPath, [path.join(ROOT, 'scripts/quality/contract-governor.mjs'), 'run', '--root', tmp, '--project', project, '--report', gateReportFile], { encoding: 'utf8', env: { ...process.env, PIDEX_CONTRACT_GOVERNOR_HOT_MODE: '1' } });
-  assert.equal(cpForbidden.status, 0, cpForbidden.stderr || cpForbidden.stdout);
-  assert.equal(JSON.parse(cpForbidden.stdout).decisions.some((d) => d.proposal.operator_type === 'OpGate' && d.applied), false);
+  writeFileSync(path.join(tmp, 'state/orchestrator-events/test/events.jsonl'), [1, 2].map((n) => JSON.stringify({ timestamp: `2026-01-01T00:00:0${n}Z`, project_path: project, operator_type: 'OpDecision', decision_type: 'skip_step', target_operator: 'OpQualityReview', reason: 'manual-terminal-import', confidence: 'high', plan_key: `plan-00${n}` })).join('\n') + '\n');
 
-  const evalRun = spawnSync(process.execPath, [path.join(ROOT, 'scripts/quality/contract-governor.mjs'), 'evaluate', '--root', tmp, '--project', project, '--correction-id', JSON.parse(cp2.stdout).decisions.find((d) => d.applied).proposal.id], { encoding: 'utf8' });
-  assert.equal(evalRun.status, 0, evalRun.stderr || evalRun.stdout);
-  assert.ok(['validated', 'needs_review'].includes(JSON.parse(evalRun.stdout).evaluation.monitoring_status));
-} finally { rmSync(tmp, { recursive: true, force: true }); }
+  const localConfig = path.join(tmp, 'config/contract-governor.local.json');
+  writeFileSync(localConfig, '{bad json\n'); const badConfigBytes = readFileSync(localConfig, 'utf8');
+  const badConfig = run(['run', '--report', reportFile]);
+  assert.equal(badConfig.status, 1); assert.equal(JSON.parse(badConfig.stdout).error_code, 'GOVERNOR_CONFIG_INVALID'); assert.equal(readFileSync(localConfig, 'utf8'), badConfigBytes);
+  rmSync(localConfig);
+
+  const first = run(['run', '--report', reportFile]);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  const firstOut = JSON.parse(first.stdout);
+  assert.equal(firstOut.capability, 'pending-only');
+  assert.equal(firstOut.status, 'completed_pending');
+  assert.equal(firstOut.proposals_pending, 1);
+  assert.equal('auto_applied' in firstOut, false);
+
+  const second = run(['run', '--report', reportFile]);
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+  assert.equal(JSON.parse(second.stdout).duplicates, 1);
+
+  const externalState = path.join(tmp, 'external-state');
+  const legacyState = path.join(tmp, 'legacy-state');
+  const external = run(['run', '--report', reportFile], { PIDEX_STATE_DIR: externalState, RUNNING_PI_STATE_DIR: legacyState });
+  assert.equal(external.status, 0, external.stderr || external.stdout);
+  const externalOut = JSON.parse(external.stdout);
+  assert.match(externalOut.project, /^project:[a-f0-9]{20}$/); assert.match(externalOut.report_ref, /^report:[a-f0-9]{20}$/);
+  assert.equal('project_path' in externalOut, false); assert.equal('report' in externalOut, false); assert.doesNotMatch(JSON.stringify(externalOut), new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  const externalRuns = path.join(externalState, 'quality/contract-governor');
+  assert.equal(existsSync(externalRuns), true); assert.equal(existsSync(path.join(legacyState, 'quality/contract-governor')), false);
+  const ledgerPath = path.join(tmp, 'state/quality/contract-corrections.jsonl');
+  const ledgerBytes = readFileSync(ledgerPath, 'utf8'); const ledger = ledgerBytes.trim().split(/\r?\n/);
+  assert.equal(ledger.length, 1, 'duplicate pending lifecycle rows are forbidden');
+  writeFileSync(ledgerPath, '{bad json\n'); const malformedLedgerBytes = readFileSync(ledgerPath, 'utf8');
+  const badLedger = run(['run', '--report', reportFile]);
+  assert.equal(badLedger.status, 1); assert.equal(JSON.parse(badLedger.stdout).error_code, 'GOVERNOR_LEDGER_INVALID'); assert.equal(readFileSync(ledgerPath, 'utf8'), malformedLedgerBytes);
+  writeFileSync(ledgerPath, ledgerBytes);
+
+  const beforeEntries = readdirSync(path.join(tmp, 'state/quality/contract-governor')).length;
+  const unsupported = run(['run', '--report', reportFile], { PIDEX_CONTRACT_GOVERNOR_HOT_MODE: '1' });
+  assert.equal(unsupported.status, 2);
+  assert.match(unsupported.stderr, /GOVERNOR_AUTOMATION_UNSUPPORTED/);
+  assert.equal(readdirSync(path.join(tmp, 'state/quality/contract-governor')).length, beforeEntries);
+
+  const evaluate = run(['evaluate', '--correction-id', 'anything']);
+  assert.equal(evaluate.status, 2);
+  assert.match(evaluate.stderr, /GOVERNOR_COMMAND_UNSUPPORTED/);
+
+  const invalid = run(['run', '--report', path.join(tmp, 'missing-report.json')]);
+  assert.equal(invalid.status, 1);
+  assert.equal(JSON.parse(invalid.stdout).status, 'invalid_input');
+
+  const lockDir = path.join(tmp, 'state/quality/contract-governor/.lock');
+  mkdirSync(lockDir, { recursive: true });
+  writeFileSync(path.join(lockDir, 'meta.json'), '{}');
+  utimesSync(lockDir, new Date(0), new Date(0));
+  const locked = run(['run', '--report', reportFile]);
+  assert.equal(locked.status, 0, locked.stderr || locked.stdout);
+  assert.equal(JSON.parse(locked.stdout).status, 'locked');
+  assert.ok(existsSync(lockDir), 'old uncertain lock must not be deleted');
+  rmSync(lockDir, { recursive: true, force: true });
+
+  const owned = acquireGovernorLock(tmp);
+  assert.ok(owned);
+  const meta = path.join(tmp, 'state/quality/contract-governor/.lock/meta.json');
+  writeFileSync(meta, JSON.stringify({ token: 'replacement' }));
+  assert.equal(owned.release(), false);
+  assert.ok(existsSync(path.dirname(meta)), 'token mismatch must preserve lock');
+  rmSync(path.dirname(meta), { recursive: true, force: true });
+
+  const swapped = acquireGovernorLock(tmp, { onReleaseStep: (step, { lockDir, tokenName }) => { if (step !== 'before-directory-claim') return; rmSync(lockDir, { recursive: true }); mkdirSync(lockDir); writeFileSync(path.join(lockDir, tokenName), 'replacement'); writeFileSync(path.join(lockDir, 'meta.json'), JSON.stringify({ token: 'replacement' })); } });
+  assert.ok(swapped); assert.equal(swapped.release(), false, 'whole-directory replacement must fail identity check'); assert.ok(existsSync(swapped.releaseDir), 'replacement directory must be preserved'); rmSync(swapped.releaseDir, { recursive: true, force: true });
+
+  const canonicalReplacement = acquireGovernorLock(tmp, { onReleaseStep: (step, { lockDir }) => { if (step !== 'after-directory-claim') return; mkdirSync(lockDir); writeFileSync(path.join(lockDir, 'replacement-owner'), 'replacement'); } });
+  assert.ok(canonicalReplacement); assert.equal(canonicalReplacement.release(), true); assert.ok(existsSync(path.join(canonicalReplacement.lockDir, 'replacement-owner')), 'new canonical owner must remain untouched'); rmSync(canonicalReplacement.lockDir, { recursive: true, force: true });
+
+  for (const [step, mutate] of [
+    ['after-directory-claim', ({ releaseDir }) => writeFileSync(path.join(releaseDir, 'meta.json'), JSON.stringify({ token: 'replacement' }))],
+    ['before-private-cleanup', ({ releaseDir }) => writeFileSync(path.join(releaseDir, 'intruder'), 'x')],
+  ]) {
+    const raced = acquireGovernorLock(tmp, { onReleaseStep: (current, details) => { if (current === step) mutate(details); } });
+    assert.ok(raced); assert.equal(raced.release(), false, `${step} replacement must fail closed`); assert.ok(existsSync(raced.releaseDir)); rmSync(raced.releaseDir, { recursive: true, force: true });
+  }
+} finally {
+  rmSync(tmp, { recursive: true, force: true });
+}
 console.log('quality contract-governor.mjs tests passed');
