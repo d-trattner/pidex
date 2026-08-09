@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, mkdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const guard = path.join(repoRoot, 'scripts/modules/reference-guard.mjs');
+const fixtureRoots = new Set();
+after(() => { for (const dir of fixtureRoots) rmSync(dir, { recursive: true, force: true }); });
 
 function fixture() {
   const dir = mkdtempSync(path.join(tmpdir(), 'pidex-reference-guard-'));
+  fixtureRoots.add(dir);
   execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: dir });
   execFileSync('git', ['config', 'user.name', 'test'], { cwd: dir });
@@ -30,10 +33,17 @@ function runGuard(dir, mode = 'fail', env = process.env) {
 
 function fakeGitEnv(dir, source) {
   const bin = mkdtempSync(path.join(dir, 'fake-bin-'));
+  if (process.platform === 'win32') {
+    const sourceFile = path.join(bin, 'source.cjs');
+    writeFileSync(sourceFile, `${source}\n`);
+    writeFileSync(path.join(dir, 'ls-files'), "require(process.env.PIDEX_REFERENCE_GUARD_FAKE_GIT_SOURCE);\n");
+    linkSync(process.execPath, path.join(bin, 'git.exe'));
+    return { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, PIDEX_REFERENCE_GUARD_FAKE_GIT_SOURCE: sourceFile };
+  }
   const git = path.join(bin, 'git');
   writeFileSync(git, `#!/usr/bin/env node\n${source}\n`);
   chmodSync(git, 0o755);
-  return { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+  return { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
 }
 
 function stagedRecord(file, mode = '100644', objectId = 'a'.repeat(40), stage = '0') {
@@ -207,6 +217,11 @@ test('does not combine separate module library and ordinary script path tokens',
   assert.equal(out.ok, true);
 });
 
+test('test harness selects the injected Git producer cross-platform', () => {
+  const dir = fixture();
+  assert.throws(() => runGuard(dir, 'fail', fakeGitEnv(dir, fakeGitBytes(Buffer.from('not-an-index-record\0')))), /Malformed git index record/);
+});
+
 test('fails closed on Git producer errors, nonzero exits, and malformed raw output', () => {
   const dir = fixture();
   const valid = stagedRecord('README.md');
@@ -267,7 +282,7 @@ test('fails decoded traversal, missing checkout paths, and symlinked tracked tex
   assert.throws(() => runGuard(linked), /tracked text checkout is not regular/);
 });
 
-test('escapes real tracked control-bearing violation paths and preserves valid UTF-8 Git names deterministically', () => {
+test('escapes real tracked control-bearing violation paths on supported filesystems', { skip: process.platform === 'win32' }, () => {
   const dir = fixture();
   const unsafe = 'bad\tname\n.md';
   writeTracked(dir, unsafe, 'Forbidden: modules/pidex/example/scripts/tool.mjs\n');
@@ -276,8 +291,10 @@ test('escapes real tracked control-bearing violation paths and preserves valid U
     assert.doesNotMatch(error.stderr, new RegExp(`${unsafe}: modules/pidex/example/scripts/tool\\.mjs`));
     return true;
   });
+});
 
+test('preserves legal UTF-8 and spaced Git names deterministically on every platform', () => {
   const valid = fixture();
-  writeTracked(valid, 'space \tand\nname.md', 'plain text\n');
+  writeTracked(valid, 'spaced ünicode name.md', 'plain text\n');
   assert.equal(runGuard(valid), runGuard(valid));
 });
