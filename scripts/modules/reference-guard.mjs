@@ -180,7 +180,8 @@ for (const file of plan049PointerFiles) {
   trackedText.set(file, readFileSync(abs, 'utf8'));
 }
 
-if (trackedText.get('modules/pidex/process-rules/module.json')?.includes(plan049Capability)) {
+const presentPlan049PointerFiles = [...plan049PointerFiles].filter((file) => trackedText.has(file));
+if (trackedText.get('modules/pidex/process-rules/module.json')?.includes(plan049Capability) && presentPlan049PointerFiles.length > 0) {
   for (const file of plan049PointerFiles) {
     const text = trackedText.get(file);
     if (!text || !hasPlan049PointerState(text)) plan049Violations.push(`${renderPathname(file)}: Plan049 pointer state incomplete`);

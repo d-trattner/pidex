@@ -78,6 +78,14 @@ test('B-T6 rejects Plan049 capability aliases and retired paths without terminal
   assert.throws(() => runGuard(partial), /Plan049 pointer state incomplete/);
 });
 
+test('accepts the capability when the entire local ignored Plan049 pointer corpus is absent', () => {
+  const dir = fixture();
+  writeTracked(dir, 'modules/pidex/process-rules/module.json', JSON.stringify({ capabilities: [{ id: 'process-rules.plan049-passive-exposure-platform' }] }));
+  const out = JSON.parse(runGuard(dir));
+  assert.equal(out.ok, true);
+  assert.equal(out.plan049_reference_violations, 0);
+});
+
 test('accepts each finite Plan049 lifecycle pointer state and rejects custom runner routes', () => {
   const pointerFiles = [
     'wiki/roadmap.md', 'wiki/status.md', 'wiki/initiatives/011-quality-rule-learning/index.md', 'wiki/initiatives/011-quality-rule-learning/plan-049-crash-safe-passive-exposure-foundation.md',
