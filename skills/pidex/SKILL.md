@@ -103,6 +103,7 @@ Before any direct-mode pipeline mutation or `pidex-*` spawn, load and apply:
 
 - `<pidex-root>/rules/orchestrator/project-boundary-write-guard.md`
 - `<pidex-root>/rules/orchestrator/no-direct-implementation.md`
+- `<pidex-root>/rules/shared/provider-safe-defensive-review-language.md`
 
 A pipeline may only mutate its declared `<project-root>` / allowed write root. Other repositories, including `<pidex-root>` when the active project is not PIDEX itself, are read-only references unless the user explicitly switches project and starts a new pipeline for that root.
 
@@ -112,7 +113,7 @@ Every specialist handoff must include a `PROJECT BOUNDARY` block naming current 
 
 ### Pre-spawn context pack
 
-Before every `pidex-*` spawn, use a compact context pack instead of pasting broad/full artifacts. Create a manual context pack/brief with only targeted artifact paths/snippets, and mention `CONTEXT-PACK-MANUAL` in the handoff. Budget check is soft by default: keep context lean, but do not block the pipeline on the absence of an optional helper.
+Before every `pidex-*` spawn, use a compact context pack instead of pasting broad/full artifacts. Create a manual context pack/brief with only targeted artifact paths/snippets, and mention `CONTEXT-PACK-MANUAL` in the handoff. Budget check is soft by default: keep context lean, but do not block the pipeline on the absence of an optional helper. For local reliability, privacy, trust-boundary, storage, filesystem, concurrency, authentication, authorization, or input-handling work, apply `PROC-PROVIDER-SAFE-1`: state authorized local scope, express concrete defensive invariants, omit copied provider messages/raw historical prompts, and use the rule's single compact retry path if a delegate or summarizer refuses.
 
 ### Step 0 — Recent projects shortlist
 

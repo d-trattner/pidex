@@ -7,6 +7,7 @@ Last updated: 2026-05-18 (PROC-NEW-2)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Provider-Safe Defensive Review Language | [../shared/provider-safe-defensive-review-language.md](../shared/provider-safe-defensive-review-language.md) | PROC-PROVIDER-SAFE-1 | Frame authorized local reviews as concrete defensive invariants; compact refusal recovery preserves findings and gates |
 | Package Manager Equivalence | [../shared/package-manager-equivalence.md](../shared/package-manager-equivalence.md) | PROC-PACKAGE-MANAGER-1 | Use detected package-manager equivalents; pnpm native/default, npm compatibility, yarn/bun unsupported; avoid lockfile type changes and npx auto-downloads |
 | No Force-Adding Ignored Files | [../shared/no-force-add-ignored-files.md](../shared/no-force-add-ignored-files.md) | PROC-GIT-IGNORE-1 | Never commit ignored runtime/operator artifacts; fix broad ignore patterns instead of using `git add -f`; run ignored-file guard before commit handoff |
 | Greenfield JS/TS pnpm Bootstrap | [greenfield-js-pnpm-bootstrap.md](greenfield-js-pnpm-bootstrap.md) | PROC-PACKAGE-MANAGER-3 | Bootstrap new JS/TS projects with pnpm unless plan/user explicitly chooses npm compatibility |

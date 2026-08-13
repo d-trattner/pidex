@@ -7,6 +7,7 @@ Last updated: 2026-05-08 (POST-RELEASE-HYGIENE)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Provider-Safe Defensive Review Language | [../shared/provider-safe-defensive-review-language.md](../shared/provider-safe-defensive-review-language.md) | PROC-PROVIDER-SAFE-1 | Frame authorized local reviews as concrete defensive invariants; compact refusal recovery preserves findings and gates |
 | Local Operator Config Guard | [../shared/local-operator-config-guard.md](../shared/local-operator-config-guard.md) | PROC-LOCAL-CONFIG-1 | Release/public-readiness work must preserve ignored local operator config and validate tracked defaults separately |
 | No Force-Adding Ignored Files | [../shared/no-force-add-ignored-files.md](../shared/no-force-add-ignored-files.md) | PROC-GIT-IGNORE-1 | Never commit ignored runtime/operator artifacts; fix broad ignore patterns instead of using `git add -f`; run ignored-file guard before release/push handoff |
 | Release-Lane Semantics Preflight Before G4 | [release-lane-semantics-preflight.md](release-lane-semantics-preflight.md) | PROC-NEW-SEMVER-2 | Before G4/tag/push, distinguish product epic labels from package semver and block ambiguous release-lane mismatches |

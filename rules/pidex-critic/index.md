@@ -7,6 +7,7 @@ Last updated: 2026-04-28 (PROC-NEW-48-1)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Provider-Safe Defensive Review Language | [../shared/provider-safe-defensive-review-language.md](../shared/provider-safe-defensive-review-language.md) | PROC-PROVIDER-SAFE-1 | Frame authorized local reviews as concrete defensive invariants; compact refusal recovery preserves findings and gates |
 | Structured Review Outcome Contract | [../shared/structured-review-outcome.md](../shared/structured-review-outcome.md) | 059-4 | Primary lifecycle-tracked reviews place exactly one bounded pidex-review-outcome-v1 block in the exact assigned artifact (gate verdict, disposition enum, findings, immediate-TBR classification); corrections carry no structured payload and route back to the reviewer |
 | Local Operator Config Guard | [../shared/local-operator-config-guard.md](../shared/local-operator-config-guard.md) | PROC-LOCAL-CONFIG-1 | Plans touching mutable settings must separate tracked public defaults from ignored local operator overrides |
 | Binding Fixture Semantic Check | [binding-semantic-check.md](binding-semantic-check.md) | X3 | Verify fixture identifiers are semantically correct domain names, not pipeline names |

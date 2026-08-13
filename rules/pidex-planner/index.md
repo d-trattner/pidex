@@ -7,6 +7,7 @@ Last updated: 2026-05-18 (PROC-NEW-7-1)
 | Rule | File | PROC-NEW | Summary |
 |------|------|----------|---------|
 | Structural Code Search Default | [../shared/structural-code-search.md](../shared/structural-code-search.md) | PROC-AST-GREP-1 | Prefer ast-grep for structural code searches; use rg for literal text and document the chosen search evidence |
+| Provider-Safe Defensive Review Language | [../shared/provider-safe-defensive-review-language.md](../shared/provider-safe-defensive-review-language.md) | PROC-PROVIDER-SAFE-1 | Frame authorized local reviews as concrete defensive invariants; compact refusal recovery preserves findings and gates |
 | Package Manager Equivalence | [../shared/package-manager-equivalence.md](../shared/package-manager-equivalence.md) | PROC-PACKAGE-MANAGER-1 | Use detected package-manager equivalents; pnpm native/default, npm compatibility, yarn/bun unsupported; avoid lockfile type changes and npx auto-downloads |
 | Greenfield JS/TS Package Manager Default | [greenfield-js-package-manager-default.md](greenfield-js-package-manager-default.md) | PROC-PACKAGE-MANAGER-2 | New PIDEX-generated JS/TS projects default to pnpm; existing unknown projects require package-manager clarification |
 | Epic Label vs Semver Disambiguation | [epic-label-semver-disambiguation.md](epic-label-semver-disambiguation.md) | PROC-NEW-SEMVER-1 | Plans must distinguish roadmap epic labels from package semver/tag lanes and record release-lane semantics |

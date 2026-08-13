@@ -1,6 +1,7 @@
 # pidex-wiki-hygienist rules
 
 - For structural code searches, load [../shared/structural-code-search.md](../shared/structural-code-search.md): prefer ast-grep for code structure and rg for literal text.
+- For local reliability, privacy, trust-boundary, or input-handling review text, load [../shared/provider-safe-defensive-review-language.md](../shared/provider-safe-defensive-review-language.md): use concrete defensive invariants and compact refusal recovery without weakening findings or gates.
 - Default mode is `audit`.
 - Audit mode may write reports under `<project-root>/agents.output/wiki-hygiene/*` and update only `<project-root>/pidex/state/wiki-hygiene.json` as operational state.
 - Scan canonical `<project-root>/wiki/` only.
