@@ -219,4 +219,40 @@ for (const shellConsumer of ['modules/pidex/analysis-metrics-history/scripts/his
   assert.match(source, /RUNNING_PI_STATE_DIR/, `${shellConsumer} honors the legacy RUNNING_PI_STATE_DIR alias`);
 }
 
+// 6. Plan048 Slice3B/4 — lifecycle action invocation seam parity: global and project tiers share one kill switch, availability gate, sanitized outcome; LS-01..LS-09 strings bind backend and UI.
+import { closedLifecycleActionHistoryAdapter, invokeLifecycleActionFromOrdinaryResult } from '../../modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.mjs';
+const lifecycleTrace = () => ({ status: 'no_op', reason: 'cadence_quarantined', correlation_id: `action:${'a'.repeat(64)}`, cadence_digest: 'b'.repeat(64) });
+const ENABLED = { PIDEX_LIFECYCLE_ACTION_ENABLED: '1' };
+const lifecycleSeamInput = (tier) => ({ store: { persistLifecycleActionIntent: () => ({ status: 'recorded' }) }, result_bytes: Buffer.from('{"schema":"pidex-impact-evaluation-v1"}'), result_digest: 'c'.repeat(64), current: tier === 'global' ? { tier: 'global', scope_id: null, rule_id: 'pidex-global:pidex-implementer:quality' } : { tier: 'project', scope_id: 'd'.repeat(24), rule_id: `project:${'d'.repeat(24)}:pidex-implementer:quality` }, now: '2026-08-22T12:00:00.000Z', trace: lifecycleTrace });
+// Kill-switch parity: both tiers refuse before any trace with zero env.
+for (const tier of ['global', 'project']) assert.deepEqual(invokeLifecycleActionFromOrdinaryResult({ ...lifecycleSeamInput(tier), env: {} }), { status: 'no_op', reason: 'kill_switch' });
+// Availability parity: missing store refuses identically for both tiers.
+for (const tier of ['global', 'project']) assert.deepEqual(invokeLifecycleActionFromOrdinaryResult({ ...lifecycleSeamInput(tier), store: {}, env: ENABLED }), { status: 'no_op', reason: 'action_unavailable' });
+// Sanitized outcome parity: identical safe shape for both tiers when enabled.
+const globalEnabled = invokeLifecycleActionFromOrdinaryResult({ ...lifecycleSeamInput('global'), env: ENABLED });
+const projectEnabled = invokeLifecycleActionFromOrdinaryResult({ ...lifecycleSeamInput('project'), env: ENABLED });
+assert.deepEqual(globalEnabled, projectEnabled);
+assert.deepEqual(globalEnabled, { status: 'no_op', reason: 'cadence_quarantined', correlation_id: `action:${'a'.repeat(64)}` });
+// Kill switch env name binds both host and project wiring surfaces.
+const EXTENSIONS_SOURCE = read('extensions/pidex/index.ts');
+const ORCHESTRATOR_SOURCE = read('modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.mjs');
+const TRACER_SOURCE = read('modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.mjs');
+assert.match(TRACER_SOURCE, /PIDEX_LIFECYCLE_ACTION_ENABLED/, 'seam must name the single lifecycle action kill-switch env');
+assert.match(ORCHESTRATOR_SOURCE, /PIDEX_LIFECYCLE_ACTION_ENABLED/, 'project pipeline wiring must honor the same kill-switch env');
+assert.match(EXTENSIONS_SOURCE, /PIDEX_LIFECYCLE_ACTION_ENABLED/, 'host wiring must honor the same kill-switch env');
+assert.match(ORCHESTRATOR_SOURCE, /closedLifecycleActionHistoryAdapter|invokeLifecycleActionFromOrdinaryResult/, 'project pipeline wiring must route through the closed seam');
+assert.match(EXTENSIONS_SOURCE, /invokeLifecycleActionFromOrdinaryResult|closedLifecycleActionHistoryAdapter/, 'host wiring must route through the closed seam');
+// LS label/aria parity: every exact LS-01..LS-09 string binds backend projection and UI verbatim.
+const QUALITY_TSX = read('dashboard/routes/quality.tsx');
+const STATUS_SOURCE = read('scripts/quality/rule-publication-status.mjs');
+const LS_LABELS = ['Deactivation pending', 'Deactivated — sync pending', 'Active — monitoring', 'Deactivated', 'Stopped locally', 'Reactivation pending', 'Reactivation failed', 'Active — pinned', 'Convergence failed'];
+const LS_ARIAS = ['Deactivation pending remote acceptance', 'Deactivation accepted; mirror synchronization pending', 'Rule active and monitoring', 'Rule deactivated', 'Rule stopped on this host only', 'Reactivation pending remote acceptance and mirror verification', 'Reactivation failed; rule remains deactivated', 'Rule active and pinned', 'Canonical lifecycle change accepted; mirror convergence failed'];
+for (const [index, label] of LS_LABELS.entries()) {
+  assert.match(STATUS_SOURCE, new RegExp(label.replace(/[—]/g, '—')), `backend must own LS label ${label}`);
+  assert.match(QUALITY_TSX, new RegExp(label.replace(/[—]/g, '—')), `UI must render LS label ${label} verbatim`);
+  assert.match(QUALITY_TSX, new RegExp(LS_ARIAS[index]), `UI must render LS aria ${LS_ARIAS[index]} verbatim`);
+}
+assert.doesNotMatch(QUALITY_TSX, /canonical stopped|stopped — canonical/i, 'UI must never render canonical stopped copy');
+assert.equal(typeof closedLifecycleActionHistoryAdapter, 'function');
+
 console.log('policy parity tests passed');

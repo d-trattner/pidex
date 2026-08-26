@@ -21,4 +21,18 @@ assert.ok(glassCardIndex >= 0, 'base glass-card span rule must exist');
 assert.ok(mobileQualityOverrideIndex > glassCardIndex, 'quality-card mobile override must appear after base glass-card rule');
 assert.ok(mobileMetricOverrideIndex > glassCardIndex, 'quality-metric-card mobile override must appear after base glass-card rule');
 
+assert.match(qualityRoute, /body\s*\{\s*background:\s*#03060d;\s*\}/, 'publication route must provide nontransparent themed body fallback');
+assert.match(qualityRoute, /data-testid="quality-publication-article"/, 'publication article must have stable browser-audit selector');
+for (const className of ['quality-publication-scroll', 'quality-publication-detail', 'quality-publication-request']) {
+  assert.match(qualityRoute, new RegExp(`className="[^"]*${className}`), `publication audit selector ${className} must remain stable`);
+}
+
+// ---- Plan048 Slice3B/4: lifecycle card mobile/responsive contract (RED) ----
+assert.match(qualityRoute, /data-testid="quality-lifecycle-article"/, 'lifecycle article must have stable browser-audit selector');
+for (const className of ['quality-lifecycle-scroll', 'quality-lifecycle-detail', 'quality-lifecycle-request']) assert.match(qualityRoute, new RegExp(`className="[^"]*${className}`), `lifecycle audit selector ${className} must remain stable`);
+assert.match(qualityRoute, /\.quality-lifecycle-control\s*\{[^}]*min-width:\s*44px;[^}]*min-height:\s*44px;/, 'lifecycle controls must keep 44px minimum touch geometry');
+assert.match(qualityRoute, /\.quality-lifecycle-control:focus-visible,\s*\.quality-lifecycle-scroll:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\);/, 'lifecycle controls/scroller must keep visible accent focus outline');
+assert.match(qualityRoute, /\.quality-lifecycle-digest\s*\{[^}]*overflow-wrap:\s*anywhere;/, 'long lifecycle identities must wrap anywhere at mobile width');
+assert.doesNotMatch(qualityRoute, /overflow-x:\s*hidden/, 'page overflow must not be masked with overflow-x hidden');
+
 console.log('quality mobile layout assertions passed');

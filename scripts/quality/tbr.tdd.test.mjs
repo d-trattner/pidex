@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { closeReviewWithTbr, promoteTbr, renderTbrItem, validateReviewOutcome, validateTbrTree, writeTbr } from './tbr.mjs';
+import { closeReviewWithTbr, promoteTbr, readTbrTreeItems, renderIndex, renderTbrItem, validateReviewOutcome, validateTbrTree, writeTbr } from './tbr.mjs';
 
 const immediate = {
   findingId: 'F-canonical', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate',
@@ -239,5 +239,90 @@ try {
   symlinkSync(outside, path.join(symlinkRoot2, 'wiki', 'tbr', 'items'));
   assert.throws(() => validateTbrTree(symlinkRoot2), (error) => error?.code === 'TBR_PATH_INVALID', 'symlinked items directory fails closed');
 } finally { rmSync(validationRoot, { recursive: true, force: true }); }
+
+// Plan 157 Slice 1 RED: stored terminal records must parse/render deterministically,
+// while writeTbr retains authority only for open records.
+const repositoryTbr = path.resolve('wiki');
+const storedArchive = validateTbrTree(path.resolve('.'));
+const historicalIds = ['TBR-18e85fb4a129', 'TBR-1fff0cbba029', 'TBR-33ff593e189e', 'TBR-42bb07ce181e', 'TBR-6bda935cbb2b', 'TBR-d131e8cdcc17'];
+const historicalItems = historicalIds.map((stableTbrId) => storedArchive.items.get(stableTbrId));
+assert.equal(storedArchive.ok, true, 'historical and additive stored records validate under canonical archive contract');
+assert.ok(historicalItems.every(Boolean), 'closed six-item migration manifest remains complete inside additive archive');
+assert.deepEqual(historicalItems.map((item) => item.status).sort(), ['open', 'resolved', 'resolved', 'resolved', 'superseded', 'resolved'].sort(), 'historical stored status vocabulary is exact');
+assert.equal(storedArchive.items.get('TBR-adde5f88e282')?.status, 'resolved', 'approved Plan046 frozen-detail TBR is canonically resolved');
+assert.equal(readFileSync(path.join(repositoryTbr, 'tbr', 'index.md'), 'utf8'), renderIndex(storedArchive.items.values()), 'checked-in index equals canonical render bytes');
+for (const item of storedArchive.items.values()) {
+  const bytes = readFileSync(path.join(repositoryTbr, 'tbr', 'items', item.file), 'utf8');
+  assert.equal(renderTbrItem(item), bytes, `${item.stableTbrId} parser/render round-trip is byte-stable`);
+}
+const terminalStored = [...storedArchive.items.values()].find((item) => item.status === 'resolved');
+assert.ok([...storedArchive.items.values()].some((item) => item.status === 'resolved' && item.historyNotes?.includes('## Final resolution')), 'historical terminal narrative is losslessly retained in historyNotes');
+const storedTerminalRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-terminal-writer-'));
+try {
+  cpSync(path.resolve('wiki'), path.join(storedTerminalRoot, 'wiki'), { recursive: true });
+  const terminalPath = path.join(storedTerminalRoot, 'wiki', 'tbr', 'items', terminalStored.file);
+  const terminalBytes = readFileSync(terminalPath, 'utf8');
+  const terminalWrite = writeTbr({ root: storedTerminalRoot, identity: { planId: terminalStored.originPlan, runFamilyId: terminalStored.originRun, reviewGate: terminalStored.originGate }, findings: [immediate] });
+  assert.equal(terminalWrite.ok, true);
+  assert.equal(terminalWrite.items[0].status, 'open', 'writer creates only open records');
+  assert.equal(readFileSync(terminalPath, 'utf8'), terminalBytes, 'writer never mutates terminal stored bytes');
+} finally { rmSync(storedTerminalRoot, { recursive: true, force: true }); }
+
+// PLAN157 correction RED: terminal records are archive-only. Promotion must deny
+// before candidate, item, or index writes; only open and promoted retries qualify.
+const terminalPromotionRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-terminal-promotion-'));
+try {
+  cpSync(path.resolve('wiki'), path.join(terminalPromotionRoot, 'wiki'), { recursive: true });
+  const terminalPromotionItems = validateTbrTree(terminalPromotionRoot).items;
+  const indexPath = path.join(terminalPromotionRoot, 'wiki', 'tbr', 'index.md');
+  const indexBytes = readFileSync(indexPath, 'utf8');
+  for (const status of ['resolved', 'superseded']) {
+    const terminal = [...terminalPromotionItems.values()].find((item) => item.status === status);
+    assert.ok(terminal, `fixture supplies ${status} terminal item`);
+    const terminalPath = path.join(terminalPromotionRoot, 'wiki', 'tbr', 'items', terminal.file);
+    const terminalBytes = readFileSync(terminalPath, 'utf8');
+    const candidateDir = path.join(terminalPromotionRoot, 'wiki', 'initiatives', 'candidates');
+    assert.deepEqual(promoteTbr({ root: terminalPromotionRoot, stableTbrId: terminal.stableTbrId, userSelected: true, promotedAt: '2026-08-13T15:00:00.000Z' }), { ok: false, code: 'TBR_ITEM_INVALID' }, `${status} promotion fails closed`);
+    assert.equal(readFileSync(terminalPath, 'utf8'), terminalBytes, `${status} bytes remain unchanged`);
+    assert.equal(readFileSync(indexPath, 'utf8'), indexBytes, `${status} index remains unchanged`);
+    assert.equal(existsSync(candidateDir), false, `${status} denial creates no candidate directory`);
+  }
+} finally { rmSync(terminalPromotionRoot, { recursive: true, force: true }); }
+
+const stateFieldRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-state-fields-'));
+try {
+  cpSync(path.resolve('wiki'), path.join(stateFieldRoot, 'wiki'), { recursive: true });
+  const stateItems = validateTbrTree(stateFieldRoot).items;
+  const stateItemDir = path.join(stateFieldRoot, 'wiki', 'tbr', 'items');
+  const stateIndexPath = path.join(stateFieldRoot, 'wiki', 'tbr', 'index.md');
+  const originalStateIndex = readFileSync(stateIndexPath, 'utf8');
+  const open = [...stateItems.values()].find((item) => item.status === 'open');
+  const resolved = [...stateItems.values()].find((item) => item.status === 'resolved');
+  const superseded = [...stateItems.values()].find((item) => item.status === 'superseded');
+  const promoted = { ...open, status: 'promoted', initiativeCandidate: `wiki/initiatives/candidates/${open.stableTbrId}.md`, promotedAt: '2026-08-13T15:00:00.000Z' };
+  for (const { label, item, fields } of [
+    { label: 'resolved with supersededBy', item: resolved, fields: 'supersededBy: forbidden' },
+    { label: 'superseded with resolutionSummary', item: superseded, fields: 'resolutionSummary: forbidden' },
+    { label: 'open with terminal fields', item: open, fields: 'resolutionSummary: forbidden\nsupersededBy: forbidden' },
+    { label: 'promoted with terminal fields', item: promoted, fields: 'resolutionSummary: forbidden\nsupersededBy: forbidden' },
+  ]) {
+    const itemPath = path.join(stateItemDir, item.file);
+    const original = readFileSync(itemPath, 'utf8');
+    writeFileSync(itemPath, renderTbrItem(item).replace('\n---\n', `\n${fields}\n---\n`));
+    assert.throws(() => validateTbrTree(stateFieldRoot), (error) => error?.code === 'TBR_ITEM_INVALID', `${label} rejects exact-key mismatch`);
+    writeFileSync(itemPath, original);
+  }
+  for (const [status, optionalField] of [['resolved', 'resolutionSummary'], ['superseded', 'supersededBy']]) {
+    const terminal = [...stateItems.values()].find((item) => item.status === status);
+    const itemPath = path.join(stateItemDir, terminal.file);
+    const original = readFileSync(itemPath, 'utf8');
+    const withoutOptional = { ...terminal }; delete withoutOptional[optionalField];
+    writeFileSync(itemPath, renderTbrItem(withoutOptional));
+    const updatedItems = new Map(stateItems); updatedItems.set(terminal.stableTbrId, { ...withoutOptional, file: terminal.file });
+    writeFileSync(stateIndexPath, renderIndex(updatedItems.values()));
+    assert.equal(validateTbrTree(stateFieldRoot).ok, true, `${status} accepts omitted optional ${optionalField}`);
+    writeFileSync(itemPath, original); writeFileSync(stateIndexPath, originalStateIndex);
+  }
+} finally { rmSync(stateFieldRoot, { recursive: true, force: true }); }
 
 console.log('tbr.mjs tests passed');

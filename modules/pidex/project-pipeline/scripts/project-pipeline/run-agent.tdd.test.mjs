@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { buildDockerExecArgs, diffWorkspaceManifests, extractRouting, normalizeExpectedArtifactPath, parseArgs, prepareProjectPipelineAgentTask, runProjectPipelineAgent, validateRouting } from './run-agent.mjs';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { loadModuleSystem } from '../../../../../scripts/modules/lib.mjs';
+import { materializeVerifiedMirror } from '../../../../../scripts/quality/rule-mirror-sync.mjs';
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-run-agent-')); }
 function setup(root, id = 'pp-run-abc123') { const r = createProjectRecord({ project_id: id, name: 'demo' }); r.status = 'ready'; saveProjectRecord(root, r); return r; }
@@ -526,6 +528,56 @@ test('spoofed non-review heading cannot suppress canonical trusted rule bytes', 
   const task = prepareProjectPipelineAgentTask({ ...options, task: spoof });
   assert.equal(task, `${spoof}${canonical.slice('Canonical task.'.length)}`);
   assert.equal(count(task, moduleRulesHeading), 2);
+});
+
+test('CR-074-05 default governed module task prepends only selected immutable mirror bytes', () => {
+  const stateRoot = tmp();
+  try {
+    const body = '# Governed default\n\nUse only mirror bytes.\n'; const hash = createHash('sha256').update(body).digest('hex');
+    materializeVerifiedMirror({ stateRoot, repository: 'repo:pp-runtime', scope_id: null, accepted_head: 'f'.repeat(40), member: { rule_id: 'pidex-global:pidex-implementer:governed', path: 'rules/pidex-implementer/governed.md', content_hash: hash, bytes: Buffer.from(body) } });
+    const runtimeContext = { schema: 'pidex-rule-runtime-context-v1', resolver_snapshot: { schema: 'pidex-rule-resolver-snapshot-v1', active_rules: [{ rule_id: 'pidex-global:pidex-implementer:governed', version_hash: hash, content_hash: hash, accepted_commit: 'f'.repeat(40), mirror_digest: hash }] } };
+    const task = prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord('pidex-implementer'), agent: 'pidex-implementer', task: 'Run production default.', runtimeContext, stateRoot });
+    assert.match(task, /# Governed default/);
+    assert.doesNotMatch(task, /Structured Review Outcome Contract|Project Pipeline browser-smoke/);
+    assert.equal(task.indexOf('# Governed default') < task.indexOf('Run production default.'), true);
+  } finally { rmSync(stateRoot, { recursive: true, force: true }); }
+});
+
+test('CR-075-05 Project Pipeline production task applies frozen runtime rules only for dispatched agent and phase', () => {
+  const stateRoot = tmp();
+  try {
+    const source = [
+      ['pidex-global:pidex-implementer:applicable', '# implementation applicable\n', 'rules/pidex-implementer/applicable.md', 'pidex-implementer', ['implementation']],
+      ['pidex-global:pidex-qa:wrong-agent', '# wrong agent\n', 'rules/pidex-qa/wrong-agent.md', 'pidex-qa', ['implementation']],
+      ['pidex-global:pidex-implementer:wrong-phase', '# wrong phase\n', 'rules/pidex-implementer/wrong-phase.md', 'pidex-implementer', ['qa']],
+    ].map(([rule_id, body, memberPath, agent, phases]) => ({ rule_id, body, path: memberPath, agent, phases, hash: createHash('sha256').update(body).digest('hex') }));
+    materializeVerifiedMirror({ stateRoot, repository: 'repo:pp-selection', scope_id: null, accepted_head: 'f'.repeat(40), members: source.map(({ rule_id, body, path: memberPath, hash }) => ({ rule_id, path: memberPath, content_hash: hash, bytes: Buffer.from(body) })) });
+    const runtimeContext = { schema: 'pidex-rule-runtime-context-v1', resolver_snapshot: { schema: 'pidex-rule-resolver-snapshot-v1', active_rules: source.map((item) => ({ rule_id: item.rule_id, version_hash: item.hash, content_hash: item.hash, accepted_commit: 'f'.repeat(40), mirror_digest: item.hash, agent: item.agent, applicability: [], phases: item.phases, lifecycle_state: 'active' })) } };
+    const task = prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord('pidex-implementer'), agent: 'pidex-implementer', task: 'Apply.', runtimeContext, stateRoot });
+    assert.match(task, /# implementation applicable/);
+    assert.doesNotMatch(task, /wrong agent|wrong phase/);
+  } finally { rmSync(stateRoot, { recursive: true, force: true }); }
+});
+
+test('CR-078-02 governed reviewer runtime requires canonical producer descriptor and exact mirror contract bytes', () => {
+  const stateRoot = tmp(); const agent = 'pidex-code-reviewer'; const expectedId = 'pidex.analysis-metrics-history.structured-review-outcome.code-review';
+  const manifest = JSON.parse(readFileSync(path.join(developmentPidexRoot, 'modules/pidex/analysis-metrics-history/module.json'), 'utf8'));
+  const canonical = manifest.agent_rules.find((rule) => rule.id === expectedId);
+  const canonicalBytes = readFileSync(path.join(developmentPidexRoot, 'modules/pidex/analysis-metrics-history', canonical.path), 'utf8');
+  const taskFor = ({ rule_id = expectedId, bytes = canonicalBytes, selectedAgent = agent } = {}) => {
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    materializeVerifiedMirror({ stateRoot, repository: `repo:reviewer-${createHash('sha256').update(`${rule_id}\0${selectedAgent}\0${hash}`).digest('hex').slice(0, 8)}`, scope_id: null, accepted_head: 'f'.repeat(40), member: { rule_id, path: `modules/pidex/analysis-metrics-history/${canonical.path}`, content_hash: hash, bytes: Buffer.from(bytes) } });
+    return prepareProjectPipelineAgentTask({ pidexRoot: developmentPidexRoot, record: ruleRecord(agent), agent, task: 'Review governed.', stateRoot, runtimeContext: { schema: 'pidex-rule-runtime-context-v1', resolver_snapshot: { schema: 'pidex-rule-resolver-snapshot-v1', active_rules: [{ rule_id, version_hash: hash, content_hash: hash, mirror_digest: hash, accepted_commit: 'f'.repeat(40), agent: selectedAgent, phases: ['code-review'], lifecycle_state: 'active' }] } } });
+  };
+  try {
+    const positive = taskFor();
+    assert.equal(positive, `${canonicalBytes}\n\nReview governed.`, 'real manifest entry and exact immutable mirror bytes form governed reviewer prompt');
+    for (const bad of [
+      { rule_id: 'pidex-global:pidex-code-reviewer:unrelated' },
+      { bytes: '# incomplete producer\n' },
+      { selectedAgent: 'pidex-qa' },
+    ]) assert.throws(() => taskFor(bad), /RULE_RUNTIME_MIRROR_MISMATCH/, JSON.stringify(bad));
+  } finally { rmSync(stateRoot, { recursive: true, force: true }); }
 });
 
 test('missing runtime module system fails closed before child execution', () => {

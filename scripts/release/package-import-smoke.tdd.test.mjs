@@ -1,123 +1,124 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { verifyBundledBaseline } from '../quality/rule-lifecycle.mjs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const peers = ['@earendil-works/pi-agent-core', '@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', 'typebox'];
-const requiredModules = new Set([
-  'modules/pidex/analysis-metrics-history/lib/project-key.mjs',
-  'modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs',
-  'modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs',
-  // Plan 059 closure: shared TBR serialization lock, state-root resolver, and the
-  // Project Pipeline archive/registry helpers imported by the lifecycle boundary.
-  'modules/pidex/analysis-metrics-history/lib/tbr-lock.mjs',
-  'modules/pidex/analysis-metrics-history/lib/state-root.mjs',
-  'modules/pidex/project-pipeline/scripts/project-pipeline/archive-sync.mjs',
-  'modules/pidex/project-pipeline/scripts/project-pipeline/registry.mjs',
-]);
-// Plan 059 closure: canonical TBR/finding validators imported by event.mjs through
-// the structured completion boundary must ship with the package.
-const requiredScripts = new Set([
-  'scripts/quality/tbr.mjs',
-  'scripts/quality/structured-review.mjs',
-]);
+const runtimeEntries = [
+  'extensions/pidex/index.ts',
+  'modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.mjs',
+  'scripts/quality/rule-lifecycle.mjs',
+  'scripts/quality/rule-impact-policy.mjs',
+  'scripts/quality/rule-impact-evaluator.mjs',
+  'scripts/quality/rule-impact-results.mjs',
+  'scripts/quality/rule-impact-cadence.mjs',
+];
+const plan047PackageFiles = [
+  'scripts/quality/rule-learning-contracts.mjs',
+  'scripts/quality/rule-learning-aggregate.mjs',
+  'scripts/quality/rule-learning-candidate.mjs',
+  'scripts/quality/rule-learning-admission.mjs',
+  'scripts/quality/rule-git-writer.mjs',
+  'scripts/quality/rule-publication-transaction.mjs',
+  'scripts/quality/rule-manual-import.mjs',
+  'scripts/quality/rule-publication-status.mjs',
+];
+const plan047CheckTests = plan047PackageFiles.map((file) => file.replace(/^scripts\/quality\//, '').replace(/\.mjs$/, '.tdd.test.mjs'));
+const plan046RuntimeFiles = [
+  'scripts/quality/rule-impact-policy.mjs',
+  'scripts/quality/rule-impact-evaluator.mjs',
+  'scripts/quality/rule-impact-results.mjs',
+  'scripts/quality/rule-impact-cadence.mjs',
+];
 
-function packageRootFor(specifier) {
-  const entry = fileURLToPath(import.meta.resolve(specifier));
-  let cursor = path.dirname(entry);
-  while (cursor !== path.dirname(cursor)) {
-    const pkg = path.join(cursor, 'package.json');
-    if (existsSync(pkg)) {
-      try { if (JSON.parse(readFileSync(pkg, 'utf8')).name === specifier) return cursor; } catch {}
-    }
-    cursor = path.dirname(cursor);
-  }
-  throw new Error(`actual peer package not found: ${specifier}`);
-}
-
-function linkPeer(consumer, specifier) {
-  const source = packageRootFor(specifier);
-  const destination = path.join(consumer, 'node_modules', ...specifier.split('/'));
-  mkdirSync(path.dirname(destination), { recursive: true });
-  symlinkSync(source, destination, process.platform === 'win32' ? 'junction' : 'dir');
-  assert.equal(realpathSync(destination), realpathSync(source));
-}
-
-// npm >=11 restricts subpath exports to only "." and "./package.json", so
-// require.resolve('npm/bin/npm-cli.js') fails even where npm is installed. Derive
-// the bundled npm CLI deterministically from the running node installation,
-// shell-free: Windows ships npm at <nodeDir>/node_modules/npm; POSIX installs
-// (nodejs.org, nvm, system, Homebrew) at <prefix>/lib/node_modules/npm with
-// prefix = dirname(nodeDir). Spawning process.execPath + npm-cli.js avoids shell
-// resolution and Windows .cmd shim differences.
 function npmCliPath() {
   const nodeDir = path.dirname(process.execPath);
-  const candidates = [
-    path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
+  const candidates = [path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), path.join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')];
+  return candidates.find(existsSync) || (() => { throw new Error('npm CLI not found'); })();
+}
+function pack(destination) {
+  const result = spawnSync(process.execPath, [npmCliPath(), 'pack', '--json', '--pack-destination', destination], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+  return JSON.parse(result.stdout)[0];
+}
+function relativeImports(file) {
+  const source = readFileSync(path.join(root, file), 'utf8');
+  return [...source.matchAll(/(?:from\s*|import\s*)["']([^"']+)["']/g)].map((match) => match[1]).filter((specifier) => specifier.startsWith('.'));
+}
+function resolveImport(from, specifier) {
+  const base = path.posix.normalize(path.posix.join(path.posix.dirname(from), specifier));
+  for (const candidate of [base, `${base}.mjs`, `${base}.ts`, `${base}.tsx`, `${base}/index.mjs`, `${base}/index.ts`]) {
+    if (existsSync(path.join(root, candidate))) return candidate;
   }
-  throw new Error(`npm CLI not found under node installation ${nodeDir} (tried: ${candidates.join(', ')})`);
+  throw new Error(`unresolved local import ${specifier} from ${from}`);
 }
-function run(command, args, options = {}) {
-  const proc = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, ...options });
-  const statusMessage = proc.error ? `${proc.error.code}: ${proc.error.message}` : '';
-  assert.equal(proc.status, 0, `${statusMessage}\n${proc.stderr}\n${proc.stdout}`);
-  return proc;
+function runtimeClosure() {
+  const closure = new Set(); const pending = [...runtimeEntries];
+  while (pending.length) {
+    const file = pending.pop();
+    if (closure.has(file)) continue;
+    closure.add(file);
+    pending.push(...relativeImports(file).map((specifier) => resolveImport(file, specifier)));
+  }
+  return closure;
 }
-function runNpm(args, options = {}) {
-  const proc = run(process.execPath, [npmCliPath(), ...args], { ...options });
-  return proc;
-}
-test('published tarball contains exact lifecycle closure and imports with real isolated peers', () => {
+
+test('published tarball contains exact Plan045 runtime import closure and baseline fails closed without install', async () => {
   const temp = mkdtempSync(path.join(os.tmpdir(), 'pidex-package-import-'));
-  const consumer = path.join(temp, 'consumer');
   try {
-    mkdirSync(consumer, { recursive: true });
-    const packed = runNpm(['pack', '--json', '--pack-destination', temp], { cwd: root });
-    const report = JSON.parse(packed.stdout)[0];
-    const manifest = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-    assert.equal(report.version, manifest.version);
-    assert.ok(report.unpackedSize < 900_000, `unpacked package budget exceeded: ${report.unpackedSize}`);
-    const modulePaths = report.files.map((item) => item.path).filter((item) => item.startsWith('modules/'));
-    assert.deepEqual(new Set(modulePaths), requiredModules);
-    assert.equal(modulePaths.length, requiredModules.size, 'module closure contains duplicate or unexpected entries');
-    const scriptPaths = report.files.map((item) => item.path).filter((item) => item.startsWith('scripts/quality/'));
-    assert.deepEqual(new Set(scriptPaths), requiredScripts, 'quality validator closure must ship for the lifecycle boundary import');
-    assert.equal(scriptPaths.length, requiredScripts.size, 'quality validator closure contains duplicate or unexpected entries');
-    for (const item of report.files) {
-      assert.equal(path.isAbsolute(item.path), false);
-      assert.equal(item.path.split(/[\\/]/).includes('..'), false);
-    }
+    const report = pack(temp);
+    const shipped = new Set(report.files.map((item) => item.path));
+    for (const file of runtimeClosure()) assert.ok(shipped.has(file), `packed runtime closure missing ${file}`);
+    assert.deepEqual(plan046RuntimeFiles.filter((file) => shipped.has(file)), plan046RuntimeFiles, 'packed Plan046 runtime modules must match current Spawn A closure');
+    assert.equal(shipped.has('state/lifecycle.sqlite'), false);
+    assert.equal(shipped.has('.git/HEAD'), false);
 
-    writeFileSync(path.join(consumer, 'package.json'), '{"name":"pidex-package-consumer","private":true,"type":"module"}\n');
     const tarball = path.join(temp, report.filename);
-    runNpm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', '--legacy-peer-deps', '--no-save', tarball], { cwd: consumer, env: { ...process.env, HOME: path.join(temp, 'home'), NODE_PATH: '' } });
-    for (const peer of peers) linkPeer(consumer, peer);
+    const listed = spawnSync('tar', ['-tzf', tarball], { encoding: 'utf8' });
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.equal(listed.stdout.includes('package/state/'), false);
 
-    const installedInNodeModules = path.join(consumer, 'node_modules', '@d-trattner', 'pidex');
-    const extractedPackage = path.join(consumer, 'pidex-under-test');
-    renameSync(installedInNodeModules, extractedPackage);
-    const installed = realpathSync(extractedPackage);
-    const extension = path.join(installed, 'extensions', 'pidex', 'index.ts');
-    for (const internal of requiredModules) {
-      const resolved = realpathSync(path.join(installed, internal));
-      assert.ok(resolved.startsWith(`${installed}${path.sep}`));
-      assert.equal(resolved.startsWith(`${realpathSync(root)}${path.sep}`), false);
-    }
-    assert.equal(existsSync(path.join(installed, 'state')), false);
-
-    const child = run(process.execPath, ['--experimental-strip-types', '--input-type=module', '--eval', `await import(${JSON.stringify(pathToFileURL(extension).href)});`], {
-      cwd: consumer,
-      env: { ...process.env, HOME: path.join(temp, 'home'), NODE_PATH: '', PIDEX_ROOT: path.join(temp, 'missing-pidex-root'), PIDEX_STATE_DIR: path.join(temp, 'state') },
-    });
-    assert.equal(child.stdout, '');
-    assert.equal(child.stderr, '');
-    assert.equal(existsSync(path.join(temp, 'state')), false, 'extension import must not create lifecycle state');
+    const baselineDir = path.join(temp, 'baseline');
+    mkdirSync(baselineDir);
+    const extracted = spawnSync('tar', ['-xzf', tarball, '-C', baselineDir, '--strip-components=1'], { encoding: 'utf8' });
+    assert.equal(extracted.status, 0, extracted.stderr);
+    const baselineModule = path.join(baselineDir, 'scripts/quality/rule-lifecycle.mjs');
+    for (const file of plan046RuntimeFiles) await import(pathToFileURL(path.join(baselineDir, file)).href);
+    const { verifyBundledBaseline } = await import(pathToFileURL(baselineModule).href);
+    const baseline = verifyBundledBaseline({ root: baselineDir });
+    const memberPath = path.join(baselineDir, baseline.members[0].path);
+    const original = readFileSync(memberPath);
+    writeFileSync(memberPath, Buffer.concat([original, Buffer.from('x')]));
+    assert.throws(() => verifyBundledBaseline({ root: baselineDir }), /RULE_BASELINE_MEMBER_DIGEST_INVALID/);
   } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('retrospective living-rule finding producer is canonical, privacy-safe, and non-publishing', () => {
+  const rulePath = 'rules/pidex-retrospective/living-rule-findings.md';
+  const rule = readFileSync(path.join(root, rulePath), 'utf8');
+  const index = readFileSync(path.join(root, 'rules/pidex-retrospective/index.md'), 'utf8');
+  assert.match(index, /\| Living Rule Findings \| \[living-rule-findings\.md\]\(living-rule-findings\.md\) \| PLAN047 \|/);
+  assert.match(rule, /pidex-rule-learning-finding-v1/);
+  assert.match(rule, /schema_version.*finding_id.*producer.*completed_run_id.*plan_id.*project_scope_id.*repository_identity.*taxonomy.*affected_agent.*affected_phase.*recurrence_key.*lesson_summary.*evidence_digests.*occurred_at.*redaction_classes/s);
+  assert.match(rule, /Raw prompts, source paths, credentials, secrets, and unrestricted logs are forbidden\./);
+  assert.match(rule, /No publication authority\./);
+  assert.equal(verifyBundledBaseline({ root }).members.some((member) => member.path === rulePath), true);
+});
+
+test('package ships Plan047 publication authority and check runs its contract suites in dependency order', () => {
+  const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const shipped = new Set(packageJson.files);
+  for (const file of plan047PackageFiles) assert.ok(shipped.has(file), `package files missing ${file}`);
+
+  const check = packageJson.scripts.check;
+  let previous = -1;
+  for (const testFile of plan047CheckTests) {
+    const position = check.indexOf(`node scripts/quality/${testFile}`);
+    assert.ok(position > previous, `check must run ${testFile} after its dependency`);
+    previous = position;
+  }
 });

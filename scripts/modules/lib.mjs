@@ -26,6 +26,16 @@ export function scriptPidexRoot(importMetaUrl) {
   return path.resolve(path.dirname(fileURLToPath(importMetaUrl)), '../..');
 }
 
+export function runtimeContextStatus(runtimeContext) {
+  if (runtimeContext === undefined) return 'Rule runtime: non_attested (descriptive; not usable_for_evidence)';
+  const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+  const digestKeys = ['schema', 'run_identity_digest', 'project_authority_digest', 'inventory_identity_digest', 'lifecycle_head_digest', 'projection_digest', 'epoch_catalog_digest', 'mirror_generation_digest', 'reconciliation_artifact_digest'];
+  const contextKeys = ['schema', 'pipeline_id', 'input_digests', 'resolver_snapshot', 'passive_exposure_input'];
+  const passiveKeys = ['inventory_identity', 'epoch_catalog', 'reconciliation_artifact', 'rule_snapshot'];
+  if (!exact(runtimeContext, contextKeys) || runtimeContext.schema !== 'pidex-rule-runtime-context-v1' || typeof runtimeContext.pipeline_id !== 'string' || !runtimeContext.pipeline_id || !exact(runtimeContext.input_digests, digestKeys) || runtimeContext.input_digests.schema !== 'pidex-rule-runtime-input-digests-v1' || !digestKeys.slice(1).every((key) => /^[a-f0-9]{64}$/.test(runtimeContext.input_digests[key])) || !runtimeContext.resolver_snapshot || runtimeContext.resolver_snapshot.schema !== 'pidex-rule-resolver-snapshot-v1' || typeof runtimeContext.resolver_snapshot.snapshot_id !== 'string' || !runtimeContext.resolver_snapshot.snapshot_id || !exact(runtimeContext.passive_exposure_input, passiveKeys)) throw new Error('RULE_RUNTIME_CONTEXT_INVALID');
+  return `Rule runtime: attested snapshot_id=${runtimeContext.resolver_snapshot.snapshot_id}`;
+}
+
 export function parseArgs(argv) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {

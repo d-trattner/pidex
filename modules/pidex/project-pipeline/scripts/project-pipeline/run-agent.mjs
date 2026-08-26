@@ -10,26 +10,16 @@ import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
 import { syncProjectMirror } from './project-mirror.mjs';
 import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
+import { renderVerifiedRuntimeRules, validateRequiredReviewerProducer } from '../../../../../scripts/quality/rule-mirror-sync.mjs';
+import { resolveStateRoot } from '../../../analysis-metrics-history/lib/state-root.mjs';
+import { lifecycleRulePhase } from '../../../../../scripts/quality/rule-lifecycle-store.mjs';
 
 const CHILD_ENV = 'PIDEX_PROJECT_PIPELINE_CHILD';
 
 const PROJECT_PIPELINE_MODULE_RULES_HEADING = '## Module-scoped rules active for this Project Pipeline phase';
 const REVIEWER_AGENTS = new Set(['pidex-critic', 'pidex-code-reviewer', 'pidex-security', 'pidex-qa']);
 const REVIEWER_RULE_SUFFIX = Object.freeze({ 'pidex-critic': 'critic', 'pidex-code-reviewer': 'code-review', 'pidex-security': 'security', 'pidex-qa': 'qa' });
-const AGENT_RULE_PHASE = Object.freeze({
-  'pidex-planner': 'planning',
-  'pidex-critic': 'critic-review',
-  'pidex-implementer': 'implementation',
-  'pidex-code-reviewer': 'code-review',
-  'pidex-security': 'security',
-  'pidex-qa': 'qa',
-  'pidex-uat': 'uat',
-  'pidex-devops': 'devops',
-});
-
-export function projectPipelineRulePhase(agent) {
-  return AGENT_RULE_PHASE[agent] || String(agent || '').replace(/^pidex-/, '');
-}
+export const projectPipelineRulePhase = lifecycleRulePhase;
 
 function registeredRuleAuthority(record, pidexRoot) {
   if (record.source?.kind === 'host-path') {
@@ -50,6 +40,13 @@ function requiredReviewerProducerRule(agent, matched, rendered) {
 }
 
 export function renderProjectPipelineModuleRules(options = {}) {
+  if (options.runtimeContext !== undefined) {
+    const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
+    const phase = projectPipelineRulePhase(options.agent);
+    const rendered = renderVerifiedRuntimeRules({ stateRoot: options.stateRoot || resolveStateRoot({ root: pidexRoot }), resolverSnapshot: options.runtimeContext?.resolver_snapshot, agent: options.agent, phase });
+    validateRequiredReviewerProducer({ agent: options.agent, phase, resolverSnapshot: options.runtimeContext?.resolver_snapshot, rendered });
+    return rendered.rendered;
+  }
   if (options.moduleRules === false) return '';
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = options.record;
@@ -74,6 +71,7 @@ export function prepareProjectPipelineAgentTask(options = {}) {
   const task = String(options.task || '');
   const rendered = renderProjectPipelineModuleRules(options);
   if (!rendered) return task;
+  if (options.runtimeContext !== undefined) return [rendered, task].join('\n\n');
   const lifecycleContext = options.reviewMode || options.reviewGate ? `Lifecycle review context: reviewGate=${options.reviewGate || 'unknown'}; reviewMode=${options.reviewMode || 'unknown'}.` : '';
   const rulesSection = lifecycleContext ? `${lifecycleContext}\n\n${rendered}` : rendered;
   return [task, PROJECT_PIPELINE_MODULE_RULES_HEADING, rulesSection].join('\n\n');

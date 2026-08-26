@@ -77,6 +77,26 @@ config/operator-contracts.local.json
 
 This file is private local state. Never commit or force-add it. Valid legacy version-1 prose patches are quarantined and inert until the operator explicitly supersedes them; malformed authority fails closed.
 
+## Rule lifecycle provenance
+
+Quality → **Rule lifecycle provenance** is read-only. It shows only allowlisted rule identity, tier, lifecycle state, accepted commit, activation epoch, protection, and bounded sync status. `Synchronized` means verified snapshot data; `Degraded` excludes affected managed rules; `Unavailable` renders no inferred provenance. No lifecycle/source/local-narrowing controls exist on this screen.
+
+Package baseline verification uses `config/rule-baseline-manifest.json` plus exact shipped `agents/` and `rules/` bytes. It needs neither product-root `.git` nor writable package files.
+
+## Living-rule publication boundary
+
+Automatic learning is bounded: redacted eligible global/project finding → tier-isolated candidate → independent quorum → deterministic admission → exactly one managed-rule commit → ordinary fast-forward → verified receipt → mirror/projection/status. Manual refinement is a request under identical gates, never direct canonical editing. No per-rule approval, force push, rebase, amend, merge, or release action exists.
+
+Exact publication statuses: `prepared`, `committed_local`, `accepted_remote`, `deferred_remote_advanced`, `rejected_policy`, `abandoned`. Recovery preserves terminal truth: attest exact remote receipt/descendant before mirror handoff; push only exact prepared ordinary fast-forward; otherwise defer changed remote, reject invalid policy/enrollment/tree, or record authorized abandonment. Local stop halts future candidate/publication/import work without rewriting history.
+
+Enrollment limits repository identity, normalized remote/branch, scope/tier, managed paths, author/trailers, writer enablement, and stable filesystem identity. Operators use sanitized status plus enrollment/remote correction then fresh transaction. Raw evidence, prompts, source/log text, credentials, private paths, and global project identity never enter candidate, commit, status, API, dashboard, package, or public projection.
+
+Package verification proves only shipped manifest schema, member hashes, aggregate digest, and separate package provenance; no `.git` or containing-commit provenance is claimed. Automatic adapters and manual refinement use source-owned authority; manual reads require stable Node handle/component reattestation. Native Windows remains a mandatory parity gate for identity/reparse boundaries, locks, atomic replacement, bytes, and recovery.
+
+## Lifecycle action boundary
+
+Deactivation/reactivation is automatic and reversible under the same no-rewrite rule: exact preserved rule bytes, one `pidex-action-cadence-v1` trailer, verified receipt, mirror plus projection. It never rewrites published history; epochs close and reopen only under verified active projections, and global projection heads carry the preserved manifest digest. Cross-host stop submits the canonical `deactivated` transition when active; local stop stays narrowing-only. `PIDEX_LIFECYCLE_ACTION_ENABLED` (default off) gates the single kill-switch seam; without an enrolled real adapter the action stays inert.
+
 ## Dashboard
 
 Quality → **Manual contract governance** shows:

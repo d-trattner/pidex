@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { allCapabilities, capabilityAvailability, loadModuleSystem, matchedAgentRules, parseArgs, runnerInvocation, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
+import { allCapabilities, capabilityAvailability, loadModuleSystem, matchedAgentRules, parseArgs, runnerInvocation, runtimeContextStatus, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
 
 function usage() {
   return `Usage: node scripts/modules/context.mjs --agent <agent> --phase <phase> --project <absolute-project-root> [options]\n\nFormats current-phase PIDEX module capability discovery as compact advisory markdown for agent handoffs. The output is metadata only; it is not execution authority.\n\nOptions:\n  --agent <name>       Required. PIDEX agent name or pseudo-agent 'orchestrator'.\n  --phase <phase>      Required. Lifecycle phase, for example pre-release.\n  --project <path>     Required. Absolute project root.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --mode <mode>        Optional opaque mode context for module-scoped agent_rules matching.\n  --help               Show this help.`;
@@ -35,7 +35,7 @@ function formatRuleFilters(rule) {
   return parts.join(', ') || 'none';
 }
 
-export function buildCapabilityContext({ system, agent, phase, project, mode }) {
+export function buildCapabilityContext({ system, agent, phase, project, mode, runtimeContext }) {
   const entries = allCapabilities(system).filter((entry) => entry.capability.phases.includes(phase));
   const rows = entries.map((entry) => {
     const availability = capabilityAvailability(system, entry, agent, phase, project);
@@ -54,6 +54,8 @@ export function buildCapabilityContext({ system, agent, phase, project, mode }) 
   }
 
   const lines = [];
+  lines.push(runtimeContextStatus(runtimeContext));
+  lines.push('');
   lines.push('## Module capabilities for this phase');
   lines.push('');
   lines.push('Advisory only: discovery/context output does not grant execution authority. Execute only checks explicitly requested by the handoff, and execute them through `scripts/modules/run-check.mjs`.');
@@ -129,6 +131,10 @@ if (args.help) {
 const pidexRoot = args['pidex-root'] ? path.resolve(String(args['pidex-root'])) : scriptPidexRoot(import.meta.url);
 const agent = args.agent;
 const phase = args.phase;
+if (args['runtime-context-json'] !== undefined) {
+  console.error('runtime context is internal; standalone JSON cannot attest rule authority');
+  process.exit(2);
+}
 if (!agent || !phase) {
   console.error('--agent and --phase are required');
   process.exit(2);
@@ -148,4 +154,4 @@ if (!validation.ok) {
   process.exit(1);
 }
 
-console.log(buildCapabilityContext({ system, agent, phase, project, mode: args.mode }));
+console.log(buildCapabilityContext({ system, agent, phase, project, mode: args.mode, runtimeContext: undefined }));

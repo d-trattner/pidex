@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { addFixtureAgentRule, makeModuleFixture } from './test-helpers.mjs';
+import { runtimeContextStatus } from './lib.mjs';
 
 function runContext(root, project, extra = []) {
   return execFileSync(process.execPath, ['scripts/modules/context.mjs', '--pidex-root', root, '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, ...extra], { cwd: process.cwd(), encoding: 'utf8' });
@@ -12,12 +13,28 @@ function runContext(root, project, extra = []) {
 test('context emits advisory markdown with runner invocations', () => {
   const { root, project } = makeModuleFixture();
   const out = runContext(root, project);
+  assert.match(out, /Rule runtime: non_attested \(descriptive; not usable_for_evidence\)/);
+  assert.doesNotMatch(out, /effective exposure|usable_for_evidence: true/);
   assert.match(out, /## Module capabilities for this phase/);
   assert.match(out, /Advisory only: discovery\/context output does not grant execution authority/);
   assert.match(out, /Required available checks:/);
   assert.match(out, /release\.reference-integrity/);
   assert.match(out, /node scripts\/modules\/run-check\.mjs --capability release\.reference-integrity --agent pidex-devops --phase pre-release/);
   assert.doesNotMatch(out, /scripts\/release\/reference-integrity\.mjs/);
+});
+
+test('CR-073-09 context rejects arbitrary JSON rather than self-attesting a caller-supplied snapshot', () => {
+  const { root, project } = makeModuleFixture();
+  const proc = spawnSync(process.execPath, ['scripts/modules/context.mjs', '--pidex-root', root, '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--runtime-context-json', JSON.stringify({ schema: 'pidex-rule-runtime-context-v1', pipeline_id: 'pipeline-module-45', snapshot_id: 'snapshot:forged' })], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.equal(proc.status, 2);
+  assert.match(proc.stderr, /runtime context is internal/);
+});
+
+test('CR-073-09 internal runtime status accepts only exact closed runtime context, never obsolete top-level snapshot ID', () => {
+  const digests = { schema: 'pidex-rule-runtime-input-digests-v1', run_identity_digest: 'a'.repeat(64), project_authority_digest: 'b'.repeat(64), inventory_identity_digest: 'c'.repeat(64), lifecycle_head_digest: 'd'.repeat(64), projection_digest: 'e'.repeat(64), epoch_catalog_digest: 'f'.repeat(64), mirror_generation_digest: 'a'.repeat(64), reconciliation_artifact_digest: 'b'.repeat(64) };
+  const context = { schema: 'pidex-rule-runtime-context-v1', pipeline_id: 'internal-pipeline', input_digests: digests, resolver_snapshot: { schema: 'pidex-rule-resolver-snapshot-v1', snapshot_id: 'snapshot:resolver' }, passive_exposure_input: { inventory_identity: {}, epoch_catalog: {}, reconciliation_artifact: {}, rule_snapshot: { snapshot_id: 'snapshot:plan061' } } };
+  assert.match(runtimeContextStatus(context), /attested snapshot_id=snapshot:resolver/);
+  assert.throws(() => runtimeContextStatus({ ...context, snapshot_id: 'snapshot:forged' }), /RULE_RUNTIME_CONTEXT_INVALID/);
 });
 
 test('context surfaces unavailable required capabilities with reasons', () => {

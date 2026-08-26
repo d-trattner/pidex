@@ -11,6 +11,10 @@ import { Type } from "typebox";
 import { foldReviewHistory, normalizeReviewPlan, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
 import { completeStructuredReviewOutcome, deriveReviewPhysicalAttempt, recordReviewAbortHold, recordReviewCompletion, recordReviewHold, recordReviewPhysicalOutcome, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 import { resolveStateRoot } from "../../modules/pidex/analysis-metrics-history/lib/state-root.mjs";
+import { bootstrapRuleInventoryProjections, lifecycleRulePhase, openRuleLifecycleStore, prepareLifecycleRuntimeContext } from "../../scripts/quality/rule-lifecycle-store.mjs";
+import { renderVerifiedRuntimeRules, validateRequiredReviewerProducer } from "../../scripts/quality/rule-mirror-sync.mjs";
+import { createHostAutomaticLearningRunner, normalizeAutomaticLearningLsRemoteOutput, openAutomaticLearningRuntimeSource, runAutomaticRuleLearningCoordinatorAsync } from "../../scripts/quality/rule-lifecycle.mjs";
+import { closedLifecycleActionHistoryAdapter, invokeLifecycleActionFromOrdinaryResult } from "../../modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.mjs";
 
 type AgentFrontmatter = {
 	name?: string;
@@ -296,6 +300,95 @@ function normalizeToolList(tools?: string[]): string[] | undefined {
 
 function hasCustomTools(tools?: string[]): boolean {
 	return Boolean(tools?.some((tool) => !BUILTIN_TOOL_NAMES.has(tool)));
+}
+
+type AutomaticRetrospectiveLearningSource = {
+	store?: any;
+	eligibility?: unknown;
+	tier?: "project" | "global";
+	scope_id?: string;
+	source_generation?: string;
+	runner_configuration?: unknown;
+	runner?: (input: any) => unknown;
+	fresh_base?: string;
+	now?: string;
+	run?: (input: { finding_bytes: Buffer }) => Promise<any>;
+	close?: () => void;
+};
+
+function hostRetrospectiveArtifact(result: any, agentCwd: string): Buffer | undefined {
+	if (result?.exitCode !== 0 || extractRoutingField(extractRoutingBlock(String(result?.finalText || "")), "verdict") !== "COMPLETE") return undefined;
+	const contextFile = extractRoutingField(extractRoutingBlock(String(result?.finalText || "")), "context_file");
+	if (!contextFile || !/^agents\.output\/retrospective\/[a-zA-Z0-9_-]+\.(?:md|json)$/.test(contextFile) || contextFile.includes("..")) return undefined;
+	const relative = `${contextFile.replace(/\.(?:md|json)$/, "")}.rule-learning.json`;
+	try {
+		const root = fs.realpathSync.native(path.join(agentCwd, "agents.output", "retrospective"));
+		const artifact = path.join(agentCwd, ...relative.split("/"));
+		const stat = fs.lstatSync(artifact);
+		const real = fs.realpathSync.native(artifact);
+		if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || path.dirname(real) !== root) return undefined;
+		return fs.readFileSync(real);
+	} catch { return undefined; }
+}
+
+/** Reads enrolled ref through one shell-free, output-bounded process operation. */
+export function createHostAutomaticLearningProcessAdapter({ spawnProcess = spawn, timeoutMs = 5_000, outputBytes = 4_096 }: any = {}) {
+	return async ({ enrolledRepository, enrolledRemote, branch }: any = {}) => {
+		if (typeof spawnProcess !== "function" || typeof enrolledRepository !== "string" || !enrolledRepository || typeof enrolledRemote !== "string" || !enrolledRemote || typeof branch !== "string" || !branch || /[\r\n\0]/.test(enrolledRepository + enrolledRemote + branch)) return { status: null, stdout: "" };
+		return await new Promise((resolve) => {
+			let child: any; let settled = false; let stdout = ""; let stderr = "";
+			const finish = (status: number | null) => { if (!settled) { settled = true; const oid = status === 0 ? normalizeAutomaticLearningLsRemoteOutput({ stdout, branch }) : null; resolve(oid ? { status: 0, stdout: oid } : { status: null, stdout: "" }); } };
+			try {
+				child = spawnProcess("git", ["-C", enrolledRepository, "ls-remote", "--heads", enrolledRemote, `refs/heads/${branch.replace(/^refs\/heads\//, "")}`], { shell: false, stdio: ["ignore", "pipe", "pipe"], timeout: timeoutMs });
+				child.stdout?.on("data", (chunk: any) => { stdout += String(chunk); if (Buffer.byteLength(stdout, "utf8") > outputBytes) { try { child.kill("SIGTERM"); } catch {} finish(null); } });
+				child.stderr?.on("data", (chunk: any) => { stderr += String(chunk); if (Buffer.byteLength(stderr, "utf8") > outputBytes) { try { child.kill("SIGTERM"); } catch {} finish(null); } });
+				child.once("error", () => finish(null));
+				child.once("close", (status: number | null) => finish(status));
+			} catch { finish(null); }
+		});
+	};
+}
+
+/** Production host bridge binds configured runner and P1 source-owned state; callers cannot provide store/eligibility/target authority. */
+export function createHostAutomaticLearningSource({ root = PACKAGE_ROOT, env = process.env, tier, scope_id, retry_family_id, now = new Date().toISOString(), processAdapter, runConfigured = runConfiguredAgent, openRuntimeSource = openAutomaticLearningRuntimeSource }: any): AutomaticRetrospectiveLearningSource {
+	const runtime = openRuntimeSource({ root, env, tier, scope_id });
+	const runner = createHostAutomaticLearningRunner({ runConfigured, cwd: root });
+	const enrolledProcessAdapter = processAdapter ?? createHostAutomaticLearningProcessAdapter();
+	return Object.freeze({
+		run: ({ finding_bytes }: { finding_bytes: Buffer }) => runtime.run({ finding_bytes, retry_family_id, runner, processAdapter: enrolledProcessAdapter, now }),
+		close: () => runtime.close(),
+	});
+}
+
+/** Default host source derives project scope only from confined retrospective bytes; store remints all authority. */
+function createDefaultHostAutomaticLearningSource({ finding_bytes }: { finding_bytes: Buffer }): AutomaticRetrospectiveLearningSource | undefined {
+	try {
+		const finding = JSON.parse(finding_bytes.toString("utf8"));
+		if (!/^[a-f0-9]{24,64}$/.test(String(finding?.project_scope_id || "")) || !/^finding:[a-f0-9]{16,64}$/.test(String(finding?.finding_id || ""))) return undefined;
+		return createHostAutomaticLearningSource({ tier: "project", scope_id: finding.project_scope_id, retry_family_id: `retry:host-${createHash("sha256").update(finding_bytes).digest("hex")}` });
+	} catch { return undefined; }
+}
+
+/** Host-only automatic ingress after one successful retrospective. Factory-owned authority closes after sole disposition. */
+/** Plan048 host seam: one kill switch (PIDEX_LIFECYCLE_ACTION_ENABLED) gates automatic lifecycle action after an ordinary terminal result; raw result/cadence bytes never cross this boundary. */
+export function runHostLifecycleActionInvocation({ store, result_bytes, result_digest, current, env = process.env, now = new Date().toISOString(), trace = closedLifecycleActionHistoryAdapter, invoker = invokeLifecycleActionFromOrdinaryResult }: any) {
+  if (!env || !env.PIDEX_LIFECYCLE_ACTION_ENABLED) return Object.freeze({ status: "no_op", reason: "kill_switch" });
+  try { return invoker({ store, result_bytes, result_digest, current, env, now, trace }); } catch { return Object.freeze({ status: "no_op", reason: "action_unavailable" }); }
+}
+
+export function runHostRetrospectiveAutomaticLearning({ result, agentCwd, source, sourceFactory = createDefaultHostAutomaticLearningSource, coordinator = runAutomaticRuleLearningCoordinatorAsync }: { result: any; agentCwd: string; source?: AutomaticRetrospectiveLearningSource; sourceFactory?: (input: { finding_bytes: Buffer }) => AutomaticRetrospectiveLearningSource | undefined; coordinator?: typeof runAutomaticRuleLearningCoordinatorAsync }): any {
+	const finding_bytes = hostRetrospectiveArtifact(result, agentCwd);
+	const resolvedSource = source ?? (finding_bytes ? sourceFactory({ finding_bytes }) : undefined);
+	if (!finding_bytes || !resolvedSource) return Object.freeze({ status: "blocked_artifact_authority" });
+	if (typeof resolvedSource.run === "function") return Promise.resolve(resolvedSource.run({ finding_bytes })).catch(() => Object.freeze({ status: "blocked_recovery_pending" })).finally(() => resolvedSource.close?.());
+	if (!resolvedSource.store || typeof resolvedSource.runner !== "function") return Object.freeze({ status: "blocked_artifact_authority" });
+	return Promise.resolve(coordinator({ ...resolvedSource, finding_bytes })).then((disposition: any) => {
+		if (typeof resolvedSource.store?.appendAutomaticLearningDisposition === "function" && typeof resolvedSource.now === "string" && typeof disposition?.status === "string") {
+			const disposition_id = `automatic-disposition:${createHash("sha256").update(`pidex-automatic-disposition-v1\0${finding_bytes.toString("utf8")}\0${disposition.status}`).digest("hex")}`;
+			try { resolvedSource.store.appendAutomaticLearningDisposition({ disposition_id, status: disposition.status, occurred_at: resolvedSource.now }); } catch { return Object.freeze({ status: "blocked_durable_conflict" }); }
+		}
+		return disposition;
+	}, () => Object.freeze({ status: "blocked_recovery_pending" })).finally(() => resolvedSource.close?.());
 }
 
 export function shouldDisableChildExtensions(tools?: string[], sandboxContext?: SandboxRuntimeContext): boolean {
@@ -2650,7 +2743,7 @@ async function runRpAgent(params: {
 	const model = params.model ?? agent.frontmatter.model;
 	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${formatPiRunnerStartDetails(model, params.effort)}`);
 	assertPiModelAllowed(model);
-	const tools = params.tools ?? parseTools(agent.frontmatter.tools);
+	const tools = params.tools === undefined ? parseTools(agent.frontmatter.tools) : params.tools;
 	const maxTurns = parsePositiveInt(agent.frontmatter.maxTurns);
 	const systemPrompt = buildAgentSystemPrompt(params.agent, agent.body, "pi");
 	const inputChars = systemPrompt.length + params.task.length;
@@ -2676,7 +2769,7 @@ async function runRpAgent(params: {
 		if (shouldDisableChildExtensions(tools, params.sandboxContext)) args.push("--no-extensions");
 		if (model) args.push("--model", model);
 		if (params.effort) args.push("--thinking", params.effort);
-		if (tools && tools.length > 0) args.push("--tools", tools.join(","));
+		if (tools !== undefined) args.push("--tools", tools.join(","));
 		args.push(`@${taskFile}`);
 
 		let stderr = "";
@@ -3072,8 +3165,8 @@ async function runConfiguredAgent(params: {
 	const provider = normalizeProvider(params.providerOverride ?? route.provider);
 	const timeoutSeconds = route.timeout_seconds;
 	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${formatConfiguredRouteStartDetails(route.routeSource, provider, route.model, route.effort)}`);
-	const explicitTools = normalizeToolList(params.tools);
-	const delegateTools = TOOL_FORWARDING_AGENTS.has(params.agent) ? explicitTools ?? route.tools : route.tools;
+	const explicitTools = params.tools === undefined ? undefined : (normalizeToolList(params.tools) ?? []);
+	const delegateTools = TOOL_FORWARDING_AGENTS.has(params.agent) ? (explicitTools ?? route.tools) : route.tools;
 
 	const runProvider = async (selectedProvider: string, fallbackFrom?: string): Promise<RpResult> => {
 		if (isToolHeavyAgent(params.agent) && !isPiProvider(selectedProvider) && !supportsDelegateToolLoop(selectedProvider)) {
@@ -3640,6 +3733,7 @@ type HostAgentBoundaryOptions = {
 	runConfigured?: typeof runConfiguredAgent;
 	runSandboxed?: typeof runSandboxedConfiguredAgent;
 	reviewLifecycle?: { stateDir: string; pipelineId: string };
+	automaticRetrospectiveSource?: () => AutomaticRetrospectiveLearningSource | undefined;
 };
 
 const REVIEWER_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer", "pidex-security", "pidex-qa"]);
@@ -3668,6 +3762,49 @@ function resolveReviewDispatch(params: any, suppliedIdentity: any, agent: string
 
 function derivedAttemptId(runFamilyId: string, reviewGate: string, reviewMode: string): string {
 	return `attempt-${createHash("sha256").update(`${runFamilyId}|${reviewGate}|${reviewMode}`).digest("hex").slice(0, 16)}`;
+}
+
+function resolveHostRuntimeContext(task: string, agent: string, lifecycle: { stateDir: string; pipelineId: string }, project: string, options: HostAgentBoundaryOptions): { runtimeContext: unknown; taskContext: string } {
+	const planId = normalizePlanKey(extractPlanId(task));
+	if (planId === "unknown-plan") return { runtimeContext: undefined, taskContext: "Rule runtime context: non_attested; descriptive only, not usable_for_evidence." };
+	let pipelineId: string;
+	try {
+		pipelineId = resolvePlanReviewAuthority({ stateDir: lifecycle.stateDir, project, planId }).pipelineId;
+	} catch {
+		return { runtimeContext: undefined, taskContext: "Rule runtime context: non_attested; lifecycle authority absent or ambiguous, not usable_for_evidence." };
+	}
+	const store = openRuleLifecycleStore({ stateRoot: lifecycle.stateDir });
+	const scopeId = createHash("sha256").update(path.resolve(project)).digest("hex").slice(0, 24);
+	try {
+		const bootstrap = bootstrapRuleInventoryProjections({
+			store, stateRoot: lifecycle.stateDir, root: PACKAGE_ROOT, projectRoot: project,
+			projectScopeId: scopeId,
+			repositories: { global: PACKAGE_ROOT, project },
+		});
+		const prepared = prepareLifecycleRuntimeContext({
+			store,
+			pipeline_id: pipelineId,
+			repository: project,
+			scope_id: scopeId,
+			repositories: [{ repository: PACKAGE_ROOT, scope_id: null }, { repository: project, scope_id: scopeId }],
+			authority_descriptors: bootstrap.authority_descriptors,
+			project_authority: { project_root: project, plan_id: planId, scope_id: scopeId },
+			run_identity: { run_id: pipelineId, plan_id: planId, model_identity: "host-direct", config_fingerprint: "host-direct-v1", correlation_id: pipelineId },
+		});
+		const runtimeContext = store.getOrCreateRuntimeContext(pipelineId, prepared.input_digests, prepared.createRuntimeContext);
+		const phase = lifecycleRulePhase(agent);
+		const governedRules = renderVerifiedRuntimeRules({ stateRoot: lifecycle.stateDir, resolverSnapshot: runtimeContext.resolver_snapshot, agent, phase });
+		validateRequiredReviewerProducer({ agent, phase, resolverSnapshot: runtimeContext.resolver_snapshot, rendered: governedRules });
+		return { runtimeContext, taskContext: `${governedRules.rendered}\n\nRule runtime context: attested lifecycle authority.` };
+	} catch (error) {
+		if (error instanceof Error && ["RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE", "RULE_RUNTIME_CONTEXT_AUTHORITY_UNAVAILABLE", "RULE_RUNTIME_CONTEXT_CONFLICT"].includes(error.message)) {
+			if (error.message === "RULE_RUNTIME_CONTEXT_CONFLICT") throw error;
+			return { runtimeContext: undefined, taskContext: "Rule runtime context: non_attested; verified runtime inputs unavailable, not usable_for_evidence." };
+		}
+		throw error;
+	} finally {
+		store.close();
+	}
 }
 
 function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipelineId: string }, project: string): { identity: Record<string, string>; pipelineId: string } | undefined {
@@ -3879,9 +4016,11 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 		"Include sandbox evidence or SANDBOX-SKIP in your artifact.",
 		"",
 	].join("\n") : "";
+	const hostRuntime = resolveHostRuntimeContext(params.task, params.agent, configuredLifecycle, options.agentCwd, options);
 	const runParams = {
 		agent: params.agent,
-		task: `${sandboxTaskPrefix}${params.task}`,
+		task: `${sandboxTaskPrefix}${params.task}\n\n${hostRuntime.taskContext}`,
+		runtimeContext: hostRuntime.runtimeContext,
 		cwd: options.agentCwd,
 		route,
 		tools: params.tools,
@@ -3891,7 +4030,13 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	const runner = sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
 		? (options.runSandboxed ?? runSandboxedConfiguredAgent)
 		: (options.runConfigured ?? runConfiguredAgent);
-	if (!reviewDispatch) return await runner(runParams);
+	if (!reviewDispatch) {
+		const result = await runner(runParams);
+		if (params.agent === "pidex-retrospective") {
+			(result as any).automatic_learning = await runHostRetrospectiveAutomaticLearning({ result, agentCwd: options.agentCwd, source: options.automaticRetrospectiveSource?.() });
+		}
+		return result;
+	}
 	if (options.signal?.aborted) throw new Error("REVIEW_DISPATCH_ABORTED");
 	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
 	const hostHeld = (reviewCompletion: any) => ({ agent: params.agent, provider: route.provider, exitCode: 0, stderr: "", finalText: "", reviewCompletion });

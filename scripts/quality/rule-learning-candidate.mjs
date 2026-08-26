@@ -1,0 +1,33 @@
+import { createHash } from 'node:crypto';
+import { candidateIdentityDigest, canonicalRuleLearningCandidateBytes, findingDigest, lessonCode, ruleLearningSupportDigest, validManualCompatibleCandidateFields, validRuleLearningCandidate, validRuleLearningSupport, validateManualCompatibleCandidateBody, validateRuleLearningFinding } from './rule-learning-contracts.mjs';
+import { readRuleLearningEnrollmentAuthority } from './rule-lifecycle-store.mjs';
+
+const HEX = /^[a-f0-9]{64}$/;
+const SAFE = /^[a-z][a-z0-9-]{2,63}$/;
+function freeze(value) { if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value; for (const child of Object.values(value)) freeze(child); return Object.freeze(value); }
+function hash(...fields) { const value = createHash('sha256'); for (const field of fields) { const bytes = Buffer.from(field, 'utf8'); value.update(`${bytes.length}:`, 'ascii'); value.update(bytes); } return value.digest('hex'); }
+function deferred(code) { return freeze({ status: 'deferred', code }); }
+function bodyOf(value) { return `# ${value.slug}\n\n## Instruction\n${value.instruction}\n\n## Trigger\n${value.trigger}\n\n## Expected evidence\n${value.expected_evidence}\n\n## Failure behavior\n${value.failure_behavior}\n\n## Rationale\n${value.rationale}\n`; }
+function generatedValid(value, support) { return validManualCompatibleCandidateFields(value) && value.applicability[0] === support.affected_phase; }
+function targetValid(target, tier) { return target && typeof target === 'object' && target.tier === tier && target.enabled === true && target.protected === false && typeof target.scope_digest === 'string' && HEX.test(target.scope_digest) && /^commit:[a-f0-9]{40}$/.test(target.predecessor) && Array.isArray(target.applicable_descriptors) && target.applicable_descriptors.length > 0 && target.applicable_descriptors.every((item) => HEX.test(item.descriptor_digest)); }
+export const candidateDigest = candidateIdentityDigest;
+export const canonicalCandidateBytes = canonicalRuleLearningCandidateBytes;
+export { validRuleLearningCandidate };
+/** Store-minted capability reattests source recurrence and exact current publication target. */
+export function buildRuleLearningCandidate({ support, findings, authority, generator } = {}) {
+  if (!validRuleLearningSupport(support) || !Array.isArray(findings) || typeof generator !== 'function') return deferred('RULE_LEARNING_CANDIDATE_INVALID');
+  const checked = findings.map((finding) => validateRuleLearningFinding(finding));
+  const suppliedDigests = checked.some((item) => !item.ok) ? null : checked.map((item) => findingDigest(item.value)).sort();
+  const first = checked[0]?.value;
+  const canonicalLesson = first && lessonCode({ taxonomy: first.taxonomy, affected_agent: first.affected_agent, affected_phase: first.affected_phase, recurrence_key: first.recurrence_key });
+  if (!suppliedDigests || support.lesson_code !== canonicalLesson || suppliedDigests.length !== support.finding_digests.length || suppliedDigests.some((digest, index) => digest !== support.finding_digests[index]) || checked.some((item) => item.value.taxonomy !== support.taxonomy || item.value.affected_agent !== support.affected_agent || item.value.affected_phase !== support.affected_phase || item.value.recurrence_key !== first.recurrence_key) || new Set(checked.map((item) => item.value.project_scope_id)).size !== support.scope_count) return deferred('RULE_LEARNING_AUTHORITY_UNAVAILABLE');
+  const bound = readRuleLearningEnrollmentAuthority({ authority, tier: support.tier, findings: checked.map((item) => item.value) });
+  if (!bound || !targetValid(bound.target, support.tier) || !bound.policy || !bound.generator_identity || bound.sources.length !== checked.length) return deferred('RULE_LEARNING_AUTHORITY_UNAVAILABLE');
+  if (bound.sources.some((source, index) => source.scope_id !== checked[index].value.project_scope_id || source.repository_identity !== checked[index].value.repository_identity || source.enabled !== true || source.protected !== false)) return deferred('RULE_LEARNING_AUTHORITY_UNAVAILABLE');
+  if (support.tier === 'project' && new Set(checked.map((item) => item.value.project_scope_id)).size !== 1) return deferred('RULE_LEARNING_AUTHORITY_UNAVAILABLE');
+  if (support.tier === 'global' && (new Set(checked.map((item) => item.value.project_scope_id)).size < 2 || new Set(checked.map((item) => item.value.repository_identity)).size < 2)) return deferred('RULE_LEARNING_AUTHORITY_UNAVAILABLE');
+  let generated; try { generated = generator(freeze({ support: freeze({ tier: support.tier, taxonomy: support.taxonomy, affected_agent: support.affected_agent, affected_phase: support.affected_phase, lesson_code: support.lesson_code, occurrence_count: support.occurrence_count, scope_count: support.scope_count, finding_digests: [...support.finding_digests] }), descriptor_digests: freeze(bound.target.applicable_descriptors.map((item) => item.descriptor_digest).sort()), policy_ids: freeze([bound.policy.id]) })); } catch { return deferred('RULE_LEARNING_CANDIDATE_INVALID'); }
+  if (!generatedValid(generated, support)) return deferred('RULE_LEARNING_CANDIDATE_INVALID');
+  const body = bodyOf(generated); if (!validateManualCompatibleCandidateBody({ body, slug: generated.slug, applicability: generated.applicability })) return deferred('RULE_LEARNING_CANDIDATE_INVALID'); const content_hash = createHash('sha256').update(body, 'utf8').digest('hex'); const scope_digest = bound.target.scope_digest; const candidate = { schema_version: 'pidex-managed-rule-v1', rule_id: support.tier === 'global' ? `pidex-global:${support.affected_agent}:${generated.slug}` : `project:${scope_digest.slice(0, 24)}:${support.affected_agent}:${generated.slug}`, tier: support.tier, agent: support.affected_agent, slug: generated.slug, applicability: [...generated.applicability], body, predecessor_commit: bound.target.predecessor, support_digest: hash('pidex-rule-learning-support-v1', JSON.stringify(support)), admission_policy_id: bound.policy.id, admission_policy_version: bound.policy.version, admission_policy_digest: bound.policy.digest, generator_principal: bound.generator_identity.principal, generator_attempt_id: bound.generator_identity.attempt_id, scope_digest, descriptor_digests: [...bound.target.applicable_descriptors.map((item) => item.descriptor_digest)].sort(), authority_digest: bound.authority_digest, content_hash };
+  candidate.support_digest = ruleLearningSupportDigest(support); candidate.candidate_digest = candidateDigest(candidate); const closed = freeze(candidate); return freeze({ status: 'candidate', candidate: closed, bytes: canonicalCandidateBytes(closed), digest: closed.candidate_digest });
+}

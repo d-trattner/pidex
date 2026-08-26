@@ -13,6 +13,8 @@ test('render-rules renders matched module-scoped rule bodies with provenance wra
   const { root, project } = makeModuleFixture();
   addFixtureAgentRule(root, { content: '# Release module rule\n\nUse the module runner evidence in release notes.\n' });
   const out = render(root, project);
+  assert.match(out, /Rule runtime: non_attested \(descriptive; not usable_for_evidence\)/);
+  assert.doesNotMatch(out, /effective exposure|usable_for_evidence: true/);
   assert.match(out, /## Rendered module-scoped rules/);
   assert.match(out, /Core PIDEX rules and explicit user instructions take precedence/);
   assert.match(out, /Rule: pidex\.release-safety\.pre-release-devops/);
@@ -21,6 +23,20 @@ test('render-rules renders matched module-scoped rule bodies with provenance wra
   assert.match(out, /# Release module rule/);
   assert.match(out, /Use the module runner evidence/);
   assert.doesNotMatch(out, /scripts\/release\/reference-integrity\.mjs/);
+});
+
+test('CR-073-09 render-rules rejects arbitrary JSON rather than self-attesting a caller-supplied snapshot', () => {
+  const { root, project } = makeModuleFixture();
+  addFixtureAgentRule(root);
+  for (const context of [
+    { schema: 'pidex-rule-runtime-context-v1', pipeline_id: 'pipeline-module-45', snapshot_id: 'snapshot:forged' },
+    { schema: 'pidex-rule-runtime-context-v1', pipeline_id: 'pipeline-module-45' },
+    { schema: 'pidex-rule-runtime-context-v1', pipeline_id: 'pipeline-module-45', snapshot_id: 'snapshot:forged', extra: true },
+  ]) {
+    const proc = spawnSync(process.execPath, ['scripts/modules/render-rules.mjs', '--pidex-root', root, '--agent', 'pidex-devops', '--phase', 'pre-release', '--project', project, '--mode', 'release', '--runtime-context-json', JSON.stringify(context)], { cwd: process.cwd(), encoding: 'utf8' });
+    assert.equal(proc.status, 2);
+    assert.match(proc.stderr, /runtime context is internal/);
+  }
 });
 
 test('render-rules suppresses rules when mode does not match', () => {

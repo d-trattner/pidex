@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import {
@@ -148,6 +148,282 @@ type QualityLatestPayload = {
   latest: QualityReadModelSummary | null;
 };
 
+type RuleProvenanceRow = {
+  rule_id?: string;
+  display_label?: string;
+  tier_scope_label?: string;
+  accepted_commit?: string;
+  activation_epoch?: string;
+  protection_class?: string;
+  lifecycle_state?: 'active' | 'deactivated';
+};
+
+type ImpactRate = { numerator?: number; denominator?: number; value?: number };
+type ImpactCohort = { start_at?: string; end_at?: string; count?: number; ess?: number; plan_count?: number; diversity_kind?: string; diversity_count?: number; support_ratio?: ImpactRate; missing_rate?: ImpactRate; evidence_exclusion_rate?: ImpactRate; exclusions?: Array<{ reason?: string; count?: number }> };
+type ImpactEvidenceRow = {
+  tier?: 'global' | 'project';
+  rule_label?: string;
+  policy?: string;
+  state?: 'collecting' | 'frozen' | 'inconclusive' | 'repeated_observational_harm' | 'blocked' | 'superseded' | 'expired';
+  reason?: string | null;
+  created_at?: string | null;
+  expires_at?: string | null;
+  closed_window_id?: string | null;
+  collection_progress?: { observed_at?: string; H2?: number; H1?: number; W1?: number; W2?: number } | null;
+  cohorts?: Partial<Record<'H2' | 'H1' | 'W1' | 'W2', ImpactCohort>>;
+  floors?: Record<string, number | null>;
+  quality_flags?: string[];
+};
+
+type PublicationRow = {
+  transaction_digest?: string;
+  rule_id?: string;
+  tier?: 'global' | 'project';
+  state?: 'prepared' | 'committed_local' | 'accepted_remote' | 'deferred_remote_advanced' | 'rejected_policy' | 'abandoned';
+  receipt_digest?: string | null;
+  accepted_commit?: string | null;
+  content_hash?: string | null;
+  activation_epoch?: string | null;
+  handoff_stage?: 'status_ready' | null;
+  admission_digest?: string | null;
+  predecessor_commit?: string | null;
+  proposal_label?: string;
+  inspect?: boolean;
+  refinement?: boolean;
+  refinement_reason?: string | null;
+  policy_category?: 'policy' | 'enrollment' | 'identity' | 'privacy' | null;
+  visible_label?: string;
+};
+
+type PublicationPayload = { status?: 'available' | 'unavailable'; publications?: PublicationRow[] };
+type PublicationDetailPayload = { status?: 'available' | 'unavailable'; publication?: unknown };
+
+const PUBLICATION_DIGEST = /^[a-f0-9]{64}$/;
+const PUBLICATION_RULE = /^(?:pidex-global|project:[a-f0-9]{24,64}):[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/;
+const PUBLICATION_STATE_LABELS: Record<NonNullable<PublicationRow['state']>, readonly string[]> = {
+  prepared: ['Prepared'],
+  committed_local: ['Publication pending'],
+  accepted_remote: ['Publication pending', 'Published and verified'],
+  deferred_remote_advanced: ['Deferred — source changed'],
+  rejected_policy: ['Rejected by policy'],
+  abandoned: ['Abandoned'],
+};
+
+export type PublicationFetcher = (input: string, init?: RequestInit) => Promise<Response>;
+export type PublicationDetailResult =
+  | { kind: 'ready'; publication: NormalizedPublication; copy: null; retry_locked: false }
+  | { kind: 'unavailable'; publication: null; copy: 'Publication status unavailable'; retry_locked: true };
+export type RefinementRequestPayload = { action: 'request_refinement'; rule_id: string; receipt_digest: string; request_nonce: string };
+export type RefinementRequestResult =
+  | { kind: 'accepted'; copy: 'Refinement request accepted'; invalidate_detail: true; refresh: true; retry_locked: true }
+  | { kind: 'stale'; copy: 'Invalid or stale refinement request'; invalidate_detail: true; refresh: true; retry_locked: true }
+  | { kind: 'operator'; copy: 'Operator access required'; invalidate_detail: false; refresh: false; retry_locked: true }
+  | { kind: 'method'; copy: 'Method not allowed'; invalidate_detail: false; refresh: false; retry_locked: true }
+  | { kind: 'unavailable'; copy: 'Publication status unavailable'; invalidate_detail: false; refresh: false; retry_locked: true };
+export type PublicationAnnouncement = { copy: string; kind: 'status' | 'alert' };
+
+export function publicationAnnouncementForRefinementResult(result: RefinementRequestResult): PublicationAnnouncement | null {
+  if (!result.invalidate_detail) return null;
+  return { copy: result.copy, kind: result.kind === 'stale' ? 'alert' : 'status' };
+}
+
+type NormalizedPublication = PublicationRow & { verified: boolean; safe_identity: boolean };
+const POLICY_CATEGORIES = new Set<NonNullable<PublicationRow['policy_category']>>(['policy', 'enrollment', 'identity', 'privacy']);
+const ACCEPTED_COMMIT = /^[a-f0-9]{40}$/;
+const ACTIVATION_EPOCH = /^epoch:[a-f0-9]{24}$/;
+const REQUEST_NONCE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+function normalizePublication(input: unknown): NormalizedPublication {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {};
+  const transaction_digest = typeof source.transaction_digest === 'string' && PUBLICATION_DIGEST.test(source.transaction_digest) ? source.transaction_digest : undefined;
+  const rule_id = typeof source.rule_id === 'string' && PUBLICATION_RULE.test(source.rule_id) ? source.rule_id : undefined;
+  const tier = source.tier === 'global' || source.tier === 'project' ? source.tier : undefined;
+  const state = typeof source.state === 'string' && Object.hasOwn(PUBLICATION_STATE_LABELS, source.state) ? source.state as NonNullable<PublicationRow['state']> : undefined;
+  const safe_identity = !!transaction_digest && !!rule_id && !!tier;
+  const receipt_digest = typeof source.receipt_digest === 'string' && PUBLICATION_DIGEST.test(source.receipt_digest) ? source.receipt_digest : undefined;
+  const accepted_commit = typeof source.accepted_commit === 'string' && ACCEPTED_COMMIT.test(source.accepted_commit) ? source.accepted_commit : undefined;
+  const content_hash = typeof source.content_hash === 'string' && PUBLICATION_DIGEST.test(source.content_hash) ? source.content_hash : undefined;
+  const activation_epoch = typeof source.activation_epoch === 'string' && ACTIVATION_EPOCH.test(source.activation_epoch) ? source.activation_epoch : undefined;
+  const claims_verified = source.visible_label === 'Published and verified';
+  const verified = safe_identity && state === 'accepted_remote' && source.handoff_stage === 'status_ready' && !!receipt_digest && !!accepted_commit && !!content_hash && !!activation_epoch && claims_verified;
+  const expected_label = state === 'accepted_remote' ? 'Publication pending' : state ? PUBLICATION_STATE_LABELS[state][0] : null;
+  const invalid_label = !verified && source.visible_label !== expected_label;
+  const visible_label = invalid_label || !state ? 'Status unavailable' : verified ? 'Published and verified' : expected_label!;
+  const row: NormalizedPublication = { transaction_digest, rule_id, tier, state, visible_label, verified, safe_identity };
+  if (verified) { row.receipt_digest = receipt_digest; row.accepted_commit = accepted_commit; row.content_hash = content_hash; row.activation_epoch = activation_epoch; row.handoff_stage = 'status_ready'; }
+  if (typeof source.admission_digest === 'string' && PUBLICATION_DIGEST.test(source.admission_digest)) row.admission_digest = source.admission_digest;
+  if (typeof source.predecessor_commit === 'string' && ACCEPTED_COMMIT.test(source.predecessor_commit)) row.predecessor_commit = source.predecessor_commit;
+  if (state === 'rejected_policy' && typeof source.policy_category === 'string' && POLICY_CATEGORIES.has(source.policy_category as NonNullable<PublicationRow['policy_category']>)) row.policy_category = source.policy_category as NonNullable<PublicationRow['policy_category']>;
+  row.inspect = safe_identity && !!state && !invalid_label && source.inspect === true;
+  row.refinement = verified && source.refinement === true;
+  return row;
+}
+
+function allowlistedPublicationDetail(value: unknown, digest: string): NormalizedPublication | null {
+  const row = normalizePublication(value);
+  return row.safe_identity && row.transaction_digest === digest && row.visible_label !== 'Status unavailable' ? row : null;
+}
+
+function validRefinementRequest(value: unknown): value is RefinementRequestPayload {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return Object.keys(record).length === 4 && ['action', 'rule_id', 'receipt_digest', 'request_nonce'].every((key) => Object.hasOwn(record, key)) && record.action === 'request_refinement' && typeof record.rule_id === 'string' && PUBLICATION_RULE.test(record.rule_id) && typeof record.receipt_digest === 'string' && PUBLICATION_DIGEST.test(record.receipt_digest) && typeof record.request_nonce === 'string' && REQUEST_NONCE.test(record.request_nonce);
+}
+
+export async function loadPublicationDetail(fetcher: PublicationFetcher, digest: string): Promise<PublicationDetailResult> {
+  try {
+    const response = await fetcher(`/api/quality/contract-governor?transaction_digest=${encodeURIComponent(digest)}`);
+    const payload = await response.json().catch(() => null) as PublicationDetailPayload | null;
+    const publication = response.status === 200 && payload?.status === 'available' ? allowlistedPublicationDetail(payload.publication, digest) : null;
+    return publication ? { kind: 'ready', publication, copy: null, retry_locked: false } : { kind: 'unavailable', publication: null, copy: 'Publication status unavailable', retry_locked: true };
+  } catch {
+    return { kind: 'unavailable', publication: null, copy: 'Publication status unavailable', retry_locked: true };
+  }
+}
+
+export async function submitRefinementRequest(fetcher: PublicationFetcher, payload: unknown): Promise<RefinementRequestResult> {
+  if (!validRefinementRequest(payload)) return { kind: 'unavailable', copy: 'Publication status unavailable', invalidate_detail: false, refresh: false, retry_locked: true };
+  const body = { action: payload.action, rule_id: payload.rule_id, receipt_digest: payload.receipt_digest, request_nonce: payload.request_nonce };
+  try {
+    const response = await fetcher('/api/quality/contract-governor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (response.status === 202) return { kind: 'accepted', copy: 'Refinement request accepted', invalidate_detail: true, refresh: true, retry_locked: true };
+    if (response.status === 400 || response.status === 409) return { kind: 'stale', copy: 'Invalid or stale refinement request', invalidate_detail: true, refresh: true, retry_locked: true };
+    if (response.status === 401 || response.status === 403) return { kind: 'operator', copy: 'Operator access required', invalidate_detail: false, refresh: false, retry_locked: true };
+    if (response.status === 405) return { kind: 'method', copy: 'Method not allowed', invalidate_detail: false, refresh: false, retry_locked: true };
+  } catch {}
+  return { kind: 'unavailable', copy: 'Publication status unavailable', invalidate_detail: false, refresh: false, retry_locked: true };
+}
+
+// ---- Plan048 Slice3B/4: lifecycle control read projection + bounded client boundary. ----
+// The dashboard renders backend-supplied row strings only (visible_label/aria verbatim); this table
+// bounds unexpected labels and keeps the exact plan LS-01..LS-09 copy present for parity audits.
+type LifecycleControlRow = {
+  transaction_digest?: string;
+  rule_id?: string;
+  tier?: 'global' | 'project';
+  scope_id?: string;
+  state?: string;
+  handoff_stage?: string | null;
+  receipt_digest?: string | null;
+  accepted_commit?: string | null;
+  content_hash?: string | null;
+  receipt_lifecycle_state?: 'deactivated' | 'active-monitor' | 'active-pinned' | null;
+  canonical_state?: 'active' | 'active-monitor' | 'active-pinned' | 'deactivated' | null;
+  mirror_verified?: boolean;
+  converged?: boolean;
+  epoch_open?: boolean;
+  local_stop_active?: boolean;
+  visible_label?: string;
+  aria?: string;
+  fallback?: string | null;
+};
+type LifecycleControlPayload = { status?: 'available' | 'unavailable'; publications?: LifecycleControlRow[] };
+
+const LIFECYCLE_LS_SPEC: Record<string, { aria: string }> = {
+  'Deactivation pending': { aria: 'Deactivation pending remote acceptance' },
+  'Deactivated — sync pending': { aria: 'Deactivation accepted; mirror synchronization pending' },
+  'Active — monitoring': { aria: 'Rule active and monitoring' },
+  'Deactivated': { aria: 'Rule deactivated' },
+  'Stopped locally': { aria: 'Rule stopped on this host only' },
+  'Reactivation pending': { aria: 'Reactivation pending remote acceptance and mirror verification' },
+  'Reactivation failed': { aria: 'Reactivation failed; rule remains deactivated' },
+  'Active — pinned': { aria: 'Rule active and pinned' },
+  'Convergence failed': { aria: 'Canonical lifecycle change accepted; mirror convergence failed' },
+};
+const LIFECYCLE_UNAVAILABLE_LABEL = 'Status unavailable';
+const LIFECYCLE_UNAVAILABLE_ARIA = 'Publication status unavailable';
+const LIFECYCLE_DEFERRED_LABEL = 'Deferred — source changed';
+// Canonical-state column maps backend enum to plan-exact copy only; never invents new labels.
+const LIFECYCLE_CANONICAL_LABELS: Record<string, string> = {
+  'active': 'Active — monitoring',
+  'active-monitor': 'Active — monitoring',
+  'active-pinned': 'Active — pinned',
+  'deactivated': 'Deactivated',
+};
+const LIFECYCLE_DIGEST = /^[a-f0-9]{64}$/;
+const LIFECYCLE_RULE = /^(?:pidex-global|project:[a-f0-9]{24,64}):[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/;
+const LIFECYCLE_ACTIONS = new Set(['stop-local', 'stop-cross-host', 'reactivate-monitor', 'reactivate-pin', 'unpin', 'refinement-handoff']);
+
+export type LifecycleControl = { action: string; label: string; disabled_reason?: string | null; refresh_unlock?: boolean };
+export type NormalizedLifecycleRow = {
+  transaction_digest?: string;
+  rule_id?: string;
+  tier?: 'global' | 'project';
+  visible_label: string;
+  aria: string;
+  canonical_label: string;
+  controls: LifecycleControl[];
+  safe_identity: boolean;
+};
+
+const LIFECYCLE_CONTROL_SPEC: Record<string, LifecycleControl[]> = {
+  'Deactivated': [
+    { action: 'reactivate-monitor', label: 'Reactivate — monitor' },
+    { action: 'reactivate-pin', label: 'Reactivate — pin' },
+  ],
+  'Active — monitoring': [
+    { action: 'stop-local', label: 'Stop locally' },
+    { action: 'stop-cross-host', label: 'Deactivate on all hosts' },
+    { action: 'refinement-handoff', label: 'Request refinement' },
+  ],
+  'Active — pinned': [
+    { action: 'unpin', label: 'Unpin' },
+    { action: 'stop-local', label: 'Stop locally' },
+    { action: 'stop-cross-host', label: 'Deactivate on all hosts' },
+    { action: 'refinement-handoff', label: 'Request refinement' },
+  ],
+  'Stopped locally': [
+    { action: 'stop-local', label: 'Stop locally', disabled_reason: 'Stopped locally' },
+    { action: 'stop-cross-host', label: 'Deactivate on all hosts' },
+  ],
+  'Reactivation failed': [
+    { action: 'reactivate-monitor', label: 'Reactivate — monitor', disabled_reason: 'Lifecycle status refresh required', refresh_unlock: true },
+  ],
+};
+
+// M-1 (Plan048 review): LS-07 retry is not statically disabled. It unlocks only after a successful fresh status refresh capability; until then the bounded reason copy keeps the stale-retry guard.
+export function lifecycleRetryControl(control: LifecycleControl, refreshCapable: boolean): LifecycleControl {
+  return control.refresh_unlock === true ? { ...control, disabled_reason: refreshCapable ? null : control.disabled_reason ?? null } : control;
+}
+
+function normalizeLifecycleRow(input: unknown): NormalizedLifecycleRow {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {};
+  const transaction_digest = typeof source.transaction_digest === 'string' && LIFECYCLE_DIGEST.test(source.transaction_digest) ? source.transaction_digest : undefined;
+  const rule_id = typeof source.rule_id === 'string' && LIFECYCLE_RULE.test(source.rule_id) ? source.rule_id : undefined;
+  const tier = source.tier === 'global' || source.tier === 'project' ? source.tier : undefined;
+  const safe_identity = !!transaction_digest && !!rule_id && !!tier;
+  const sourceLabel = typeof source.visible_label === 'string' ? source.visible_label : null;
+  const known = sourceLabel && Object.hasOwn(LIFECYCLE_LS_SPEC, sourceLabel) ? LIFECYCLE_LS_SPEC[sourceLabel] : null;
+  const visible_label = known ? sourceLabel! : sourceLabel === LIFECYCLE_UNAVAILABLE_LABEL || sourceLabel === LIFECYCLE_DEFERRED_LABEL ? sourceLabel : LIFECYCLE_UNAVAILABLE_LABEL;
+  const aria = typeof source.aria === 'string' && source.aria.length > 0 && source.aria.length <= 200 ? source.aria : known?.aria || LIFECYCLE_UNAVAILABLE_ARIA;
+  const canonical = typeof source.canonical_state === 'string' ? source.canonical_state : null;
+  const canonical_label = canonical && Object.hasOwn(LIFECYCLE_CANONICAL_LABELS, canonical) ? LIFECYCLE_CANONICAL_LABELS[canonical] : 'Unavailable';
+  const controls = LIFECYCLE_CONTROL_SPEC[visible_label] || [];
+  return { transaction_digest, rule_id, tier, visible_label, aria, canonical_label, controls, safe_identity };
+}
+
+export type LifecycleControlSubmitResult =
+  | { kind: 'accepted'; copy: 'Lifecycle action accepted'; refresh: true }
+  | { kind: 'stale'; copy: 'Lifecycle state changed'; refresh: true }
+  | { kind: 'operator'; copy: 'Operator access required'; refresh: false }
+  | { kind: 'unavailable'; copy: 'Lifecycle action unavailable'; refresh: false };
+
+export function lifecycleAnnouncementForResult(result: LifecycleControlSubmitResult): { copy: string; kind: 'status' | 'alert' } {
+  return { copy: result.copy, kind: result.kind === 'accepted' ? 'status' : 'alert' };
+}
+
+export async function submitLifecycleControl(fetcher: PublicationFetcher, row: NormalizedLifecycleRow, action: string): Promise<LifecycleControlSubmitResult> {
+  if (!row.safe_identity || !row.rule_id || !LIFECYCLE_ACTIONS.has(action) || !globalThis.crypto?.randomUUID) return { kind: 'unavailable', copy: 'Lifecycle action unavailable', refresh: false };
+  const body = { action, rule_id: row.rule_id, request_nonce: globalThis.crypto.randomUUID() };
+  try {
+    const response = await fetcher('/api/quality/contract-governor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (response.status === 202) return { kind: 'accepted', copy: 'Lifecycle action accepted', refresh: true };
+    if (response.status === 400 || response.status === 409) return { kind: 'stale', copy: 'Lifecycle state changed', refresh: true };
+    if (response.status === 401 || response.status === 403) return { kind: 'operator', copy: 'Operator access required', refresh: false };
+  } catch {}
+  return { kind: 'unavailable', copy: 'Lifecycle action unavailable', refresh: false };
+}
+
 type ContractGovernorPayload = {
   ok: boolean;
   status?: 'pending' | 'descriptive' | 'degraded' | 'unavailable';
@@ -158,6 +434,10 @@ type ContractGovernorPayload = {
   pending?: Array<Record<string, any>>;
   approved?: Array<Record<string, any>>;
   corrections?: Array<Record<string, any>>;
+  rule_provenance?: { status?: 'verified' | 'degraded' | 'unavailable'; reason_code?: string; rules?: RuleProvenanceRow[] };
+  impact_evidence?: { status?: 'available' | 'unavailable'; reason_code?: string; tiers?: { global?: ImpactEvidenceRow[]; project?: ImpactEvidenceRow[] } };
+  publication_status?: PublicationPayload;
+  lifecycle_control?: LifecycleControlPayload;
 };
 
 const EMPTY_QUALITY: QualityPayload = {
@@ -193,6 +473,120 @@ function QualityPage() {
   const latestQuality = qualityLatestQuery.data?.latest ?? null;
   const governor = governorQuery.data;
   const governorLatest = governor?.runs?.[0];
+  const ruleProvenance = governor?.rule_provenance;
+  const ruleProvenanceStatus = ruleProvenance?.status === 'verified' || ruleProvenance?.status === 'degraded' ? ruleProvenance.status : 'unavailable';
+  const ruleProvenanceBadge = ruleProvenanceStatus === 'verified' ? { glyph: '✓', copy: 'Synchronized', aria: 'Rule state synchronized' } : ruleProvenanceStatus === 'degraded' ? { glyph: '!', copy: 'Degraded', aria: 'Rule state degraded; affected managed rules excluded' } : { glyph: '?', copy: 'Unavailable', aria: 'Rule state unavailable' };
+  const ruleProvenanceRows = ruleProvenance?.rules || [];
+  const impactEvidence = governor?.impact_evidence;
+  const impactTiers = impactEvidence?.status === 'available' ? impactEvidence.tiers : undefined;
+  const [publicationDetail, setPublicationDetail] = useState<NormalizedPublication | null>(null);
+  const [publicationDetailState, setPublicationDetailState] = useState<'idle' | 'loading' | 'error' | 'ready'>('idle');
+  const [activePublicationDigest, setActivePublicationDigest] = useState<string | null>(null);
+  const [refinementState, setRefinementState] = useState<'idle' | 'ready' | 'submitting' | 'error'>('idle');
+  const [refinementMessage, setRefinementMessage] = useState('');
+  const [publicationAnnouncement, setPublicationAnnouncement] = useState<{ copy: string; kind: 'status' | 'alert' } | null>(null);
+  const [publicationRetryLocked, setPublicationRetryLocked] = useState(false);
+  const publicationInspectRefs = useRef(new Map<string, HTMLButtonElement>());
+  const publicationStatus = governor?.publication_status?.status === 'available' ? governor.publication_status : null;
+  const publicationSourceRows = publicationStatus?.publications || [];
+  const normalizedPublicationRows = publicationSourceRows.map(normalizePublication);
+  const publicationRows = normalizedPublicationRows.filter((row) => row.tier === 'global' || row.tier === 'project');
+  const unavailablePublicationRows = normalizedPublicationRows.filter((row) => row.tier !== 'global' && row.tier !== 'project');
+  const publicationBadge = (row: NormalizedPublication) => row.verified ? '✓' : row.visible_label === 'Prepared' || row.visible_label === 'Publication pending' ? '…' : row.visible_label === 'Deferred — source changed' || row.visible_label === 'Rejected by policy' ? '!' : row.visible_label === 'Abandoned' ? '—' : '?';
+  const [activeLifecycleDigest, setActiveLifecycleDigest] = useState<string | null>(null);
+  const [lifecycleSubmitted, setLifecycleSubmitted] = useState<Record<string, boolean>>({});
+  const [lifecycleRetryCapable, setLifecycleRetryCapable] = useState(false);
+  const [lifecycleAnnouncement, setLifecycleAnnouncement] = useState<{ copy: string; kind: 'status' | 'alert' } | null>(null);
+  const lifecycleControlRefs = useRef(new Map<string, HTMLButtonElement>());
+  const lifecycleStatus = governor?.lifecycle_control?.status === 'available' ? governor.lifecycle_control : null;
+  const lifecycleSourceRows = lifecycleStatus?.publications || [];
+  const lifecycleRows = lifecycleSourceRows.map(normalizeLifecycleRow).filter((row) => row.tier === 'global' || row.tier === 'project');
+  const lifecycleRuleLabel = (row: NormalizedLifecycleRow) => row.rule_id?.split(':').at(-1) || 'Unavailable';
+  const lifecycleTierLabel = (row: NormalizedLifecycleRow) => row.tier === 'global' ? 'Global' : 'Project';
+  const closeLifecycleDetail = () => {
+    const digest = activeLifecycleDigest;
+    setActiveLifecycleDigest(null); setLifecycleAnnouncement(null);
+    if (digest) queueMicrotask(() => lifecycleControlRefs.current.get(digest)?.focus());
+  };
+  const submitLifecycleAction = async (row: NormalizedLifecycleRow, control: LifecycleControl) => {
+    const digest = row.transaction_digest;
+    if (!digest || !row.safe_identity) return;
+    setLifecycleSubmitted((current) => ({ ...current, [digest]: true }));
+    setActiveLifecycleDigest(digest);
+    setLifecycleAnnouncement({ copy: 'Lifecycle action submitted…', kind: 'status' });
+    const response = await submitLifecycleControl(fetch, row, control.action);
+    const announcement = lifecycleAnnouncementForResult(response);
+    setLifecycleAnnouncement(announcement);
+    if (response.refresh) {
+      setActiveLifecycleDigest(null);
+      try { await governorQuery.refetch(); setLifecycleRetryCapable(true); } finally { setLifecycleSubmitted({}); }
+      return;
+    }
+    setLifecycleSubmitted((current) => ({ ...current, [digest]: false }));
+  };
+  const publicationRuleLabel = (row: NormalizedPublication) => row.rule_id?.split(':').at(-1) || 'Unavailable';
+  const publicationOwner = (row: NormalizedPublication) => row.rule_id?.split(':')[row.tier === 'global' ? 1 : 2] || 'Unavailable';
+  const safeDigestValue = (value?: string | null) => PUBLICATION_DIGEST.test(value || '') ? value! : 'Unavailable';
+  const safeCommitValue = (value?: string | null) => ACCEPTED_COMMIT.test(value || '') ? value! : 'Unavailable';
+  const policyCategory = (row: NormalizedPublication) => row.state === 'rejected_policy' ? row.policy_category || 'Category unavailable' : '—';
+  const closePublicationDetail = () => {
+    const digest = activePublicationDigest;
+    setActivePublicationDigest(null); setPublicationDetail(null); setPublicationDetailState('idle'); setRefinementState('idle'); setRefinementMessage(''); setPublicationAnnouncement(null); setPublicationRetryLocked(false);
+    if (digest) queueMicrotask(() => publicationInspectRefs.current.get(digest)?.focus());
+  };
+  const inspectPublication = async (row: NormalizedPublication) => {
+    const digest = row.transaction_digest;
+    if (!row.safe_identity || !digest || row.inspect !== true) return;
+    if (activePublicationDigest === digest) { closePublicationDetail(); return; }
+    setActivePublicationDigest(digest); setPublicationDetail(null); setPublicationDetailState('loading'); setRefinementState('idle'); setRefinementMessage(''); setPublicationAnnouncement(null); setPublicationRetryLocked(false);
+    const response = await loadPublicationDetail(fetch, digest);
+    setPublicationRetryLocked(response.retry_locked);
+    if (response.kind === 'ready') { setPublicationDetail(response.publication); setPublicationDetailState('ready'); return; }
+    setPublicationDetailState('error');
+  };
+  const submitRefinement = async () => {
+    const receiptDigest = publicationDetail?.receipt_digest;
+    if (!publicationDetail || !publicationDetail.verified || !PUBLICATION_DIGEST.test(receiptDigest || '') || !receiptDigest || !globalThis.crypto?.randomUUID) {
+      setRefinementState('error'); setRefinementMessage('Publication status unavailable'); setPublicationRetryLocked(true); return;
+    }
+    setPublicationRetryLocked(true); setRefinementState('submitting'); setRefinementMessage('Requesting refinement…'); setPublicationAnnouncement(null);
+    const ruleId = publicationDetail.rule_id;
+    if (!ruleId) { setRefinementState('error'); setRefinementMessage('Publication status unavailable'); return; }
+    const response = await submitRefinementRequest(fetch, { action: 'request_refinement', rule_id: ruleId, receipt_digest: receiptDigest, request_nonce: globalThis.crypto.randomUUID() });
+    setRefinementMessage(response.copy);
+    const announcement = publicationAnnouncementForRefinementResult(response);
+    setPublicationAnnouncement(announcement);
+    if (response.invalidate_detail) {
+      setActivePublicationDigest(null); setPublicationDetail(null); setPublicationDetailState('idle'); setRefinementState('idle');
+    }
+    if (response.refresh) {
+      try { await governorQuery.refetch(); setLifecycleRetryCapable(true); } finally { setPublicationRetryLocked(false); }
+      return;
+    }
+    setRefinementState('error'); setPublicationRetryLocked(response.retry_locked);
+  };
+  const impactBadge = (state?: ImpactEvidenceRow['state']) => state === 'collecting'
+    ? { glyph: '…', copy: 'Collecting', aria: 'Observational evidence collecting' }
+    : state === 'inconclusive' || state === 'blocked'
+      ? { glyph: '!', copy: 'Inconclusive', aria: 'Observational evidence inconclusive; no lifecycle action authorized' }
+      : state === 'expired' || state === 'superseded'
+        ? { glyph: '!', copy: 'Evidence expired', aria: 'Observational evidence expired or superseded; no lifecycle action authorized' }
+        : state === 'repeated_observational_harm'
+          ? { glyph: '!', copy: 'Repeated observational harm', aria: 'Repeated observational harm; observational evidence only' }
+          : state === 'frozen' || state === 'evaluated'
+            ? { glyph: '✓', copy: 'Evaluated', aria: 'Observational evidence evaluated' }
+            : { glyph: '?', copy: 'Evidence unavailable', aria: 'Observational evidence unavailable' };
+  const impactWindowLabels: Record<'H2' | 'H1' | 'W1' | 'W2', string> = { H2: '-60 to -30 days', H1: '-30 to 0 days', W1: '0 to +30 days', W2: '+30 to +60 days' };
+  const impactExclusionLabels: Record<string, string> = { missing_invalid_outcome: 'Missing or invalid outcome', incomplete_identity_exposure: 'Incomplete identity exposure', mixed_fallback_degraded_exposure: 'Mixed fallback or degraded exposure', invalid_fingerprint_covariate: 'Invalid fingerprint covariate', stale_clock_failure: 'Stale clock failure', concurrent_change: 'Concurrent change', unsupported_stratum: 'Unsupported stratum', other_policy_failure: 'Other policy failure' };
+  const impactRate = (rate?: ImpactRate) => Number.isFinite(rate?.value) ? `${(Number(rate?.value) * 100).toFixed(1)}%` : 'Unavailable';
+  const impactCohortDetails = (row: ImpactEvidenceRow) => <dl aria-label="Cohort detail">{(['H2', 'H1', 'W1', 'W2'] as const).map((id) => {
+    const cohort = row.cohorts?.[id];
+    const exclusions = cohort?.exclusions?.filter((item) => Number.isSafeInteger(item.count) && Number(item.count) > 0 && !!item.reason && Object.hasOwn(impactExclusionLabels, item.reason)).slice(0, 8) || [];
+    return <div key={id}><dt><strong>{id} ({impactWindowLabels[id]})</strong></dt>{cohort?.start_at && cohort.end_at ? <dd>{cohort.start_at} → {cohort.end_at}<br />Count {cohort.count ?? '—'} · ESS {cohort.ess ?? '—'} · plans {cohort.plan_count ?? '—'} · diversity {cohort.diversity_count ?? '—'}<br />Support {impactRate(cohort.support_ratio)} · Missing {impactRate(cohort.missing_rate)} · Exclusions {impactRate(cohort.evidence_exclusion_rate)}<br />Exclusion reasons: {exclusions.length ? exclusions.map((item) => `${impactExclusionLabels[item.reason!]}: ${item.count}`).join(' · ') : 'None'}</dd> : <dd>Unavailable</dd>}</div>;
+  })}</dl>;
+  const impactFloors = (row: ImpactEvidenceRow) => `count ${row.floors?.minimum_count ?? '—'} · ESS ${row.floors?.minimum_ess ?? '—'} · plans ${row.floors?.minimum_plan_count ?? '—'} · diversity ${row.floors?.minimum_diversity_count ?? '—'}`;
+  const impactQuality = (row: ImpactEvidenceRow) => row.quality_flags?.length ? row.quality_flags.join(' · ') : 'No quality flags';
+  const impactDates = (row: ImpactEvidenceRow) => `${row.created_at || 'Unavailable'} · ${row.expires_at || 'No expiry recorded'}`;
   const governorState = governorQuery.isError ? 'unavailable' : (governor?.status || (governor?.ok ? 'pending' : 'unavailable'));
   const governorStateCopy = governorState === 'pending' ? 'Pending-only governance is available for explicit manual proposals.' : governorState === 'degraded' ? 'Governance evidence is degraded and unavailable for action.' : governorState === 'descriptive' ? 'Governance is descriptive only and unavailable for action.' : 'Governance state is unavailable; no action or approval is inferred.';
   const scopeLabel = project || 'All projects';
@@ -327,7 +721,7 @@ function QualityPage() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) throw new Error(payload?.error || `Refresh failed (${response.status})`);
       setRefreshState({ status: 'success', message: `Refreshed ${payload.refreshed || 0} report target(s).` });
-      await Promise.all([qualityLatestQuery.refetch(), qualityQuery.refetch(), modelQuery.refetch()]);
+      await Promise.all([qualityLatestQuery.refetch(), qualityQuery.refetch(), modelQuery.refetch(), governorQuery.refetch()]); setLifecycleRetryCapable(true);
     } catch (error) {
       setRefreshState({ status: 'error', message: error instanceof Error ? error.message : 'Refresh failed' });
     }
@@ -407,6 +801,139 @@ function QualityPage() {
             </tbody></table>
           </div>
         ) : <p className="muted">No mode telemetry loaded yet.</p>}
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full">
+        <div className="card-heading-row">
+          <div>
+            <h3>Rule lifecycle provenance</h3>
+            <p className="muted">Read-only view of canonical source, verified mirror, resolver epoch, and sync quality.</p>
+          </div>
+        </div>
+        <div role="status" aria-live="polite" className={`settings-warning${ruleProvenanceStatus === 'verified' ? '' : ' active'}`} aria-label={ruleProvenanceBadge.aria}>
+          <strong>{ruleProvenanceBadge.glyph} {ruleProvenanceBadge.copy}</strong>
+          {ruleProvenanceStatus === 'degraded' && /^[a-z_]+$/.test(ruleProvenance?.reason_code || '') ? ` · ${ruleProvenance?.reason_code}` : null}
+        </div>
+        {ruleProvenanceRows.length ? (
+          <div className="table-scroll">
+            <table className="table" aria-label="Rule lifecycle provenance table"><thead><tr><th>Rule</th><th>Tier</th><th>Commit</th><th>Epoch</th><th>Protection</th><th>State</th></tr></thead><tbody>
+              {ruleProvenanceRows.map((row, index) => <tr key={`${row.rule_id || 'unknown'}-${index}`}><td>{row.display_label || 'Unknown rule'}<br /><span className="muted">{row.rule_id || 'Unknown rule'}</span></td><td>{row.tier_scope_label || 'Unavailable'}</td><td>{row.accepted_commit || 'Unavailable'}</td><td>{row.activation_epoch || 'Unavailable'}</td><td>{row.protection_class || 'Unknown protection'}</td><td>{row.lifecycle_state === 'active' || row.lifecycle_state === 'deactivated' ? row.lifecycle_state : 'Unavailable'}</td></tr>)}
+            </tbody></table>
+          </div>
+        ) : <p className="muted">No rule provenance available.</p>}
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full" data-testid="quality-publication-article">
+        <style>{`
+          body { background: #03060d; }
+          .quality-publication-control { min-width: 44px; min-height: 44px; }
+          .quality-publication-control:focus-visible, .quality-publication-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+          .quality-publication-digest { overflow-wrap: anywhere; word-break: break-word; }
+          .quality-publication-detail, .quality-publication-request { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+          .quality-publication-detail dl { display: grid; grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: 8px 12px; }
+          .quality-publication-detail dt { font-weight: 700; } .quality-publication-detail dd { margin: 0; }
+          @media (max-width: 639px) { .quality-publication-detail dl { grid-template-columns: 1fr; gap: 4px; } .quality-publication-detail dd { margin-bottom: 8px; } .quality-publication-request .quality-action-row { flex-direction: column; } .quality-publication-request .quality-publication-control { width: 100%; } }
+        `}</style>
+        <div className="card-heading-row">
+          <div>
+            <h3>Rule publication</h3>
+            <p className="muted">Read-only publication status for generated candidates and verified canonical rules.</p>
+            <p className="muted">Generated candidate — not authority</p>
+          </div>
+        </div>
+        {publicationAnnouncement ? <p role={publicationAnnouncement.kind} aria-live={publicationAnnouncement.kind === 'status' ? 'polite' : undefined}>{publicationAnnouncement.copy}</p> : null}
+        {governorQuery.isLoading ? <p className="muted">Loading publication status…</p> : !publicationStatus ? <p className="muted">Publication status unavailable</p> : publicationRows.length === 0 && unavailablePublicationRows.length === 0 ? <p className="muted">No publication records available.</p> : <>{(['global', 'project'] as const).map((tier) => {
+          const title = tier === 'global' ? 'Global' : 'Project';
+          const rows = publicationRows.filter((row) => row.tier === tier);
+          const activeRow = rows.find((row) => row.transaction_digest === activePublicationDigest);
+          return <section key={tier} style={{ borderTop: tier === 'global' ? undefined : '1px solid var(--line)', marginTop: 16, paddingTop: tier === 'global' ? 0 : 16 }}>
+            <h4>{title}</h4>
+            <div className="table-scroll quality-publication-scroll" tabIndex={0} aria-label={`${title} rule publication table`}>
+              <table className="table" aria-label={`${title} rule publication table`}><thead><tr><th>Rule</th><th>Publication status</th><th>Policy category</th></tr></thead><tbody>
+                {rows.map((row) => { const digest = row.transaction_digest || 'unavailable'; return <tr key={digest}><td style={{ minWidth: 220 }}><strong>{publicationRuleLabel(row)}</strong><br /><span className="muted quality-publication-digest">{row.rule_id || 'Unavailable'}</span><br />{row.inspect === true ? <button ref={(element) => { if (element) publicationInspectRefs.current.set(digest, element); else publicationInspectRefs.current.delete(digest); }} type="button" className="button quality-publication-control" aria-expanded={activePublicationDigest === digest} aria-controls={`publication-detail-${digest}`} onClick={() => { void inspectPublication(row); }}>Inspect</button> : null}</td><td aria-label={row.visible_label}><span aria-hidden="true">{publicationBadge(row)}</span> {row.visible_label}</td><td>{policyCategory(row)}</td></tr>; })}
+              </tbody></table>
+            </div>
+            {activeRow ? <section id={`publication-detail-${activeRow.transaction_digest}`} className="quality-publication-detail" aria-label="Publication detail" onKeyDown={(event) => { if (event.key === 'Escape') closePublicationDetail(); }}>
+              <div className="card-heading-row"><div><h5>Publication detail</h5><p className="muted">{publicationRuleLabel(activeRow)}</p></div></div>
+              {publicationDetailState === 'loading' ? <p className="muted">Loading publication detail…</p> : publicationDetailState === 'error' || !publicationDetail ? <p className="muted">Publication status unavailable</p> : <>
+                <dl>{[
+                  ['Rule', publicationRuleLabel(publicationDetail)], ['Stable identity', publicationDetail.rule_id], ['Tier', publicationDetail.tier === 'global' ? 'Global' : 'Project'], ['Owner', publicationOwner(publicationDetail)], ['Proposal authority', 'Generated candidate — not authority'], ['Publication status', publicationDetail.visible_label], ['Content digest', safeDigestValue(publicationDetail.content_hash)], ['Admission digest', safeDigestValue(publicationDetail.admission_digest)], ['Transaction digest', safeDigestValue(publicationDetail.transaction_digest)], ['Predecessor commit', safeCommitValue(publicationDetail.predecessor_commit)], ['Receipt', publicationDetail.visible_label === 'Published and verified' ? 'Published and verified' : 'Receipt unavailable'], ['Policy category', policyCategory(publicationDetail)],
+                ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd className="quality-publication-digest">{value}</dd></div>)}</dl>
+                {publicationDetail.verified ? <div className="quality-publication-request"><h6>Request refinement</h6>{publicationDetail.refinement === true ? refinementState === 'ready' || refinementState === 'submitting' ? <><p>Submit this rule to existing admission and publication checks. No canonical content changes from this screen.</p><div className="quality-action-row"><button type="button" className="button quality-publication-control" onClick={() => { void submitRefinement(); }} disabled={refinementState === 'submitting'}>Submit request</button><button type="button" className="button quality-publication-control" onClick={() => { setRefinementState('idle'); setRefinementMessage(''); }}>Cancel</button></div></> : refinementState === 'idle' ? <button type="button" className="button quality-publication-control" onClick={() => { setRefinementState('ready'); setRefinementMessage(''); }}>Request refinement</button> : null : <><button type="button" className="button quality-publication-control" disabled aria-describedby={`refinement-reason-${publicationDetail.transaction_digest}`}>Request refinement</button><p id={`refinement-reason-${publicationDetail.transaction_digest}`} className="muted">Refinement requests are unavailable for this rule.</p></>}{refinementMessage ? <p role={refinementState === 'error' ? 'alert' : 'status'} aria-live={refinementState === 'error' ? undefined : 'polite'}>{refinementMessage}</p> : null}</div> : null}
+              </>}
+              <button type="button" className="button quality-publication-control" onClick={closePublicationDetail}>Close publication detail</button>
+            </section> : null}
+          </section>;
+        })}{unavailablePublicationRows.length ? <section style={{ borderTop: '1px solid var(--line)', marginTop: 16, paddingTop: 16 }}><h4>Scope unavailable</h4><div className="table-scroll quality-publication-scroll" tabIndex={0} aria-label="Unavailable scope rule publication table"><table className="table" aria-label="Unavailable scope rule publication table"><thead><tr><th>Rule</th><th>Publication status</th><th>Policy category</th></tr></thead><tbody>{unavailablePublicationRows.map((_, index) => <tr key={`unavailable-${index}`}><td>Unavailable</td><td><span aria-hidden="true">?</span> Status unavailable</td><td>—</td></tr>)}</tbody></table></div></section> : null}</>}
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full" data-testid="quality-lifecycle-article">
+        <style>{`
+          body { background: #03060d; }
+          .quality-lifecycle-control { min-width: 44px; min-height: 44px; }
+          .quality-lifecycle-control:focus-visible, .quality-lifecycle-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+          .quality-lifecycle-digest { overflow-wrap: anywhere; word-break: break-word; }
+          .quality-lifecycle-detail, .quality-lifecycle-request { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+          .quality-lifecycle-detail dl { display: grid; grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: 8px 12px; }
+          .quality-lifecycle-detail dt { font-weight: 700; } .quality-lifecycle-detail dd { margin: 0; }
+          @media (max-width: 639px) { .quality-lifecycle-detail dl { grid-template-columns: 1fr; gap: 4px; } .quality-lifecycle-detail dd { margin-bottom: 8px; } }
+        `}</style>
+        <div className="card-heading-row">
+          <div>
+            <h3>Lifecycle actions</h3>
+            <p className="muted">Authenticated reversible lifecycle controls. Automatic deactivation needs no per-action approval.</p>
+          </div>
+        </div>
+        {lifecycleAnnouncement ? <p role={lifecycleAnnouncement.kind} aria-live={lifecycleAnnouncement.kind === 'status' ? 'polite' : undefined}>{lifecycleAnnouncement.copy}</p> : null}
+        {governorQuery.isLoading ? <p className="muted">Loading lifecycle status…</p> : !lifecycleStatus ? <p className="muted">Publication status unavailable</p> : lifecycleRows.length === 0 ? <p className="muted">No lifecycle actions available.</p> : <>{(['global', 'project'] as const).map((tier) => {
+          const title = tier === 'global' ? 'Global' : 'Project';
+          const rows = lifecycleRows.filter((row) => row.tier === tier);
+          if (rows.length === 0) return null;
+          const activeRow = rows.find((row) => row.transaction_digest === activeLifecycleDigest);
+          return <section key={tier} style={{ borderTop: tier === 'global' ? undefined : '1px solid var(--line)', marginTop: 16, paddingTop: tier === 'global' ? 0 : 16 }}>
+            <h4>{title}</h4>
+            <div className="table-scroll quality-lifecycle-scroll" tabIndex={0} aria-label={`${title} lifecycle actions table`}>
+              <table className="table" aria-label={`${title} lifecycle actions table`}><thead><tr><th>Rule</th><th>Lifecycle status</th><th>Canonical state</th><th>Actions</th></tr></thead><tbody>
+                {rows.map((row) => { const digest = row.transaction_digest || 'unavailable'; const submitting = !!digest && lifecycleSubmitted[digest] === true; return <tr key={digest}><td style={{ minWidth: 220 }}><strong>{lifecycleRuleLabel(row)}</strong><br /><span className="muted quality-lifecycle-digest">{row.rule_id || 'Unavailable'}</span></td><td aria-label={row.aria}><span aria-hidden="true">{row.visible_label.includes('pending') ? '…' : row.visible_label.includes('failed') || row.visible_label === 'Stopped locally' || row.visible_label === 'Convergence failed' ? '!' : '✓'}</span>{` ${row.visible_label}`}</td><td>{row.canonical_label}</td><td>{row.controls.length ? <div className="quality-lifecycle-request">{row.controls.map((control) => { const effective = lifecycleRetryControl(control, lifecycleRetryCapable); const disabled = submitting || effective.disabled_reason != null; const reasonId = disabled && effective.disabled_reason ? `lifecycle-reason-${digest}-${control.action}` : undefined; return <div key={control.action}><button ref={(element) => { if (element) lifecycleControlRefs.current.set(digest, element); else lifecycleControlRefs.current.delete(digest); }} type="button" className="button quality-lifecycle-control" disabled={disabled} aria-describedby={reasonId} onClick={() => { void submitLifecycleAction(row, control); }}>{control.label}</button>{reasonId ? <p id={reasonId} className="muted">{effective.disabled_reason}</p> : null}</div>; })}</div> : null}</td></tr>; })}
+              </tbody></table>
+            </div>
+            {activeRow ? <section id={`lifecycle-detail-${activeRow.transaction_digest}`} className="quality-lifecycle-detail" aria-label="Lifecycle action detail" onKeyDown={(event) => { if (event.key === 'Escape') closeLifecycleDetail(); }}>
+              <div className="card-heading-row"><div><h5>Lifecycle action detail</h5><p className="muted">{lifecycleRuleLabel(activeRow)}</p></div></div>
+              <dl>{[
+                ['Rule', lifecycleRuleLabel(activeRow)], ['Stable identity', activeRow.rule_id || 'Unavailable'], ['Tier', lifecycleTierLabel(activeRow)], ['Lifecycle status', activeRow.visible_label], ['Canonical state', activeRow.canonical_label], ['Transaction digest', safeDigestValue(activeRow.transaction_digest)],
+              ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd className="quality-lifecycle-digest">{value}</dd></div>)}</dl>
+              <button type="button" className="button quality-lifecycle-control" onClick={closeLifecycleDetail}>Close lifecycle action detail</button>
+            </section> : null}
+          </section>;
+        })}</>}
+      </article>
+
+      <article className="glass-card glass quality-card quality-card-full">
+        <div className="card-heading-row">
+          <div>
+            <h3>Observational evidence</h3>
+            <p className="muted">Read-only measurement summary. Observational results are not causal proof.</p>
+          </div>
+        </div>
+        {(['global', 'project'] as const).map((tier) => {
+          const rows = impactTiers?.[tier] || [];
+          const title = tier === 'global' ? 'Global' : 'Project';
+          const badge = impactBadge(rows[0]?.state);
+          const hasHistoricalResult = rows.some((row) => ['frozen', 'inconclusive', 'repeated_observational_harm', 'superseded', 'expired', 'evaluated'].includes(row.state || ''));
+          return <section key={tier} style={{ marginTop: 12 }}>
+            <h4>{title}</h4>
+            <div role="status" aria-live="polite" className={`settings-warning${badge.copy === 'Evaluated' ? '' : ' active'}`} aria-label={badge.aria}>
+              <strong>{badge.glyph} {badge.copy}</strong>
+              {rows[0]?.reason && /^[a-z_]+$/.test(rows[0].reason) ? ` · ${rows[0].reason}` : null}
+            </div>
+            {rows.length ? <div className="table-scroll" tabIndex={0} aria-label={`${title} observational evidence table`}>
+              <table className="table" aria-label={`${title} observational evidence table`}><thead><tr><th>Tier</th><th>Rule</th><th>Policy</th><th>Result</th><th>Cohort detail</th><th>Floors</th><th>Quality</th><th>Created/Expires</th></tr></thead><tbody>
+                {rows.map((row, index) => { const rowBadge = impactBadge(row.state); return <tr key={`${tier}-${index}`}><td>{title}</td><td>{row.rule_label || 'Measured rule'}</td><td>{row.policy || 'Evidence unavailable'}</td><td aria-label={rowBadge.aria}>{rowBadge.glyph} {rowBadge.copy}</td><td>{impactCohortDetails(row)}</td><td>{impactFloors(row)}</td><td>{impactQuality(row)}</td><td>{impactDates(row)}</td></tr>; })}
+              </tbody></table>
+            </div> : <p className="muted">Evidence unavailable.</p>}
+            {hasHistoricalResult ? <p className="muted">Residual confounding and temporal change may remain. This evidence is not causal proof.</p> : null}
+          </section>;
+        })}
       </article>
 
       <article className="glass-card glass quality-card quality-card-full">

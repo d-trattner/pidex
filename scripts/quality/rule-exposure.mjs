@@ -18,6 +18,19 @@ function epochKey(rule) {
   return `${rule.rule_id}\0${rule.version_hash}`;
 }
 
+const LEGACY_PASSIVE_RULE_ID = /^rule:[a-z0-9][a-z0-9._-]*(?::[a-z0-9][a-z0-9._-]*)*$/;
+const GLOBAL_PASSIVE_RULE_ID = /^pidex-global:[a-z0-9-]+:[a-z0-9-]+$/;
+const PROJECT_PASSIVE_RULE_ID = /^project:[a-f0-9]{24,64}:[a-z0-9-]+:[a-z0-9-]+$/;
+
+function validPassiveRuleId(value) {
+  return typeof value === 'string' && (LEGACY_PASSIVE_RULE_ID.test(value) || GLOBAL_PASSIVE_RULE_ID.test(value) || PROJECT_PASSIVE_RULE_ID.test(value));
+}
+
+function validEpochKey(value) {
+  const parts = typeof value === 'string' ? value.split('\0') : [];
+  return parts.length === 2 && validPassiveRuleId(parts[0]) && /^[a-f0-9]{64}$/.test(parts[1]);
+}
+
 const QUALITY_MEMBERS = Object.freeze({
   completeness: new Set(['complete', 'incomplete', 'mixed']),
   derivation: new Set(['direct', 'fallback']),
@@ -46,7 +59,7 @@ function validEpochCatalog(parsed) {
   if (!parsed || typeof parsed !== 'object') return false;
   if (parsed.schema !== 1) return false;
   if (!parsed.epochs || typeof parsed.epochs !== 'object') return false;
-  return !Array.isArray(parsed.epochs);
+  return !Array.isArray(parsed.epochs) && Object.entries(parsed.epochs).every(([key, epoch]) => validEpochKey(key) && /^epoch:[a-f0-9]{24}$/.test(epoch));
 }
 
 export function loadActivationEpochCatalog(file) {
@@ -57,6 +70,7 @@ export function loadActivationEpochCatalog(file) {
 }
 
 export function saveActivationEpochCatalog(file, catalog) {
+  if (!validEpochCatalog({ schema: 1, epochs: catalog })) throw new Error('invalid activation epoch catalog');
   const parent = path.dirname(file);
   mkdirSync(parent, { recursive: true });
   const serialized = `${JSON.stringify({ schema: 1, epochs: createActivationEpochCatalog(catalog) }, null, 2)}\n`;
@@ -73,7 +87,7 @@ function freshEpoch(rule) {
 }
 
 function validEpochRule(rule) {
-  return Boolean(rule?.rule_id && rule?.version_hash);
+  return validPassiveRuleId(rule?.rule_id) && /^[a-f0-9]{64}$/.test(rule?.version_hash);
 }
 
 function validEpochTransitionInput(catalog, rule, trigger) {
@@ -179,7 +193,7 @@ function snapshotFields(inventory, resolver_revision, projection_revision, run, 
     model_identity: snapshotOptional(run.model_identity),
     config_fingerprint: snapshotOptional(run.config_fingerprint),
     correlation_id: snapshotOptional(run.correlation_id),
-    created_at: new Date().toISOString(),
+    created_at: inventory.entries.map((item) => item.created_at).filter((value) => typeof value === 'string' && Number.isFinite(Date.parse(value))).sort()[0] || new Date().toISOString(),
   };
 }
 
@@ -295,7 +309,7 @@ function validBundleIdentifier(value, prefix) {
 
 function validActiveRule(value) {
   return hasExactKeys(value, ['rule_id', 'version_hash', 'activation_epoch'])
-    && /^rule:/.test(value.rule_id) && /^[a-f0-9]{64}$/.test(value.version_hash)
+    && validPassiveRuleId(value.rule_id) && /^[a-f0-9]{64}$/.test(value.version_hash)
     && /^epoch:[a-f0-9]{24}$/.test(value.activation_epoch);
 }
 
@@ -344,7 +358,7 @@ function validExposure(value) {
 
 function validEpoch(value) {
   return hasExactKeys(value, ['schema', 'epochs']) && value.schema === 1 && validBundleRecord(value.epochs)
-    && Object.entries(value.epochs).every(([key, epoch]) => /^rule:.+\0[a-f0-9]{64}$/.test(key) && /^epoch:[a-f0-9]{24}$/.test(epoch));
+    && Object.entries(value.epochs).every(([key, epoch]) => validEpochKey(key) && /^epoch:[a-f0-9]{24}$/.test(epoch));
 }
 
 function validCatalog(value) {

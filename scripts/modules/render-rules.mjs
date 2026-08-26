@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { VALID_PHASES, knownAgents, loadModuleSystem, parseArgs, renderMatchedAgentRules, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
+import { VALID_PHASES, knownAgents, loadModuleSystem, parseArgs, renderMatchedAgentRules, runtimeContextStatus, scriptPidexRoot, validateProjectPath, validateSystem } from './lib.mjs';
 
 function usage() {
   return `Usage: node scripts/modules/render-rules.mjs --agent <agent> --phase <phase> --project <absolute-project-root> --mode <mode> [options]\n\nRenders matched module-scoped agent_rules with provenance wrappers. This is a rendering helper only; it does not inject prompts or grant tools.\n\nOptions:\n  --agent <name>       Required. PIDEX specialist agent name.\n  --phase <phase>      Required. Lifecycle phase.\n  --project <path>     Required. Absolute project root.\n  --mode <mode>        Required explicit opaque mode context.\n  --pidex-root <path>  PIDEX root for tests/advanced use. Defaults to repository root.\n  --max-bytes <n>      Aggregate rendered output cap. Default 65536.\n  --help               Show this help.`;
@@ -16,6 +16,10 @@ const pidexRoot = args['pidex-root'] ? path.resolve(String(args['pidex-root'])) 
 const agent = args.agent;
 const phase = args.phase;
 const mode = args.mode;
+if (args['runtime-context-json'] !== undefined) {
+  console.error('runtime context is internal; standalone JSON cannot attest rule authority');
+  process.exit(2);
+}
 if (!agent || !phase || !mode) {
   console.error('--agent, --phase, and --mode are required');
   console.error(usage());
@@ -52,4 +56,4 @@ if (!validation.ok) {
   process.exit(1);
 }
 
-console.log(renderMatchedAgentRules(system, { agent, phase, project, mode }, { maxBytes }));
+console.log(`${runtimeContextStatus(undefined)}\n\n${renderMatchedAgentRules(system, { agent, phase, project, mode }, { maxBytes })}`);

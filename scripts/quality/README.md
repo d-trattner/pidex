@@ -2,6 +2,28 @@
 
 Read-only bootstrap for `/pdq`.
 
+## Rule lifecycle baseline
+
+`node scripts/quality/rule-lifecycle.mjs read --root <pidex-root>` verifies shipped protected baseline bytes from `config/rule-baseline-manifest.json`. It is read-only: no Git checkout, package write, lifecycle action, or mirror repair. Missing or mismatched baseline fails closed.
+
+`/quality` shows **Rule lifecycle provenance** as read-only status. `Synchronized`, `Degraded`, and `Unavailable` never expose source bytes, paths, DB details, or lifecycle controls. Unavailable projection stays empty; it never infers managed state.
+
+## Living-rule publication
+
+Automatic project/global learning follows one narrow path: eligible redacted finding → tier-isolated candidate → independent semantic quorum → deterministic admission → one managed-rule commit → ordinary fast-forward → verified receipt → Plan045 mirror, projection, and publication status. Global evidence stays cross-scope; project evidence stays enrolled exact-project only. Generator never votes.
+
+Manual refinement is an authenticated request plus stable read, not direct edit authority. It enters same privacy, protection, quorum, transaction, receipt, and recovery gates. There is no per-rule approval, direct canonical write, force-push, rebase, amend, merge, or release action.
+
+Publication states are exact: `prepared` (TX-01), `committed_local` (TX-02), `accepted_remote` (TX-03), `deferred_remote_advanced` (TX-04), `rejected_policy` (TX-05), and `abandoned` (TX-06). Recovery preserves terminal state: verify accepted remote descendant/receipt first; otherwise push only exact prepared fast-forward base, defer remote advance, reject invalid enrollment/tree, or record authorized abandonment. Local stop disables future generation/publication/import; it never rewrites published history.
+
+Enrollment binds repository identity, remote, branch, tier/scope, managed paths, author/trailers, writer enablement, and filesystem identity. Operators recover by inspecting sanitized status and resolving enrollment/remote facts before a fresh transaction. Do not expose prompts, source/log text, credentials, private paths, project identity in global tier, or raw errors; retain only allowed categories/counts/digests.
+
+Package verification has no Git claim: it verifies shipped manifest schema, member hashes, aggregate digest, and separate package provenance only. Manual-refinement reader uses Node stable handle/component reattestation; missing or ambiguous Windows identity fails closed. Native Windows is a required fail-closed parity gate for identity, path/reparse handling, lock/atomic-write behavior, exact bytes, and recovery; Linux evidence does not substitute.
+
+## Lifecycle action
+
+Automatic reversible lifecycle action (deactivation/reactivation) is the same no-rewrite writer discipline: exact preserved rule bytes → one `pidex-action-cadence-v1` trailer commit → verified accepted receipt → mirror plus projection with prior epoch closed and fresh epoch only on a verified active projection. Global projection heads carry the preserved manifest bytes digest; nothing synthetic enters the truth surface. Cross-host stop submits the canonical `deactivated` transition when active; local stop stays narrowing-only and is never canonical. Kill switch `PIDEX_LIFECYCLE_ACTION_ENABLED` (default off) is the single seam across host, tracer, and orchestrator; without an enrolled real adapter the action stays inert (`cadence_quarantined` no-op). Status exposes only `clear | consumed | quarantined`; no raw evidence, paths, or digests leak.
+
 ## Goals
 
 - Produce descriptive PIDEX quality reports without running a full `/pd` pipeline.

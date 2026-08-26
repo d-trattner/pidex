@@ -664,3 +664,25 @@ test('fails canonical-active and unusable when reconciliation is incomplete', ()
   assert.equal(exposure.quality, 'inventory_incomplete');
   assert.equal(exposure.usable_for_evidence, false);
 });
+
+test('ID45-C01..C06 accepts retained safe and canonical passive IDs without aliasing, rejects unsafe families', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-passive-id-'));
+  const replaceRuleId = (input, rule_id) => {
+    const active = { ...input.snapshot.active_rules[0], rule_id };
+    return {
+      ...input,
+      snapshot: { ...input.snapshot, active_rules: [active] },
+      exposure: { ...input.exposure, active_rules: [active], activation_epochs: { [rule_id]: active.activation_epoch } },
+      epoch: { ...input.epoch, epochs: { [`${rule_id}\0${active.version_hash}`]: active.activation_epoch } },
+      catalog_contribution: { ...input.catalog_contribution, entries: [active] },
+    };
+  };
+  try {
+    for (const rule_id of ['rule:legacy:pidex-alpha', 'pidex-global:pidex-implementer:quality', `project:${'a'.repeat(24)}:pidex-implementer:quality`]) {
+      assert.doesNotThrow(() => publishPassiveBundle(replaceRuleId(fullProducerBundle(root, { run_id: `accepted-${rule_id}` }), rule_id)), rule_id);
+    }
+    for (const rule_id of ['rule:unsafe//path', 'rule:.traversal', 'pidex-global:Pidex:quality', 'pidex-global:pidex:quality:extra', 'project:bad:pidex:quality', 'unknown:pidex:quality']) {
+      assert.throws(() => publishPassiveBundle(replaceRuleId(fullProducerBundle(root, { run_id: `rejected-${createHash('sha256').update(rule_id).digest('hex')}` }), rule_id)), /PASSIVE_SCHEMA_INVALID/, rule_id);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

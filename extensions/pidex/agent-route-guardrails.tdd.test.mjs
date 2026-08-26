@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { executeHostAgentBoundary, resolveHostAgentRoute } from './index.ts';
+import { createHostAutomaticLearningProcessAdapter, createHostAutomaticLearningSource, executeHostAgentBoundary, resolveHostAgentRoute, runHostRetrospectiveAutomaticLearning } from './index.ts';
+import { enrollAutomaticLearningProfileFromFile, resolveAutomaticLearningRoutes } from '../../scripts/quality/rule-lifecycle.mjs';
+import { openRuleLifecycleStore } from '../../scripts/quality/rule-lifecycle-store.mjs';
 
 const config = {
   defaults: { provider: 'pi', model: 'openai-codex/gpt-5.6-terra', effort: 'medium', timeout_seconds: 300 },
@@ -20,6 +24,8 @@ const config = {
     },
   },
 };
+
+const canonicalJson = (value) => Array.isArray(value) ? `[${value.map(canonicalJson).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}` : JSON.stringify(value);
 
 const lanes = [
   { lane_id: 'pidex-critic:deepseek:deepseek-v4-flash', agent: 'pidex-critic', trigger: 'after-plan', runner_provider: 'pi', runner_model: 'deepseek/deepseek-v4-flash', effort: 'low', timeout_seconds: 600 },
@@ -169,6 +175,107 @@ test('configured primary route reaches runner seam with configured tool and perm
   assert.deepEqual(received.disallowed_tools, ['bash']);
   assert.deepEqual(received.add_dirs, ['../shared']);
   assert.equal(received.dangerously_skip_permissions, true);
+});
+
+test('host retrospective seam accepts only successful confined regular artifacts and blocks absent source-owned authority', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pidex-host-retro-'));
+  try {
+    const artifact = join(root, 'agents.output', 'retrospective', 'finding.json');
+    mkdirSync(join(root, 'agents.output', 'retrospective'), { recursive: true });
+    writeFileSync(artifact, '{"not":"canonical"}');
+    assert.deepEqual(runHostRetrospectiveAutomaticLearning({
+      result: { exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\ncontext_file: agents.output/retrospective/finding.json\n-->' },
+      agentCwd: root,
+    }), { status: 'blocked_artifact_authority' });
+    linkSync(artifact, join(root, 'agents.output', 'retrospective', 'linked.json'));
+    assert.deepEqual(runHostRetrospectiveAutomaticLearning({
+      result: { exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\ncontext_file: agents.output/retrospective/linked.json\n-->' },
+      agentCwd: root,
+    }), { status: 'blocked_artifact_authority' });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('host retrospective seam awaits async coordinator before durable disposition', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pidex-host-retro-sidecar-'));
+  try {
+    const retrospective = join(root, 'agents.output', 'retrospective', 'report.md');
+    const sidecar = join(root, 'agents.output', 'retrospective', 'report.rule-learning.json');
+    mkdirSync(join(root, 'agents.output', 'retrospective'), { recursive: true }); writeFileSync(retrospective, '# retrospective\n'); writeFileSync(sidecar, '{"canonical":true}');
+    let received; let disposition;
+    const result = await runHostRetrospectiveAutomaticLearning({
+      result: { exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\ncontext_file: agents.output/retrospective/report.md\n-->' }, agentCwd: root,
+      source: { store: { appendAutomaticLearningDisposition(input) { disposition = input; return { status: 'recorded' }; } }, runner() {}, now: '2026-08-14T00:00:00.000Z' }, coordinator: async (input) => { received = input.finding_bytes.toString(); return { status: 'prepared' }; },
+    });
+    assert.deepEqual(result, { status: 'prepared'}); assert.equal(received, '{"canonical":true}'); assert.deepEqual(disposition, { status: 'prepared', occurred_at: '2026-08-14T00:00:00.000Z', disposition_id: `automatic-disposition:${createHash('sha256').update('pidex-automatic-disposition-v1\0{"canonical":true}\0prepared').digest('hex')}` });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Plan238 successful retrospective creates default automatic source when no test source is injected', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pidex-host-default-source-'));
+  try {
+    mkdirSync(join(root, 'agents.output', 'retrospective'), { recursive: true });
+    writeFileSync(join(root, 'agents.output', 'retrospective', 'report.md'), '# retrospective\n');
+    writeFileSync(join(root, 'agents.output', 'retrospective', 'report.rule-learning.json'), '{"canonical":true}');
+    let received; let closed = 0;
+    const result = await runHostRetrospectiveAutomaticLearning({ result: { exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\ncontext_file: agents.output/retrospective/report.md\n-->' }, agentCwd: root, sourceFactory: ({ finding_bytes }) => { received = finding_bytes.toString(); return { run: async () => ({ status: 'prepared', writer_handoff: { kind: 'TX-01' } }), close: () => { closed += 1; } }; } });
+    assert.deepEqual(result, { status: 'prepared', writer_handoff: { kind: 'TX-01' } });
+    assert.equal(received, '{"canonical":true}'); assert.equal(closed, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Plan238 P2 host source factory owns enrolled authority, exact runner bytes, sole event, and close', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pidex-host-bridge-'));
+  try {
+    const finding = '{"canonical":true}';
+    mkdirSync(join(root, 'agents.output', 'retrospective'), { recursive: true });
+    writeFileSync(join(root, 'agents.output', 'retrospective', 'report.md'), '# retrospective\n');
+    writeFileSync(join(root, 'agents.output', 'retrospective', 'report.rule-learning.json'), finding);
+    const calls = []; let closed = 0;
+    const source = createHostAutomaticLearningSource({
+      root, env: { PIDEX_STATE_DIR: join(root, 'state') }, tier: 'project', scope_id: 'a'.repeat(24),
+      openRuntimeSource: () => ({
+        configuration_generation: '1'.repeat(64),
+        run: async (input) => { calls.push(input); return { status: 'blocked_target_authority' }; },
+        close: () => { closed += 1; },
+      }),
+      runConfigured: async () => ({ exitCode: 0, finalText: '{"decision":"accept","schema_version":"pidex-rule-learning-review-v1"}' }),
+      processAdapter: () => ({ status: 0, stdout: `${'b'.repeat(40)}\n` }), now: '2026-08-20T00:00:00.000Z',
+    });
+    const result = await runHostRetrospectiveAutomaticLearning({
+      result: { exitCode: 0, finalText: '<!-- ROUTING\nverdict: COMPLETE\ncontext_file: agents.output/retrospective/report.md\n-->' }, agentCwd: root, source,
+    });
+    assert.deepEqual(result, { status: 'blocked_target_authority' });
+    assert.equal(calls.length, 1); assert.equal(calls[0].finding_bytes.toString(), finding);
+    assert.equal(closed, 1, 'bridge closes existing store after coordinator disposition');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Plan238 host base adapter spawns only bounded shell-free enrolled ls-remote', async () => {
+  const calls = [];
+  const adapter = createHostAutomaticLearningProcessAdapter({ spawnProcess(command, args, options) {
+    calls.push({ command, args, options });
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+    queueMicrotask(() => { child.stdout.emit('data', `${'a'.repeat(40)}\trefs/heads/main\n`); child.emit('close', 0, null); });
+    return child;
+  } });
+  assert.deepEqual(await adapter({ enrolledRepository: '/enrolled/repository', enrolledRemote: 'https://example.invalid/rules.git', branch: 'main' }), { status: 0, stdout: 'a'.repeat(40) });
+  assert.deepEqual(calls, [{ command: 'git', args: ['-C', '/enrolled/repository', 'ls-remote', '--heads', 'https://example.invalid/rules.git', 'refs/heads/main'], options: { shell: false, stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 } }]);
+});
+
+test('F-254-02 host E2E enrolls profile through producer then closes and reopens production source', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pidex-host-profile-producer-')); const stateRoot = join(root, 'state'); const scope = 'a'.repeat(24); const repository = `repo:${'b'.repeat(64)}`; const now = '2026-08-20T00:00:00.000Z';
+  const routes = Object.fromEntries(['pidex-pi', 'pidex-critic', 'pidex-code-reviewer'].map((principal) => [principal, { principal, provider: 'fake', model: `fake/${principal}`, effort: 'high' }]));
+  const target = { repository, tier: 'project', scope_id: scope, scope_digest: 'c'.repeat(64), rule_id: `project:${scope}:pidex-implementer:producer`, predecessor: `commit:${'d'.repeat(40)}`, authority_digest: 'e'.repeat(64), enabled: true, protected: false, applicable_descriptors: [{ descriptor_digest: 'f'.repeat(64) }], existing: [] };
+  const writer_authority = { normalized_remote_digest: '1'.repeat(64), branch: 'refs/heads/main', author: 'PIDEX <pidex@example.invalid>', writer_enabled: true, trailer_policy: 'publication-v1', repository_identity_digest: '2'.repeat(64), identity_platform: 'posix', root_identity_digest: '3'.repeat(64), parent_identity_digest: '4'.repeat(64), files_identity_digest: '5'.repeat(64), identity_proof: 'supported-v1', publication_timestamp: now };
+  try {
+    mkdirSync(join(root, 'config'), { recursive: true }); writeFileSync(join(root, 'config', 'agents.json'), JSON.stringify({ agents: routes }));
+    const configuration = resolveAutomaticLearningRoutes({ root, tier: 'project' }); const profile = { schema_version: 'pidex-automatic-learning-profile-v1', route_generation: configuration.configuration_generation, enrollment: { evaluator_host_id: `host:${'6'.repeat(64)}`, targets: { project: target } }, reviewers: { configuration_generation: configuration.configuration_generation } }; const profileFile = join(root, 'automatic-profile.json'); writeFileSync(profileFile, canonicalJson(profile));
+    assert.equal(enrollAutomaticLearningProfileFromFile({ stateRoot, profileFile }).status, 'enrolled');
+    const setup = openRuleLifecycleStore({ stateRoot }); setup.enroll({ repository, scope_id: scope, remote: 'https://example.invalid/producer.git', branch: 'refs/heads/main' }); setup.enrollPublicationTarget({ repository, tier: 'project', scope_id: scope, scope_digest: target.scope_digest, rule_id: target.rule_id, predecessor: target.predecessor, enrollment_digest: '7'.repeat(64), allowed_paths: ['pidex/rules/managed/pidex-implementer/index.md', 'pidex/rules/managed/pidex-implementer/producer.md'], writer_authority }); setup.close();
+    const source = createHostAutomaticLearningSource({ root, env: { PIDEX_STATE_DIR: stateRoot }, tier: 'project', scope_id: scope, retry_family_id: 'retry:host-producer', now, runConfigured: async () => ({ exitCode: 1 }) }); source.close();
+    const reopened = createHostAutomaticLearningSource({ root, env: { PIDEX_STATE_DIR: stateRoot }, tier: 'project', scope_id: scope, retry_family_id: 'retry:host-producer', now, runConfigured: async () => ({ exitCode: 1 }) }); reopened.close();
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('root check executes host route guardrail regression', () => {

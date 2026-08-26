@@ -18,6 +18,7 @@ const UNSAFE_CONTENT = /(?:api[_-]?key\s*[=:]|authorization\s*:|bearer\s+[A-Za-z
 const CONTROL = /[\u0000-\u001f\u007f]/;
 function fail(code) { throw Object.assign(new Error(code), { code }); }
 function text(value, limit) { return typeof value === 'string' && value.length > 0 && value.length <= limit && !CONTROL.test(value) && !UNSAFE_CONTENT.test(value); }
+function narrativeText(value, limit = 4096) { return typeof value === 'string' && value.length > 0 && value.length <= limit && !/[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/.test(value) && !UNSAFE_CONTENT.test(value); }
 function pathText(value, limit) { return text(value, limit) && !path.isAbsolute(value) && !value.split(/[\\/]/).includes('..'); }
 function slug(value) { return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'finding'; }
 function exactKeys(value, allowed) { return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((key) => allowed.has(key)) && [...allowed].every((key) => key in value); }
@@ -42,10 +43,20 @@ export function validateReviewOutcome(outcome, reviewGate, { archiveActive = fal
   if (verdict === 'CHANGES_REQUESTED' && !active.length) return { ok: false, code: 'REVIEW_REJECTION_EMPTY' };
   return { ok: true, value: canonicalizeReviewOutcome({ verdict, active, immediateTbr }) };
 }
+function renderBlock(key, value) { return value?.includes('\n') ? `${key}: |-\n${value.split('\n').map((line) => `  ${line}`).join('\n')}` : `${key}: ${value}`; }
+function narrativeSections(item) {
+  const sections = [];
+  for (const [key, heading] of [['shortDescription', 'Short description'], ['deferredReason', 'Deferred reason'], ['nextAnalysisOrDisconfirmingTest', 'Smallest future analysis or disconfirming test']]) if (item[key]) sections.push(`## ${heading}\n\n${item[key]}`);
+  return sections.join('\n\n');
+}
 export function renderTbrItem(item) {
   const fields = ITEM_FIELDS.map((key) => `${key}: ${item[key]}`);
-  const promotion = item.status === 'promoted' ? `\ninitiativeCandidate: ${item.initiativeCandidate}\npromotedAt: ${item.promotedAt}` : '';
-  return `---\n${fields.join('\n')}\naffectedIdentifiers:\n${item.affectedIdentifiers.map((value) => `  - ${value}`).join('\n')}${promotion}\n---\n\n## Short description\n\n${item.shortDescription}\n\n## Deferred reason\n\n${item.deferredReason}\n\n## Smallest future analysis or disconfirming test\n\n${item.nextAnalysisOrDisconfirmingTest}\n\n## Navigation\n\n- Archive: [[../index]]\n`;
+  const stateFields = [];
+  if (item.status === 'promoted') stateFields.push(`initiativeCandidate: ${item.initiativeCandidate}`, `promotedAt: ${item.promotedAt}`);
+  if (item.status === 'resolved' && item.resolutionSummary) stateFields.push(renderBlock('resolutionSummary', item.resolutionSummary));
+  if (item.status === 'superseded' && item.supersededBy) stateFields.push(renderBlock('supersededBy', item.supersededBy));
+  if (item.historyNotes) stateFields.push(renderBlock('historyNotes', item.historyNotes));
+  return `---\n${fields.join('\n')}\naffectedIdentifiers:\n${item.affectedIdentifiers.map((value) => `  - ${value}`).join('\n')}${stateFields.length ? `\n${stateFields.join('\n')}` : ''}\n---\n\n${narrativeSections(item)}${narrativeSections(item) ? '\n\n' : ''}## Navigation\n\n- Archive: [[../index]]\n`;
 }
 function itemFor(identity, finding) {
   const stableTbrId = `TBR-${createHash('sha256').update([identity.planId, identity.runFamilyId, identity.reviewGate, finding.findingId].join('\0')).digest('hex').slice(0, 12)}`;
@@ -71,24 +82,48 @@ function safeFile(dir, name, limit = 8192) {
   return file;
 }
 function optionalSafeFile(dir, name, limit = 8192) { return existsSync(path.join(dir, name)) ? safeFile(dir, name, limit) : null; }
+function unquote(value) { if (value.startsWith('"') && value.endsWith('"')) { try { const parsed = JSON.parse(value); if (typeof parsed === 'string') return parsed; } catch {} } return value; }
+function parseFrontmatter(source) {
+  const item = { affectedIdentifiers: [] }; const lines = source.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line === 'affectedIdentifiers:') { while (lines[index + 1]?.startsWith('  - ')) item.affectedIdentifiers.push(unquote(lines[++index].slice(4))); continue; }
+    const separator = line.indexOf(': '); if (separator < 1) fail('TBR_ITEM_INVALID');
+    const key = line.slice(0, separator), value = line.slice(separator + 2);
+    if (value === '|-') { const block = []; while (lines[index + 1]?.startsWith('  ')) block.push(lines[++index].slice(2)); item[key] = block.join('\n'); continue; }
+    item[key] = unquote(value);
+  }
+  return item;
+}
+function parseNarrative(body, item) {
+  const navigation = '\n\n## Navigation\n\n- Archive: [[../index]]\n';
+  if (!body.endsWith(navigation)) fail('TBR_ITEM_INVALID');
+  const source = body.slice(0, -navigation.length).replace(/^\n+/, '').replace(/\n\n$/, '');
+  if (!source) return;
+  const heading = /^## (Short description|Deferred reason|Smallest future analysis or disconfirming test)\n\n/gm; const matches = [...source.matchAll(heading)];
+  if (!matches.length || matches[0].index !== 0) fail('TBR_ITEM_INVALID');
+  const keys = { 'Short description': 'shortDescription', 'Deferred reason': 'deferredReason', 'Smallest future analysis or disconfirming test': 'nextAnalysisOrDisconfirmingTest' };
+  for (let index = 0; index < matches.length; index += 1) {
+    const start = matches[index].index + matches[index][0].length, end = index + 1 < matches.length ? matches[index + 1].index - 2 : source.length;
+    item[keys[matches[index][1]]] = source.slice(start, end);
+  }
+}
 function parseItem(file, name) {
   const match = name.match(/^(TBR-[a-f0-9]{12})-([a-z0-9-]{1,60})\.md$/); if (!match) return null;
-  const textBody = readFileSync(safeFile(path.dirname(file), name), 'utf8'); const frontmatter = textBody.match(/^---\n([\s\S]*?)\n---\n/); if (!frontmatter) fail('TBR_ITEM_INVALID');
-  const item = { affectedIdentifiers: [] }; let affected = false;
-  for (const line of frontmatter[1].split('\n')) {
-    if (line === 'affectedIdentifiers:') { affected = true; continue; }
-    if (affected && line.startsWith('  - ')) { item.affectedIdentifiers.push(line.slice(4)); continue; }
-    const separator = line.indexOf(': '); if (separator < 1) fail('TBR_ITEM_INVALID'); item[line.slice(0, separator)] = line.slice(separator + 2);
-  }
-  const sections = textBody.match(/\n\n## Short description\n\n([^\n]*)\n\n## Deferred reason\n\n([^\n]*)\n\n## Smallest future analysis or disconfirming test\n\n([^\n]*)\n\n## Navigation\n\n- Archive: \[\[\.\.\/index\]\]\n$/);
-  if (!sections) fail('TBR_ITEM_INVALID'); Object.assign(item, { shortDescription: sections[1], deferredReason: sections[2], nextAnalysisOrDisconfirmingTest: sections[3] });
+  const textBody = readFileSync(safeFile(path.dirname(file), name), 'utf8'); const frontmatter = textBody.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/); if (!frontmatter) fail('TBR_ITEM_INVALID');
+  const item = parseFrontmatter(frontmatter[1]); parseNarrative(frontmatter[2], item);
   if (item.stableTbrId !== match[1] || !validStoredItem(item) || renderTbrItem(item) !== textBody) fail('TBR_ITEM_INVALID');
   return { ...item, file: name };
 }
 function validStoredItem(item) {
-  const fields = new Set([...ITEM_FIELDS, 'affectedIdentifiers', 'shortDescription', 'deferredReason', 'nextAnalysisOrDisconfirmingTest']);
+  const fields = new Set([...ITEM_FIELDS, 'affectedIdentifiers', 'shortDescription', 'deferredReason', 'nextAnalysisOrDisconfirmingTest', 'historyNotes']);
   if (item.status === 'promoted') { fields.add('initiativeCandidate'); fields.add('promotedAt'); }
-  return exactKeys(item, fields) && STABLE_ID.test(item.stableTbrId) && ['open', 'promoted'].includes(item.status) && text(item.title, 120) && CLASSES.has(item.findingClass) && SEVERITIES.has(item.proposedSeverity) && REPRODUCTION.has(item.reproductionState) && item.blockingScope === 'none' && ['none', 'hold'].includes(item.releaseRecommendation) && text(item.originEpic, 80) && text(item.originPlan, 80) && text(item.originRun, 80) && GATES.has(item.originGate) && ID.test(item.sourceFindingId) && pathText(item.reviewArtifact, 240) && text(item.createdAt, 40) && archiveFields(item) && (item.status !== 'promoted' || (item.initiativeCandidate === `wiki/initiatives/candidates/${item.stableTbrId}.md` && text(item.promotedAt, 40))) && Buffer.byteLength(renderTbrItem(item), 'utf8') <= 8192;
+  if (item.status === 'resolved') fields.add('resolutionSummary');
+  if (item.status === 'superseded') fields.add('supersededBy');
+  const terminal = ['resolved', 'superseded'].includes(item.status);
+  const narrative = ['shortDescription', 'deferredReason', 'nextAnalysisOrDisconfirmingTest'].every((key) => !item[key] || narrativeText(item[key], 500));
+  const required = [...ITEM_FIELDS, 'affectedIdentifiers'];
+  return required.every((key) => key in item) && Object.keys(item).every((key) => fields.has(key)) && STABLE_ID.test(item.stableTbrId) && ['open', 'promoted', 'resolved', 'superseded'].includes(item.status) && text(item.title, 120) && CLASSES.has(item.findingClass) && SEVERITIES.has(item.proposedSeverity) && REPRODUCTION.has(item.reproductionState) && item.blockingScope === 'none' && ['none', 'hold'].includes(item.releaseRecommendation) && text(item.originEpic, 80) && text(item.originPlan, 80) && text(item.originRun, 80) && GATES.has(item.originGate) && ID.test(item.sourceFindingId) && pathText(item.reviewArtifact, 240) && text(item.createdAt, 40) && Array.isArray(item.affectedIdentifiers) && item.affectedIdentifiers.length <= 20 && item.affectedIdentifiers.every((value) => pathText(value, 160)) && narrative && (terminal || (narrativeText(item.shortDescription, 500) && narrativeText(item.deferredReason, 500) && narrativeText(item.nextAnalysisOrDisconfirmingTest, 500))) && (!item.historyNotes || narrativeText(item.historyNotes)) && (item.status !== 'promoted' || (item.initiativeCandidate === `wiki/initiatives/candidates/${item.stableTbrId}.md` && text(item.promotedAt, 40))) && (item.status !== 'resolved' || !item.resolutionSummary || narrativeText(item.resolutionSummary)) && (item.status !== 'superseded' || !item.supersededBy || narrativeText(item.supersededBy)) && Buffer.byteLength(renderTbrItem(item), 'utf8') <= 8192;
 }
 function readCanonicalItems(dir) {
   const found = new Map();
@@ -181,6 +216,7 @@ export function promoteTbr({ root, stableTbrId, userSelected, promotedAt = new D
   try {
     if (userSelected !== true || !STABLE_ID.test(stableTbrId || '') || !text(promotedAt, 40)) fail('TBR_INVALID');
     const safeRoot = canonicalRoot(root), itemDir = secureDir(safeRoot, ['wiki', 'tbr', 'items']), items = readCanonicalItems(itemDir), item = items.get(stableTbrId); if (!item) fail('TBR_ITEM_INVALID');
+    if (!['open', 'promoted'].includes(item.status)) fail('TBR_ITEM_INVALID');
     const candidateDir = secureDir(safeRoot, ['wiki', 'initiatives', 'candidates']), current = readCandidate(candidateDir, stableTbrId);
     if (current && (current.stableTbrId !== stableTbrId || current.source !== item.file.slice(0, -3))) fail('TBR_COLLISION');
     const resolvedPromotedAt = current?.promotedAt || promotedAt, expectedCandidate = candidateBody(item, resolvedPromotedAt);

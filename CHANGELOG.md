@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- QA passed for cumulative Plan047/227/238 Plan258 Linux gate: 382 reported tests plus two dashboard assertions green, 85.02% line coverage, exact-22 fence 4693/5000, package exact-eight smoke, adapters, runtime routes, and approved 28-image browser evidence verified. Native Windows remains pending.
+
 ## 0.4.1 - 2026-08-07
 
 - Public documentation and status alignment only. No runtime, dependency, or support-status expansion.
