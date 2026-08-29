@@ -14,7 +14,7 @@ import { resolveStateRoot } from "../../modules/pidex/analysis-metrics-history/l
 import { bootstrapRuleInventoryProjections, lifecycleRulePhase, openRuleLifecycleStore, prepareLifecycleRuntimeContext } from "../../scripts/quality/rule-lifecycle-store.mjs";
 import { renderVerifiedRuntimeRules, validateRequiredReviewerProducer } from "../../scripts/quality/rule-mirror-sync.mjs";
 import { createHostAutomaticLearningRunner, normalizeAutomaticLearningLsRemoteOutput, openAutomaticLearningRuntimeSource, runAutomaticRuleLearningCoordinatorAsync } from "../../scripts/quality/rule-lifecycle.mjs";
-import { closedLifecycleActionHistoryAdapter, invokeLifecycleActionFromOrdinaryResult } from "../../modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.mjs";
+import { closedLifecycleActionHistoryAdapter, invokeLifecycleActionFromOrdinaryResult } from "../../modules/pidex/project-pipeline/lib/rule-lifecycle-action.mjs";
 
 type AgentFrontmatter = {
 	name?: string;

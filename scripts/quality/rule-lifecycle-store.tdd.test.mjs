@@ -7,11 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { loadPlan046EvaluatorInputExampleBytes, loadPlan046ImpactResultExamples } from './fixtures/plan046-contract-examples.mjs';
 import { acquireAcceptedRemoteReceipt, bootstrapRuleInventoryProjections, openRuleLifecycleStore, prepareLifecycleRuntimeContext, readDashboardImpactEvidence } from './rule-lifecycle-store.mjs';
 import { buildImpactEvaluationArtifact, parseImpactEvaluationBytes, writeImmutableInput } from './rule-impact-results.mjs';
 import { canonicalFindingBytes, createRuleLearningEligibilityEnvelope, createRuleLearningFinding, createRuleLearningSupport, findingDigest, lessonCode } from './rule-learning-contracts.mjs';
 import { createAutomaticLearningAdapterEvent } from './rule-lifecycle.mjs';
 import { buildRuleLearningCandidate } from './rule-learning-candidate.mjs';
+function impactResultExamples() { return loadPlan046ImpactResultExamples().map(({ bytes }) => parseImpactEvaluationBytes(bytes)); }
 function withStore(dir, run) { return () => { const stateRoot = mkdtempSync(path.join(os.tmpdir(), dir)); let store; try { store = openRuleLifecycleStore({ stateRoot }); return run(store, stateRoot); } finally { let cleanupError; try { store?.close(); } catch (error) { cleanupError = `store.close() failed: ${error?.message || error}`; } try { rmSync(stateRoot, { recursive: true, force: true }); } catch (error) { cleanupError ||= `store fixture cleanup failed: ${error?.message || error}`; } if (cleanupError) console.error(`[withStore] ${cleanupError} (stateRoot=${stateRoot})`); } }; }
 
 function packagedHead(repository, commit) {
@@ -52,7 +54,7 @@ test('learning authority accepts only exact 40-hex target predecessors', () => {
 test('F-152-05 dashboard evidence reopens exact latest ER bytes and fails closed on corrupt current rows', () => {
   const missingRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-dashboard-impact-missing-'));
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-dashboard-impact-'));
-  const examples = [...readFileSync('agents.output/planning/116c-plan046-exact-result-schema.md', 'utf8').matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => parseImpactEvaluationBytes(Buffer.from(json, 'utf8')));
+  const examples = impactResultExamples();
   const selector = (result) => ({ tier: result.artifact.tier, scope_id: result.artifact.lineage.scope_id || '', rule_id: result.artifact.lineage.rule_id, version_hash: result.artifact.lineage.rule_version_hash, content_hash: result.artifact.lineage.rule_content_hash, activation_epoch: result.artifact.lineage.activation_epoch, policy_id: result.artifact.lineage.policy_id, policy_digest: result.artifact.lineage.policy_digest });
   try {
     assert.deepEqual(readDashboardImpactEvidence({ stateRoot: missingRoot }), { status: 'unavailable', reason_code: 'evidence-unavailable', tiers: { global: [], project: [] } });
@@ -85,7 +87,7 @@ test('F-152-05 dashboard evidence reopens exact latest ER bytes and fails closed
 });
 test('F-152-05 dashboard projects day cohorts across leap/month/year boundaries and omits overflow dates', () => {
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-dashboard-impact-days-'));
-  const examples = [...readFileSync('agents.output/planning/116c-plan046-exact-result-schema.md', 'utf8').matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => parseImpactEvaluationBytes(Buffer.from(json, 'utf8')));
+  const examples = impactResultExamples();
   try {
     const store = openRuleLifecycleStore({ stateRoot });
     const source = examples.find((result) => result.artifact.tier === 'global' && result.artifact.state === 'repeated_observational_harm');
@@ -107,7 +109,7 @@ test('F-152-05 dashboard projects day cohorts across leap/month/year boundaries 
 });
 test('F-152-05 dashboard selects verified newer terminal ER through prior relation without leaking lineage', () => {
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-dashboard-terminal-'));
-  const examples = [...readFileSync('agents.output/planning/116c-plan046-exact-result-schema.md', 'utf8').matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => parseImpactEvaluationBytes(Buffer.from(json, 'utf8')));
+  const examples = impactResultExamples();
   const selector = (result) => ({ tier: result.artifact.tier, scope_id: result.artifact.lineage.scope_id || '', rule_id: result.artifact.lineage.rule_id, version_hash: result.artifact.lineage.rule_version_hash, content_hash: result.artifact.lineage.rule_content_hash, activation_epoch: result.artifact.lineage.activation_epoch, policy_id: result.artifact.lineage.policy_id, policy_digest: result.artifact.lineage.policy_digest });
   try {
     const store = openRuleLifecycleStore({ stateRoot });
@@ -137,7 +139,7 @@ test('F-152-05 dashboard selects verified newer terminal ER through prior relati
 });
 test('F-152-05 dashboard verifies terminal replacement successor bytes and rejects corrupt terminal relations', () => {
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-dashboard-terminal-replacement-'));
-  const examples = [...readFileSync('agents.output/planning/116c-plan046-exact-result-schema.md', 'utf8').matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => parseImpactEvaluationBytes(Buffer.from(json, 'utf8')));
+  const examples = impactResultExamples();
   const selector = (result) => ({ tier: result.artifact.tier, scope_id: result.artifact.lineage.scope_id || '', rule_id: result.artifact.lineage.rule_id, version_hash: result.artifact.lineage.rule_version_hash, content_hash: result.artifact.lineage.rule_content_hash, activation_epoch: result.artifact.lineage.activation_epoch, policy_id: result.artifact.lineage.policy_id, policy_digest: result.artifact.lineage.policy_digest });
   const operands = (artifact, patch = {}) => ({ tier: artifact.tier, state: artifact.state, lineage: artifact.lineage, closed_window_id: artifact.closed_window_id, collection_progress: artifact.collection_progress, cohorts: artifact.cohorts, comparisons: artifact.comparisons, dimensions: artifact.dimensions, balance: artifact.balance, drift_consistency: artifact.drift_consistency, gate_operands: artifact.gate_operands, metrics: artifact.metrics, quality_flags: artifact.quality_flags, reason: artifact.reason, prior_result: artifact.prior_result, created_at: artifact.created_at, expires_at: artifact.expires_at, ...patch });
   try {
@@ -755,9 +757,7 @@ store.replaceProjection({ repository: 'repo:global', scope_id: null, accepted_he
 assert.throws(() => store.replaceProjection({ repository: 'repo:global', scope_id: null, accepted_head: 'a'.repeat(40), head: packagedHead('repo:global', 'a'.repeat(40)), entries: [] }), /RULE_LIFECYCLE_HEAD_ROLLBACK/);
 }));
 test('Plan046 C3 admits exact accepted EI opening bytes and digest into same-store authority', () => {
-  const source = readFileSync(new URL('../../agents.output/planning/116b-plan046-exact-evaluator-input-schema.md', import.meta.url), 'utf8');
-  const [, bytes] = source.match(/```json\n(\{"schema":"rule-impact-evaluator-input-v1"[^\n]+\})\n```/);
-  const evaluatorInput = JSON.parse(bytes); const opening = evaluatorInput.target_epoch_opening;
+  const evaluatorInput = JSON.parse(loadPlan046EvaluatorInputExampleBytes()); const opening = evaluatorInput.target_epoch_opening;
   const target = { tier: 'global', scope_id: '', rule_id: evaluatorInput.evaluated_target.rule_id, version_hash: evaluatorInput.evaluated_target.version_hash, content_hash: evaluatorInput.evaluated_target.content_hash, activation_epoch: evaluatorInput.evaluated_target.activation_epoch };
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-c3-opening-contract-')); const store = openRuleLifecycleStore({ stateRoot });
   try {
@@ -765,9 +765,7 @@ test('Plan046 C3 admits exact accepted EI opening bytes and digest into same-sto
   } finally { store.close(); rmSync(stateRoot, { recursive: true, force: true }); }
 });
 test('API-09 reads accepted v2 fixture opening immediately through same exact target selector', () => {
-  const source = readFileSync(new URL('../../agents.output/planning/116b-plan046-exact-evaluator-input-schema.md', import.meta.url), 'utf8');
-  const [, bytes] = source.match(/```json\n(\{"schema":"rule-impact-evaluator-input-v1"[^\n]+\})\n```/);
-  const evaluatorInput = JSON.parse(bytes); const opening = evaluatorInput.target_epoch_opening;
+  const evaluatorInput = JSON.parse(loadPlan046EvaluatorInputExampleBytes()); const opening = evaluatorInput.target_epoch_opening;
   const target = { tier: 'global', scope_id: '', rule_id: evaluatorInput.evaluated_target.rule_id, version_hash: evaluatorInput.evaluated_target.version_hash, content_hash: evaluatorInput.evaluated_target.content_hash, activation_epoch: evaluatorInput.evaluated_target.activation_epoch };
   const opening_bytes = Buffer.from(JSON.stringify(opening), 'utf8');
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-api09-opening-roundtrip-')); const store = openRuleLifecycleStore({ stateRoot });

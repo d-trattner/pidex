@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { loadPlan046ImpactResultExamples } from './fixtures/plan046-contract-examples.mjs';
 import { runRuleImpactCadence, selectImpactLifecycleTransition } from './rule-impact-cadence.mjs';
 import { buildExpectedCurrentFromApi09, buildImpactEvaluationArtifact, readTrustedImpactEvaluationPrior, recordImpactEvaluation } from './rule-impact-results.mjs';
 import { openRuleLifecycleStore } from './rule-lifecycle-store.mjs';
@@ -113,8 +114,7 @@ test('cadence rejects malformed ready API-09 bytes before evaluator or checkpoin
   const inputDigest = createHash('sha256').update(inputBytes).digest('hex'); const inputId = `rule-impact-input:${inputDigest}`;
   const lineage = { resolver_snapshot_id: 'snapshot:api09', resolver_snapshot_digest: snapshotDigest, exposure_id: exposureId, exposure_publication_digest: exposureDigest, measurement_input_id: inputId, measurement_input_digest: inputDigest, evaluation_input_digest: '4'.repeat(64), rule_id: target.rule_id, rule_version_hash: target.version_hash, rule_content_hash: target.content_hash, accepted_commit: target.accepted_commit, scope_id: null, activation_epoch: target.activation_epoch, mirror_digest: target.mirror_digest, policy_id: policy.policy_id, policy_digest: policyDigest('global') };
   try {
-    const source = readFileSync('agents.output/planning/116c-plan046-exact-result-schema.md', 'utf8');
-    const example = [...source.matchAll(/```json\n(\{"schema":"passive-impact-global-result-v1"[^\n]+\})\n```/g)].map(([, json]) => JSON.parse(json)).find(({ state }) => state === 'collecting');
+    const example = loadPlan046ImpactResultExamples().map(({ bytes }) => JSON.parse(bytes)).find(({ state, tier }) => state === 'collecting' && tier === 'global');
     const { schema, result_id, estimator_id, ...operands } = example;
     const prior = buildImpactEvaluationArtifact({ ...operands, tier: 'global', lineage, created_at: due.due_at });
     recordImpactEvaluation({ store: sqlite, stateRoot, resultBytes: prior.bytes, resultDigest: prior.result_digest, expectedLineage: { tier: 'global', scope_id: null, rule_id: target.rule_id, version_hash: target.version_hash, content_hash: target.content_hash, accepted_commit: target.accepted_commit, activation_epoch: target.activation_epoch, policy_id: policy.policy_id, policy_digest: policyDigest('global'), resolver_snapshot_id: lineage.resolver_snapshot_id, resolver_snapshot_digest: snapshotDigest, exposure_id: lineage.exposure_id, exposure_publication_digest: exposureDigest, measurement_input_id: inputId, measurement_input_digest: inputDigest, evaluation_input_digest: lineage.evaluation_input_digest } });

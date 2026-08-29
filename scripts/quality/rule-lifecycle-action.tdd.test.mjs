@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { loadPlan046ImpactResultExamples } from './fixtures/plan046-contract-examples.mjs';
 import { buildImpactEvaluationArtifact, parseImpactEvaluationBytes } from './rule-impact-results.mjs';
 import { openRuleLifecycleStore } from './rule-lifecycle-store.mjs';
 import { applyRuleLifecycleControl, decideRuleLifecycleAction, deriveActionCadenceDigest, traceRuleLifecycleAction } from './rule-lifecycle-action.mjs';
@@ -14,8 +15,7 @@ const DIGEST_B = 'b'.repeat(64);
 const HEAD = 'c'.repeat(40);
 const SCOPE = '1'.repeat(24);
 const NOW = '2026-08-22T12:00:00.000Z';
-const SCHEMA = readFileSync(new URL('../../agents.output/planning/116c-plan046-exact-result-schema.md', import.meta.url), 'utf8');
-const EXAMPLES = [...SCHEMA.matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => parseImpactEvaluationBytes(Buffer.from(json, 'utf8')));
+const EXAMPLES = loadPlan046ImpactResultExamples().map(({ bytes }) => parseImpactEvaluationBytes(bytes));
 const HARMFUL = EXAMPLES.find((entry) => entry.artifact.state === 'repeated_observational_harm').artifact;
 const NON_HARMFUL = EXAMPLES.filter((entry) => entry.artifact.state !== 'repeated_observational_harm');
 

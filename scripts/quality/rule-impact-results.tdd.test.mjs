@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSy
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { loadPlan046ImpactResultExamples } from './fixtures/plan046-contract-examples.mjs';
 import { assembleImpactEvaluatorInput, bindInputChain, buildExpectedCurrentFromApi09, buildImpactEvaluationArtifact, buildImpactLifecycleResult, captureRuleImpactFanout, buildRuleImpactInput, getVerifiedImpactFamilySources, linkImpactEvaluationReplacement, parseImpactEvaluationBytes, readImpactEvaluation, readImpactEvaluationReplacement, readImmutableFile, readIndexedImpactInput, readLatestImpactEvaluationPrior, readTrustedImpactEvaluationPrior, readTrustedImpactEvaluationReplacement, recordImpactEvaluation, recordTerminalImpactEvaluation, recordNonActionImpactResult, readPlan048ImpactResult, reverifyVerifiedImpactFamilySource, selectVerifiedImpactFamilies, writeImmutableInput } from './rule-impact-results.mjs';
 import { openRuleLifecycleStore } from './rule-lifecycle-store.mjs';
 import { runRuleImpactCadence } from './rule-impact-cadence.mjs';
@@ -400,13 +401,11 @@ test('A2 persists complete target fanout only under supplied state root and exac
   } finally { store.close(); rmSync(stateRoot, { recursive: true, force: true }); }
 });
 test('BD16–BD29 parses seven exact ER states with nonself identity and full digest', () => {
-  const source = readFileSync(new URL('../../agents.output/planning/116c-plan046-exact-result-schema.md', import.meta.url), 'utf8');
-  const examples = [...source.matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```\n\nIdentity projection SHA-256: `([a-f0-9]{64})`\n\nFull ER SHA-256: `([a-f0-9]{64})`/g)];
+  const examples = loadPlan046ImpactResultExamples();
   assert.equal(examples.length, 7);
-  for (const [, json, identityDigest, resultDigest] of examples) {
-    const bytes = Buffer.from(json, 'utf8');
+  for (const { bytes, identity_digest: identityDigest, result_digest: resultDigest } of examples) {
     const parsed = parseImpactEvaluationBytes(bytes);
-    const artifact = JSON.parse(json);
+    const artifact = JSON.parse(bytes);
     const projection = { ...artifact }; delete projection.result_id;
     assert.equal(createHash('sha256').update(JSON.stringify(projection)).digest('hex'), identityDigest);
     assert.equal(parsed.result_identity_digest, identityDigest);
@@ -417,8 +416,7 @@ test('BD16–BD29 parses seven exact ER states with nonself identity and full di
   }
 });
 test('Plan133 builds all seven approved ER bytes with caller-required tier and rejects malformed nested/private operands', () => {
-  const source = readFileSync(new URL('../../agents.output/planning/116c-plan046-exact-result-schema.md', import.meta.url), 'utf8');
-  const examples = [...source.matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => JSON.parse(json));
+  const examples = loadPlan046ImpactResultExamples().map(({ bytes }) => JSON.parse(bytes));
   assert.equal(examples.length, 7);
   const argumentsFor = ({ schema, result_id, estimator_id, tier, ...operands }) => ({ tier, ...operands });
   for (const artifact of examples) {
@@ -443,8 +441,7 @@ test('Plan133 builds all seven approved ER bytes with caller-required tier and r
   }
 });
 function lifecycleExamples() {
-  const source = readFileSync(new URL('../../agents.output/planning/116c-plan046-exact-result-schema.md', import.meta.url), 'utf8');
-  return [...source.matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```/g)].map(([, json]) => parseImpactEvaluationBytes(Buffer.from(json, 'utf8')));
+  return loadPlan046ImpactResultExamples().map(({ bytes }) => parseImpactEvaluationBytes(bytes));
 }
 function lifecycleCurrent(parsed) {
   const lineage = parsed.artifact.lineage;
@@ -511,9 +508,7 @@ test('BD-29 closes policy changes as superseded and rejects corrupt prior lifecy
   assert.throws(() => buildImpactLifecycleResult({ ...request, transition: { kind: 'result_replaced', next_result_id: `passive-impact-project:${'e'.repeat(64)}`, next_result_digest: 'e'.repeat(64) } }), /RULE_IMPACT_RESULT_INPUT_INVALID/);
 });
 test('BD-27 persists immutable total ER, retries exact bytes, and rejects digest substitution', () => {
-  const source = readFileSync(new URL('../../agents.output/planning/116c-plan046-exact-result-schema.md', import.meta.url), 'utf8');
-  const [, json, , resultDigest] = [...source.matchAll(/```json\n(\{"schema":"passive-impact-(?:global|project)-result-v1"[^\n]+\})\n```\n\nIdentity projection SHA-256: `([a-f0-9]{64})`\n\nFull ER SHA-256: `([a-f0-9]{64})`/g)][0];
-  const bytes = Buffer.from(json, 'utf8');
+  const { bytes, result_digest: resultDigest } = loadPlan046ImpactResultExamples()[0];
   const parsed = parseImpactEvaluationBytes(bytes);
   const lineage = parsed.artifact.lineage;
   const expectedLineage = {

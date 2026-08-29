@@ -47,6 +47,7 @@
     "modules/pidex/analysis-metrics-history/lib/tbr-lock.mjs",
     "modules/pidex/analysis-metrics-history/lib/state-root.mjs",
     "modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs",
+    "modules/pidex/project-pipeline/lib/rule-lifecycle-action.mjs",
     "modules/pidex/project-pipeline/scripts/project-pipeline/archive-sync.mjs",
     "modules/pidex/project-pipeline/scripts/project-pipeline/browser-smoke-bridge.mjs",
     "modules/pidex/project-pipeline/scripts/project-pipeline/clone.mjs",

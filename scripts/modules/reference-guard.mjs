@@ -116,7 +116,7 @@ function isModuleFrameworkTest(file) {
 }
 
 function isValidationHarness(file) {
-  return file === 'package.json' || file === 'scripts/release/public-readiness-check.mjs';
+  return file === 'package.json' || file === 'scripts/release/public-readiness-check.mjs' || file === 'extensions/pidex/rule-resolver-consumer-guard.tdd.test.mjs';
 }
 
 function isExternalEvidenceMarkdown(file, mode) {
