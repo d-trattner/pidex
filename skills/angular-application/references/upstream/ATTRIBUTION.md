@@ -6,7 +6,7 @@
 - Mirror commit: `a8d71e4fcf4e504e428c9a0befaefd77b83a8480`
 - `BUILD_INFO` source: https://github.com/angular/angular/tree/563850e860bd887820b6ddea4638017dd8ef2293/skills/dev-skills
 - License: MIT, Copyright 2010–2026 Google LLC
-- Packaged entry filenames are renamed from `SKILL.md` to prevent duplicate Pi skill discovery; reference contents otherwise retain their upstream text.
+- The packaged `angular-developer` entry is renamed from `SKILL.md` to prevent duplicate Pi skill discovery. Its MCP link/reference is removed by explicit product decision. Official `angular-new-app` is not packaged as an active reference; PIDEX uses a constrained, attributed greenfield procedure.
 
 ## Angular Material
 

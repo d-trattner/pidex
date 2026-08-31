@@ -26,7 +26,7 @@ test('skill gates optimization on module status and keeps Material/Nx conditiona
   assert.match(skill, /Material is not a dependency default/);
   assert.match(skill, /Activate when `nx\.json`, `nx`, or `@nx\/angular` is detected/);
   assert.match(skill, /Never use MCP, WebMCP, generated Angular\/Nx AI-config/);
-  assert.match(skill, /original official `angular-new-app` file is retained for provenance but is not an executable workflow/);
+  assert.match(skill, /official `angular-new-app` source coordinate remains attributed but its MCP-bearing file is not packaged or executable/);
   assert.doesNotMatch(skill, /\]\(references\/official-angular\/angular-new-app\.md\)/);
   assert.doesNotMatch(skill, /npx\s+(?:@angular\/cli|nx|create-nx-workspace)@latest/);
 });

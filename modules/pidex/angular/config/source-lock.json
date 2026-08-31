@@ -5,7 +5,11 @@
     "core": "22.1.4",
     "cli": "22.1.6",
     "skills_mirror_commit": "a8d71e4fcf4e504e428c9a0befaefd77b83a8480",
-    "skills_source_commit": "563850e860bd887820b6ddea4638017dd8ef2293"
+    "skills_source_commit": "563850e860bd887820b6ddea4638017dd8ef2293",
+    "adaptations": [
+      "excluded angular-new-app runtime reference; PIDEX constrained greenfield procedure is authoritative",
+      "excluded Angular MCP reference and mcp.md"
+    ]
   },
   "material": {
     "material": "22.1.4",
@@ -28,13 +32,8 @@
   "members": [
     {
       "path": "skills/angular-application/references/official-angular/angular-developer.md",
-      "bytes": 10735,
-      "sha256": "ec5e3a0b1ef218c0d7d40e35c40e5255e7319d7d595c5a6036d8bdac2532c782"
-    },
-    {
-      "path": "skills/angular-application/references/official-angular/angular-new-app.md",
-      "bytes": 4343,
-      "sha256": "807120998cc2161b14963300fcb8fd594c71f3a527f67f0172123b458178631e"
+      "bytes": 10617,
+      "sha256": "b3983bb46f76c51172b651ccbdf08a01e95c84ae405df8df51602997a7d2f6d7"
     },
     {
       "path": "skills/angular-application/references/official-angular/references/angular-animations.md",
@@ -140,11 +139,6 @@
       "path": "skills/angular-application/references/official-angular/references/loading-strategies.md",
       "bytes": 1522,
       "sha256": "4eb2e243425443426d28c6f68c823d501c7b2bf64e4587c96c4c6013d57e7c93"
-    },
-    {
-      "path": "skills/angular-application/references/official-angular/references/mcp.md",
-      "bytes": 3247,
-      "sha256": "e112ece9672d042144bc1aeb1245bd0325bab172398d7129a258be81f9db61aa"
     },
     {
       "path": "skills/angular-application/references/official-angular/references/migrations.md",
@@ -273,8 +267,8 @@
     },
     {
       "path": "skills/angular-application/references/upstream/ATTRIBUTION.md",
-      "bytes": 1383,
-      "sha256": "932d533401b7d5dfffde5877415b26e2e0c42ad5ba2e9fbb296c42af7119d375"
+      "bytes": 1529,
+      "sha256": "4cc775cb649d39c1f05d6a5ca21562a45db4872e0db986e35897878b0d2033bb"
     },
     {
       "path": "skills/angular-application/references/upstream/LICENSE-angular-components.txt",
@@ -292,5 +286,5 @@
       "sha256": "50bb7bf81374073606d3c3f277762d5222d82c918b2088f3789ed7e5f9f8b496"
     }
   ],
-  "aggregate_sha256": "d53315d78d761e249c0cc1a366a26ef8a6803d523196ba9d5ff8555c914d84ee"
+  "aggregate_sha256": "0ae5f3558aaac0830efb9c726957542ee917bad44520af78464128cb34ae1bc2"
 }

@@ -57,7 +57,7 @@ Load only relevant references. Do not load L/XL material for an S task.
 
 ## Official Angular base
 
-Read [angular-developer.md](references/official-angular/angular-developer.md). Load its referenced topic files only when needed. PIDEX exclusions in this entry skill override upstream mentions of MCP, global installation, generated AI-config, or moving versions. For greenfield creation read the constrained [new-application procedure](references/optimization/new-application.md); the original official `angular-new-app` file is retained for provenance but is not an executable workflow.
+Read [angular-developer.md](references/official-angular/angular-developer.md). Load its referenced topic files only when needed. PIDEX exclusions in this entry skill override upstream mentions of MCP, global installation, generated AI-config, or moving versions. For greenfield creation read the constrained [new-application procedure](references/optimization/new-application.md); the official `angular-new-app` source coordinate remains attributed but its MCP-bearing file is not packaged or executable.
 
 Always inspect the workspace version before advising. Preserve existing architecture/forms/builders unless modernization is explicitly selected.
 
