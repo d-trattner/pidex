@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 export function resolveAngularProjectRoot(input) {
@@ -16,25 +16,37 @@ export function pathWithin(root, target) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function readBoundedProjectFile(root, relative, options = {}) {
-  const maxBytes = Number(options.maxBytes || 1024 * 1024);
-  if (typeof relative !== 'string' || path.isAbsolute(relative) || relative.split(/[\\/]+/).some((part) => part === '..' || part === '')) {
-    throw new Error('ANGULAR_PROJECT_FILE_PATH_INVALID');
-  }
-  const target = path.resolve(root, relative);
-  if (!pathWithin(root, target)) throw new Error('ANGULAR_PROJECT_FILE_ESCAPE');
-  if (!existsSync(target)) return null;
+function assertNoProjectLink(root, relative) {
   let current = path.resolve(root);
   for (const part of relative.split(/[\\/]+/)) {
     current = path.join(current, part);
-    const stat = lstatSync(current);
-    if (stat.isSymbolicLink()) throw new Error(`ANGULAR_PROJECT_FILE_LINK:${relative}`);
+    if (lstatSync(current).isSymbolicLink()) throw new Error(`ANGULAR_PROJECT_FILE_LINK:${relative}`);
   }
-  const stat = lstatSync(target);
-  if (!stat.isFile() || stat.size > maxBytes) throw new Error(`ANGULAR_PROJECT_FILE_INVALID:${relative}`);
-  const physical = realpathSync(target);
-  if (!pathWithin(realpathSync(root), physical)) throw new Error(`ANGULAR_PROJECT_FILE_ESCAPE:${relative}`);
-  return readFileSync(physical, 'utf8');
+}
+
+function sameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mode === right.mode;
+}
+
+function readBoundedProjectFile(root, relative, options = {}) {
+  const maxBytes = Number(options.maxBytes || 1024 * 1024);
+  if (typeof relative !== 'string' || path.isAbsolute(relative) || relative.split(/[\\/]+/).some((part) => part === '..' || part === '')) throw new Error('ANGULAR_PROJECT_FILE_PATH_INVALID');
+  const target = path.resolve(root, relative); const physicalRoot = realpathSync(root);
+  if (!pathWithin(root, target)) throw new Error('ANGULAR_PROJECT_FILE_ESCAPE');
+  if (!existsSync(target)) return null;
+  assertNoProjectLink(root, relative);
+  const flags = constants.O_RDONLY | (constants.O_NOFOLLOW || 0); let fd;
+  try {
+    fd = openSync(target, flags);
+    const opened = fstatSync(fd, { bigint: true });
+    if (!opened.isFile() || opened.size > BigInt(maxBytes)) throw new Error(`ANGULAR_PROJECT_FILE_INVALID:${relative}`);
+    const bytes = readFileSync(fd);
+    const reread = fstatSync(fd, { bigint: true });
+    assertNoProjectLink(root, relative);
+    const finalPath = realpathSync(target); const finalStat = lstatSync(target, { bigint: true });
+    if (!pathWithin(physicalRoot, finalPath) || !sameIdentity(opened, reread) || !sameIdentity(opened, finalStat)) throw new Error(`ANGULAR_PROJECT_FILE_RACE:${relative}`);
+    return bytes.toString('utf8');
+  } finally { if (fd !== undefined) closeSync(fd); }
 }
 
 export function readBoundedProjectJson(root, relative, options = {}) {
