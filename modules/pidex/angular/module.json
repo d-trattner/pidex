@@ -1,0 +1,60 @@
+{
+  "id": "pidex.angular",
+  "schema_version": 1,
+  "name": "PIDEX Angular",
+  "kind": "optional-internal",
+  "default_enabled": true,
+  "dependencies": ["pidex.core"],
+  "capabilities": [
+    {
+      "id": "angular.source-check",
+      "kind": "check",
+      "phases": ["preflight", "planning", "maintenance", "pre-release"],
+      "scope": "install",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/angular/scripts/angular/source-check.mjs", "--json"]
+      }
+    },
+    {
+      "id": "angular.inspect",
+      "kind": "check",
+      "phases": ["preflight", "planning", "implementation", "qa", "security", "maintenance"],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-planner", "pidex-implementer", "pidex-qa", "pidex-security", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["read-only"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/angular/scripts/angular/inspect.mjs", "--project", "__PIDEX_PROJECT__", "--json"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--resolve-nx$"]
+        }
+      }
+    },
+    {
+      "id": "angular.verify",
+      "kind": "check",
+      "phases": ["implementation", "qa", "uat", "maintenance"],
+      "scope": "project",
+      "importance": "optional",
+      "allowed_agents": ["orchestrator", "pidex-implementer", "pidex-qa", "pidex-uat", "pidex-devops", "pidex-pi"],
+      "supported_platforms": ["linux", "wsl2", "windows-native", "windows-git-bash"],
+      "mutability": ["writes-project", "external-side-effects"],
+      "command": {
+        "bin": "node",
+        "args": ["modules/pidex/angular/scripts/angular/verify.mjs", "--project", "__PIDEX_PROJECT__", "--json"],
+        "passthrough": true,
+        "passthrough_policy": {
+          "allowed_patterns": ["^--operation$", "^(build|test|lint|affected|all)$", "^--project-name$", "^[A-Za-z0-9_.-]{1,100}$", "^--timeout-ms$", "^[0-9]{1,7}$"]
+        }
+      }
+    }
+  ]
+}

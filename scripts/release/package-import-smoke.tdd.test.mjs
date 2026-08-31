@@ -97,6 +97,35 @@ test('published tarball contains exact Plan045 runtime import closure and baseli
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 
+test('published tarball contains the complete Angular module and exactly one Angular skill entry', async () => {
+  const temp = mkdtempSync(path.join(os.tmpdir(), 'pidex-angular-package-'));
+  try {
+    const report = pack(temp);
+    const shipped = new Set(report.files.map((item) => item.path));
+    for (const file of [
+      'modules/pidex/angular/module.json',
+      'modules/pidex/angular/config/source-lock.json',
+      'modules/pidex/angular/lib/source-lock.mjs',
+      'modules/pidex/angular/lib/workspace-inspector.mjs',
+      'modules/pidex/angular/lib/verification-contract.mjs',
+      'modules/pidex/angular/lib/managed-process.mjs',
+      'modules/pidex/angular/lib/nx-cli.mjs',
+      'modules/pidex/angular/scripts/angular/source-check.mjs',
+      'modules/pidex/angular/scripts/angular/inspect.mjs',
+      'modules/pidex/angular/scripts/angular/verify.mjs',
+      'skills/angular-application/SKILL.md',
+      'skills/angular-application/references/upstream/UPSTREAM.json',
+    ]) assert.ok(shipped.has(file), `packed Angular closure missing ${file}`);
+    assert.equal([...shipped].filter((file) => file.startsWith('skills/angular-application/references/') && file.endsWith('/SKILL.md')).length, 0);
+
+    const extractedDir = path.join(temp, 'extracted'); mkdirSync(extractedDir);
+    const extracted = spawnSync('tar', ['-xzf', path.join(temp, report.filename), '-C', extractedDir, '--strip-components=1'], { encoding: 'utf8' });
+    assert.equal(extracted.status, 0, extracted.stderr);
+    const sourceLock = await import(pathToFileURL(path.join(extractedDir, 'modules/pidex/angular/lib/source-lock.mjs')).href);
+    assert.equal(sourceLock.verifyAngularSourceLock({ pidexRoot: extractedDir }).status, 'verified');
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
 test('retrospective living-rule finding producer is canonical, privacy-safe, and non-publishing', () => {
   const rulePath = 'rules/pidex-retrospective/living-rule-findings.md';
   const rule = readFileSync(path.join(root, rulePath), 'utf8');

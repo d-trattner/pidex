@@ -1,0 +1,14 @@
+{
+  "schema": "pidex-angular-compatibility-v1",
+  "angular": "22.x",
+  "node": ["^22.22.3", "^24.15.0", "^26.0.0"],
+  "typescript": ">=6.0.0 <6.1.0",
+  "rxjs": ["^6.5.3", "^7.4.0"],
+  "material": "22.x",
+  "cdk": "22.x",
+  "nx": ">=23.1.0",
+  "source_urls": [
+    "https://angular.dev/reference/versions",
+    "https://nx.dev/docs/technologies/angular/guides/angular-nx-version-matrix"
+  ]
+}

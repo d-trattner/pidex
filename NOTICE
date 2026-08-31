@@ -9,8 +9,8 @@ full text.
 This project bundles unmodified or adapted files from third-party projects.
 The following section lists each bundled component, its source, and the
 original license under which the component is distributed. The original
-license texts are reproduced verbatim below as required by the respective
-license terms.
+license texts are reproduced verbatim below or bundled beside the attributed
+references as required by the respective license terms.
 
 ------------------------------------------------------------------------------
 
@@ -112,3 +112,42 @@ The original Matt Pocock skills MIT license text follows:
     CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------------------------
+
+3. Angular Agent Skills and Angular Material references
+------------------------------------------------------------------------------
+
+Sources:
+  https://github.com/angular/skills/tree/a8d71e4fcf4e504e428c9a0befaefd77b83a8480
+  https://github.com/angular/angular/tree/563850e860bd887820b6ddea4638017dd8ef2293/skills/dev-skills
+  https://github.com/angular/components/tree/5d64e397b47e722e6ec8cd9eed69cd032766f656
+Author: Google LLC
+License: MIT
+
+Bundled files live under:
+
+  skills/angular-application/references/official-angular/
+  skills/angular-application/references/official-material/
+
+Exact Angular and Angular Components MIT license texts are bundled at:
+
+  skills/angular-application/references/upstream/LICENSE-angular.txt
+  skills/angular-application/references/upstream/LICENSE-angular-components.txt
+
+------------------------------------------------------------------------------
+
+4. Nx Agent Skills
+------------------------------------------------------------------------------
+
+Source: https://github.com/nrwl/nx/tree/c598d4e2fae2a75e2690e69f09d943d66b1489d8/.agents/skills
+Author: Narwhal Technologies Inc.
+License: MIT
+
+Selected no-MCP Nx skill references are bundled under:
+
+  skills/angular-application/references/official-nx/
+
+The exact Nx MIT license text is bundled at:
+
+  skills/angular-application/references/upstream/LICENSE-nx.txt
