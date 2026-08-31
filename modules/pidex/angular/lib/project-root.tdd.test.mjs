@@ -16,9 +16,13 @@ test('project root and bounded JSON reject links, traversal, malformed and overs
   assert.throws(() => readBoundedProjectJson(root, 'bad.json'), /JSON_INVALID/);
   writeFileSync(path.join(root, 'large.json'), 'x'.repeat(20));
   assert.throws(() => readBoundedProjectJson(root, 'large.json', { maxBytes: 10 }), /FILE_INVALID/);
-  symlinkSync(path.join(root, 'package.json'), path.join(root, 'linked.json'));
-  assert.throws(() => readBoundedProjectJson(root, 'linked.json'), /FILE_LINK/);
-  symlinkSync(root, path.join(parent, 'root-link'), 'dir');
+  try {
+    symlinkSync(path.join(root, 'package.json'), path.join(root, 'linked.json'), 'file');
+    assert.throws(() => readBoundedProjectJson(root, 'linked.json'), /FILE_LINK/);
+  } catch (error) {
+    if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+  }
+  symlinkSync(root, path.join(parent, 'root-link'), process.platform === 'win32' ? 'junction' : 'dir');
   assert.throws(() => resolveAngularProjectRoot(path.join(parent, 'root-link')), /ROOT_INVALID/);
   rmSync(parent, { recursive: true, force: true });
 });
