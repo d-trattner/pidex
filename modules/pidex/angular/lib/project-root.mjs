@@ -11,7 +11,7 @@ export function resolveAngularProjectRoot(input) {
   return { requested, physical };
 }
 
-export function pathWithin(root, target) {
+function pathWithin(root, target) {
   const relative = path.relative(path.resolve(root), path.resolve(target));
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }

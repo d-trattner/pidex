@@ -7,28 +7,36 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const skillRoot = path.join(root, 'skills/angular-application');
 const skill = readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf8');
+const edgeCases = readFileSync(path.join(skillRoot, 'references/learned-edge-cases.md'), 'utf8');
 const manifest = JSON.parse(readFileSync(path.join(root, 'modules/pidex/angular/module.json'), 'utf8'));
 
 function files(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? files(path.join(dir, entry.name)) : [path.join(dir, entry.name)]);
 }
 
-test('Angular package exposes one bounded skill over three module capabilities', () => {
+test('Angular package exposes one adaptive base skill and two read-only capabilities', () => {
   assert.match(skill, /^---\nname: angular-application\ndescription: .{80,1024}\n/m);
   assert.ok(skill.split('\n').length <= 220);
   assert.ok(Buffer.byteLength(skill) <= 14 * 1024);
-  assert.deepEqual(manifest.capabilities.map((item) => item.id), ['angular.source-check', 'angular.inspect', 'angular.verify']);
+  assert.deepEqual(manifest.capabilities.map((item) => item.id), ['angular.source-check', 'angular.inspect']);
+  assert.ok(manifest.capabilities.every((item) => item.mutability.length === 1 && item.mutability[0] === 'read-only'));
   assert.equal(files(path.join(skillRoot, 'references')).filter((file) => path.basename(file) === 'SKILL.md').length, 0);
 });
 
-test('skill gates optimization on module status and keeps Material/Nx conditional without MCP', () => {
-  assert.match(skill, /If `pidex\.angular` is disabled, unavailable, or source verification fails, stop using this skill's optimization rules/);
-  assert.match(skill, /Material is not a dependency default/);
-  assert.match(skill, /Activate when `nx\.json`, `nx`, or `@nx\/angular` is detected/);
+test('skill keeps official base, Material and Nx profiles conditional and MCP excluded', () => {
+  assert.match(skill, /If `pidex\.angular` is disabled, unavailable, or source verification fails, stop before applying this skill/);
+  assert.match(skill, /Material is not a default dependency/);
+  assert.match(skill, /Activate only when `nx\.json`, `nx`, or `@nx\/angular` is detected/);
   assert.match(skill, /Never use MCP, WebMCP, generated Angular\/Nx AI-config/);
-  assert.match(skill, /official `angular-new-app` source coordinate remains attributed but its MCP-bearing file is not packaged or executable/);
-  assert.doesNotMatch(skill, /\]\(references\/official-angular\/angular-new-app\.md\)/);
+  assert.match(skill, /PIDEX supplies no Angular build\/test\/lint\/affected executor/);
+  assert.doesNotMatch(skill, /angular\.verify|--resolve-nx/);
   assert.doesNotMatch(skill, /npx\s+(?:@angular\/cli|nx|create-nx-workspace)@latest/);
+});
+
+test('learned edge-case layer contains no untested technical rule', () => {
+  assert.match(edgeCases, /no PIDEX benchmark or real-project edge case has been admitted yet/);
+  assert.match(edgeCases, /documented failure with the official baseline/);
+  assert.match(skill, /evidence-backed-edge-cases: '0'/);
 });
 
 test('all Markdown links in Angular skill resolve inside the skill root', () => {

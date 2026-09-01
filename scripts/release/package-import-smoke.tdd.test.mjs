@@ -107,16 +107,13 @@ test('published tarball contains the complete Angular module and exactly one Ang
       'modules/pidex/angular/config/source-lock.json',
       'modules/pidex/angular/lib/source-lock.mjs',
       'modules/pidex/angular/lib/workspace-inspector.mjs',
-      'modules/pidex/angular/lib/verification-contract.mjs',
-      'modules/pidex/angular/lib/managed-process.mjs',
-      'modules/pidex/angular/lib/nx-cli.mjs',
       'modules/pidex/angular/scripts/angular/source-check.mjs',
       'modules/pidex/angular/scripts/angular/inspect.mjs',
-      'modules/pidex/angular/scripts/angular/verify.mjs',
       'skills/angular-application/SKILL.md',
       'skills/angular-application/references/upstream/UPSTREAM.json',
     ]) assert.ok(shipped.has(file), `packed Angular closure missing ${file}`);
     assert.equal([...shipped].filter((file) => file.startsWith('skills/angular-application/references/') && file.endsWith('/SKILL.md')).length, 0);
+    for (const removed of ['modules/pidex/angular/scripts/angular/verify.mjs', 'modules/pidex/angular/lib/managed-process.mjs', 'modules/pidex/angular/lib/nx-cli.mjs']) assert.equal(shipped.has(removed), false);
 
     const extractedDir = path.join(temp, 'extracted'); mkdirSync(extractedDir);
     const extracted = spawnSync('tar', ['-xzf', path.join(temp, report.filename), '-C', extractedDir, '--strip-components=1'], { encoding: 'utf8' });

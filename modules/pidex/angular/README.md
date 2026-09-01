@@ -1,12 +1,13 @@
 # PIDEX Angular module
 
-Optional, reversible mechanics for the `angular-application` skill.
+Optional, reversible profile selection and source-integrity mechanics for the `angular-application` skill.
 
 Capabilities:
 
-- `angular.source-check` — verifies pinned Angular/Material/Nx references and attribution.
-- `angular.inspect` — detects Angular, Material and Nx workspace/version/graph state.
-- `angular.verify` — runs only declared build/test/lint/affected targets through structured argv.
+- `angular.source-check` — verifies pinned Angular, Material and Nx references and attribution.
+- `angular.inspect` — reads bounded workspace metadata to detect Angular, Material and Nx versions/profiles.
+
+Both capabilities are read-only. This module does not provide an Angular build, test, lint, affected, generator, package-manager, Git, network, or benchmark runner. Application work uses the project's existing tools through normal coding-agent facilities and explicit user authority.
 
 Use capabilities through `scripts/modules/run-check.mjs`. Do not call module scripts directly from agents, rules, skills, or public documentation.
 
@@ -20,6 +21,6 @@ Disable with a local module override:
 }
 ```
 
-When disabled, capability discovery fails closed and the skill's mandatory module gate tells the model not to apply the PIDEX Angular optimization layer. Pi may still list the statically packaged skill until `/reload`; a normal Git/package rollback removes it entirely.
+When disabled, capability discovery fails closed and the skill gate tells the model not to apply the packaged Angular guidance. Pi may still list the statically packaged skill until `/reload`; a normal Git/package rollback removes it entirely.
 
-MCP, WebMCP, generated Angular/Nx AI configuration, Nx Cloud automation, global Angular installation, and dependency installation are outside this module.
+MCP, WebMCP, generated Angular/Nx AI configuration, Nx Cloud automation, global Angular installation, dependency installation, and unadmitted test-derived edge cases are outside this module.

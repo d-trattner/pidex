@@ -4,19 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { inspectAngularWorkspace } from '../../lib/workspace-inspector.mjs';
 
 export function parseInspectArgs(argv = []) {
-  const out = { json: false, resolveNx: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === '--project') out.project = argv[++i] || '';
+  const out = { json: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === '--project') out.project = argv[++index] || '';
     else if (arg === '--json') out.json = true;
-    else if (arg === '--resolve-nx') out.resolveNx = true;
     else if (arg === '--help') out.help = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
   return out;
 }
 
-function usage() { return 'Usage: inspect.mjs --project <absolute-path> [--resolve-nx] [--json]'; }
+function usage() { return 'Usage: inspect.mjs --project <absolute-path> [--json]'; }
 
 function main(argv = process.argv.slice(2)) {
   try {
