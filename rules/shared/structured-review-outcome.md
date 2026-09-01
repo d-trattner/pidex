@@ -57,7 +57,7 @@ This exact example passes the runtime validator at review2 (`archiveActive`), wh
 - `verdict` — your gate's own verdict vocabulary only:
   - critic / code-review: `APPROVED` | `APPROVED_WITH_COMMENTS` | `REJECTED`
   - security: `APPROVED` | `APPROVED_WITH_CONTROLS` | `REJECTED`
-  - qa: `COMPLETE` | `FAILED`
+  - qa: `COMPLETE` | `FAILED` | `BLOCKED`
 - `contractDisposition` — exactly one of: `in_contract` | `scope_expansion` | `architecture_expansion` | `acceptance_expansion` | `evidence_expansion` | `threat_model_expansion`.
 - `findings` — zero to twenty strictly validated findings using the existing canonical finding schema (identity, relation, class, reproduction, causality, severity, disposition, bounded archive fields). No credentials, prompt bodies, absolute paths, raw logs, HTML instructions, or uncontrolled free-form payloads.
 
@@ -68,6 +68,7 @@ This exact example passes the runtime validator at review2 (`archiveActive`), wh
 - Approved verdict with any active finding: invalid.
 - `review2` rejection: every remaining active and immediate finding is archived, the lifecycle completes `closed`, and the typed status is `CLOSED_WITH_TBR` — the gate advances exactly once; no correction3/review3/fourth reviewer.
 - Any expansion disposition stops for an explicit user decision with typed `USER_DECISION_REQUIRED`; no correction is spawned.
+- QA `BLOCKED` is reserved for truthful missing environment/access/tooling/evidence. It uses `contractDisposition: in_contract` and `findings: []`, terminalizes as typed `USER_DECISION_REQUIRED`, and never spawns an implementation correction.
 
 ## Corrections
 

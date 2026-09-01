@@ -86,6 +86,10 @@ assert.equal(validateStructuredReviewOutcome(payload({ verdict: 'APPROVED_WITH_C
 assert.equal(validateStructuredReviewOutcome(payload({ verdict: 'APPROVED_WITH_CONTROLS', findings: [active, immediate] }), 'security').ok, true);
 assert.equal(validateStructuredReviewOutcome(payload({ verdict: 'COMPLETE', findings: [] }), 'qa').ok, true);
 assert.equal(validateStructuredReviewOutcome(payload({ verdict: 'FAILED', findings: [active, immediate] }), 'qa').ok, true);
+const qaBlocked = validateStructuredReviewOutcome(payload({ verdict: 'BLOCKED', findings: [] }), 'qa');
+assert.equal(qaBlocked.ok, true);
+assert.equal(qaBlocked.value.verdict, 'USER_DECISION_REQUIRED');
+assert.equal(qaBlocked.value.expansion, false);
 assert.equal(validateStructuredReviewOutcome(payload({ verdict: 'REJECTED', findings: [active] }), 'security').ok, true);
 for (const gate of ['critic', 'code-review', 'security', 'qa']) {
   assert.equal(validateStructuredReviewOutcome(payload({ verdict: 'CHANGES_REQUESTED', findings: [active] }), gate).ok, false, `${gate} must reject non-contract verdict strings`);

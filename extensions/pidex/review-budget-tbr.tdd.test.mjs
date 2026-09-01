@@ -272,6 +272,9 @@ for (const [gate, verdicts] of Object.entries(gateVerdicts)) {
   }
   assert.equal(normalizeReviewVerdict(gate, 'APPROVED '), null);
 }
+assert.equal(normalizeReviewVerdict('qa', 'BLOCKED'), 'USER_DECISION_REQUIRED');
+assert.deepEqual(validateReviewOutcome({ verdict: 'BLOCKED', findings: [] }, 'qa'), { ok: true, value: { active: [], immediateTbr: [], verdict: 'USER_DECISION_REQUIRED' } });
+for (const gate of ['critic', 'code-review', 'security']) assert.equal(normalizeReviewVerdict(gate, 'BLOCKED'), null);
 
 const historyRow = (event_type, metadata) => ({ event_type, metadata });
 const completedGateMode = (reviewGate, reviewMode, attemptId, outcome) => [

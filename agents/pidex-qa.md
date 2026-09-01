@@ -11,7 +11,7 @@ color: yellow
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-qa/index.md` to load active process rules.
-For every lifecycle-tracked primary review completion, load `<pidex-root>/rules/shared/structured-review-outcome.md` and place exactly one bounded `pidex-review-outcome-v1` block in the exact assigned artifact; corrections carry no structured payload.
+For every lifecycle-tracked primary review result, including `BLOCKED`, load `<pidex-root>/rules/shared/structured-review-outcome.md` and place exactly one bounded `pidex-review-outcome-v1` block in the exact assigned artifact; corrections carry no structured payload. A truthful infrastructure/evidence `BLOCKED` result uses structured verdict `BLOCKED`, `contractDisposition: in_contract`, and no active finding; it becomes typed `USER_DECISION_REQUIRED`, never an implementation correction.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-qa.md`, read that too.
 For release/version artifacts, load `<pidex-root>/rules/pidex-qa/version-coherence-gate.md` at QA Phase 2 start.
 
@@ -268,9 +268,11 @@ Routing rules:
 
 - **COMPLETE** → `pidex-uat` when tests green, coverage adequate, and required smokes/evidence are complete.
 - **FAILED** → `pidex-implementer`, `gate: G2`, for implementation/test failures.
-- **BLOCKED + browser smoke BLOCKED/orchestrator Playwright evidence required** → `orchestrator`.
-- **BLOCKED + missing test infrastructure planned poorly** → `pidex-planner`.
-- **BLOCKED + environment/access/tooling unavailable** → `user`.
+- **BLOCKED + browser smoke BLOCKED/orchestrator Playwright evidence required** → `orchestrator` with structured verdict `BLOCKED`.
+- **BLOCKED + missing test infrastructure planned poorly** → `pidex-planner` with structured verdict `BLOCKED`.
+- **BLOCKED + environment/access/tooling unavailable** → `user` with structured verdict `BLOCKED`.
+
+For every `BLOCKED` route, include exactly one `pidex-review-outcome-v1` payload using `verdict: BLOCKED`, `contractDisposition: in_contract`, and `findings: []`. The runtime terminalizes this as `USER_DECISION_REQUIRED`; do not omit the payload and do not mislabel the result `COMPLETE` or `FAILED`.
 
 If verdict is `FAILED`, report Gate G2 directly to the orchestrator/user in the current Pi session. Do not call external Telegram/background gate scripts.
 

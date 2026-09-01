@@ -718,7 +718,7 @@ export function completeStructuredReviewOutcome({ stateDir, project, pipelineId,
       // Intended lifecycle outcome (AD-2/AD-7): expansion stops as USER_DECISION_REQUIRED;
       // review2 in-contract rejection is terminal `closed`; approval closes accepted.
       let intendedOutcome;
-      if (checked.value.expansion) intendedOutcome = 'USER_DECISION_REQUIRED';
+      if (checked.value.expansion || checked.value.verdict === 'USER_DECISION_REQUIRED') intendedOutcome = 'USER_DECISION_REQUIRED';
       else if (checked.value.verdict === 'APPROVED') intendedOutcome = 'APPROVED';
       else if (identity.reviewMode === 'review2') intendedOutcome = 'closed';
       else intendedOutcome = 'CHANGES_REQUESTED';

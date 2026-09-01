@@ -9,6 +9,7 @@ const load = (name) => JSON.parse(readFileSync(path.join(root, 'config', 'profil
 const balanced = load('5.6-hybrid-balanced');
 const lowcost = load('5.6-hybrid-lowcost');
 const solQuality = load('5.6-sol-quality');
+const activeAgents = JSON.parse(readFileSync(path.join(root, 'config', 'agents.json'), 'utf8'));
 
 const expectedBalanced = {
   'pidex-analyst': ['openai-codex/gpt-5.6-sol', 'high'],
@@ -77,6 +78,14 @@ test('lowcost differs from balanced only for bounded code review and QA routes',
   assert.deepEqual(selectedRoute(lowcost, 'pidex-qa'), ['openai-codex/gpt-5.6-terra', 'medium']);
   assert.deepEqual(selectedRoute(lowcost, 'pidex-designer'), ['openai-codex/gpt-5.6-sol', 'high']);
   assert.doesNotMatch(JSON.stringify(lowcost), /codex-spark/i);
+});
+
+test('supported profiles preserve every configured principal authority field', () => {
+  const authorities = Object.entries(activeAgents.agents).filter(([, route]) => route.principal).map(([agent, route]) => [agent, route.principal]);
+  assert.ok(authorities.length > 0);
+  for (const profile of [balanced, lowcost, solQuality]) {
+    for (const [agent, principal] of authorities) assert.equal(profile.agents[agent]?.principal, principal, `${profile.description}:${agent}`);
+  }
 });
 
 test('supported profiles keep schema/version/fallback contract and do not use low effort', () => {

@@ -14,7 +14,7 @@
     {"path":"agents/pidex-implementer.md","byte_hash":"da212911a62fadde29d42c7d385c0cfc40bace1a12c657f8024a3a9eac37f488"},
     {"path":"agents/pidex-pi.md","byte_hash":"9de09e3700b6aec77a7b43a68f664a17a2d0151b17ed5663659c693cf2874b48"},
     {"path":"agents/pidex-planner.md","byte_hash":"78b5eb9d007d822dc41610a64b33e73a43e9826019c05a6352706b103eff51be"},
-    {"path":"agents/pidex-qa.md","byte_hash":"ea76fca669274649b13923f8def570b7e1c70d39062c5e8d88c1707dc46d2aa2"},
+    {"path":"agents/pidex-qa.md","byte_hash":"3bc00540e1ba2f5ea55b246566141d020b5e4367acef4ab1a7b4798a207278d3"},
     {"path":"agents/pidex-retrospective.md","byte_hash":"7b680f55e1c40c3ad3390da04265d228d1119063785974ad22952e64fa88524d"},
     {"path":"agents/pidex-roadmap.md","byte_hash":"3f4a28e25a85e4500102ecab5c098378f167cdf4e30002cb4c1bc0abb0e827fc"},
     {"path":"agents/pidex-security.md","byte_hash":"a4c07cc2c4d52caae9c0c92f7edc351091bef6c1ea21dfb6909cc9cc108781f3"},
@@ -275,7 +275,7 @@
     {"rule_id":"legacy:rules:shared:package-manager-equivalence","path":"rules/shared/package-manager-equivalence.md","byte_hash":"7f3ace8155b059b026e7b19b92a8a21d19676f86031df7914911f9168c0cd796","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:provider-safe-defensive-review-language","path":"rules/shared/provider-safe-defensive-review-language.md","byte_hash":"9a2c2968fd3731919f24a0ade3db5b08748cad1f248ce9c25e3395df509eeccf","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:structural-code-search","path":"rules/shared/structural-code-search.md","byte_hash":"8c5dfa4926ea992c967013ee9fc6b1d0b56ac26e93d092c17eaedc71c45b18c4","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"086ade4aebdf97b0d36c9e0c2752c7a44543ba1867f0aa5d5f7b6748acb5e616","protection_class":"legacy_baseline"}
+    {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"d43e37b1c80306da0c11c437916d32180c2730fdb8ec974913b841b4f0c09642","protection_class":"legacy_baseline"}
   ],
-  "aggregate_digest": "10f844e6b9751647ea5de444ccf21ff87c3a203f39ab0b25e0c9ced6f47aa50d"
+  "aggregate_digest": "a3b011949f54698eaca5497de6fd383c2b08099f3d439b7c2f31a8e297bd49fa"
 }

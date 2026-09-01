@@ -62,6 +62,7 @@ const complete = (current, pipelineId, routingVerdict, artifactPath = 'agents.ou
 
 try {
   mkdirSync(path.join(project, 'agents.output', 'code-review'), { recursive: true });
+  mkdirSync(path.join(project, 'agents.output', 'qa'), { recursive: true });
 
   // In-contract initial rejection: uniform six-event completion with fixed-position
   // completion_prepared receipt binding identity, artifact digest, outcome digest,
@@ -164,6 +165,20 @@ try {
   assert.deepEqual(foldReviewHistory(readFileSync(path.join(eventsBase, 'family-expansion.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)), expansion), { status: 'expansion_pending' }, 'expansion folds non-spawnable');
   assert.deepEqual(complete(expansion, 'family-expansion', 'REJECTED'), { status: 'USER_DECISION_REQUIRED', disposition: 'scope_expansion' }, 'expansion retry is idempotent');
   assert.equal(rows('family-expansion', expansion.attemptId).length, 6, 'expansion retry appends no second receipt');
+
+  // QA infrastructure/evidence blocking is a truthful non-correction terminal hold.
+  // It uses the QA-native BLOCKED verdict and durable USER_DECISION_REQUIRED outcome
+  // without pretending COMPLETE or routing an implementation correction.
+  fresh('family-qa-blocked');
+  const qaBlocked = { ...base, runFamilyId: 'family-qa-blocked', reviewGate: 'qa', attemptId: 'attempt-qa-blocked' };
+  assert.equal(start(qaBlocked, 'family-qa-blocked').status, 'accepted');
+  const qaBlockedPayload = payload({ verdict: 'BLOCKED', findings: [] });
+  const qaBlockedContent = fenced(qaBlockedPayload);
+  writeArtifact('agents.output/qa/059.md', qaBlockedContent);
+  assert.deepEqual(complete(qaBlocked, 'family-qa-blocked', 'BLOCKED', 'agents.output/qa/059.md', 'orchestrator'), { status: 'USER_DECISION_REQUIRED', disposition: 'in_contract' });
+  assertReceipt('family-qa-blocked', qaBlocked.attemptId, { identity: qaBlocked, intendedOutcome: 'USER_DECISION_REQUIRED', tbrIds: [], artifactDigest: artifactDigestOf(qaBlockedContent), outcomeDigest: outcomeDigestOf(qaBlockedPayload) });
+  assert.deepEqual(foldReviewHistory(readFileSync(path.join(eventsBase, 'family-qa-blocked.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)), qaBlocked), { status: 'expansion_pending' }, 'blocked QA is non-spawnable pending user/orchestrator evidence');
+  assert.deepEqual(tbrItems(), [], 'blocked QA creates no TBR');
 
   // Fault injection: crash after prepared receipt (returned/outcome missing) resumes
   // under the exact same receipt without changing stable IDs or bytes.
