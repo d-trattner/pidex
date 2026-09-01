@@ -142,9 +142,25 @@
         "passthrough": true,
         "passthrough_policy": {
           "allowed_patterns": [
-            "^--[A-Za-z0-9-]+$",
-            "^[A-Za-z0-9 ._:/=@+-]+$"
+            "^--(event|cwd|mode|epic|reason)$"
           ],
+          "allowed_value_patterns": {
+            "--event": [
+              "^[a-z][a-z0-9-]{0,79}$"
+            ],
+            "--cwd": [
+              "^[A-Za-z0-9 ._:/=@\\\\-]+$"
+            ],
+            "--mode": [
+              "^direct$"
+            ],
+            "--epic": [
+              "^[^\\u0000-\\u001F\\u007F]{1,200}$"
+            ],
+            "--reason": [
+              "^[^\\u0000-\\u001F\\u007F]{1,1000}$"
+            ]
+          },
           "allow_absolute_project_paths": true
         }
       }
