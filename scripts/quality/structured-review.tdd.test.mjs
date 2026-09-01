@@ -77,6 +77,7 @@ assert.deepEqual(rejectedOk.value.immediateTbr.map((finding) => finding.findingI
 assert.equal(rejectedOk.value.expansion, false);
 assert.deepEqual(validateStructuredReviewOutcome(payload({ verdict: 'REJECTED', findings: [] }), 'code-review'), { ok: false, code: 'REVIEW_REJECTION_EMPTY' }, 'rejected with zero active findings is invalid (no final zero-active exception)');
 assert.deepEqual(validateStructuredReviewOutcome(payload({ verdict: 'REJECTED', findings: [immediate] }), 'code-review'), { ok: false, code: 'REVIEW_REJECTION_EMPTY' }, 'immediate-only rejection cannot close');
+assert.deepEqual(validateStructuredReviewOutcome(payload({ verdict: 'REJECTED', findings: [{ ...active, title: 'Partial archive fields are forbidden' }] }), 'code-review'), { ok: false, code: 'REVIEW_FINDING_INVALID' }, 'non-final active findings use exactly seven fields; partial archive prose stays outside payload');
 assert.deepEqual(validateStructuredReviewOutcome(payload({ verdict: 'REJECTED', findings: [active, { ...immediate, findingId: 'F-dup' }, { ...immediate, findingId: 'F-dup' }] }), 'code-review'), { ok: false, code: 'REVIEW_FINDING_INVALID' }, 'duplicate finding IDs reject collection');
 assert.deepEqual(validateStructuredReviewOutcome(payload({ verdict: 'APPROVED', findings: Array.from({ length: 21 }, (_, index) => ({ ...immediate, findingId: `F-${index}` })) }), 'code-review'), { ok: false, code: 'REVIEW_OUTCOME_INVALID' }, 'more than 20 findings is invalid');
 

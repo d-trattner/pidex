@@ -14,6 +14,14 @@ These are concise producer instructions only. The runtime validator in `scripts/
 
 ## Required payload
 
+For an active finding in `initial` or `review1`, use exactly these seven fields and no archive/narrative fields:
+
+```json
+{"findingId":"F-assigned-01","relation":"assigned","class":"Product","reproductionState":"not_tested","causedByCorrection":false,"severity":"High","disposition":"active"}
+```
+
+Keep title, rationale, affected identifiers and test evidence in the surrounding Markdown. Do not copy only some archive fields into a non-final active payload. Full archive fields are required only for `tbr_immediate` findings and active `review2` terminal closure.
+
 One fenced block with info string exactly `` ```pidex-review-outcome-v1 ``:
 
 Example (code-review gate; review2 terminal-close semantics — active findings must carry the full archive fields, and every field stays within the unsafe-content/path limits):

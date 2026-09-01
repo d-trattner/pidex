@@ -7,8 +7,8 @@
   "agents": [
     {"path":"agents/pidex-analyst.md","byte_hash":"0c5b96e67b1aca1e0ffbd5956e9ccb7dddf902614bcd3dc971a90f6b246e7774"},
     {"path":"agents/pidex-architect.md","byte_hash":"088d371d03a48f5ac67b0cff95ad6b294ff36dd0bb87f84e6376d8c932f59b3c"},
-    {"path":"agents/pidex-code-reviewer.md","byte_hash":"ff57ba44eae9cde0a14d6cd3dd18df15a664b8c28b1cb78202a70b36fd03fd0a"},
-    {"path":"agents/pidex-critic.md","byte_hash":"aa085436a71b9f4494bd15d32c51ddff9dcca3663b898675bd4dede471cd3c44"},
+    {"path":"agents/pidex-code-reviewer.md","byte_hash":"e9b2afa0f42f52336b106915e92b4ef2d44f487a56c70377d430f237df19b6db"},
+    {"path":"agents/pidex-critic.md","byte_hash":"f8c5b1e0b8e4007b421f91a1ce50f18c34fa765f6e8574c4062673575e6a4bbd"},
     {"path":"agents/pidex-designer.md","byte_hash":"098d52b4d47dcf5525e8e08e6ee02a265763072870ed2c029b44a46439f96ac2"},
     {"path":"agents/pidex-devops.md","byte_hash":"2248ed71d6c2d6c6b6534a043367bab47208126cf0ab181eee31fc140610874f"},
     {"path":"agents/pidex-implementer.md","byte_hash":"da212911a62fadde29d42c7d385c0cfc40bace1a12c657f8024a3a9eac37f488"},
@@ -17,7 +17,7 @@
     {"path":"agents/pidex-qa.md","byte_hash":"3bc00540e1ba2f5ea55b246566141d020b5e4367acef4ab1a7b4798a207278d3"},
     {"path":"agents/pidex-retrospective.md","byte_hash":"7b680f55e1c40c3ad3390da04265d228d1119063785974ad22952e64fa88524d"},
     {"path":"agents/pidex-roadmap.md","byte_hash":"3f4a28e25a85e4500102ecab5c098378f167cdf4e30002cb4c1bc0abb0e827fc"},
-    {"path":"agents/pidex-security.md","byte_hash":"a4c07cc2c4d52caae9c0c92f7edc351091bef6c1ea21dfb6909cc9cc108781f3"},
+    {"path":"agents/pidex-security.md","byte_hash":"d4f06595f4e042fe08b2817eef7144a529ef8c98028f37685c1bae7f3604ebce"},
     {"path":"agents/pidex-uat.md","byte_hash":"e75b7914671fb8856478755c25b7ffdfec527eb880ba9f7583467d0620469667"},
     {"path":"agents/pidex-wiki-hygienist.md","byte_hash":"f52ce5c205fa8b6093708b42b11d0c23720053dbae562c5779132b8f963c8cac"}
   ],
@@ -275,7 +275,7 @@
     {"rule_id":"legacy:rules:shared:package-manager-equivalence","path":"rules/shared/package-manager-equivalence.md","byte_hash":"7f3ace8155b059b026e7b19b92a8a21d19676f86031df7914911f9168c0cd796","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:provider-safe-defensive-review-language","path":"rules/shared/provider-safe-defensive-review-language.md","byte_hash":"9a2c2968fd3731919f24a0ade3db5b08748cad1f248ce9c25e3395df509eeccf","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:structural-code-search","path":"rules/shared/structural-code-search.md","byte_hash":"8c5dfa4926ea992c967013ee9fc6b1d0b56ac26e93d092c17eaedc71c45b18c4","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"d43e37b1c80306da0c11c437916d32180c2730fdb8ec974913b841b4f0c09642","protection_class":"legacy_baseline"}
+    {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"d822492ec7adcba15c232c012039aac9a1adf0c637a3ee30d9320c351c8728c8","protection_class":"legacy_baseline"}
   ],
-  "aggregate_digest": "a3b011949f54698eaca5497de6fd383c2b08099f3d439b7c2f31a8e297bd49fa"
+  "aggregate_digest": "d205bf05fc5e0d3ca7c72fdd5df84986601914810d08159f7f0dc29689198b0b"
 }

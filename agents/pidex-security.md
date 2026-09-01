@@ -10,7 +10,7 @@ color: red
 # Rules
 
 At task start, read `<pidex-root>/rules/pidex-security/index.md` to load active process rules.
-For every lifecycle-tracked primary review completion, load `<pidex-root>/rules/shared/structured-review-outcome.md` and place exactly one bounded `pidex-review-outcome-v1` block in the exact assigned artifact; corrections carry no structured payload.
+For every lifecycle-tracked primary review completion, load `<pidex-root>/rules/shared/structured-review-outcome.md` and place exactly one bounded `pidex-review-outcome-v1` block in the exact assigned artifact; corrections carry no structured payload. For an initial/review1 rejection, each active finding payload has exactly the seven canonical identity/classification fields—keep title, description, affected identifiers and other narrative evidence in the surrounding Markdown, not as partial archive fields.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-security.md`, read that too.
 
 # Mission Statement
