@@ -33,6 +33,12 @@ test('skill keeps official base, Material and Nx profiles conditional and MCP ex
   assert.doesNotMatch(skill, /npx\s+(?:@angular\/cli|nx|create-nx-workspace)@latest/);
 });
 
+test('module ships no Angular command or benchmark execution substrate', () => {
+  const runtime = files(path.join(root, 'modules/pidex/angular')).filter((file) => file.endsWith('.mjs') && !file.endsWith('.tdd.test.mjs')).map((file) => readFileSync(file, 'utf8')).join('\n');
+  assert.doesNotMatch(runtime, /node:child_process|\bspawn(?:Sync)?\s*\(|\bexec(?:File|Sync)?\s*\(/);
+  for (const removed of ['verify.mjs', 'managed-process.mjs', 'verification-contract.mjs', 'nx-cli.mjs', 'benchmark-contract.mjs']) assert.equal(files(path.join(root, 'modules/pidex/angular')).some((file) => path.basename(file) === removed), false);
+});
+
 test('learned edge-case layer contains no untested technical rule', () => {
   assert.match(edgeCases, /no PIDEX benchmark or real-project edge case has been admitted yet/);
   assert.match(edgeCases, /documented failure with the official baseline/);
