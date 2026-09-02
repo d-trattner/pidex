@@ -48,8 +48,10 @@ Orchestrator-direct implementation is allowed only under the documented stall fa
 - repeated specialist stalls or malformed/no-progress returns;
 - recovery attempts failed;
 - the fallback is explicitly documented as `PROC-NEW-10 orchestrator-direct fallback`;
-- the generated artifact identifies the reviewer/implementer as orchestrator-direct;
+- an implementation evidence artifact identifies the implementer as orchestrator-direct;
 - the operator is informed that the normal specialist route was bypassed.
+
+This fallback can recover implementation or execute verification commands, but it can never impersonate a trusted review principal, author an approval artifact, close a review lifecycle, or advance to a later gate after review identity/outcome failure. Repeated reviewer failures, `REVIEW_IDENTITY_INVALID`, or `REVIEW_OUTCOME_INVALID` terminalize as a user decision requirement; preserve evidence and stop. A fresh authorized run or valid reviewer continuation must perform the review.
 
 This exception must not be used simply because the task is small.
 

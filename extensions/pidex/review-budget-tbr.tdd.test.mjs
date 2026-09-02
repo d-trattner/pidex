@@ -13,6 +13,13 @@ import { canonicalProjectIdentity } from '../../modules/pidex/analysis-metrics-h
 import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
 
+const structuredReviewContract = readFileSync('rules/shared/structured-review-outcome.md', 'utf8');
+assert.match(structuredReviewContract, /correction always finishes with `verdict: COMPLETE`/);
+assert.match(structuredReviewContract, /Never use `BLOCKED`, route to another correction agent/);
+assert.match(readFileSync('agents/pidex-implementer.md', 'utf8'), /Never emit `BLOCKED` or route correction-to-correction/);
+assert.match(readFileSync('rules/orchestrator/no-direct-implementation.md', 'utf8'), /never impersonate a trusted review principal/);
+assert.match(readFileSync('skills/pidex/SKILL.md', 'utf8'), /Never author or approve a trusted reviewer artifact/);
+
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
 const extendedPlanIdentity = { ...identity, runFamilyId: 'family-16725', planId: 'plan-16725', attemptId: 'attempt-16725' };
 assert.equal(validateReviewIdentity(extendedPlanIdentity).ok, true);

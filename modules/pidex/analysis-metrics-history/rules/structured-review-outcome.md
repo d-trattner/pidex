@@ -88,7 +88,7 @@ This exact example passes the runtime validator at review2 (`archiveActive`), wh
 
 ## Corrections
 
-Corrections (`correction1`, `correction2`) carry **no structured payload** — they remain ordinary handoffs that route back to the same reviewer gate. The typed status is authoritative over contradictory ROUTING text: `CLOSED_WITH_TBR` and `USER_DECISION_REQUIRED` override any rejection route and never auto-correct.
+Corrections (`correction1`, `correction2`) carry **no structured payload** — they remain ordinary handoffs that route back to the same reviewer gate. A correction always finishes with `verdict: COMPLETE` and routes to that reviewer, even when the correction deliberately addresses only a bounded subset of active findings. The reviewer—not the correction agent—then marks resolved findings and returns `REJECTED` for any remaining findings, advancing to the next bounded correction. Never use `BLOCKED`, route to another correction agent, or bypass the intervening reviewer merely because unresolved findings remain. The typed status is authoritative over contradictory ROUTING text: `CLOSED_WITH_TBR` and `USER_DECISION_REQUIRED` override any rejection route and never auto-correct.
 
 ## Failure modes
 

@@ -11,7 +11,7 @@
     {"path":"agents/pidex-critic.md","byte_hash":"f8c5b1e0b8e4007b421f91a1ce50f18c34fa765f6e8574c4062673575e6a4bbd"},
     {"path":"agents/pidex-designer.md","byte_hash":"098d52b4d47dcf5525e8e08e6ee02a265763072870ed2c029b44a46439f96ac2"},
     {"path":"agents/pidex-devops.md","byte_hash":"2248ed71d6c2d6c6b6534a043367bab47208126cf0ab181eee31fc140610874f"},
-    {"path":"agents/pidex-implementer.md","byte_hash":"da212911a62fadde29d42c7d385c0cfc40bace1a12c657f8024a3a9eac37f488"},
+    {"path":"agents/pidex-implementer.md","byte_hash":"77927d899c5096fb26708100db1b9b7852fa2103c2cb3fc72ad1c9b7a1d22931"},
     {"path":"agents/pidex-pi.md","byte_hash":"9de09e3700b6aec77a7b43a68f664a17a2d0151b17ed5663659c693cf2874b48"},
     {"path":"agents/pidex-planner.md","byte_hash":"78b5eb9d007d822dc41610a64b33e73a43e9826019c05a6352706b103eff51be"},
     {"path":"agents/pidex-qa.md","byte_hash":"3bc00540e1ba2f5ea55b246566141d020b5e4367acef4ab1a7b4798a207278d3"},
@@ -26,7 +26,7 @@
     {"rule_id":"legacy:rules:orchestrator:conversation-to-roadmap-promotion","path":"rules/orchestrator/conversation-to-roadmap-promotion.md","byte_hash":"e7c1b06df86e1bbc9bd91c57feca639ecef4efb1ca1d856e31fe691b87cd9048","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:orchestrator:followup-roadmap-suggestion","path":"rules/orchestrator/followup-roadmap-suggestion.md","byte_hash":"8734fcc93b4ac7fcce40afc6705cbe10c95f924ecd4705e7884202985db91d3b","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:orchestrator:g9-rejection-playwright-repro","path":"rules/orchestrator/g9-rejection-playwright-repro.md","byte_hash":"3bbc23c04c9cfd28aeb8dc60af84ce2fbf7ebc8bdf061cc26c76f75acf2b9e34","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:orchestrator:no-direct-implementation","path":"rules/orchestrator/no-direct-implementation.md","byte_hash":"d7208138c9850471f6c5eda7bebce84e175a03af95d08a3dbf19f6bf023c7a4c","protection_class":"legacy_baseline"},
+    {"rule_id":"legacy:rules:orchestrator:no-direct-implementation","path":"rules/orchestrator/no-direct-implementation.md","byte_hash":"6d5d85a29d0dd1aa31d3c741df0e3f6d046e4bb72f9f8add27bc15f9c62eebf8","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:orchestrator:package-manager-preflight","path":"rules/orchestrator/package-manager-preflight.md","byte_hash":"e09ad9bcf9ad2d550047402c5ce552476beaec0ea6a4be80dc2c7c063d125d12","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:orchestrator:project-boundary-write-guard","path":"rules/orchestrator/project-boundary-write-guard.md","byte_hash":"932885162a37a9dc41ed5f272e663488f27d3b6ca25af3e8242812a89a3602f9","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:orchestrator:sandbox-preflight","path":"rules/orchestrator/sandbox-preflight.md","byte_hash":"4b10cc82050edc4776ac2a4b734d57b3300e971bbe2fca8fbf99e440a791a5c9","protection_class":"legacy_baseline"},
@@ -275,7 +275,7 @@
     {"rule_id":"legacy:rules:shared:package-manager-equivalence","path":"rules/shared/package-manager-equivalence.md","byte_hash":"7f3ace8155b059b026e7b19b92a8a21d19676f86031df7914911f9168c0cd796","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:provider-safe-defensive-review-language","path":"rules/shared/provider-safe-defensive-review-language.md","byte_hash":"9a2c2968fd3731919f24a0ade3db5b08748cad1f248ce9c25e3395df509eeccf","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:structural-code-search","path":"rules/shared/structural-code-search.md","byte_hash":"8c5dfa4926ea992c967013ee9fc6b1d0b56ac26e93d092c17eaedc71c45b18c4","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"d822492ec7adcba15c232c012039aac9a1adf0c637a3ee30d9320c351c8728c8","protection_class":"legacy_baseline"}
+    {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"045efc216b6aa955f5979edc5131219337e3b790c410374beaa1d04856966d9a","protection_class":"legacy_baseline"}
   ],
-  "aggregate_digest": "d205bf05fc5e0d3ca7c72fdd5df84986601914810d08159f7f0dc29689198b0b"
+  "aggregate_digest": "43a6b4d2e74495ad6e50e6aeed882489d1ad5847f9fcd68aaa06ddff1f7ba4f9"
 }

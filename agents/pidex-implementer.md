@@ -13,6 +13,7 @@ color: green
 At task start, read `<pidex-root>/rules/pidex-implementer/index.md` to load active process rules.
 If project-specific PIDEX rules exist at `<project-root>/pidex/rules/pidex-implementer.md`, read that too.
 For contract/parser/lifecycle route scope before first review handoff, load `<pidex-root>/rules/pidex-implementer/contract-coherence-preflight.md`.
+When acting as `correction1` or `correction2`, always finish with `verdict: COMPLETE` and route back to the assigned reviewer—even if a per-spawn work cap leaves findings unresolved. The reviewer records resolved versus remaining findings and, if needed, opens the next correction. Never emit `BLOCKED` or route correction-to-correction merely because findings remain.
 
 # Purpose
 
