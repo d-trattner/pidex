@@ -18,7 +18,10 @@ assert.match(structuredReviewContract, /correction always finishes with `verdict
 assert.match(structuredReviewContract, /Never use `BLOCKED`, route to another correction agent/);
 assert.match(readFileSync('agents/pidex-implementer.md', 'utf8'), /Never emit `BLOCKED` or route correction-to-correction/);
 assert.match(readFileSync('rules/orchestrator/no-direct-implementation.md', 'utf8'), /never impersonate a trusted review principal/);
-assert.match(readFileSync('skills/pidex/SKILL.md', 'utf8'), /Never author or approve a trusted reviewer artifact/);
+const pidexSkill = readFileSync('skills/pidex/SKILL.md', 'utf8');
+assert.match(pidexSkill, /Never author or approve a trusted reviewer artifact/);
+assert.match(pidexSkill, /stage is \*\*not complete regardless of artifact content/);
+assert.match(pidexSkill, /Never reclassify such an artifact as "usable"/);
 
 const identity = { runFamilyId: 'family-038', planId: 'plan-038', reviewGate: 'code-review', reviewMode: 'initial', attemptId: 'attempt-1' };
 const extendedPlanIdentity = { ...identity, runFamilyId: 'family-16725', planId: 'plan-16725', attemptId: 'attempt-16725' };

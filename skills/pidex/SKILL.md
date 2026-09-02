@@ -1347,7 +1347,9 @@ Inspect the `pidex_agent` result telemetry (`exitCode`, `durationMs`, `turnCount
 
 **Empirical basis**: Plan 25 Spawn A attempt 1 returned `tool_uses: 0` with Anthropic rate-limit message `You've hit your limit · resets 1:30pm`. Orchestrator recovered ad-hoc — this pre-check formalizes it.
 
-**3-step stall check** (if pre-check did not trigger):
+**Hard telemetry gate before the 3-step stall check:** if `timedOut=true`, `turnLimitHit=true`, the child was terminated by signal, or `exitCode != 0`, the stage is **not complete regardless of artifact content or any draft/final-looking ROUTING text**. Never reclassify such an artifact as "usable", emit a completed-stage event, or advance to the next role. Preserve it as partial evidence and re-spawn the same role once with an explicit continuation/finalization brief. If that bounded continuation fails, terminalize for user decision; do not substitute parent judgment.
+
+**3-step stall check** (if pre-check and hard telemetry gate did not trigger):
 
 1. **ROUTING presence check**: grep the Agent return message for `<!-- ROUTING`. If absent → **stall detected** (per Rule 9c two-phase, even a draft ROUTING should appear within first ~5 tool_uses; total absence means agent was cut off before first Edit or before draft emission).
 
@@ -1360,6 +1362,7 @@ Inspect the `pidex_agent` result telemetry (`exitCode`, `durationMs`, `turnCount
 | Stall type | Recovery action |
 |-----------|----------------|
 | No ROUTING + empty doc | Re-spawn with pre-created skeleton + hyper-targeted brief (max 3 files to read, "first action: Edit"). Use the 3rd-time-is-the-charm pattern validated in Plans 23+24. |
+| Failed hard telemetry (`timedOut`, `turnLimitHit`, signal, nonzero exit) with any partial artifact or ROUTING | Do not advance. Re-spawn the same role once with a continuation/finalization brief bound to that artifact; require a fresh successful return and final ROUTING. |
 | No ROUTING + partial doc | Re-spawn "continuation" agent with brief "finalize sections X, Y, Z then emit ROUTING" — reference the partial doc explicitly. |
 | ROUTING present but uncommitted code (implementer) | Re-spawn "commit-only finalization" agent: brief `git status` → commit named slices → final ROUTING. No new code. |
 | Repeated implementation stalls (3+ spawns same stage) | **PROC-NEW-10 orchestrator-direct implementation fallback**: run verification commands and recover implementation evidence only after agent recovery fails. Never author or approve a trusted reviewer artifact. Any repeated reviewer failure, `REVIEW_IDENTITY_INVALID`, or `REVIEW_OUTCOME_INVALID` stops as user decision required; preserve evidence and do not advance gates. |
