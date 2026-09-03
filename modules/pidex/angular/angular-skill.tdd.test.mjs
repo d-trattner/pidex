@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const skillRoot = path.join(root, 'skills/angular-application');
 const skill = readFileSync(path.join(skillRoot, 'SKILL.md'), 'utf8');
 const edgeCases = readFileSync(path.join(skillRoot, 'references/learned-edge-cases.md'), 'utf8');
+const materialProfile = readFileSync(path.join(skillRoot, 'references/profiles/material.md'), 'utf8');
 const manifest = JSON.parse(readFileSync(path.join(root, 'modules/pidex/angular/module.json'), 'utf8'));
 
 function files(dir) {
@@ -31,6 +32,11 @@ test('skill keeps official base, Material and Nx profiles conditional and MCP ex
   assert.match(skill, /PIDEX supplies no Angular build\/test\/lint\/affected executor/);
   assert.doesNotMatch(skill, /angular\.verify|--resolve-nx/);
   assert.doesNotMatch(skill, /npx\s+(?:@angular\/cli|nx|create-nx-workspace)@latest/);
+  assert.match(materialProfile, /Material 3 theming, focus treatment, and harness adoption are additive checks/);
+  assert.match(materialProfile, /must not replace, weaken, or omit any required interaction, mode transition, state, or focused test/);
+  assert.match(materialProfile, /appearance modes use the current Material 3 Sass `mat\.theme` API with explicit `color-scheme`/);
+  assert.match(materialProfile, /component harnesses with `TestbedHarnessEnvironment` rather than generic or private DOM interaction/);
+  assert.match(materialProfile, /do not add `ChangeDetectionStrategy\.OnPush` solely because signals or Material are used/);
 });
 
 test('module ships no Angular command or benchmark execution substrate', () => {
