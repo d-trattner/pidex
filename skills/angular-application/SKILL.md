@@ -6,7 +6,7 @@ compatibility: Requires a trusted project and Node.js. Angular 22 supports Node 
 metadata:
   version: '0.2.0'
   upstream-angular-major: '22'
-  evidence-backed-edge-cases: '0'
+  evidence-backed-edge-cases: '1'
 ---
 
 # Angular Application
@@ -77,6 +77,6 @@ PIDEX supplies no Angular build/test/lint/affected executor. Report only checks 
 
 ## Learned edge cases
 
-The official base and conditional profiles are available now. Test-derived PIDEX edge cases are a separate evidence layer. The layer currently contains no admitted technical rules because no comparative benchmark or real Angular project has yet demonstrated one.
+The official base and conditional profiles are available now. Test-derived PIDEX edge cases are a separate evidence layer. Load the evidence-backed edge-case file when implementing Angular Router leave decisions, deferred navigation, or dirty-state guards.
 
 Future edge-case guidance must satisfy the admission requirements in [learned-edge-cases.md](references/learned-edge-cases.md). Initiative011 may identify candidates but cannot rewrite this skill automatically.

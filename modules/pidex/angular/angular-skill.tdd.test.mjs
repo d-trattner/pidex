@@ -45,10 +45,13 @@ test('module ships no Angular command or benchmark execution substrate', () => {
   for (const removed of ['verify.mjs', 'managed-process.mjs', 'verification-contract.mjs', 'nx-cli.mjs', 'benchmark-contract.mjs']) assert.equal(files(path.join(root, 'modules/pidex/angular')).some((file) => path.basename(file) === removed), false);
 });
 
-test('learned edge-case layer contains no untested technical rule', () => {
-  assert.match(edgeCases, /no PIDEX benchmark or real-project edge case has been admitted yet/);
-  assert.match(edgeCases, /documented failure with the official baseline/);
-  assert.match(skill, /evidence-backed-edge-cases: '0'/);
+test('learned edge-case layer exposes only the admitted Router programming rule', () => {
+  assert.match(edgeCases, /one Angular programming rule admitted from comparative benchmark evidence/);
+  assert.match(edgeCases, /Bind deferred Router leave authorization to the exact destination/);
+  assert.match(edgeCases, /never resume it through an unscoped one-shot boolean/);
+  assert.match(edgeCases, /consume it only when the next guard invocation matches that target/);
+  assert.match(edgeCases, /Testing-only omissions/);
+  assert.match(skill, /evidence-backed-edge-cases: '1'/);
 });
 
 test('all Markdown links in Angular skill resolve inside the skill root', () => {
