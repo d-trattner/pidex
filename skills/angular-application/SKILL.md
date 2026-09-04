@@ -6,7 +6,7 @@ compatibility: Requires a trusted project and Node.js. Angular 22 supports Node 
 metadata:
   version: '0.2.0'
   upstream-angular-major: '22'
-  evidence-backed-edge-cases: '1'
+  evidence-backed-edge-cases: '2'
 ---
 
 # Angular Application
@@ -77,6 +77,8 @@ PIDEX supplies no Angular build/test/lint/affected executor. Report only checks 
 
 ## Learned edge cases
 
-The official base and conditional profiles are available now. Test-derived PIDEX edge cases are a separate evidence layer. Load the evidence-backed edge-case file when implementing Angular Router leave decisions, deferred navigation, or dirty-state guards.
+The official base and conditional profiles are available now. Test-derived PIDEX edge cases are a separate evidence layer. Load the evidence-backed edge-case file when implementing Angular Router leave decisions or dirty-state guards, and when a signal store combines asynchronous snapshots with optimistic, committed, or live local mutations.
+
+For a matching asynchronous-snapshot task, do not report completion unless every load captures a store mutation revision/cursor and its completion explicitly rejects or rebases the snapshot when accepted mutations occurred after that capture. A route/request generation guard alone is insufficient because it does not preserve newer local state.
 
 Future edge-case guidance must satisfy the admission requirements in [learned-edge-cases.md](references/learned-edge-cases.md). Initiative011 may identify candidates but cannot rewrite this skill automatically.
