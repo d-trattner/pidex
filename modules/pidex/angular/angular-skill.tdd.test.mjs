@@ -45,13 +45,10 @@ test('module ships no Angular command or benchmark execution substrate', () => {
   for (const removed of ['verify.mjs', 'managed-process.mjs', 'verification-contract.mjs', 'nx-cli.mjs', 'benchmark-contract.mjs']) assert.equal(files(path.join(root, 'modules/pidex/angular')).some((file) => path.basename(file) === removed), false);
 });
 
-test('learned edge-case layer exposes only the admitted latest-intent rule', () => {
-  assert.match(edgeCases, /one technical rule admitted from comparative benchmark evidence/);
-  assert.match(edgeCases, /Test both completion directions for latest-intent asynchronous state/);
-  assert.match(edgeCases, /older success completing after the newer failure/);
-  assert.match(edgeCases, /older failure completing after the newer success/);
-  assert.match(edgeCases, /exact learned-layer candidate then scored 44\/44 twice/);
-  assert.match(skill, /evidence-backed-edge-cases: '1'/);
+test('learned edge-case layer contains no untested technical rule', () => {
+  assert.match(edgeCases, /no PIDEX benchmark or real-project edge case has been admitted yet/);
+  assert.match(edgeCases, /documented failure with the official baseline/);
+  assert.match(skill, /evidence-backed-edge-cases: '0'/);
 });
 
 test('all Markdown links in Angular skill resolve inside the skill root', () => {
