@@ -1,6 +1,6 @@
 # Evidence-backed Angular edge cases
 
-Status: two Angular programming rules admitted from comparative benchmark evidence.
+Status: three Angular programming rules admitted from comparative benchmark evidence.
 
 ## Bind deferred Router leave authorization to the exact destination
 
@@ -17,6 +17,14 @@ In a root-scoped signal store that combines asynchronously loaded snapshots with
 Capture a mutation revision or event cursor when each load starts. When its snapshot completes, either prove that it is newer than the local base, or install it and replay/rebase every accepted mutation after that cursor before deriving the visible signal state. Keep still-pending optimistic deltas separate so each completion or rollback remains operation-scoped. Verify navigation or refresh completion after a committed operation and after a live event, including a pending operation, without losing or duplicating any accepted delta.
 
 Evidence: two independent official-skill implementations and the no-skill control used operation-aware state but called unconditional `load`/`replaceBase` from route refresh completion, allowing a later snapshot to erase committed transfer and live-event changes. The exact completion-gated candidate produced two independent implementations with mutation revision/cursor capture and reject-or-replay handling; all critical programming checks passed in both, and the unaffected Stage 05 control passed 49/49.
+
+## Treat Angular templates as compiler-typed contracts
+
+Angular templates are not unrestricted JavaScript. Every expression resolves against template locals and component or iterable-item members, and every reactive-form directive has a concrete control-type contract. Do not reference implicit JavaScript globals such as `Math`, `Number`, `Object`, or `JSON`; compute the value in TypeScript or expose a narrow component member. Do not bind a `FormArray` to `[formGroup]`; bind it through its parent with `formArrayName`, then bind each child group with the matching group directive and stable row identity. Check every binding name against the exact view-model interface.
+
+Run the real affected application build after template or form wiring and treat every template diagnostic as a blocking programming error. TypeScript-only checks and authored test files do not prove that Angular's template compiler accepts the application.
+
+Evidence: two independent DepotFlow Stage 12 official-skill implementations failed production application compilation. One referenced implicit `Math` from a template (`TS2339`); the other passed a typed `FormArray` where the form directive required a `FormGroup` (`TS2739`). A first narrow candidate was rejected after product-behavior regressions. The strengthened fail-closed template-contract candidate produced two independent implementations whose production application builds passed. Their remaining failures were confined to provider-authored tests using `Array.prototype.at` outside the workspace test target and were not reclassified as production failures or promoted as guidance. The unaffected Stage 11 control passed build, tests, and evaluator. Independent audit: PASS, with the exact-item-name clause treated as supporting compiler-contract guidance rather than a separately proven failure class.
 
 ## Admission policy
 

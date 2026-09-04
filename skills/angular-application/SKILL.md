@@ -6,7 +6,7 @@ compatibility: Requires a trusted project and Node.js. Angular 22 supports Node 
 metadata:
   version: '0.2.0'
   upstream-angular-major: '22'
-  evidence-backed-edge-cases: '2'
+  evidence-backed-edge-cases: '3'
 ---
 
 # Angular Application
