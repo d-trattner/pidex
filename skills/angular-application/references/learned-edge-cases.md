@@ -1,6 +1,6 @@
 # Evidence-backed Angular edge cases
 
-Status: one admitted Angular programming rule plus one programming candidate under comparative confirmation.
+Status: two Angular programming rules admitted from comparative benchmark evidence.
 
 ## Bind deferred Router leave authorization to the exact destination
 
@@ -16,7 +16,7 @@ In a root-scoped signal store that combines asynchronously loaded snapshots with
 
 Capture a mutation revision or event cursor when each load starts. When its snapshot completes, either prove that it is newer than the local base, or install it and replay/rebase every accepted mutation after that cursor before deriving the visible signal state. Keep still-pending optimistic deltas separate so each completion or rollback remains operation-scoped. Verify navigation or refresh completion after a committed operation and after a live event, including a pending operation, without losing or duplicating any accepted delta.
 
-Candidate evidence: three independent DepotFlow Stage 06 implementations used an operation-aware ledger but called unconditional `load`/`replaceBase` from route refresh completion, allowing a later snapshot to erase committed transfer and live-event changes. Exact candidate confirmation and unaffected controls remain required before admission.
+Evidence: two independent official-skill implementations and the no-skill control used operation-aware state but called unconditional `load`/`replaceBase` from route refresh completion, allowing a later snapshot to erase committed transfer and live-event changes. The exact completion-gated candidate produced two independent implementations with mutation revision/cursor capture and reject-or-replay handling; all critical programming checks passed in both, and the unaffected Stage 05 control passed 49/49.
 
 ## Admission policy
 

@@ -45,8 +45,8 @@ test('module ships no Angular command or benchmark execution substrate', () => {
   for (const removed of ['verify.mjs', 'managed-process.mjs', 'verification-contract.mjs', 'nx-cli.mjs', 'benchmark-contract.mjs']) assert.equal(files(path.join(root, 'modules/pidex/angular')).some((file) => path.basename(file) === removed), false);
 });
 
-test('learned edge-case layer exposes the admitted Router rule and bounded snapshot-rebase candidate', () => {
-  assert.match(edgeCases, /one admitted Angular programming rule plus one programming candidate under comparative confirmation/);
+test('learned edge-case layer exposes exactly the two admitted programming rules', () => {
+  assert.match(edgeCases, /two Angular programming rules admitted from comparative benchmark evidence/);
   assert.match(edgeCases, /Bind deferred Router leave authorization to the exact destination/);
   assert.match(edgeCases, /never resume it through an unscoped one-shot boolean/);
   assert.match(edgeCases, /consume it only when the next guard invocation matches that target/);
