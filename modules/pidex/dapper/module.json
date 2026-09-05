@@ -1,0 +1,10 @@
+{
+  "id": "pidex.dapper",
+  "schema_version": 1,
+  "name": "PIDEX Dapper Guidance",
+  "kind": "optional-internal",
+  "default_enabled": false,
+  "dependencies": ["pidex.core", "pidex.dotnet"],
+  "skill_package": { "path": "pi-package", "skills": ["dapper-data-access"] },
+  "capabilities": []
+}

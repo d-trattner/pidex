@@ -1,0 +1,10 @@
+{
+  "id": "pidex.serilog",
+  "schema_version": 1,
+  "name": "PIDEX Serilog Guidance",
+  "kind": "optional-internal",
+  "default_enabled": false,
+  "dependencies": ["pidex.core", "pidex.dotnet"],
+  "skill_package": { "path": "pi-package", "skills": ["serilog-observability"] },
+  "capabilities": []
+}

@@ -169,6 +169,18 @@ Run module tests:
 pnpm run modules:test
 ```
 
+## Optional skill packages
+
+Guidance-only modules may own nested private Pi packages through `skill_package`. Nested packages are outside root package skill discovery, so default-off means unavailable. Explicit activation delegates to Pi package management and records ignored local module state:
+
+```bash
+node scripts/modules/skill-resources.mjs status
+node scripts/modules/skill-resources.mjs enable pidex.dapper
+node scripts/modules/skill-resources.mjs disable pidex.dapper
+```
+
+Reload Pi after changes. See [optional .NET backend skills](dotnet-skills.md).
+
 ## Discovery contract
 
 Discovery is agent-aware and phase-aware.

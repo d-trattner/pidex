@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added four default-off, independently switchable guidance modules for .NET backend architecture, Dapper-first data access, Serilog observability, and SQL Server. Skills ship as nested private Pi packages, remain absent from root discovery until explicit activation, and use dependency-aware reversible registration.
 - QA passed for cumulative Plan047/227/238 Plan258 Linux gate: 382 reported tests plus two dashboard assertions green, 85.02% line coverage, exact-22 fence 4693/5000, package exact-eight smoke, adapters, runtime routes, and approved 28-image browser evidence verified. Native Windows remains pending.
 
 ## 0.4.1 - 2026-08-07

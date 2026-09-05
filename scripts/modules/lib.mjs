@@ -14,6 +14,7 @@ const AGENT_RULE_ID_RE = /^[a-z0-9][a-z0-9.-]{2,160}$/;
 const AGENT_RULE_TOKEN_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 const CAPABILITY_ID_RE = /^[A-Za-z0-9_.:-]{1,160}$/;
 const MAX_AGENT_RULE_FILE_BYTES = 16 * 1024;
+const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const NODE_TEST_FIXED_V1_TARGETS = [
   'scripts/quality/rule-inventory.tdd.test.mjs',
   'scripts/quality/rule-exposure.tdd.test.mjs',
@@ -363,10 +364,60 @@ export function validateAgentRules(system, manifest, agents = knownAgents(system
   return errors;
 }
 
+function validateSkillPackage(system, file, manifest, ownedSkills) {
+  const errors = [];
+  const resource = manifest.skill_package;
+  if (resource === undefined) return errors;
+  if (!resource || typeof resource !== 'object' || Array.isArray(resource) || Object.keys(resource).sort().join('\0') !== 'path\0skills') return [`${manifest.id}: invalid skill_package shape`];
+  if (typeof resource.path !== 'string' || !/^[a-z0-9][a-z0-9./-]*$/.test(resource.path) || resource.path !== path.posix.normalize(resource.path) || path.isAbsolute(resource.path) || resource.path.split('/').some((part) => !part || part === '.' || part === '..')) return [`${manifest.id}: invalid skill_package path`];
+  if (!Array.isArray(resource.skills) || resource.skills.length === 0 || resource.skills.some((name) => typeof name !== 'string' || !SKILL_NAME_RE.test(name)) || new Set(resource.skills).size !== resource.skills.length) return [`${manifest.id}: invalid skill_package skills`];
+  const moduleRoot = path.dirname(file);
+  const packageRoot = path.resolve(moduleRoot, ...resource.path.split('/'));
+  try {
+    const physicalModule = realpathSync(moduleRoot);
+    const physicalPackage = realpathSync(packageRoot);
+    if (!strictDescendant(physicalModule, physicalPackage) || lstatSync(packageRoot).isSymbolicLink()) throw new Error('escape');
+    const inspectTree = (directory) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name);
+        const stat = lstatSync(target);
+        if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile())) throw new Error('unsafe package entry');
+        if (stat.isDirectory()) inspectTree(target);
+      }
+    };
+    inspectTree(packageRoot);
+    const descriptor = readJson(path.join(packageRoot, 'package.json'));
+    if (descriptor.private !== true || !Array.isArray(descriptor.pi?.skills) || descriptor.pi.skills.length !== 1 || descriptor.pi.skills[0] !== './skills') errors.push(`${manifest.id}: nested skill package descriptor invalid`);
+    const found = [];
+    const skillsRoot = path.join(packageRoot, 'skills');
+    const collectSkills = (directory, isRoot = false) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name);
+        if (entry.isDirectory()) collectSkills(target);
+        else if (entry.isFile() && entry.name === 'SKILL.md') {
+          const match = readFileSync(target, 'utf8').match(/^---\s*\n[\s\S]*?^name:\s*([a-z0-9-]+)\s*$/m);
+          if (!match) throw new Error('invalid skill frontmatter');
+          found.push(match[1]);
+        } else if (isRoot && entry.isFile() && entry.name.endsWith('.md')) throw new Error('undeclared root markdown skill');
+      }
+    };
+    collectSkills(skillsRoot, true);
+    if (found.sort().join('\0') !== [...resource.skills].sort().join('\0')) errors.push(`${manifest.id}: declared and packaged skills differ`);
+    for (const name of resource.skills) {
+      if (ownedSkills.has(name)) errors.push(`duplicate module-owned skill: ${name}`);
+      else ownedSkills.add(name);
+    }
+  } catch {
+    errors.push(`${manifest.id}: skill_package missing or escapes module root`);
+  }
+  return errors;
+}
+
 export function validateSystem(system) {
   const errors = [];
   const moduleIds = new Set();
   const capabilityIds = new Set();
+  const ownedSkills = new Set();
   const agents = knownAgents(system.pidexRoot);
   for (const { file, manifest } of system.modules) {
     if (!manifest || typeof manifest !== 'object') { errors.push(`${file}: manifest must be object`); continue; }
@@ -394,6 +445,7 @@ export function validateSystem(system) {
       errors.push(...validateCapabilityCommand(system.pidexRoot, capability));
     }
     errors.push(...validateAgentRules(system, manifest, agents));
+    errors.push(...validateSkillPackage(system, file, manifest, ownedSkills));
   }
   const agentRuleIds = new Set();
   for (const { manifest } of system.modules) {
