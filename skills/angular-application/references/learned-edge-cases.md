@@ -1,6 +1,6 @@
 # Evidence-backed Angular edge cases
 
-Status: three Angular programming rules admitted from comparative benchmark evidence.
+Status: four Angular programming rules admitted from comparative benchmark evidence.
 
 ## Bind deferred Router leave authorization to the exact destination
 
@@ -25,6 +25,14 @@ Angular templates are not unrestricted JavaScript. Every expression resolves aga
 Run the real affected application build after template or form wiring and treat every template diagnostic as a blocking programming error. TypeScript-only checks and authored test files do not prove that Angular's template compiler accepts the application.
 
 Evidence: two independent DepotFlow Stage 12 official-skill implementations failed production application compilation. One referenced implicit `Math` from a template (`TS2339`); the other passed a typed `FormArray` where the form directive required a `FormGroup` (`TS2739`). A first narrow candidate was rejected after product-behavior regressions. The strengthened fail-closed template-contract candidate produced two independent implementations whose production application builds passed. Their remaining failures were confined to provider-authored tests using `Array.prototype.at` outside the workspace test target and were not reclassified as production failures or promoted as guidance. The unaffected Stage 11 control passed build, tests, and evaluator. Independent audit: PASS, with the exact-item-name clause treated as supporting compiler-contract guidance rather than a separately proven failure class.
+
+## Bind framework migrations to the exact destination toolchain
+
+A React-to-Angular migration is incomplete when only source files are translated. Establish one coherent Angular workspace authority: destination manifest, Angular workspace and TypeScript configuration, browser entry point, regenerated lockfile, and removal of the old React runtime entry points. When the target defines an exact compatibility tuple, use those exact coordinates rather than selecting the first installable release from the requested major. Complete the migration only after the destination Angular build and tests run successfully.
+
+Keep this rule narrow. It does not require a full rewrite over an incremental migration, prescribe unrelated redesign, or prove one specific lockfile command. It requires that the chosen cutover unit has one runtime authority, an internally consistent exact target toolchain, and executable destination validation. Never hide incompatibility with force or legacy-peer bypasses.
+
+Evidence: after adding an unconfounded, bounded dependency-migration harness, two independent official-skill React-to-Angular implementations selected Angular `22.0.0` despite the fixture's required core/common/compiler/forms/router `22.1.4` and CLI/build `22.1.6` tuple; one also failed the production build. The strengthened candidate produced two independent migrations with the exact tuple, regenerated lockfiles, and passing Angular builds/tests; all critical evaluator checks passed (54/54 and 52/54, with only one important test-evidence wording gap). An unaffected S02 async-signals control passed 41/41. Independent audit: PASS for the narrow destination-toolchain rule; command-level lockfile provenance and clause-by-clause ablation remain explicitly unclaimed.
 
 ## Admission policy
 

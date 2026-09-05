@@ -45,8 +45,8 @@ test('module ships no Angular command or benchmark execution substrate', () => {
   for (const removed of ['verify.mjs', 'managed-process.mjs', 'verification-contract.mjs', 'nx-cli.mjs', 'benchmark-contract.mjs']) assert.equal(files(path.join(root, 'modules/pidex/angular')).some((file) => path.basename(file) === removed), false);
 });
 
-test('learned edge-case layer exposes exactly the three admitted programming rules', () => {
-  assert.match(edgeCases, /three Angular programming rules admitted from comparative benchmark evidence/);
+test('learned edge-case layer exposes exactly the four admitted programming rules', () => {
+  assert.match(edgeCases, /four Angular programming rules admitted from comparative benchmark evidence/);
   assert.match(edgeCases, /Bind deferred Router leave authorization to the exact destination/);
   assert.match(edgeCases, /never resume it through an unscoped one-shot boolean/);
   assert.match(edgeCases, /consume it only when the next guard invocation matches that target/);
@@ -55,8 +55,10 @@ test('learned edge-case layer exposes exactly the three admitted programming rul
   assert.match(edgeCases, /Treat Angular templates as compiler-typed contracts/);
   assert.match(edgeCases, /Do not reference implicit JavaScript globals/);
   assert.match(edgeCases, /Do not bind a `FormArray` to `\[formGroup\]`/);
+  assert.match(edgeCases, /Bind framework migrations to the exact destination toolchain/);
+  assert.match(edgeCases, /use those exact coordinates rather than selecting the first installable release/);
   assert.match(edgeCases, /Testing-only omissions/);
-  assert.match(skill, /evidence-backed-edge-cases: '3'/);
+  assert.match(skill, /evidence-backed-edge-cases: '4'/);
 });
 
 test('all Markdown links in Angular skill resolve inside the skill root', () => {
