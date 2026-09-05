@@ -20,7 +20,7 @@
 
 - Source: https://github.com/nrwl/nx/tree/c598d4e2fae2a75e2690e69f09d943d66b1489d8/.agents/skills
 - Selected files: `nx-workspace`, `AFFECTED`, `nx-generate`, `nx-run-tasks`, `nx-plugins`, `link-workspace-packages`
-- Baseline packages: `nx@23.1.2`, `@nx/angular@23.1.2`
+- Baseline packages: `nx@23.2.0`, `@nx/angular@23.2.0` (Angular 22.1 compatibility floor; refreshed 2026-09-05)
 - License: MIT, Copyright (c) 2017–2026 Narwhal Technologies Inc.
 - MCP, AI-config and CI-cloud automation skills are intentionally excluded.
 

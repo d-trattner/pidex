@@ -3,7 +3,7 @@
 Activate when Nx is detected or explicitly requested.
 
 - Keep `nx` and all `@nx/*` packages on the same version.
-- For Angular 22, require Nx 23.1 or newer within the current official compatibility matrix.
+- For the pinned Angular 22.1 target, require Nx 23.2 or newer within the current official compatibility matrix. Nx 23.1 starts Angular 22.0 support but does not cover Angular 22.1.
 - Use workspace-local Nx; never a global or moving `latest` command during normal work.
 - Read `nx.json`, but obtain complete project configuration from `nx show project <name> --json` because plugins infer targets.
 - Use `nx show projects --json` and `nx graph --print` for workspace/dependency truth.

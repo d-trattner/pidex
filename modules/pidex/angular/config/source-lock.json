@@ -1,6 +1,6 @@
 {
   "schema": "pidex-angular-source-lock-v1",
-  "created_at": "2026-08-31T00:00:00.000Z",
+  "created_at": "2026-09-05T00:00:00.000Z",
   "angular": {
     "core": "22.1.4",
     "cli": "22.1.6",
@@ -17,10 +17,10 @@
     "source_commit": "5d64e397b47e722e6ec8cd9eed69cd032766f656"
   },
   "nx": {
-    "nx": "23.1.2",
-    "angular_plugin": "23.1.2",
+    "nx": "23.2.0",
+    "angular_plugin": "23.2.0",
     "source_commit": "c598d4e2fae2a75e2690e69f09d943d66b1489d8",
-    "angular22_range": ">=23.1.0"
+    "angular22_range": ">=23.2.0"
   },
   "web_codegen_scorer": "0.0.70",
   "licenses": {
@@ -267,8 +267,8 @@
     },
     {
       "path": "skills/angular-application/references/upstream/ATTRIBUTION.md",
-      "bytes": 1529,
-      "sha256": "4cc775cb649d39c1f05d6a5ca21562a45db4872e0db986e35897878b0d2033bb"
+      "bytes": 1586,
+      "sha256": "eb13e20ddedca2f8071684ab305a9c05f19e3b7da0067f46efdd146d83ef3c7e"
     },
     {
       "path": "skills/angular-application/references/upstream/LICENSE-angular-components.txt",
@@ -286,5 +286,5 @@
       "sha256": "50bb7bf81374073606d3c3f277762d5222d82c918b2088f3789ed7e5f9f8b496"
     }
   ],
-  "aggregate_sha256": "0ae5f3558aaac0830efb9c726957542ee917bad44520af78464128cb34ae1bc2"
+  "aggregate_sha256": "4c838891fa1ccff21d149587b7212137e8ab0a3b3da6dfc0bfe4ba887422fbba"
 }

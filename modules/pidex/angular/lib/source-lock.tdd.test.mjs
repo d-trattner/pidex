@@ -22,7 +22,7 @@ test('source lock verifies exact Angular, Material and Nx closure', () => {
   assert.match(result.aggregate_sha256, /^[a-f0-9]{64}$/);
   assert.equal(result.coordinates.angular.core, '22.1.4');
   assert.equal(result.coordinates.material.material, '22.1.4');
-  assert.equal(result.coordinates.nx.nx, '23.1.2');
+  assert.equal(result.coordinates.nx.nx, '23.2.0');
 });
 
 test('source lock rejects changed, missing, extra, mirror-mismatched and nested skill files', () => {
