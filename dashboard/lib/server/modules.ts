@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
@@ -9,6 +10,7 @@ type ModuleManifest = {
   kind: 'core-required' | 'core-toggleable' | 'optional-internal';
   default_enabled?: boolean;
   dependencies?: string[];
+  skill_package?: { path: string; skills: string[] };
   capabilities?: Array<{
     id: string;
     kind: string;
@@ -39,7 +41,9 @@ export type ModuleStatus = {
   kind: string;
   enabled: boolean;
   locked: boolean;
+  controllable: boolean;
   source: string;
+  skill_resource: { skills: string[]; registration: 'unverified' } | null;
   dependencies: string[];
   capabilities: Array<{
     id: string;
@@ -107,7 +111,7 @@ function readEvidence(root: string): Map<string, EvidenceRow> {
   return latest;
 }
 
-export function getModulesStatus(root = PIDEX_ROOT): { ok: true; runtime_root: string; modules: ModuleStatus[]; totals: { modules: number; enabled: number; capabilities: number } } {
+export function getModulesStatus(root = PIDEX_ROOT): { ok: true; runtime_root: string; revision: string; actions_enabled: boolean; modules: ModuleStatus[]; totals: { modules: number; enabled: number; capabilities: number } } {
   const evidence = readEvidence(root);
   const modules = walkModuleManifests(root).map((file) => {
     const manifest = readJson<ModuleManifest>(file, { id: path.basename(path.dirname(file)), kind: 'optional-internal', capabilities: [] });
@@ -129,14 +133,19 @@ export function getModulesStatus(root = PIDEX_ROOT): { ok: true; runtime_root: s
       kind: manifest.kind,
       enabled: state.enabled,
       locked: state.locked,
+      controllable: !state.locked,
       source: state.source,
+      skill_resource: manifest.skill_package ? { skills: manifest.skill_package.skills || [], registration: 'unverified' as const } : null,
       dependencies: manifest.dependencies || [],
       capabilities,
     };
   });
+  const effective = modules.map((module) => [module.id, module.enabled]).sort(([a], [b]) => String(a).localeCompare(String(b)));
   return {
     ok: true,
     runtime_root: path.basename(root) || 'pidex',
+    revision: createHash('sha256').update(JSON.stringify(effective)).digest('hex'),
+    actions_enabled: ['1', 'true', 'yes'].includes((process.env.PIDEX_MODULE_ACTIONS_ENABLED || '').trim().toLowerCase()) && Buffer.byteLength(process.env.PIDEX_MODULE_ACTION_TOKEN || '') >= 16,
     modules,
     totals: {
       modules: modules.length,

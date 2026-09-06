@@ -4,7 +4,7 @@ PIDEX modules are an internal architecture boundary for PIDEX-owned workflow fea
 
 ## Current status
 
-The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, module-scoped `agent_rules` metadata discovery, reviewed rule rendering, PIDEX-wide module-rule eligibility, the first automatic prompt-integration consumer in Project Pipeline, and read-only dashboard transparency.
+The module framework is internal-first and supports manifests, install-level config, validation, discovery, runner execution, evidence, module-scoped `agent_rules` metadata discovery, reviewed rule rendering, PIDEX-wide module-rule eligibility, the first automatic prompt-integration consumer in Project Pipeline, dashboard transparency, and guarded local enable/disable actions on the existing `/modules` page.
 
 Physically migrated first-party modules now include:
 
@@ -24,7 +24,6 @@ Not implemented yet:
 - third-party modules;
 - module registry/install;
 - dashboard feature contribution loader;
-- dashboard module management UI;
 - removal of compatibility wrappers;
 - external rule contributions;
 - automatic host-direct/hardened-pipeline module rule prompt injection beyond the reviewed Project Pipeline integration.
@@ -180,6 +179,20 @@ node scripts/modules/skill-resources.mjs disable pidex.dapper
 ```
 
 Reload Pi after changes. See [optional .NET backend skills](dotnet-skills.md).
+
+## Dashboard controls
+
+`/modules` remains read-only unless the dashboard process explicitly opts in:
+
+```bash
+PIDEX_MODULE_ACTIONS_ENABLED=1 \
+PIDEX_MODULE_ACTION_TOKEN='<operator-secret>' \
+pnpm --prefix dashboard run dev
+```
+
+Core-required modules stay locked. Each action first computes the dependency closure, requires explicit confirmation, sends an expected revision and idempotency key, and writes only ignored `config/modules.local.json`. Disabling a module with active dependents requires a separate cascade confirmation. Skill-owning modules also delegate to bounded `pi install`/`pi remove`; the dashboard reports Pi registration as `unverified` and requests `/reload` rather than claiming runtime availability.
+
+Every write requires a `PIDEX_MODULE_ACTION_TOKEN` of at least 16 bytes, including loopback writes; enter it in the page's session-only token field. Browser writes must also be same-origin. The token is never returned by the API or persisted by the UI. Use TLS when accessing a dashboard across a network. Module actions remain default-off and do not install SDKs, NuGet packages, databases, migrations, or logging sinks.
 
 ## Discovery contract
 

@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { applySkillResourceAction, planSkillResourceAction, skillResourceStatus } from './skill-resources.mjs';
+import { applyModuleAction, applySkillResourceAction, moduleStateRevision, planModuleAction, planSkillResourceAction, skillResourceStatus } from './skill-resources.mjs';
 import { loadModuleSystem, validateSystem } from './lib.mjs';
 
 const roots = [];
@@ -22,6 +23,12 @@ test('root Pi package does not discover default-off nested skills', () => {
   const descriptor = JSON.parse(readFileSync(path.join(process.cwd(), 'package.json')));
   assert.deepEqual(descriptor.pi.skills, ['./skills']);
   for (const name of ['dotnet-backend', 'dapper-data-access', 'serilog-observability', 'sql-server']) assert.equal(existsSync(path.join(process.cwd(), 'skills', name, 'SKILL.md')), false);
+});
+
+test('status accepts JSON flag without treating it as module id', () => {
+  const result = spawnSync(process.execPath, [path.join(process.cwd(), 'scripts/modules/skill-resources.mjs'), 'status', '--json'], { cwd: process.cwd(), encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true); assert.equal(payload.modules.length, 4);
 });
 
 test('four nested skill packages are valid and default off', () => {
@@ -75,7 +82,7 @@ test('base removal blocks enabled dependents and cascade removes dependents firs
   const root = fixture(); writeFileSync(path.join(root, 'config', 'modules.local.json'), JSON.stringify({ modules: { 'pidex.dotnet': { enabled: true }, 'pidex.dapper': { enabled: true }, 'pidex.serilog': { enabled: true } } }));
   const system = loadModuleSystem(root);
   assert.throws(() => planSkillResourceAction(system, 'disable', 'pidex.dotnet'), /enabled dependents/);
-  assert.deepEqual(planSkillResourceAction(system, 'disable', 'pidex.dotnet', true).map((x) => x.moduleId), ['pidex.serilog', 'pidex.dapper', 'pidex.dotnet']);
+  assert.deepEqual(planSkillResourceAction(system, 'disable', 'pidex.dotnet', true).map((x) => x.moduleId), ['pidex.dapper', 'pidex.serilog', 'pidex.dotnet']);
 });
 
 test('failed Pi operation rolls back prior package registration and leaves state unchanged', () => {
@@ -106,6 +113,24 @@ test('skill references resolve and Dapper guidance keeps EF Core non-default', (
   const dapper = readFileSync(path.join(process.cwd(), 'modules/pidex/dapper/pi-package/skills/dapper-data-access/SKILL.md'), 'utf8');
   assert.match(dapper, /Prefer Dapper over introducing EF Core/);
   assert.doesNotMatch(dapper, /prefer EF Core|EF Core.*default/i);
+});
+
+test('generic module actions lock core and enforce expected revision', () => {
+  const root = fixture(); const system = loadModuleSystem(root); const revision = moduleStateRevision(system);
+  assert.throws(() => planModuleAction(system, 'disable', 'pidex.core'), /locked module/);
+  assert.throws(() => applyModuleAction({ pidexRoot: root, action: 'enable', moduleId: 'pidex.dotnet', expectedRevision: '0'.repeat(64), runPi: () => ({ ok: true }) }), (error) => error.code === 'MODULE_STATE_CONFLICT');
+  const result = applyModuleAction({ pidexRoot: root, action: 'enable', moduleId: 'pidex.dotnet', expectedRevision: revision, runPi: () => ({ ok: true }) });
+  assert.match(result.revision, /^[a-f0-9]{64}$/); assert.notEqual(result.revision, revision);
+
+  const plainRoot = fixture(); mkdirSync(path.join(plainRoot, 'modules/pidex/plain'), { recursive: true });
+  writeFileSync(path.join(plainRoot, 'modules/pidex/plain/module.json'), JSON.stringify({ schema_version: 1, id: 'pidex.plain', name: 'Plain', kind: 'optional-internal', default_enabled: false, dependencies: [], capabilities: [] }));
+  let piCalls = 0;
+  const plainResult = applyModuleAction({ pidexRoot: plainRoot, action: 'enable', moduleId: 'pidex.plain', expectedRevision: moduleStateRevision(loadModuleSystem(plainRoot)), runPi: () => { piCalls++; return { ok: true }; } });
+  assert.equal(plainResult.changed, true); assert.equal(plainResult.reload_required, false); assert.equal(piCalls, 0);
+
+  const busyRoot = fixture(); writeFileSync(path.join(busyRoot, 'config', '.modules-action.lock'), 'busy');
+  assert.throws(() => applyModuleAction({ pidexRoot: busyRoot, action: 'enable', moduleId: 'pidex.dotnet', runPi: () => ({ ok: true }) }), (error) => error.code === 'MODULE_ACTION_BUSY');
+  assert.equal(existsSync(path.join(busyRoot, 'config', 'modules.local.json')), false);
 });
 
 test('dry-run performs no Pi operation or state write', () => {

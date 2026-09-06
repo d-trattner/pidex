@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Boxes, CheckCircle2, CircleSlash, Lock, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
 
 import { GlassPanel } from '../components/ui/glass-panel';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
@@ -9,6 +10,8 @@ import { useDashboardQuery } from '../lib/client/use-dashboard-query';
 type ModulePayload = {
   ok: boolean;
   runtime_root: string;
+  revision: string;
+  actions_enabled: boolean;
   totals: { modules: number; enabled: number; capabilities: number };
   modules: Array<{
     id: string;
@@ -16,7 +19,9 @@ type ModulePayload = {
     kind: string;
     enabled: boolean;
     locked: boolean;
+    controllable: boolean;
     source: string;
+    skill_resource: { skills: string[]; registration: 'unverified' } | null;
     dependencies: string[];
     capabilities: Array<{
       id: string;
@@ -34,13 +39,49 @@ function ModulesPage() {
   const data = query.data;
   const modules = data?.modules || [];
   const locked = modules.filter((module) => module.locked).length;
+  const [pending, setPending] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [token, setToken] = useState('');
+
+  const postAction = async (moduleId: string, action: 'enable' | 'disable', cascade = false, dryRun = false) => {
+    if (!data) return null;
+    const response = await fetch('/api/modules', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': globalThis.crypto?.randomUUID?.() || `module-${Date.now()}-${Math.random().toString(36).slice(2)}`, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ action, module_id: moduleId, cascade, dry_run: dryRun, expected_revision: data.revision, confirm: !dryRun }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw Object.assign(new Error(payload.error || 'Module action failed.'), { code: payload.code });
+    return payload as { actions: Array<{ moduleId: string }>; reload_required: boolean };
+  };
+
+  const control = async (moduleId: string, action: 'enable' | 'disable') => {
+    setPending(moduleId); setNotice(null);
+    try {
+      let cascade = false; let preview;
+      try { preview = await postAction(moduleId, action, false, true); }
+      catch (error) {
+        if ((error as { code?: string }).code !== 'DEPENDENTS_ENABLED' || !window.confirm(`${(error as Error).message}\n\nDisable dependents too?`)) throw error;
+        cascade = true; preview = await postAction(moduleId, action, true, true);
+      }
+      const affected = preview?.actions.map((item) => item.moduleId).join(', ') || moduleId;
+      if (!window.confirm(`${action === 'enable' ? 'Enable' : 'Disable'} ${affected}?${cascade ? '\nThis cascades to dependent modules.' : ''}`)) return;
+      const result = await postAction(moduleId, action, cascade, false);
+      setNotice({ kind: 'ok', text: `${action === 'enable' ? 'Enabled' : 'Disabled'}: ${affected}.${result?.reload_required ? ' Run /reload in Pi; package registration is not independently attested yet.' : ''}` });
+      await query.refetch();
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Module action failed.' }); }
+    finally { setPending(null); }
+  };
 
   return (
     <section className="grid overview-grid" style={{ marginTop: 12 }}>
       <GlassPanel className="glass-card overview-hero" style={{ gridColumn: '1 / -1' }}>
         <h2 className="h2">Modules</h2>
-        <p className="muted">Read-only PIDEX module status, capability ownership, and latest runner evidence.</p>
+        <p className="muted">PIDEX module status, capability ownership, and guarded local activation.</p>
         {data?.runtime_root ? <p className="muted">Runtime root: <code>{data.runtime_root}</code></p> : null}
+        {!data?.actions_enabled ? <p className="muted">Module actions are disabled. Set <code>PIDEX_MODULE_ACTIONS_ENABLED=1</code> and restart the dashboard to opt in.</p> : null}
+        {data?.actions_enabled ? <label className="muted">Operator action token (session only): <input type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" /></label> : null}
+        {notice ? <p role="status" style={{ color: notice.kind === 'error' ? 'var(--danger)' : 'var(--success)' }}>{notice.text}</p> : null}
       </GlassPanel>
 
       {query.isLoading ? (
@@ -58,7 +99,7 @@ function ModulesPage() {
               <p className="muted">No modules discovered.</p>
             ) : (
               <div className="table-scroll">
-                <table className="data-table">
+                <table className="data-table" style={{ minWidth: 1000 }}>
                   <thead>
                     <tr>
                       <th>Module</th>
@@ -66,6 +107,7 @@ function ModulesPage() {
                       <th>Status</th>
                       <th>Capabilities</th>
                       <th>Dependencies</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -76,6 +118,7 @@ function ModulesPage() {
                         <td>{module.enabled ? 'enabled' : 'disabled'} · {module.locked ? 'locked' : module.source}</td>
                         <td>{module.capabilities.length}</td>
                         <td>{module.dependencies.length ? module.dependencies.join(', ') : '—'}</td>
+                        <td>{module.controllable && data?.actions_enabled ? <button className="button" type="button" disabled={pending !== null} onClick={() => control(module.id, module.enabled ? 'disable' : 'enable')}>{pending === module.id ? 'Working…' : module.enabled ? 'Disable' : 'Enable'}</button> : module.locked ? 'Locked' : 'Actions off'}{module.skill_resource ? <><br /><span className="muted">Pi registration: unverified</span></> : null}</td>
                       </tr>
                     ))}
                   </tbody>
