@@ -100,6 +100,7 @@ These areas need more evidence before PIDEX can make a stronger Windows support 
 - global Git hook install/uninstall scripts are Linux-owned and may not map cleanly to Windows Git configuration.
 - provider/delegate and broader/full pipeline scripts still need native Windows validation of delegated agent behavior, auth handling, and path quoting beyond the focused Project Pipeline smoke/preview/browser-smoke scenarios.
 - native PowerShell support requires more Windows-owned wrappers and smoke tests before support can be promoted.
+- the Angular 22 source/workspace module and the .NET nested-skill/dashboard activation transaction have Linux evidence but still require their prepared isolated native-Windows acceptance runs.
 
 ## Experimental PowerShell bootstrap
 

@@ -18,7 +18,7 @@ PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary 
 
 Lifecycle-tracked Critic, Code Review, Security, and QA work uses bounded review budgets: a fixed number of review dispatches per project, plan, and gate. The limit prevents review loops without limiting normal planning, implementation, tokens, cost, or time.
 
-PIDEX v0.4 is an evidence-driven reliability release. It bounds lifecycle-tracked review work to two automatic corrections before durable `CLOSED_WITH_TBR` terminalization, adds strict browser-smoke schema 2 verdict handling and constrained rich checks, hardens focused native-Windows file behavior, and injects matched module rules directly into Project Pipeline agents. Linux, focused native-Windows, and real Project Pipeline acceptance passed for this release; native-Windows support remains experimental rather than broadly supported.
+PIDEX v0.5 adds an evidence-tested Angular 22 application skill with conditional Material and Nx profiles, four narrowly admitted programming rules, and read-only source/workspace capabilities. It also adds four default-off .NET backend guidance modules for ASP.NET Core architecture, Dapper-first data access, Serilog, and SQL Server, plus guarded module controls on the existing dashboard. Module writes remain opt-in, token-authenticated, dependency-aware, revision-safe, and reversible. Linux focused, package, browser, and isolated real-Pi activation evidence passed; native-Windows acceptance remains pending, so Windows support stays experimental.
 
 Controlled test-server fixtures, all-role screening, and independent holdouts selected the current GPT-5.6 catalog: Balanced combines Sol for quality-critical reasoning and review, Terra for implementation and operations, and Luna for retrospectives; Lowcost uses Terra for bounded Code Review and QA where repeated holdouts retained the core outcome with materially lower token use; All-Sol remains selective rather than the default. Spark was tested across the role matrix but was not competitive as a general profile. UAT was its only eligible offload, and one slower role-specific route did not justify a separate profile and fallback lifecycle.
 
@@ -41,7 +41,9 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Project Pipeline](readme/project-pipeline.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
-- [PIDEX modules](readme/modules.md)
+- [PIDEX modules and guarded dashboard controls](readme/modules.md)
+- [Optional .NET backend skills](readme/dotnet-skills.md)
+- [Angular application module and skill](modules/pidex/angular/README.md)
 - [Project session memory](readme/project-memory.md)
 - [Project context](readme/project-context.md)
 - [Windows status](readme/windows.md)
@@ -87,7 +89,7 @@ See [Windows status](readme/windows.md) for support boundaries and the PowerShel
 
 ## Install
 
-PIDEX v0.4 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the experimental Windows bootstrap. Other runtime paths are not supported yet.
+PIDEX v0.5 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the experimental Windows bootstrap. Other runtime paths are not supported yet.
 
 ### Install modes
 
@@ -208,7 +210,9 @@ Project session memory:
 - `scripts/delegate/` – `codex` delegate/auth wrapper
 - `pidex.analysis-metrics-history` module – analytics, metrics, history helpers
 - `pidex.memory-wiki-hygiene` module – wiki hygiene audit/cadence module
-- `dashboard/` – local analytics UI
+- `pidex.angular` module and `angular-application` skill – read-only Angular 22 profile/source support
+- `pidex.dotnet`, `pidex.dapper`, `pidex.serilog`, and `pidex.sqlserver` – default-off nested skill packages
+- `dashboard/` – local analytics UI, including guarded module controls
 - `readme/` – detailed feature docs
 
 ## Smoke checks
@@ -248,7 +252,7 @@ node dashboard/start.mjs
 
 On native Windows, `node dashboard/start.mjs` runs the dashboard in the current terminal by default to avoid flashing helper console windows; stop it with `Ctrl+C`. See [Windows status](readme/windows.md). The Linux shell launchers are not required for the dashboard on native Windows.
 
-The dashboard provides Overview, Live, Runs, Quality, Usage, Wiki, Context, and Settings sections. See [Dashboard](readme/dashboard.md).
+The dashboard provides Overview, Live, Runs, Quality, Modules, Usage, Wiki, Context, and Settings sections. Module actions are disabled by default and require an operator token when explicitly enabled. See [Dashboard](readme/dashboard.md).
 
 ## Provider limits and profiles
 

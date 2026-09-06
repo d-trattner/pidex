@@ -1,1 +1,1 @@
-{"name":"@d-trattner/pidex-sqlserver-skill","version":"0.4.1","private":true,"keywords":["pi-package"],"pi":{"skills":["./skills"]}}
+{"name":"@d-trattner/pidex-sqlserver-skill","version":"0.5.0","private":true,"keywords":["pi-package"],"pi":{"skills":["./skills"]}}

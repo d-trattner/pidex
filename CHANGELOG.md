@@ -2,8 +2,15 @@
 
 ## Unreleased
 
-- Added four default-off, independently switchable guidance modules for .NET backend architecture, Dapper-first data access, Serilog observability, and SQL Server. Skills ship as nested private Pi packages, remain absent from root discovery until explicit activation, and use dependency-aware reversible registration.
-- QA passed for cumulative Plan047/227/238 Plan258 Linux gate: 382 reported tests plus two dashboard assertions green, 85.02% line coverage, exact-22 fence 4693/5000, package exact-eight smoke, adapters, runtime routes, and approved 28-image browser evidence verified. Native Windows remains pending.
+## 0.5.0 - 2026-09-06
+
+- Added one progressively disclosed `angular-application` skill backed by pinned Angular 22 guidance, conditional Material 3 and Nx profiles, and four benchmark-admitted rules for router leave authorization, async snapshot rebasing, template compiler/build contracts, and exact framework-migration toolchains.
+- Added the read-only `pidex.angular` module with source-lock verification and bounded static workspace/profile inspection. PIDEX does not execute Angular builds, generators, package installation, MCP, WebMCP, or benchmark workloads.
+- Added four default-off, independently switchable guidance modules for .NET/ASP.NET Core architecture, Dapper-first data access, Serilog observability, and SQL Server. Nested private Pi packages remain absent from root discovery until explicit activation.
+- Added guarded enable/disable controls to the existing dashboard Modules page. Actions are default-off, token-authenticated, same-origin for browsers, revision/idempotency protected, dependency/cascade aware, core-locking, and rollback-capable; Pi registration remains explicitly unverified until reload.
+- Completed isolated Linux real-Pi activation evidence for the .NET modules and fake-only browser interaction evidence for dashboard controls. Native-Windows Angular and module-activation gates remain pending; no broader Windows support claim is added.
+- Hardened review continuity and failure truth across bounded natural epics, partial corrections, non-final findings, and timed-out specialist artifacts.
+- QA passed for cumulative Plan047/227/238 Plan258 Linux gate: 382 reported tests plus two dashboard assertions green, 85.02% line coverage, exact-22 fence 4693/5000, package exact-eight smoke, adapters, runtime routes, and approved 28-image browser evidence verified.
 
 ## 0.4.1 - 2026-08-07
 

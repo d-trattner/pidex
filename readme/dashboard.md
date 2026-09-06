@@ -72,10 +72,23 @@ The public default `config/dashboard.json` leaves the domain unset. PIDEX does n
 - **Live** — active projects, running pipelines, timeline, latest agent runs, and context/markdown modal.
 - **Runs** — agent and completed pipeline tables with formatted timestamps, durations, cost, and context-document buttons.
 - **Quality** — selector-scoped PDQ quality metrics, trace gaps, operator contract findings, quality trends, background governance status, completion/runtime/model-quality charts, and artifact health signals.
+- **Modules** — discovered modules, effective state, dependencies, capability ownership, locked core modules, and guarded enable/disable actions.
 - **Usage** — provider limits, active profile, token consumption, quota trends, profile switching, and estimate-only agent balance/runway cards.
 - **Wiki** — project-scoped markdown browser for `agents.output` and auto-detected `wiki` roots.
 - **Context** — project-scoped editor for `pidex/context/CONTEXT.md` domain language, relationships, example dialogue, and flagged ambiguities.
 - **Settings** — active profile, configured profiles, provider-limit refresh status, optional parallel-agent configuration, Quality Governance local settings, and estimate-only agent balance inputs.
+
+## Guarded module actions
+
+The Modules page is read-only by default. To permit local module-state changes, set both variables before starting the dashboard:
+
+```bash
+PIDEX_MODULE_ACTIONS_ENABLED=1 \
+PIDEX_MODULE_ACTION_TOKEN='<at-least-16-byte-operator-secret>' \
+node dashboard/start.mjs
+```
+
+Every write requires the token; browser writes must also be same-origin. The UI keeps the token in component memory only, previews dependency effects, requires confirmation, and requires a second cascade confirmation when disabling active dependents. Core-required modules stay locked. Skill-owning modules delegate to bounded `pi install`/`pi remove`, report registration as unverified, and request `/reload`. Use TLS for non-loopback access. See [PIDEX modules](modules.md).
 
 ## UX notes
 
