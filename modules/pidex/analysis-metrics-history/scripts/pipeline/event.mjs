@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { closeSync, constants as fsConstants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmdirSync, rmSync, unlinkSync, writeSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import process from 'node:process';
@@ -13,6 +13,11 @@ import { extractStructuredPayload, validateStructuredReviewOutcome } from '../..
 import { acquireProjectArchiveLock, resolveArchiveRoot } from '../../../../../modules/pidex/project-pipeline/scripts/project-pipeline/archive-sync.mjs';
 import { acquireProjectTbrLock, projectTbrLockPath } from '../../lib/tbr-lock.mjs';
 import { resolveStateRoot } from '../../lib/state-root.mjs';
+import { RECOVERY_SCHEMA } from '../../../../../scripts/runtime/closeout-receipt.mjs';
+import { createCloseoutRecovery, validateCloseoutRequest, describeCloseoutRecovery } from '../../../../../scripts/runtime/closeout-recovery.mjs';
+import { inspectExecution } from '../../../../../scripts/runtime/review-execution.mjs';
+import { readBounded, safePath } from '../../../../../scripts/runtime/io.mjs';
+import { CLOSEOUT_SCHEMA, CLOSEOUT_START, CLOSEOUT_END, CLOSEOUT_PUBLISHERS, POST_RETRO_AGENTS, foldCloseoutObligations, assertCloseoutObligationsComplete, closeoutHash, closeoutArtifactPath, closeoutResultRouting } from '../../../../../scripts/runtime/closeout-obligations.mjs';
 // Plan 059 Slice 3 (AD-6): archive-only Project Pipeline completion reuses the
 // existing external archive lock framework from the project-pipeline module (no
 // second lock framework, no circular module authority — archive-sync.mjs only
@@ -31,7 +36,7 @@ function parse(argv) {
   const out = { root: rootFromScript(), stateDir: resolveStateRoot({ root: rootFromScript() }), project: '', projectSlug: '', pipelineId: process.env.RUNNING_PI_PIPELINE_ID || '', plan: 'unknown-plan', event: '', status: '', actor: 'orchestrator', message: '', source: 'manual', projectMode: '', testProject: undefined, metadataJson: '' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]; const v = () => argv[++i] || '';
-    if (a === '--project') out.project = v(); else if (a === '--state-dir') out.stateDir = v(); else if (a === '--project-slug' || a === '--slug') out.projectSlug = v(); else if (a === '--pipeline-id') out.pipelineId = v(); else if (a === '--plan') out.plan = v(); else if (a === '--event' || a === '--event-type') out.event = v(); else if (a === '--status') out.status = v(); else if (a === '--actor') out.actor = v(); else if (a === '--message') out.message = v(); else if (a === '--source') out.source = v(); else if (a === '--project-mode') out.projectMode = v(); else if (a === '--test-project') { const value = v().toLowerCase(); if (!['true', 'false'].includes(value)) throw new Error('--test-project requires true or false'); out.testProject = value === 'true'; } else if (a === '--metadata-json') out.metadataJson = v(); else if (a === '-h' || a === '--help') { out.help = true; } else throw new Error(`Unknown arg: ${a}`);
+    if (a === '--project') out.project = v(); else if (a === '--state-dir') out.stateDir = v(); else if (a === '--project-slug' || a === '--slug') out.projectSlug = v(); else if (a === '--pipeline-id') out.pipelineId = v(); else if (a === '--plan') out.plan = v(); else if (a === '--event' || a === '--event-type') out.event = v(); else if (a === '--status') out.status = v(); else if (a === '--actor') out.actor = v(); else if (a === '--message') out.message = v(); else if (a === '--source') out.source = v(); else if (a === '--project-mode') out.projectMode = v(); else if (a === '--test-project') { const value = v().toLowerCase(); if (!['true', 'false'].includes(value)) throw new Error('--test-project requires true or false'); out.testProject = value === 'true'; } else if (a === '--confirm-closeout') out.confirmTerminal = true; else if (a === '--metadata-json') out.metadataJson = v(); else if (a === '-h' || a === '--help') { out.help = true; } else throw new Error(`Unknown arg: ${a}`);
   }
   out.stateDir ||= path.join(out.root, 'state');
   if (!out.project) out.project = process.cwd();
@@ -264,7 +269,10 @@ function writeNewFileDurable(file, content, mode = 0o600) {
 }
 
 function appendReviewEvent(stream, event_type, metadata) {
-  const payload = Buffer.from(`${JSON.stringify({ timestamp: new Date().toISOString(), event_type, metadata })}\n`); const fd = openSync(stream, 'a');
+  appendRecordDurable(stream, { timestamp: new Date().toISOString(), event_type, metadata });
+}
+function appendRecordDurable(stream, record) {
+  const payload = Buffer.from(`${JSON.stringify(record)}\n`); const fd = openSync(stream, 'a');
   try { let offset = 0; while (offset < payload.length) { const written = writeSync(fd, payload, offset, payload.length - offset); if (!Number.isInteger(written) || written <= 0) throw new Error('review lifecycle short write'); offset += written; } fsyncSync(fd); }
   finally { closeSync(fd); }
 }
@@ -279,7 +287,7 @@ function bindReviewRoot(authority, identity) {
     let rows; try { rows = readReviewRows(candidate); } catch { return { code: 'REVIEW_HISTORY_INVALID' }; }
     if (rows.some((row) => row?.metadata?.planId === identity.planId && row?.metadata?.reviewGate === identity.reviewGate)) return { code: 'REVIEW_HISTORY_INVALID' };
   }
-  return { stream: authority.stream, rows: rootRows };
+  return { stream: authority.stream, pipelineId: authority.pipelineId, rows: rootRows };
 }
 function reviewLock(authority, identity) { return path.join(authority.base, `.review-${identity.planId}-${identity.reviewGate}.lock`); }
 function releasePair(gateLock, selectionLock) {
@@ -331,7 +339,7 @@ function reserveStateResult(state, resume) {
   if (state.status === 'primary_hold' && !resume) return { status: 'held', reviewCompletion: { status: 'PRIMARY_REVIEW_UNAVAILABLE', holdId: state.holdId } };
   if (resume && state.status !== 'primary_hold') return { status: 'denied', code: 'REVIEW_RESUME_INVALID' };
   if (state.status === 'physical_accepted') return { ...state, status: 'uncertain', code: 'REVIEW_PHYSICAL_ACCEPTED_UNCERTAIN' };
-  if (state.status === 'physical_exhausted') return { status: 'exhausted', ...state };
+  if (state.status === 'physical_exhausted') return { ...state, status: 'exhausted' };
   if (state.status === 'terminal' || state.status === 'spawn_accepted' || state.status === 'prepared' || state.status === 'expansion_pending') return { status: 'resumed', ...(state.status === 'terminal' ? { terminal: state.terminal } : {}) };
   return null;
 }
@@ -442,10 +450,24 @@ export function reserveReviewStartAsync({ stateDir, project, pipelineId, identit
         let child; let signalled = false; let finished = false;
         const finish = (result) => { if (finished) return; finished = true; if (!releasePair(ctx.gate, ctx.selection.lock)) { resolve({ status: 'unavailable', code: 'REVIEW_LOCK_RELEASE_UNCERTAIN' }); return; } resolve(result); };
         const accepted = (started) => finish({ status: 'accepted', started, ...attemptMetadata });
-        const failToStart = () => { try { finish(recordFailedToStart(ctx.root, reservation, physical)); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
-        const processStarted = () => { if (signalled) throw new Error('REVIEW_SPAWN_ACCEPTANCE_DUPLICATE'); signalled = true; try { appendReviewEvent(ctx.root.stream, 'spawn_accepted', reservation.metadata); if (child !== undefined) accepted(child); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); } };
-        try { child = start(processStarted); if (signalled && !finished) accepted(child); Promise.resolve(child).catch(() => { if (!signalled) failToStart(); }); }
-        catch { failToStart(); }
+        const failToStart = (error) => {
+          if (/^REVIEW_EXECUTION_/.test(String(error?.message || ''))) { finish({ status: 'unavailable', code: error.message }); return; }
+          try { finish(recordFailedToStart(ctx.root, reservation, physical)); } catch { finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' }); }
+        };
+        const processStarted = (evidence) => {
+          if (signalled) throw new Error('REVIEW_SPAWN_ACCEPTANCE_DUPLICATE');
+          signalled = true;
+          try {
+            if (evidence !== undefined && (!evidence || Object.keys(evidence).length !== 1 || !/^[a-f0-9]{64}$/.test(evidence.executionStartDigest))) throw new Error('REVIEW_EXECUTION_ACCEPTANCE_INVALID');
+            appendReviewEvent(ctx.root.stream, 'spawn_accepted', { ...reservation.metadata, ...(evidence ?? {}) });
+            if (child !== undefined) accepted(child);
+          } catch {
+            finish({ status: 'unavailable', code: 'REVIEW_LIFECYCLE_UNAVAILABLE' });
+            throw new Error('REVIEW_LIFECYCLE_UNAVAILABLE');
+          }
+        };
+        try { child = start(processStarted, Object.freeze({ ...attemptMetadata })); if (signalled && !finished) accepted(child); Promise.resolve(child).catch(error => { if (!signalled) failToStart(error); }); }
+        catch (error) { failToStart(error); }
       });
     } catch (error) { return Promise.resolve(lifecycleErrorResult(error)); }
   });
@@ -484,6 +506,31 @@ export function recordReviewHold({ stateDir, project, pipelineId, identity, phys
     const holdId = status === 'PRIMARY_REVIEW_UNAVAILABLE' ? `hold-${createHash('sha256').update(JSON.stringify({ identity, physical, status })).digest('hex').slice(0, 32)}` : undefined;
     appendReviewEvent(ctx.root.stream, 'review_hold', { ...identity, ...physical, status, ...(holdId ? { holdId } : {}) });
     return holdId ? { status, holdId } : { status };
+  });
+}
+
+// Internal host recovery seam: no caller-supplied exit/outcome or event rows.
+// Selection + gate locks cover receipt validation and the complete transition.
+export function reconcileReviewExecution({ stateDir, project, pipelineId, identity, actor, scope }) {
+  if (!validateReviewIdentity(identity).ok || !/^[a-f0-9]{64}$/.test(scope ?? '')) return { status: 'denied', code: 'REVIEW_EXECUTION_IDENTITY_INVALID' };
+  return withReviewMutation(stateDir, project, identity, ctx => {
+    if (pipelineId !== ctx.root.pipelineId) return { status: 'denied', code: 'REVIEW_EXECUTION_MISMATCH' };
+    const state = foldReviewHistory(ctx.root.rows, identity);
+    if (state.status !== 'physical_accepted') return { status: 'not_pending' };
+    const physical = deriveReviewPhysicalAttempt(identity, state.physicalGeneration, state.physicalOrdinal);
+    const accepted = ctx.root.rows.findLast(row => row.event_type === 'spawn_accepted' && matchesIdentity(row.metadata, identity) && samePhysical(row.metadata, physical));
+    const binding = { project: canonicalProjectIdentity(project).canonicalProject, pipelineId, identity, physical, actor, scope };
+    const observed = inspectExecution(stateDir, binding, accepted?.metadata?.executionStartDigest);
+    if (observed.status === 'aborted') {
+      appendReviewEvent(ctx.root.stream, 'review_hold', { ...identity, ...physical, status: 'REVIEW_ABORTED', executionReceiptDigest: observed.receiptDigest });
+      return { status: 'held', reviewCompletion: { status: 'REVIEW_ABORTED' } };
+    }
+    if (observed.status !== 'failed') return { status: observed.status === 'running' ? 'running' : 'uncertain', code: observed.code ?? 'REVIEW_EXECUTION_UNCONFIRMED' };
+    const outcome = observed.reason === 'timeout' ? 'TIMED_OUT' : observed.reason === 'turn_limit' ? 'TURN_LIMIT_HIT' : 'FAILED_TO_RUN';
+    const metadata = { ...identity, ...physical, executionReceiptDigest: observed.receiptDigest };
+    appendReviewEvent(ctx.root.stream, 'spawn_returned', metadata);
+    appendReviewEvent(ctx.root.stream, 'physical_outcome', { ...metadata, outcome, evidenceSource: 'supervisor_exit', evidence: { exitCode: observed.exitCode, timedOut: outcome === 'TIMED_OUT', turnLimitHit: outcome === 'TURN_LIMIT_HIT', finalTextPresent: false, routingPresent: false, artifactPresent: false } });
+    return { status: 'reconciled', outcome, ...physical };
   });
 }
 
@@ -810,30 +857,200 @@ function buildPipelineRecord(options, authority, pipelineId, planId, event) {
 
 function persistPipelineRecord(authority, pipelineId, record, isStart) {
   const outPath = path.join(authority.base, `${pipelineId}.jsonl`);
-  if (!isStart) { writeFileSync(outPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', flag: 'a' }); return outPath; }
+  if (!isStart) { appendRecordDurable(outPath, record); return outPath; }
   writeNewFileDurable(outPath, `${JSON.stringify(record)}\n`);
   try { writeNewFileDurable(authority.current, pipelineId); }
   catch (error) { try { unlinkSync(outPath); } catch {} throw error; }
   return outPath;
 }
 
+// Production host boundary is the producer. The generic event CLI cannot write
+// these reserved rows. A closure binds return processing to this admitted run;
+// a lost publisher/consumer return remains pending, never implicitly waived.
+export function beginHostCloseoutDispatch({ stateDir, project, planId, actor } = {}) {
+  if (!CLOSEOUT_PUBLISHERS.has(actor) && !POST_RETRO_AGENTS.has(actor)) return null;
+  const canonical = canonicalTerminalBase(stateDir, project);
+  const active = existsSync(canonical.base) ? readdirSync(canonical.base).filter(n => /^plan-[0-9]+\.current$/.test(n)).map(n => n.slice(0, -8)) : [];
+  if (!active.length) return null; // standalone calls are not pipeline closeout
+  if (!planId || planId === 'unknown-plan') {
+    if (active.length !== 1) throw new Error('PIPELINE_CLOSEOUT_PLAN_AMBIGUOUS');
+    planId = active[0];
+  }
+  const ctx = { stateDir, project: canonical.canonicalProject, planId };
+  const mutate = fn => withLockContext(() => {
+    const selection = takeSelectionLock(stateDir, project, planId); if (!selection.held) throw new Error(selection.code);
+    try {
+      let authority;
+      try { authority = resolvePipelineAuthority({ ...ctx }); }
+      catch (error) {
+        if (error?.message === 'REVIEW_AUTHORITY_NOT_FOUND') throw new Error(`REVIEW_AUTHORITY_NOT_FOUND: requested_plan=${planId}; observed_active_plans=${active.join(',')}; no dispatch admitted. Verify the handoff's explicit Plan: NNN header against its intended opening record; do not change or repair authority.`);
+        throw error;
+      }
+      if (authority.base !== canonical.base) throw new Error('PIPELINE_CLOSEOUT_LEGACY_UNCOVERED');
+      return fn(authority, { project: ctx.project, planId, pipelineId: authority.pipelineId });
+    } finally { releaseLockOrdered('selection', selection.lock); }
+  });
+  const admitted = mutate((authority, binding) => {
+    const state = foldCloseoutObligations(authority.rows, binding);
+    if ([...state.dispatches.values()].some(d => d.actor === actor && d.schema === RECOVERY_SCHEMA)) throw new Error('PIPELINE_CLOSEOUT_ALREADY_DISPATCHED');
+    if ([...state.dispatches.values()].some(d => d.status === 'running' && (d.actor === actor || (CLOSEOUT_PUBLISHERS.has(actor) && CLOSEOUT_PUBLISHERS.has(d.actor))))) throw new Error('PIPELINE_CLOSEOUT_DISPATCH_PENDING');
+    if (actor === 'pidex-retrospective' && [...state.obligations.values()].some(o => o.status === 'pending')) throw new Error('PIPELINE_CLOSEOUT_OBLIGATIONS_PENDING');
+    const consumes = [...state.obligations.values()].filter(o => o.status === 'pending' && o.actor === actor);
+    if (actor === 'pidex-pi' && !consumes.length && [...state.obligations.values()].some(o => o.status === 'pending')) throw new Error('PIPELINE_CLOSEOUT_HANDOFF_NOT_REQUIRED');
+    if (!CLOSEOUT_PUBLISHERS.has(actor) && !consumes.length) {
+      if (state.dispatches.size) throw new Error('PIPELINE_CLOSEOUT_HANDOFF_NOT_REQUIRED');
+      return null;
+    }
+    const id = randomUUID(); const roundId = consumes[0]?.roundId ?? id;
+    const metadata = { schema: CLOSEOUT_SCHEMA, ...binding, id, actor, roundId, consumes: consumes.map(o => o.id) };
+    const row = { event_type: CLOSEOUT_START, metadata };
+    foldCloseoutObligations([...authority.rows, row], binding); // includes overlap/round checks
+    appendRecordDurable(authority.stream, { timestamp: new Date().toISOString(), ...row });
+    return { metadata, consumes };
+  });
+  if (!admitted) return null;
+  const { metadata } = admitted;
+  let finished = false;
+  return {
+    id: metadata.id,
+    instruction: '\nFor THIS invocation only (other calls have different IDs), in BOTH final chat and artifact ROUTING echo exactly closeout_dispatch: ' + metadata.id + '\nand closeout_obligations: ' + (metadata.consumes.join(', ') || 'none') + '\n' + (CLOSEOUT_PUBLISHERS.has(actor)
+      ? '\nPIDEX CLOSEOUT CONTRACT: In BOTH final chat ROUTING and artifact ROUTING, explicitly include post_retro_handoffs: none OR a comma-separated subset of pidex-planner, pidex-roadmap, pidex-architect. Use ATX (#/##) section headings. Nonempty standard sections Planning Insights, Roadmap Updates and Architecture Patterns REQUIRE pidex-planner, pidex-roadmap and pidex-architect respectively, even if the field says none. Omit an inapplicable section or use only None. in it. Declared targets are additive and cannot waive section-derived work. PI DEFERRED only defers configuration changes, never these handoffs. Retrospective COMPLETE routes to pidex-pi; completed/deferred PI analysis routes to orchestrator. Missing/mismatched declarations block completion.\n'
+      : '\nPIDEX POST-RETRO HANDOFF: Fulfil only the following declared learning/backlog/architecture obligations, not a new feature plan or review cycle. Return COMPLETE (or APPROVED), route_to: orchestrator, with matching final/artifact ROUTING and an agents.output markdown context_file. DEFERRED is not completion. Sources: ' + JSON.stringify(admitted.consumes) + '\n'),
+    finish(result) {
+      if (finished) throw new Error('PIPELINE_CLOSEOUT_RETURN_REPLAYED');
+      if (result?.agent !== actor) throw new Error('PIPELINE_CLOSEOUT_RETURN_IDENTITY_INVALID');
+      let artifact = null; let verdict = null; let requests = []; let outcome = 'failed';
+      if (result.exitCode === 0 && !result.aborted && !result.timedOut && !result.turnLimitHit) {
+        const relative = closeoutArtifactPath(result.finalText);
+        if (typeof relative !== 'string' || !/^agents\.output\/.+\.md$/.test(relative)) throw new Error('PIPELINE_CLOSEOUT_ARTIFACT_INVALID');
+        const bytes = readBounded(ctx.project, relative, 128 * 1024).bytes;
+        const routing = closeoutResultRouting(actor, result.finalText, bytes.toString('utf8'));
+        if (routing.dispatchId !== metadata.id || JSON.stringify([...routing.consumes].sort()) !== JSON.stringify([...metadata.consumes].sort())) throw new Error('PIPELINE_CLOSEOUT_RETURN_IDENTITY_INVALID');
+        const positive = actor === 'pidex-retrospective' ? routing.verdict === 'COMPLETE' : ['COMPLETE', 'APPROVED', ...(actor === 'pidex-pi' ? ['DEFERRED'] : [])].includes(routing.verdict);
+        if (positive) {
+          verdict = routing.verdict; requests = routing.requests;
+          artifact = { path: relative, digest: closeoutHash(bytes), content: bytes.toString('utf8') }; outcome = 'completed';
+        } else if (!['BLOCKED', 'DEFERRED'].includes(routing.verdict)) throw new Error('PIPELINE_CLOSEOUT_VERDICT_INVALID');
+      }
+      const end = { schema: metadata.schema, project: metadata.project, planId, pipelineId: metadata.pipelineId, id: metadata.id, outcome, artifact, verdict, requests };
+      const pending = mutate((authority, binding) => {
+        if (binding.pipelineId !== metadata.pipelineId) throw new Error('PIPELINE_CLOSEOUT_RETURN_IDENTITY_INVALID');
+        const row = { event_type: CLOSEOUT_END, metadata: end };
+        const next = foldCloseoutObligations([...authority.rows, row], binding);
+        appendRecordDurable(authority.stream, { timestamp: new Date().toISOString(), ...row });
+        return [...next.obligations.values()].filter(o => o.status === 'pending').map(o => ({ id: o.id, actor: o.actor }));
+      });
+      finished = true;
+      return { status: outcome === 'completed' ? 'dispatch_completed' : 'dispatch_failed', dispatchId: metadata.id, obligationsDeclared: requests, obligationPolicy: metadata.schema, pendingObligations: pending };
+    },
+  };
+}
+
+export function beginRecoverableHostCloseout({ stateDir, project, actor, request, scope }) {
+  validateCloseoutRequest(request);
+  const canonical = canonicalTerminalBase(stateDir, project);
+  const context = { project: canonical.canonicalProject, planId: request.planId, pipelineId: request.pipelineId };
+  const mutate = fn => withLockContext(() => {
+    const lock = takeSelectionLock(stateDir, project, request.planId); if (!lock.held) throw new Error(lock.code);
+    try {
+      const a = resolvePipelineAuthority({ stateDir, project, planId: request.planId });
+      if (a.base !== canonical.base || a.pipelineId !== request.pipelineId) throw new Error('PIPELINE_CLOSEOUT_RETURN_IDENTITY_INVALID');
+      return fn(a);
+    } finally { releaseLockOrdered('selection', lock.lock); }
+  });
+  return createCloseoutRecovery({ stateRoot: stateDir, context, actor, request, scope, mutate, append: appendRecordDurable });
+}
+
+export function inspectHostCloseout({ stateDir, project, planId, pipelineId, dispatchId, scope }) {
+  if (process.platform !== 'linux' || !/^plan-[0-9]{1,40}$/.test(planId) || !/^[a-zA-Z0-9._-]{1,160}$/.test(pipelineId)) throw new Error('PIPELINE_CLOSEOUT_REQUEST_INVALID');
+  const canonical = canonicalTerminalBase(stateDir, project);
+  const file = path.relative(stateDir, path.join(canonical.base, `${pipelineId}.jsonl`)).split(path.sep).join('/');
+  const rows = readBounded(stateDir, file, 8 * 1024 * 1024).bytes.toString('utf8').trim().split('\n').map(JSON.parse);
+  const roots = rows.filter(r => r.event_type === 'pipeline_started');
+  if (roots.length !== 1 || roots[0].project_path !== canonical.canonicalProject || roots[0].plan_key !== planId || roots[0].pipeline_id !== pipelineId) throw new Error('PIPELINE_CLOSEOUT_RETURN_IDENTITY_INVALID');
+  return describeCloseoutRecovery({ rows, context: { project: canonical.canonicalProject, planId, pipelineId }, stateRoot: stateDir, dispatchId, scope });
+}
+
+function canonicalTerminalBase(stateDir, project) {
+  const canonical = canonicalProjectIdentity(project);
+  return { ...canonical, base: safePath(stateDir, `pipeline-events/${canonical.projectKey}`) };
+}
+function completedReviewsAreTerminal(rows, planId) {
+  const gates = new Map();
+  for (const row of rows) {
+    if (row?.metadata?.reviewGate === undefined) continue;
+    const checked = validateReviewIdentity(row.metadata);
+    if (!checked.ok || checked.value.planId !== planId) throw new Error('PIPELINE_REVIEW_INCOMPLETE');
+    gates.set(checked.value.reviewGate, checked.value);
+  }
+  for (const identity of gates.values()) {
+    if (foldReviewHistory(rows, identity).status !== 'terminal') throw new Error('PIPELINE_REVIEW_INCOMPLETE');
+  }
+}
+function confirmExistingTerminal(options, stateDir, project, planId, event) {
+  const { base, canonicalProject } = canonicalTerminalBase(stateDir, project);
+  const stream = path.join(base, `${options.pipelineId}.jsonl`);
+  if (!regularFile(stream)) return null;
+  const relative = path.relative(stateDir, stream).split(path.sep).join('/');
+  const rows = readBounded(stateDir, relative, 8 * 1024 * 1024).bytes.toString('utf8').trim().split('\n').map(line => JSON.parse(line));
+  const roots = rows.filter(row => row.event_type === 'pipeline_started');
+  if (roots.length !== 1 || roots[0].project_path !== canonicalProject || roots[0].plan_key !== planId || roots[0].pipeline_id !== options.pipelineId) throw new Error('PIPELINE_CLOSEOUT_IDENTITY_INVALID');
+  const terminals = rows.filter(row => TERMINAL_EVENTS.has(row.event_type));
+  if (!terminals.length) return null;
+  if (terminals.length !== 1 || terminals[0] !== rows.at(-1) || terminals[0].event_type !== event || terminals[0].pipeline_id !== options.pipelineId || terminals[0].plan_key !== planId || terminals[0].project_path !== canonicalProject) throw new Error('PIPELINE_CLOSEOUT_CONFLICT');
+  if (event === 'pipeline_completed') {
+    completedReviewsAreTerminal(rows, planId);
+    assertCloseoutObligationsComplete(rows, { project: canonicalProject, planId, pipelineId: options.pipelineId });
+  }
+  const current = path.join(base, `${planId}.current`);
+  if (currentPointerFile(current)) {
+    if (readBounded(stateDir, path.relative(stateDir, current).split(path.sep).join('/'), 256).bytes.toString('utf8').trim() !== options.pipelineId) throw new Error('PIPELINE_CLOSEOUT_CONFLICT');
+    unlinkSync(current); // same selection lock; never delete a successor pointer
+  }
+  const streamFd = openSync(stream, 'r'); try { fsyncSync(streamFd); } finally { closeSync(streamFd); }
+  const fd = openSync(base, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); }
+  return { outPath: stream, pipelineId: options.pipelineId, record: terminals[0], confirmed: true, alreadyRecorded: true };
+}
+
+// Explicit orchestrator declaration, not inferred success. Existing tracked
+// reviews must be terminal; UAT/DevOps/task acceptance remain caller obligations.
+function validateCloseoutOptions(options) {
+  if (process.platform !== 'linux') throw new Error('PIPELINE_CLOSEOUT_PLATFORM_UNCOVERED');
+  if (!TERMINAL_EVENTS.has(options.event) || !/^[a-zA-Z0-9._-]{1,160}$/.test(options.pipelineId ?? '') || !/^plan-[0-9]{1,40}$/.test(options.plan ?? '') || !options.project) throw new Error('PIPELINE_CLOSEOUT_IDENTITY_INVALID');
+}
+export function confirmPipelineCloseout(options = {}) {
+  return recordPipelineEvent({ ...options, confirmTerminal: true });
+}
+
 export function recordPipelineEvent(options = {}) {
+  if (options.confirmTerminal) validateCloseoutOptions(options);
   return withLockContext(() => {
     const stateDir = path.resolve(options.stateDir || path.join(rootFromScript(), 'state'));
     const project = options.project || process.cwd();
     const event = String(options.event || ''); if (!event) throw new Error('Missing required --event');
+    if (event.startsWith('pipeline_closeout_')) throw new Error('PIPELINE_CLOSEOUT_RESERVED_EVENT');
     const planId = normalizePlan(options.plan);
     const selection = takeSelectionLock(stateDir, project, planId); if (!selection.held) throw new Error(selection.code);
     try {
       const isStart = event === 'pipeline_started';
+      if (options.confirmTerminal) {
+        const existing = confirmExistingTerminal(options, stateDir, project, planId, event);
+        if (existing) return existing;
+      }
       const authority = eventAuthority({ stateDir, project, planId, event });
       if (isStart && authority.stream) throw new Error('pipeline already active');
       mkdirSync(authority.base, { recursive: true });
       const pipelineId = eventPipelineId(options, authority, planId, isStart);
+      if (options.confirmTerminal) {
+        if (authority.base !== canonicalTerminalBase(stateDir, project).base) throw new Error('PIPELINE_CLOSEOUT_LEGACY_UNCOVERED');
+        if (event === 'pipeline_completed') completedReviewsAreTerminal(readReviewRows(authority.stream), planId);
+      }
+      if (event === 'pipeline_completed') assertCloseoutObligationsComplete(authority.rows, { project: authority.canonicalProject, planId, pipelineId });
       const record = buildPipelineRecord(options, authority, pipelineId, planId, event);
       const outPath = persistPipelineRecord(authority, pipelineId, record, isStart);
       if (TERMINAL_EVENTS.has(event) && existsSync(authority.current) && readFileSync(authority.current, 'utf8').trim() === pipelineId) unlinkSync(authority.current);
-      return { outPath, pipelineId, record, authority };
+      if (options.confirmTerminal) { const fd = openSync(authority.base, 'r'); try { fsyncSync(fd); } finally { closeSync(fd); } }
+      return { outPath, pipelineId, record, authority, ...(options.confirmTerminal ? { confirmed: true, alreadyRecorded: false } : {}) };
     } finally { releaseLockOrdered('selection', selection.lock); }
   });
 }
@@ -843,9 +1060,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const args = parse(process.argv.slice(2));
     if (args.help) { console.log('Usage: event.mjs --plan PLAN --event EVENT [options]'); process.exit(0); }
     let metadata = null; if (args.metadataJson) { metadata = JSON.parse(args.metadataJson); if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) throw new Error('--metadata-json must be a JSON object'); }
-    const result = recordPipelineEvent({ stateDir: args.stateDir, project: args.project.replace(/^~(?=$|[\\/])/, process.env.HOME || ''), projectSlug: args.projectSlug, pipelineId: args.pipelineId, plan: args.plan, event: args.event, status: args.status, actor: args.actor, message: args.message, source: args.source, projectMode: args.projectMode, testProject: args.testProject, metadata });
-    console.log(`${result.outPath} pipeline_id=${result.pipelineId}`);
-    if (TERMINAL_EVENTS.has(args.event) && process.env.PIDEX_PIPELINE_EVENT_RUN_OPTIONAL_HOOKS === '1') {
+    const result = recordPipelineEvent({ stateDir: args.stateDir, project: args.project.replace(/^~(?=$|[\\/])/, process.env.HOME || ''), projectSlug: args.projectSlug, pipelineId: args.pipelineId, plan: normalizePlan(args.plan), event: args.event, status: args.status, actor: args.actor, message: args.message, source: args.source, projectMode: args.projectMode, testProject: args.testProject, metadata, confirmTerminal: args.confirmTerminal });
+    console.log(args.confirmTerminal ? JSON.stringify({ status: 'confirmed', pipelineId: result.pipelineId, planId: result.record.plan_key, event: result.record.event_type, alreadyRecorded: result.alreadyRecorded }) : `${result.outPath} pipeline_id=${result.pipelineId}`);
+    if (!result.alreadyRecorded && TERMINAL_EVENTS.has(args.event) && process.env.PIDEX_PIPELINE_EVENT_RUN_OPTIONAL_HOOKS === '1') {
       const hygiene = path.join(args.root, 'scripts', 'wiki', 'hygiene.mjs'); if (existsSync(hygiene)) runOptional(process.execPath, [hygiene, 'cadence', '--project', result.record.project_path, '--plan', result.record.plan_key, '--pipeline-id', result.pipelineId, '--terminal-event', args.event], { cwd: args.root, encoding: 'utf8', timeout: Number(process.env.PIDEX_WIKI_HYGIENE_CADENCE_TIMEOUT_SECONDS || 30) * 1000 });
     }
   } catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exit(2); }

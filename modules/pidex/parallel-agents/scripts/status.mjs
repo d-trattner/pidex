@@ -41,7 +41,7 @@ function validateNoCreds(obj, current = '') {
   } else if (Array.isArray(obj)) obj.forEach((v, i) => errors.push(...validateNoCreds(v, `${current}[${i}]`)));
   return errors;
 }
-function normalizeConfig(raw = {}) {
+export function normalizeConfig(raw = {}) {
   const errors = validateNoCreds(raw);
   const cfg = { schema_version: Number.parseInt(raw.schema_version || 1, 10), enabled: Boolean(raw.enabled ?? false), default_mode: raw.default_mode || 'opportunistic', dedupe_hours: Number.parseInt(raw.dedupe_hours || 6, 10), max_provider_models_per_agent: Number.parseInt(raw.max_provider_models_per_agent || 2, 10), agents: {} };
   if (cfg.max_provider_models_per_agent !== 2) { errors.push('max_provider_models_per_agent must be 2'); cfg.max_provider_models_per_agent = 2; }
@@ -145,4 +145,6 @@ async function main() {
   else { console.error(`unknown command: ${cmd}`); process.exit(2); }
   if (cmd === 'classify' && !args.includes('--json')) console.log(out.type); else console.log(JSON.stringify(out, null, args.includes('--json') ? 0 : 2)); process.exitCode = code;
 }
-main().catch((e) => { console.error(e instanceof Error ? e.message : String(e)); process.exit(1); });
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((e) => { console.error(e instanceof Error ? e.message : String(e)); process.exit(1); });
+}

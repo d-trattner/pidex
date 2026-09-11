@@ -44,3 +44,11 @@ A successful explicit run emits an `OpQualityReview` operator event labelled `ma
 ## Contract-backed findings
 
 PDQ findings include operator-contract metadata such as contract ID, expected condition, allowed skip/manual-evidence reasons, and resolution options. Explicit valid operator decisions count as observed evidence rather than generic trace gaps.
+
+Run-specific evidence (`OpSpawn`, `OpContextPack`, `OpReview`, `OpRoute`, `OpGate`) must match project, plan, role, observed mode and execution identity. Host-direct and hardened host telemetry share the existing `run_dir` across metrics and events; Project Pipeline metrics use `project_run_id`. PDQ does not invent missing Project Pipeline operator events. Plan-wide Preflight/QualityReview contracts retain their own granularity.
+
+A run-scoped manual decision must carry the same identity/scope and exact `target_step`. The operator-decision CLI supports additive fields through `--extra-json` (for example `agent`, `project_mode`, and the existing `run_dir` copied from the metric). These are observational references, not review lifecycle authority. Broad legacy decisions cannot satisfy multiple independent runs.
+
+Legacy missing identities, mismatched targets and conflicting same-identity records remain trace gaps; identical duplicate records count once. This can increase reported gaps without any new runtime failure. Historical data is not rewritten, and a zero-gap report is still not a causal quality or product-acceptance proof.
+
+The direct `scripts/quality/report.mjs` CLI uses the same state-root resolver for input, saved mode and default JSON output. Explicit `--json-out` and `--md-out` paths retain precedence.

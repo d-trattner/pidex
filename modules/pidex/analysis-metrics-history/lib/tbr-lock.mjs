@@ -12,7 +12,7 @@
 // dead-but-unproven, or unreadable owners fail closed (UNCERTAIN); deadline
 // without proof fails UNAVAILABLE; no mtime/stale takeover ever. Stale-lock
 // cleanup is operator repair, never automatic.
-import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, rmSync, rmdirSync, closeSync, fsyncSync, unlinkSync, writeSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, rmdirSync, closeSync, fsyncSync, unlinkSync, writeSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { canonicalProjectIdentity, projectKeyFromResolvedPath } from './project-key.mjs';
@@ -31,9 +31,16 @@ function validOwner(value) {
   return value && Number.isInteger(value.pid) && value.pid > 0 && typeof value.processStart === 'string' && value.processStart.length > 0 && value.processStart.length <= 128 && typeof value.key === 'string' && value.key.length <= 256;
 }
 function writeNewFileDurable(file, content, mode = 0o600) {
-  const fd = openSync(file, 'wx', mode);
-  try { const payload = Buffer.from(content); let offset = 0; while (offset < payload.length) { const written = writeSync(fd, payload, offset, payload.length - offset); if (!Number.isInteger(written) || written <= 0) throw new Error('tbr lock short write'); offset += written; } fsyncSync(fd); }
-  finally { closeSync(fd); }
+  // Called only inside this caller's newly mkdir-acquired lock directory.
+  // Publish complete bytes atomically: a waiter sees ENOENT until ready, never
+  // the empty owner file between open('wx') and write. No stale lock takeover.
+  const temporary = `${file}.${process.pid}.tmp`;
+  const fd = openSync(temporary, 'wx', mode);
+  try {
+    try { const payload = Buffer.from(content); let offset = 0; while (offset < payload.length) { const written = writeSync(fd, payload, offset, payload.length - offset); if (!Number.isInteger(written) || written <= 0) throw new Error('tbr lock short write'); offset += written; } fsyncSync(fd); }
+    finally { closeSync(fd); }
+    renameSync(temporary, file);
+  } finally { try { unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
 }
 
 export function projectTbrLockPath({ stateDir, project }) {

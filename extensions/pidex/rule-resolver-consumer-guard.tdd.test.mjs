@@ -1,13 +1,30 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { recordPipelineEvent } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
-import { executeHostAgentBoundary } from './index.ts';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+// Immutable-inventory tests need a real committed authority for the candidate
+// module manifests, not whichever commit happens to underlie a dirty worktree.
+// Commit only an isolated fixture copy; never stage/change the working repository.
+const authorityRoot = mkdtempSync(join(tmpdir(), 'pidex-rule-consumer-authority-'));
+const sourceFiles = execFileSync('git', ['-C', root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], { encoding: 'utf8' }).split('\0').filter(file =>
+  /^(agents|rules|config)\//.test(file) || /^modules\/pidex\/[^/]+\/(module\.json$|rules\/|agents\/)/.test(file));
+for (const file of sourceFiles) {
+  const destination = path.join(authorityRoot, file);
+  mkdirSync(path.dirname(destination), { recursive: true }); copyFileSync(path.join(root, file), destination);
+}
+for (const args of [['init', '-q'], ['add', '.'], ['-c', 'user.name=PIDEX fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'isolated candidate rule authority']]) execFileSync('git', ['-C', authorityRoot, ...args]);
+const previousRoot = process.env.PIDEX_ROOT;
+let executeHostAgentBoundary;
+try {
+  process.env.PIDEX_ROOT = authorityRoot;
+  ({ executeHostAgentBoundary } = await import('./index.ts?committed-rule-consumer-fixture'));
+} finally { if (previousRoot === undefined) delete process.env.PIDEX_ROOT; else process.env.PIDEX_ROOT = previousRoot; }
+after(() => rmSync(authorityRoot, { recursive: true, force: true }));
 const consumers = [
   'extensions/pidex/index.ts',
   'modules/pidex/project-pipeline/scripts/project-pipeline/orchestrator.mjs',

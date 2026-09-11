@@ -1099,9 +1099,9 @@ node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-hi
   --metadata-json '{"entrypoint":"pidex-skill"}'
 ```
 
-`analysis-metrics-history.record-event` is analytics-only. It writes JSONL under `<pidex-root>/state/pipeline-events/`; it does not drive a backend scheduler. Operators never pass SQLite `project_id`; ingest derives that from `project_path` (default `$PWD`).
+`analysis-metrics-history.record-event` is analytics-only. It writes JSONL under `<effective-state-root>/pipeline-events/` (`PIDEX_STATE_DIR` > `RUNNING_PI_STATE_DIR` > `<pidex-root>/state`); it does not drive a backend scheduler. Operators never pass SQLite `project_id`; ingest derives that from `project_path` (default `$PWD`).
 
-Before invoking the opening agent (`pidex-planner`, `pidex-architect`, `pidex-analyst`, or `pidex-wiki-hygienist`), emit the finalized project-scoped preflight operator event. This event is separate from the low-confidence `/pidex` kickoff skeleton and must use the resolved `<absolute project path>` and plan key:
+Before invoking the opening agent (`pidex-planner`, `pidex-architect`, `pidex-analyst`, or `pidex-wiki-hygienist`), emit the finalized project-scoped preflight operator event. This event is separate from the low-confidence `/pidex` kickoff skeleton and must use the resolved `<absolute project path>`, plan key, and exact `pipeline_id` returned by `pipeline_started`. Capture and reuse that returned ID; do not omit it or reconstruct it from the plan/project name. Persisted preflight records without an explicit run ID fail closed:
 
 ```bash
 node <pidex-root>/scripts/quality/preflight.mjs record \
@@ -1123,11 +1123,7 @@ If exact counts are not known, use best-effort conservative values and include t
 After the pipeline completes (step 9 / post-retro handoffs) or if the user aborts it, append closing history and lifecycle events:
 
 ```bash
-node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-append --agent orchestrator --phase planning --project "<absolute project path>" -- \
-  --event direct-complete \
-  --cwd "<absolute project path>" \
-  --mode direct
-
+set -e
 node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.record-event --agent orchestrator --phase planning --project "<absolute project path>" -- \
   --project "<absolute project path>" \
   --plan "<plan-key>" \
@@ -1135,9 +1131,17 @@ node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-hi
   --status completed \
   --actor orchestrator \
   --message "Direct-mode pipeline complete"
+
+# Only after successful canonical terminal recording/required Linux ACK:
+node <pidex-root>/scripts/modules/run-check.mjs --capability analysis-metrics-history.history-append --agent orchestrator --phase planning --project "<absolute project path>" -- \
+  --event direct-complete \
+  --cwd "<absolute project path>" \
+  --mode direct
 ```
 
-Terminal lifecycle events (`pipeline_completed`, `pipeline_failed`, `pipeline_aborted`, `pipeline_cancelled`) automatically run plan-scoped PDQ quality cadence unless `PIDEX_AUTO_PDQ=0` is set. The auto hook updates `state/quality/review-state.json`, writes report files, and appends `OpQualityReview`; failures are fail-soft and must not block terminal event recording.
+On Linux host-direct runs, use the opening event's canonical `plan_key` (for example `--plan plan-001`, not the artifact/title `001-docs-contributing-usage`) and add `--pipeline-id "<exact opening pipeline id>" --confirm-closeout` to the terminal `analysis-metrics-history.record-event` invocation above. Do not announce completion until it exits successfully and returns a `status: confirmed` acknowledgement for that exact project/plan/pipeline and requested terminal event. The event CLI retains its normal plan-label normalization before strict canonical validation; it never relaxes the exact project/pipeline/plan authority check. Correcting a display label to the same opening `plan_key` is an input-format correction, not a new identity or permission to reset a hold. A lost acknowledgement may be retried with the identical identity/event: it must acknowledge the existing record, not append a second terminal. Conflicts, unresolved tracked reviews, missing authority and unsupported storage remain blockers; never change identity, delete locks, or invent an event to get an acknowledgement. This declaration does not replace task checks, UAT, DevOps, or required post-retro handoffs. Other platforms retain their existing event path; the new durable acknowledgement is Linux-scoped and not Windows acceptance.
+
+Terminal lifecycle events (`pipeline_completed`, `pipeline_failed`, `pipeline_aborted`, `pipeline_cancelled`) do not automatically run PDQ or grant rule-action authority. PDQ is manually invoked via `/pdq`; do not expect or fabricate automatic `OpQualityReview` evidence. The event CLI may run its optional Wiki-hygiene hook only when `PIDEX_PIPELINE_EVENT_RUN_OPTIONAL_HOOKS=1`. Terminal recording remains independent of that optional hook.
 
 (Use `--event direct-abort` with `--reason "<why>"` and `pipeline_aborted --status aborted` if the user stopped it mid-pipeline.)
 
@@ -1409,6 +1413,14 @@ Check retrospective doc sections and invoke corresponding agents. Run in paralle
 - **"Architecture Patterns"** → invoke pidex-architect to update `system-architecture.md`
 
 Only invoke agents whose sections have content.
+
+For every active-pipeline host handoff, start the task with `Plan: NNN` for the intended opening record (for example `Plan: 002`), before historical plan references. Never treat an earlier plan mentioned as context as the new dispatch target. Missing/ambiguous actual authority remains a blocker; a request-format correction must preserve the intended canonical identity.
+
+Linux unsandboxed host-direct primary calls now persist post-retro obligations at the execution boundary. Retrospective and PI must explicitly declare `post_retro_handoffs: none` or a comma-separated subset of the three agents above in BOTH their final chat ROUTING and exact artifact ROUTING. The v2 producer also derives required targets from nonempty ATX sections `Planning Insights` → planner, `Roadmap Updates` → roadmap, `Architecture Patterns` → architect. An inapplicable section may be absent or contain only `None.` / `N/A.` / `Not applicable.`; other content requires its handoff even when `post_retro_handoffs` says `none`. Declared targets are additive, not waivers. Old v1 records keep their historical declared-only semantics and are not retroactively upgraded.
+
+Echo the boundary-assigned `closeout_dispatch` and `closeout_obligations` exactly in both ROUTING blocks FOR THE SAME INVOCATION. Every invocation has its own nonce; different agents' IDs are expected to differ. PI consuming a retrospective-round obligation is expected, not a conflicting declaration. The producer validates each return against its own artifact; do not invent cross-agent equality checks. Previous artifacts/returns do not fulfil a fresh dispatch. Completed PI and post-retro handoffs route back to `orchestrator`, not a new feature-review cycle. Missing or conflicting declarations block closeout. PI `DEFERRED` only defers proposed configuration changes; it does not waive declared handoffs. Invoke each pending handoff as the same plan's post-retro work, not a new feature plan/review cycle. Actual successful matching returns fulfil obligations; prose, pre-retro calls and budget exhaustion do not. Both normal and confirmed `pipeline_completed` reject open obligations. If capacity is exhausted, report blocked/failed work, never successful completion or `direct-complete`. Do not write reserved ledger events, clear unknown dispatches, reset identities, or infer a waiver from a general continuation request. Explicit waiver or reconstruction of an unconfirmed post-retro return is not implemented; fail closed rather than fabricate it.
+
+**Optional bounded recovery, not automatic adoption:** Linux unsandboxed host-direct primary Pi closeouts may opt into `closeout: { action: "start", planId: "plan-NNN", pipelineId: "<exact opening id>", artifactPath: "agents.output/...md" }` on `pidex_agent`. Read `<pidex-root>/readme/closeout-recovery.md` first. This explicitly defers automatic rule learning, not mandatory PI or knowledge handoffs. The v3 producer captures the bounded return before postprocessing. To continue, use `action: "resume"` with the same tuple, same agent and original `dispatchId`; never invent a replacement invocation. Resume makes no model call, does not reconstruct historical returns and cannot run an unconfirmed hook again. This first increment allows one physical call per actor/pipeline and **zero automatic retries**, preserving existing review budgets. Missing receipts, scope changes, aborts and unknown locks remain holds. Use `scripts/runtime/closeout-status.mjs` for read-only diagnosis; do not interpret historical quiescence as a fresh scan or general cancellation authority.
 
 **7. When the pipeline completes**
 

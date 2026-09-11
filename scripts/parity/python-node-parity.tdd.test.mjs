@@ -133,7 +133,27 @@ function makeWikiProject(name) {
 try {
   const old = runPythonReportFixture();
   const node = runNodeReportFixture();
-  assert.deepEqual(stable(node), stable(old));
+  // Initiative051 deliberately changes legacy per-run diagnostics: missing
+  // execution identity is unproven, not merely probably unlogged. Keep the
+  // historical Python fixture immutable and admit ONLY these exact fields;
+  // counts, severity, targets, costs, coordination and every other field retain
+  // the original parity assertion. Matching semantics have their own matrix in
+  // report-integration.tdd.test.mjs (including the historical false 6/6 case).
+  const expected = structuredClone(old);
+  const runOperators = new Set(['OpSpawn', 'OpContextPack', 'OpReview', 'OpRoute', 'OpGate']);
+  for (const trace of [expected.trace, expected.summary.operator_trace]) {
+    for (const finding of trace.findings) {
+      if (!runOperators.has(finding.operator_type)) continue;
+      const row = reportFixture.metrics.find((metric) => metric.agent === finding.agent
+        && normalize_plan(metric.plan) === finding.plan_key);
+      assert.ok(row, 'approved diagnostic delta must belong to a known legacy metric');
+      assert.equal(row.run_dir, undefined);
+      finding.confidence = 'insufficient-data';
+      finding.reason = `${finding.operator_type}: missing execution identity or project scope; no per-execution completeness claim.`;
+      finding.evidence = row.context_file || null;
+    }
+  }
+  assert.deepEqual(stable(node), stable(expected));
 
   const oldHygiene = writeOldScript('scripts/wiki/hygiene.py', gitShow('scripts/wiki/hygiene.py'));
   const oldProject = makeWikiProject('old-project');

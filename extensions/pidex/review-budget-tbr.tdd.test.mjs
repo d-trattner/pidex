@@ -8,7 +8,7 @@ import path from 'node:path';
 import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, normalizePublicReviewIdentity, runConfiguredProviderAttempts } from './index.ts';
 import { foldReviewHistory, normalizeReviewVerdict, validateReviewIdentity } from './review-budget.ts';
 import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
-import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
+import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion, deriveReviewPhysicalAttempt, recordReviewPhysicalOutcome, recordReviewHold, recordReviewAbortHold } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
 import { canonicalProjectIdentity } from '../../modules/pidex/analysis-metrics-history/lib/project-key.mjs';
 import '../../scripts/quality/tbr.tdd.test.mjs';
 import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
@@ -207,6 +207,97 @@ try {
   assert.equal(returnedOnly.reviewCompletion.status, 'REVIEW_DISPATCH_UNCERTAIN', 'returned-only lifecycle state returns typed uncertainty hold');
   assert.equal(lifecycleChildren, childrenBeforeResume, 'returned-only retry must not run a child');
 } finally { rmSync(lifecycleState, { recursive: true, force: true }); rmSync(lifecycleProject, { recursive: true, force: true }); }
+
+// Live interruption regression: physical states must stay inside the review seam.
+// In particular an interrupted correction must never become ordinary implementation.
+// Isolate unrelated rule-inventory Git/network work: this matrix tests real review
+// admission/completion against temporary stores, not production inventory bootstrap.
+const physicalRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-physical-runtime-'));
+for (const directory of ['agents', 'config', 'scripts']) mkdirSync(path.join(physicalRoot, directory));
+writeFileSync(path.join(physicalRoot, 'package.json'), JSON.stringify({ name: 'pidex', version: '0.0.0' }));
+writeFileSync(path.join(physicalRoot, 'config/agents.json'), JSON.stringify({ defaults: { provider: 'pi' }, agents: {} }));
+const previousPhysicalRoot = process.env.PIDEX_ROOT;
+let physicalBoundary;
+try {
+  process.env.PIDEX_ROOT = physicalRoot;
+  physicalBoundary = (await import('./index.ts?physical-review-state-regressions')).executeHostAgentBoundary;
+} finally {
+  if (previousPhysicalRoot === undefined) delete process.env.PIDEX_ROOT; else process.env.PIDEX_ROOT = previousPhysicalRoot;
+}
+try {
+for (const spec of [
+  { gate: 'security', agent: 'pidex-implementer', mode: 'correction1', reviewer: 'pidex-security' },
+  { gate: 'critic', agent: 'pidex-planner', mode: 'correction1', reviewer: 'pidex-critic' },
+  { gate: 'security', agent: 'pidex-security', mode: 'initial', reviewer: 'pidex-security' },
+]) for (const state of ['accepted', 'retry', 'exhausted', 'primary-hold', 'abort-hold', 'partial-return']) {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), 'pidex-implicit-physical-'));
+  const stateDir = path.join(fixture, 'state');
+  const project = path.join(fixture, 'project');
+  const context = 'agents.output/review/038.md';
+  const pipelineId = `physical-${spec.gate}-${spec.mode}-${state}`;
+  mkdirSync(path.join(project, 'agents.output/review'), { recursive: true });
+  bindCurrent(stateDir, project, pipelineId);
+  let children = 0;
+  const options = {
+    agentCwd: project,
+    reviewLifecycle: { stateDir, pipelineId },
+    loadConfig: () => ({ defaults: { provider: 'pi' }, agents: {} }),
+    resolveSandboxState: () => ({ enabled: false }),
+    runConfigured: async (params) => {
+      children += 1;
+      params.onProcessStarted?.();
+      return { agent: params.agent, provider: 'pi', exitCode: 0, stderr: '', finalText: `<!-- ROUTING\nverdict: REJECTED\nroute_to: ${spec.agent}\ncontext_file: ${context}\n-->` };
+    },
+  };
+  try {
+    if (spec.mode === 'correction1') {
+      writeFileSync(path.join(project, context), structuredFenced(structuredPayload({ findings: [structuredActiveFinding] })));
+      await physicalBoundary({ agent: spec.reviewer, task: 'Plan 038 initial review' }, options);
+    }
+    const id = { runFamilyId: pipelineId, planId: 'plan-038', reviewGate: spec.gate, reviewMode: spec.mode, attemptId: lifecycleAttempt(pipelineId, spec.gate, spec.mode) };
+    const lifecycle = { stateDir, project, pipelineId, identity: id };
+    const startPhysical = async (ordinal) => {
+      const physical = deriveReviewPhysicalAttempt(id, 0, ordinal);
+      const reserved = await reserveReviewStartAsync({ ...lifecycle, physical, start: (accepted) => { accepted(); return 'seeded-physical-child'; } });
+      assert.equal(reserved.status, 'accepted');
+      return physical;
+    };
+    const failPhysical = (physical) => recordReviewPhysicalOutcome({ ...lifecycle, physical, outcome: 'TIMED_OUT', evidence: { exitCode: 143, timedOut: true, finalTextPresent: false } });
+    let physical = await startPhysical(0);
+    if (['retry', 'exhausted', 'primary-hold'].includes(state)) assert.equal(failPhysical(physical).status, 'retryable');
+    if (['exhausted', 'primary-hold'].includes(state)) { physical = await startPhysical(1); assert.equal(failPhysical(physical).status, 'exhausted'); }
+    if (state === 'primary-hold') assert.equal(recordReviewHold({ ...lifecycle, physical, status: 'PRIMARY_REVIEW_UNAVAILABLE' }).status, 'PRIMARY_REVIEW_UNAVAILABLE');
+    if (state === 'abort-hold') assert.equal(recordReviewAbortHold({ ...lifecycle, physical }).status, 'REVIEW_ABORTED');
+    const stream = path.join(eventBase(stateDir, project), `${pipelineId}.jsonl`);
+    if (state === 'partial-return') writeFileSync(stream, JSON.stringify({ event_type: 'spawn_returned', metadata: { ...id, ...physical } }) + '\n', { flag: 'a' });
+    const before = readFileSync(stream, 'utf8');
+    const childrenBefore = children;
+    writeFileSync(path.join(project, context), structuredFenced(structuredPayload({ verdict: 'APPROVED', findings: [] })));
+    options.runConfigured = async (params) => {
+      children += 1; params.onProcessStarted?.();
+      return { agent: params.agent, provider: 'pi', exitCode: 0, stderr: '', finalText: `<!-- ROUTING\nverdict: ${spec.mode === 'initial' ? 'APPROVED' : 'COMPLETE'}\nroute_to: ${spec.mode === 'initial' ? 'pidex-qa' : spec.reviewer}\ncontext_file: ${context}\n-->` };
+    };
+    if (state === 'partial-return') {
+      await assert.rejects(() => physicalBoundary({ agent: spec.agent, task: 'Plan 038 continue assigned work' }, options), /REVIEW_(IDENTITY|HISTORY)_INVALID/);
+      assert.equal(children, childrenBefore, 'partial durable transition must not become ordinary correction');
+      assert.equal(readFileSync(stream, 'utf8'), before);
+      continue;
+    }
+    const result = await physicalBoundary({ agent: spec.agent, task: 'Plan 038 continue assigned work' }, options).catch(error => { throw new Error(`${spec.agent}/${state}: ${error.message}`, { cause: error }); });
+    if (state === 'retry') {
+      assert.equal(children, childrenBefore + 1, 'only the remaining physical retry is permitted');
+      assert.equal(result.exitCode, 0);
+      const starts = readFileSync(stream, 'utf8').trim().split('\n').map(JSON.parse).filter(r => r.event_type === 'start_reserved' && r.metadata?.reviewMode === spec.mode);
+      assert.deepEqual(starts.map(r => r.metadata.physicalOrdinal), [0, 1], 'retry budget must not reset');
+    } else {
+      assert.equal(children, childrenBefore, `${spec.agent}/${state}: no ordinary or duplicate child`);
+      const expected = state === 'accepted' ? 'REVIEW_DISPATCH_UNCERTAIN' : state === 'abort-hold' ? 'REVIEW_ABORTED' : 'PRIMARY_REVIEW_UNAVAILABLE';
+      assert.equal(result.reviewCompletion?.status, expected);
+      if (state !== 'exhausted') assert.equal(readFileSync(stream, 'utf8'), before, 'existing hold/uncertainty must not mutate history');
+    }
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+}
+} finally { rmSync(physicalRoot, { recursive: true, force: true }); }
 
 const immediateFinding = { findingId: 'F-2', relation: 'new', class: 'Product', reproductionState: 'reproduced', causedByCorrection: false, severity: 'High', disposition: 'tbr_immediate', title: 'Deferred finding', shortDescription: 'New finding deferred.', originEpic: 'initiative-038', reviewArtifact: 'agents.output/code-review/038.md', affectedIdentifiers: ['scripts/quality/tbr.mjs'], deferredReason: 'New finding cannot reject.', nextAnalysisOrDisconfirmingTest: 'Validate canonical payload.' };
 const rejected = validateReviewOutcome({ verdict: 'REJECTED', findings: [

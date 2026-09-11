@@ -97,6 +97,8 @@ Package verification proves only shipped manifest schema, member hashes, aggrega
 
 Deactivation/reactivation is automatic and reversible under the same no-rewrite rule: exact preserved rule bytes, one `pidex-action-cadence-v1` trailer, verified receipt, mirror plus projection. It never rewrites published history; epochs close and reopen only under verified active projections, and global projection heads carry the preserved manifest digest. Cross-host stop submits the canonical `deactivated` transition when active; local stop stays narrowing-only. `PIDEX_LIFECYCLE_ACTION_ENABLED` (default off) gates the single kill-switch seam; without an enrolled real adapter the action stays inert.
 
+The ordinary Project Pipeline terminal path currently has **no enrolled canonical Impact Evaluation/current-state source connected to that seam**. It therefore reports `lifecycle_action: { status: "no_op", reason: "action_unavailable" }` when enabled for an otherwise eligible run; disabled or excluded runs retain their corresponding no-op reason. An exposure receipt is not an Impact Evaluation and cannot substitute for its bytes or authority. No action store is opened by this unavailable path. Pipeline completion describes project work, not successful rule deactivation. Connecting a real source/history adapter and proving operational behavior remains separate work; helper/fixture acceptance does not close that gap.
+
 ## Dashboard
 
 Quality → **Manual contract governance** shows:

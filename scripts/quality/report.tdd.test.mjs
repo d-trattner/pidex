@@ -3,7 +3,19 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { normalize_plan, build_expected_observed, parse_git_status_rules, select_since_last_review, summarize, write_markdown } from './report.mjs';
+import { normalize_plan, build_expected_observed as buildTrace, parse_git_status_rules, select_since_last_review, summarize, write_markdown } from './report.mjs';
+
+// These contract-classification fixtures represent known single executions.
+// Missing/ambiguous historical identity has separate regression coverage in report-integration.
+function build_expected_observed(data, plans) {
+  const metrics = (data.metrics || []).map((row, i) => ({ project: '/fixture/project', run_dir: `fixture-${i}`, ...row }));
+  const orchestrator_events = (data.orchestrator_events || []).map(row => ({
+    project_path: '/fixture/project',
+    ...(metrics.length === 1 ? { run_dir: metrics[0].run_dir, agent: metrics[0].agent } : {}),
+    ...row,
+  }));
+  return buildTrace({ ...data, metrics, orchestrator_events }, plans);
+}
 
 assert.equal(normalize_plan('4'), 'plan-004');
 assert.equal(normalize_plan('plan-4'), 'plan-004');

@@ -38,6 +38,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Docker sandbox](readme/sandbox.md)
 - [Project modes](readme/modes.md)
 - [Bounded lifecycle review budgets](readme/review-budgets.md)
+- [Opt-in Linux closeout return/replay](readme/closeout-recovery.md)
 - [Project Pipeline](readme/project-pipeline.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)
@@ -198,6 +199,8 @@ Project session memory:
 ```
 
 `/pdmem` writes to `<project-root>/wiki/session-memory/`. See [Project session memory](readme/project-memory.md).
+
+Working-baseline support is opt-in: read-only `/pdstatus`, explicit acceptance, and fresh process-bound starts distinguish source changes from loaded code. Existing sessions remain unbound and compatible. See [Working baseline](readme/working-baseline.md) for the Linux-first scope, confirmation workflow, and rollback limits.
 
 ## Repo scope
 

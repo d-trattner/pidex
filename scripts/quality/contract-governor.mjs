@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { normalizeGovernorConfig } from '../runtime/config-observation.mjs';
 // Manual pending-only contract-governor runner. No apply, delegate, or validation authority.
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -29,13 +30,7 @@ function config(root) {
   const legacyKeys = [...new Set([...Object.keys(defaults || {}), ...Object.keys(local || {})].filter((key) => AUTOMATION_KEYS.has(key)))];
   const enabledEnv = AUTOMATION_ENV.filter((key) => envEnables(process.env[key]));
   if (legacyKeys.length || enabledEnv.length) { const error = new Error(`GOVERNOR_AUTOMATION_UNSUPPORTED: ${[...legacyKeys, ...enabledEnv].join(',')}`); error.code = 'GOVERNOR_AUTOMATION_UNSUPPORTED'; throw error; }
-  const merged = { ...defaults, ...local };
-  const unknownKeys = Object.keys(merged).filter((key) => !['$schema', 'version', 'capability', 'max_proposals_per_run'].includes(key));
-  if (unknownKeys.length) throw new Error(`GOVERNOR_CONFIG_INVALID: unknown fields ${unknownKeys.join(',')}`);
-  if (merged.version !== 2 || merged.capability !== 'manual-pending-only') throw new Error('GOVERNOR_CONFIG_INVALID: expected version 2 manual-pending-only');
-  const max = Number(merged.max_proposals_per_run ?? 5);
-  if (!Number.isInteger(max) || max < 1 || max > 20) throw new Error('GOVERNOR_CONFIG_INVALID: max_proposals_per_run must be 1..20');
-  return { version: 2, capability: 'manual-pending-only', max_proposals_per_run: max };
+  return normalizeGovernorConfig(defaults,local);
 }
 
 export function acquireGovernorLock(root, options = {}) {

@@ -6,10 +6,14 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGzip, gunzipSync } from "node:zlib";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { parseFrontmatter, VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
+import { assertRuntimeBaseline, registerRuntimeBaseline } from "./runtime-baseline.ts";
+import { mergeRoute, mergeSandbox } from "../../scripts/runtime/config-observation.mjs";
 import { Type } from "typebox";
 import { foldReviewHistory, normalizeReviewPlan, normalizeReviewVerdict, reviewAgentMatches, validateReviewIdentity } from "./review-budget.ts";
-import { completeStructuredReviewOutcome, deriveReviewPhysicalAttempt, recordReviewAbortHold, recordReviewCompletion, recordReviewHold, recordReviewPhysicalOutcome, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
+import { validateCloseoutRequest } from "../../scripts/runtime/closeout-recovery.mjs";
+import { EXECUTION_PROTOCOL_DIGEST, assertExecutionSupport, spawnObservedExecution, inspectExecution } from "../../scripts/runtime/review-execution.mjs";
+import { beginRecoverableHostCloseout, beginHostCloseoutDispatch, completeStructuredReviewOutcome, deriveReviewPhysicalAttempt, recordReviewAbortHold, recordReviewCompletion, recordReviewHold, recordReviewPhysicalOutcome, reconcileReviewExecution, reserveReviewStart, reserveReviewStartAsync, resolvePlanReviewAuthority } from "../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs";
 import { resolveStateRoot } from "../../modules/pidex/analysis-metrics-history/lib/state-root.mjs";
 import { bootstrapRuleInventoryProjections, lifecycleRulePhase, openRuleLifecycleStore, prepareLifecycleRuntimeContext } from "../../scripts/quality/rule-lifecycle-store.mjs";
 import { renderVerifiedRuntimeRules, validateRequiredReviewerProducer } from "../../scripts/quality/rule-mirror-sync.mjs";
@@ -412,13 +416,10 @@ function loadRoutingConfig(): RoutingConfig {
 }
 
 function resolveRoute(config: RoutingConfig, agentName: string): AgentRoute {
-	return {
-		...(config.defaults ?? {}),
-		...(config.agents?.[agentName] ?? {}),
-	};
+	return mergeRoute(config, agentName);
 }
 
-type HostAgentRequest = { agent: string; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string; runFamilyId?: string; planId?: string; reviewGate?: string; reviewMode?: string; attemptId?: string; resumeHoldId?: string; resumeConfirmed?: boolean };
+type HostAgentRequest = { agent: string; closeout?: CloseoutRequest; provider?: string; model?: string; effort?: string; laneId?: string; trigger?: string; runFamilyId?: string; planId?: string; reviewGate?: string; reviewMode?: string; attemptId?: string; resumeHoldId?: string; resumeConfirmed?: boolean };
 
 export function validateHostAgentRequestShape(params: HostAgentRequest): { secondary: boolean } {
 	const hasManualRoute = params.provider !== undefined || params.model !== undefined || params.effort !== undefined;
@@ -467,12 +468,7 @@ function readJsonObject<T extends Record<string, any>>(file: string, fallback: T
 }
 
 function deepMerge<T extends Record<string, any>>(base: T, override: Record<string, any>): T {
-	const out: Record<string, any> = { ...base };
-	for (const [key, value] of Object.entries(override || {})) {
-		if (value && typeof value === "object" && !Array.isArray(value) && out[key] && typeof out[key] === "object" && !Array.isArray(out[key])) out[key] = deepMerge(out[key], value);
-		else out[key] = value;
-	}
-	return out as T;
+	return mergeSandbox(base, override) as T;
 }
 
 function loadSandboxConfig(): SandboxConfig {
@@ -523,6 +519,7 @@ function redactedProjectPipelineModeFailure(exitCode: number | null): ProjectPip
 }
 
 export function runProjectPipelineModeResolver(projectRoot: string, mode?: string, source = "interactive"): ProjectPipelineModeResult {
+	if (mode) assertRuntimeBaseline(mode);
 	if (!fs.existsSync(PROJECT_PIPELINE_MODE_SCRIPT)) return { ok: false, decision_required: true, reason: `project-pipeline mode resolver missing; run /pidex-init-home or update the canonical PIDEX runtime before starting /pd` };
 	const args = [PROJECT_PIPELINE_MODE_SCRIPT, "--pidex-root", PACKAGE_ROOT, "--project-root", projectRoot, "--json"];
 	if (mode) args.push("--mode", mode, "--source", source);
@@ -2189,7 +2186,7 @@ function notifyGate(cwd: string, planId: string, gate: string, routeTo: string |
 	}
 }
 
-function recordOperatorEvents(result: RpResult, cwd: string, task: string): string | undefined {
+export function recordOperatorEvents(result: RpResult, cwd: string, task: string): string | undefined {
 	const routing = extractRoutingBlock(result.finalText);
 	const planId = extractPlanId(task, result.finalText);
 	const contextFile = extractRoutingField(routing, "context_file");
@@ -2199,6 +2196,7 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 	let eventFile = appendOperatorEvent(cwd, planId, {
 		operator_type: "OpContextPack",
 		agent: result.agent,
+		run_dir: result.runDir,
 		logical_decision: { agent: result.agent, task_chars: task.length, context_paths_detected: contextPaths.length },
 		physical_action: { context_paths: contextPaths, estimated_token_class: estimateContextSizeClass(task.length), budget_warning: task.length >= 32_000 },
 		confidence: contextPaths.length ? "medium" : "low",
@@ -2220,6 +2218,7 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 		eventFile = appendOperatorEvent(cwd, planId, {
 			operator_type: "OpReview",
 			agent: result.agent,
+			run_dir: result.runDir,
 			source_artifact: contextFile,
 			logical_decision: { review_agent: result.agent, expected_verdict_in_routing: true },
 			physical_action: { verdict: extractRoutingField(routing, "verdict") || "unknown", gate: gate || undefined, route_to: routeTo, finding_counts: extractFindingCounts(result.finalText) },
@@ -2230,6 +2229,7 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 		eventFile = appendOperatorEvent(cwd, planId, {
 			operator_type: "OpRoute",
 			agent: result.agent,
+			run_dir: result.runDir,
 			source_artifact: contextFile,
 			gate_present: Boolean(gate),
 			logical_decision: { route_to: routeTo, gate: gate || undefined, context_file: contextFile },
@@ -2241,6 +2241,7 @@ function recordOperatorEvents(result: RpResult, cwd: string, task: string): stri
 		eventFile = appendOperatorEvent(cwd, planId, {
 			operator_type: "OpGate",
 			agent: result.agent,
+			run_dir: result.runDir,
 			source_artifact: contextFile,
 			gate,
 			logical_decision: { gate, route_to: routeTo, user_decision_required: true },
@@ -2370,7 +2371,7 @@ function runPidexQualityReport(cwd: string, argsLine?: string): { ok: boolean; s
 	}
 }
 
-function recordAgentMetric(result: RpResult, cwd: string, task: string): string | undefined {
+export function recordAgentMetric(result: RpResult, cwd: string, task: string): string | undefined {
 	try {
 		const project = safePathSegment(cwd);
 		const routing = extractRoutingBlock(result.finalText);
@@ -2736,8 +2737,12 @@ async function runRpAgent(params: {
 	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
-	onProcessStarted?: () => void;
+	onProcessStarted?: (evidence?: { executionStartDigest: string }) => void;
+	reviewExecution?: ReviewExecutionContext;
+	closeoutExecution?: CloseoutExecutionContext;
+	onCloseoutReturned?: (result: RpResult) => void;
 }): Promise<RpResult> {
+	const observedExecution = params.reviewExecution ?? params.closeoutExecution;
 	const startedAt = Date.now();
 	const agent = loadAgent(params.agent);
 	const model = params.model ?? agent.frontmatter.model;
@@ -2746,6 +2751,7 @@ async function runRpAgent(params: {
 	const tools = params.tools === undefined ? parseTools(agent.frontmatter.tools) : params.tools;
 	const maxTurns = parsePositiveInt(agent.frontmatter.maxTurns);
 	const systemPrompt = buildAgentSystemPrompt(params.agent, agent.body, "pi");
+	if (observedExecution && (observedExecution.definitionDigest !== executionValueDigest(agent) || observedExecution.systemPromptDigest !== executionValueDigest(systemPrompt))) throw new Error("REVIEW_EXECUTION_SCOPE_CHANGED");
 	const inputChars = systemPrompt.length + params.task.length;
 	const runLog = createAgentRunLog(params.agent, params.cwd);
 	const systemPromptFile = path.join(runLog.runDir, `${safePathSegment(params.agent)}.system.md`);
@@ -2790,6 +2796,14 @@ async function runRpAgent(params: {
 		let finalText = "";
 		let observedModel = model;
 		let proc: ReturnType<typeof spawn> | undefined;
+		let observed: ReturnType<typeof spawnObservedExecution> | undefined;
+		let executionStartDigest: string | undefined;
+		let abortListener: (() => void) | undefined;
+		const stopProcess = (signal: NodeJS.Signals, reason?: string) => {
+			if (observed && reason) return observed.stop(reason);
+			if (observed && signal === "SIGKILL") return observed.hardStop();
+			return proc?.kill(signal) ?? false;
+		};
 		let cleanTerminalAssistantStopReceived = false;
 		let forcedTerminationSignal = false;
 		let finalDrainTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2807,9 +2821,9 @@ async function runRpAgent(params: {
 			if (finalDrainTimer || !proc) return;
 			finalDrainTimer = setTimeout(() => {
 				if (!proc) return;
-				forcedTerminationSignal = proc.kill("SIGTERM") || forcedTerminationSignal;
+				forcedTerminationSignal = stopProcess("SIGTERM", "final_drain") || forcedTerminationSignal;
 				finalHardKillTimer = setTimeout(() => {
-					forcedTerminationSignal = proc?.kill("SIGKILL") || forcedTerminationSignal;
+					forcedTerminationSignal = stopProcess("SIGKILL") || forcedTerminationSignal;
 				}, FINAL_STOP_HARD_KILL_MS);
 				finalHardKillTimer.unref?.();
 			}, FINAL_STOP_GRACE_MS);
@@ -2829,8 +2843,8 @@ async function runRpAgent(params: {
 					turnCount += 1;
 					if (maxTurns && turnCount > maxTurns && proc) {
 						turnLimitHit = true;
-						proc.kill("SIGTERM");
-						setTimeout(() => proc?.kill("SIGKILL"), 5000).unref?.();
+						stopProcess("SIGTERM", "turn_limit");
+						setTimeout(() => stopProcess("SIGKILL"), 5000).unref?.();
 					}
 				}
 				if (event?.type === "tool_execution_start") toolCount += 1;
@@ -2864,23 +2878,29 @@ async function runRpAgent(params: {
 
 		const exitCode = await new Promise<number>((resolve) => {
 			const piSpec = piChildSpawnSpec(args);
-			proc = spawn(piSpec.command, piSpec.args, {
-				cwd: params.cwd,
-				stdio: ["ignore", "pipe", "pipe"],
-				env: {
+			const childEnv = {
 					...process.env,
 					[PIDEX_CHILD_ENV]: "1",
 					[PIDEX_PROJECT_BOUNDARY_ENV]: JSON.stringify({ active: true, projectRoot: resolveProjectRoot(params.cwd), pidexRoot: PACKAGE_ROOT, startedCwd: params.cwd }),
 					...(params.sandboxContext ? { [PIDEX_SANDBOX_CONTEXT_ENV]: JSON.stringify(params.sandboxContext) } : {}),
 					PI_SKIP_VERSION_CHECK: "1",
-				},
-			});
-			params.onProcessStarted?.();
+			};
+			if (observedExecution) {
+				if (params.signal?.aborted) throw new Error("EXECUTION_DISPATCH_ABORTED");
+				observed = spawnObservedExecution({ stateRoot: observedExecution.stateRoot, binding: observedExecution.binding, command: piSpec.command, args: piSpec.args, cwd: params.cwd, env: childEnv, onProcessStarted: evidence => {
+					executionStartDigest = evidence.executionStartDigest;
+					params.onProcessStarted?.(evidence);
+				} });
+				proc = observed.proc;
+			} else {
+				proc = spawn(piSpec.command, piSpec.args, { cwd: params.cwd, stdio: ["ignore", "pipe", "pipe"], env: childEnv });
+				params.onProcessStarted?.();
+			}
 			const timeoutMs = params.timeoutSeconds ? Math.max(1, params.timeoutSeconds) * 1000 : undefined;
 			const timeoutTimer = timeoutMs ? setTimeout(() => {
 				timedOut = true;
-				proc?.kill("SIGTERM");
-				setTimeout(() => proc?.kill("SIGKILL"), 5000).unref?.();
+				stopProcess("SIGTERM", "timeout");
+				setTimeout(() => stopProcess("SIGKILL"), 5000).unref?.();
 			}, timeoutMs) : undefined;
 			proc.stdout.on("data", (data) => {
 				if (!runLog.writeChunk(data)) {
@@ -2924,13 +2944,28 @@ async function runRpAgent(params: {
 			if (params.signal) {
 				const kill = () => {
 					aborted = true;
-					proc?.kill("SIGTERM");
-					setTimeout(() => proc?.kill("SIGKILL"), 5000).unref?.();
+					if (params.reviewExecution && executionStartDigest) {
+						const binding = params.reviewExecution.binding;
+						recordReviewAbortHold({ stateDir: params.reviewExecution.stateRoot, project: binding.project, pipelineId: binding.pipelineId, identity: binding.identity, physical: binding.physical });
+					}
+					stopProcess("SIGTERM", "user_abort");
+					setTimeout(() => stopProcess("SIGKILL"), 5000).unref?.();
 				};
+				abortListener = kill;
 				if (params.signal.aborted) kill();
 				else params.signal.addEventListener("abort", kill, { once: true });
 			}
+		}).finally(() => {
+			if (abortListener) params.signal?.removeEventListener("abort", abortListener);
+			stderrStream.end();
 		});
+		if (observedExecution) {
+			const end = inspectExecution(observedExecution.stateRoot, observedExecution.binding, executionStartDigest);
+			if (!["failed", "finished", "aborted"].includes(end.status)) throw new Error("REVIEW_EXECUTION_END_UNCONFIRMED");
+			aborted ||= end.status === "aborted";
+			timedOut ||= end.reason === "timeout";
+			turnLimitHit ||= end.reason === "turn_limit";
+		}
 		emitUpdate(finalText, true);
 		if (aborted) stderr = appendTail(stderr, "\nAborted by user.");
 		if (timedOut) stderr = appendTail(stderr, `\nPi child timed out after ${params.timeoutSeconds}s.`);
@@ -2969,6 +3004,8 @@ async function runRpAgent(params: {
 			turnLimitHit,
 			warnings: warnings.length ? warnings : undefined,
 		};
+		// Durable closeout capture precedes metadata/metrics, hooks and parsers.
+		params.onCloseoutReturned?.(result);
 		try {
 			fs.writeFileSync(path.join(runLog.runDir, "metadata.json"), JSON.stringify({
 				runner: "pi",
@@ -3142,6 +3179,11 @@ export async function runConfiguredProviderAttempts(
 	return result;
 }
 
+type ReviewExecutionContext = { stateRoot: string; binding: any; definitionDigest: string; systemPromptDigest: string };
+type CloseoutExecutionContext = Omit<ReviewExecutionContext, "binding"> & { binding: { kind: "closeout"; project: string; pipelineId: string; planId: string; dispatchId: string; actor: string; scope: string } };
+type CloseoutRequest = { action: "start" | "resume"; planId: string; pipelineId: string; artifactPath: string; dispatchId?: string };
+const executionValueDigest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
 async function runConfiguredAgent(params: {
 	agent: string;
 	task: string;
@@ -3154,9 +3196,13 @@ async function runConfiguredAgent(params: {
 	sandboxContext?: SandboxRuntimeContext;
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
-	onProcessStarted?: () => void;
+	onProcessStarted?: (evidence?: { executionStartDigest: string }) => void;
 	reviewDispatch?: boolean;
+	reviewExecution?: ReviewExecutionContext;
+	closeoutExecution?: CloseoutExecutionContext;
+	onCloseoutReturned?: (result: RpResult) => void;
 }): Promise<RpResult> {
+	if (params.closeoutExecution && params.signal?.aborted) throw new Error("PIPELINE_CLOSEOUT_ABORT_HOLD");
 	params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: resolving route...`);
 	const config = loadRoutingConfig();
 	const route: AgentRoute & { routeSource: string } = params.route
@@ -3169,6 +3215,7 @@ async function runConfiguredAgent(params: {
 	const delegateTools = TOOL_FORWARDING_AGENTS.has(params.agent) ? (explicitTools ?? route.tools) : route.tools;
 
 	const runProvider = async (selectedProvider: string, fallbackFrom?: string): Promise<RpResult> => {
+		assertRuntimeBaseline(params.sandboxContext?.mode ?? "host-direct");
 		if (isToolHeavyAgent(params.agent) && !isPiProvider(selectedProvider) && !supportsDelegateToolLoop(selectedProvider)) {
 			return {
 				agent: params.agent,
@@ -3205,6 +3252,9 @@ async function runConfiguredAgent(params: {
 				signal: params.signal,
 				onUpdate: params.onUpdate,
 				onProcessStarted: params.onProcessStarted,
+				reviewExecution: params.reviewExecution,
+				closeoutExecution: params.closeoutExecution,
+				onCloseoutReturned: params.onCloseoutReturned,
 			});
 			return { ...result, fallbackFrom };
 		}
@@ -3238,8 +3288,8 @@ async function runConfiguredAgent(params: {
 		fallbackProvider,
 		reviewDispatch: params.reviewDispatch,
 		signal: params.signal,
-		retrySameProvider: isPiProvider(provider) && !params.providerOverride,
-		fallbackEnabled: !fallbackDisabled && !params.providerOverride && !params.route,
+		retrySameProvider: isPiProvider(provider) && !params.providerOverride && !params.closeoutExecution,
+		fallbackEnabled: !fallbackDisabled && !params.providerOverride && !params.route && !params.closeoutExecution,
 		onSameProviderRetry: () => params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} returned invalid completion; retrying once on ${provider}.`),
 		onConfiguredFallback: (missingRouting) => params.onUpdate?.(`${formatAgentProgressLabel(params.agent)}: ${provider} failed${missingRouting ? " (missing ROUTING)" : ""}; falling back to ${fallbackProvider}.`),
 	}, runProvider);
@@ -3740,6 +3790,9 @@ const REVIEWER_AGENTS = new Set(["pidex-critic", "pidex-code-reviewer", "pidex-s
 const CORRECTION_OWNERS = new Set(["pidex-planner", "pidex-implementer"]);
 const REVIEW_GATES = ["critic", "code-review", "security", "qa"];
 const REVIEW_MODES = ["initial", "correction1", "review1", "correction2", "review2"];
+// Resolve active physical retry/hold states too. The reservation layer decides
+// whether they may spawn; absence must never downgrade a correction to ordinary work.
+const IMPLICIT_REVIEW_STATES = new Set(["allowed", "resume_reserved", "spawn_accepted", "physical_accepted", "physical_retry", "physical_exhausted", "primary_hold", "abort_hold"]);
 
 function reviewDispatchFor(agent: string, identity: Record<string, unknown>, _task = "", secondary = false) {
 	return !secondary && (REVIEWER_AGENTS.has(agent) || (CORRECTION_OWNERS.has(agent) && Object.values(identity).some((value) => value !== undefined)));
@@ -3831,9 +3884,22 @@ function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipel
 		.filter((identity) => {
 			if (!reviewAgentMatches(String(params?.agent), identity)) return false;
 			const state = foldReviewHistory(rows, identity);
-			return ["allowed", "resume_reserved", "spawn_accepted"].includes(state.status) || (state.status === "uncertain" && rows.some((row) => ["runFamilyId", "planId", "reviewGate", "reviewMode", "attemptId"].every((key) => row?.metadata?.[key] === identity[key])));
+			return IMPLICIT_REVIEW_STATES.has(state.status) || (state.status === "uncertain" && rows.some((row) => ["runFamilyId", "planId", "reviewGate", "reviewMode", "attemptId"].every((key) => row?.metadata?.[key] === identity[key])));
 		});
 	if (candidates.length > 1) throw new Error("REVIEW_IDENTITY_INVALID");
+	if (candidates.length === 0 && CORRECTION_OWNERS.has(String(params?.agent))) {
+		// A partial/corrupt completion or advanced pending identity is not ordinary
+		// work. This matters when a process dies between durable completion rows.
+		const gates = params.agent === "pidex-planner" ? ["critic"] : ["code-review", "security", "qa"];
+		for (const gate of gates) {
+			const history = rows.filter(row => row?.metadata?.planId === planId && row.metadata.reviewGate === gate);
+			if (!history.length) continue;
+			const actual = history.map(row => validateReviewIdentity(row.metadata)).find(value => value.ok)?.value;
+			if (!actual) throw new Error("REVIEW_HISTORY_INVALID");
+			const state = foldReviewHistory(rows, actual);
+			if (state.status !== "terminal" || state.terminal !== "accepted") throw new Error("REVIEW_HISTORY_INVALID");
+		}
+	}
 	return candidates.length === 1 ? { identity: candidates[0], pipelineId } : undefined;
 }
 
@@ -3984,6 +4050,13 @@ function reviewChildFailure(lifecycle: any, identity: Record<string, string>, ph
 }
 
 export async function executeHostAgentBoundary(params: HostAgentRequest & { task: string; tools?: string[] }, options: HostAgentBoundaryOptions): Promise<RpResult> {
+	validateHostAgentRequestShape(params);
+	if (params.closeout) {
+		validateCloseoutRequest(params.closeout);
+		if ([params.laneId, params.resumeHoldId, params.resumeConfirmed, (params as any).reviewIdentity, (params as any).projectId, (params as any).expectedInputPath, (params as any).expectedOutputPath, params.runFamilyId, params.planId, params.reviewGate, params.reviewMode, params.attemptId].some(v => v !== undefined)) throw new Error("PIPELINE_CLOSEOUT_REQUEST_INVALID");
+		params = { ...params, task: `Plan: ${params.closeout.planId.slice(5)}\n${params.task}` };
+	}
+	assertRuntimeBaseline(options.agentProjectMode?.mode ?? "host-direct");
 	const request = validateHostAgentRequestShape(params);
 	const suppliedIdentity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
 	const configuredLifecycle = options.reviewLifecycle ?? { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${path.basename(options.agentCwd)}-${params.planId}` };
@@ -4004,6 +4077,7 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 		: [];
 	const route = resolveHostAgentRoute(params, (options.loadConfig ?? loadRoutingConfig)(), eligibleLanes);
 	const sandboxState = (options.resolveSandboxState ?? (() => resolveSandboxStateForProjectMode(options.agentProjectMode)))();
+	if (params.closeout && (process.platform !== "linux" || sandboxState.enabled || request.secondary || reviewDispatch || !isPiProvider(route.provider) || (options.agentProjectMode?.mode && options.agentProjectMode.mode !== "host-direct"))) throw new Error("PIPELINE_CLOSEOUT_RECOVERY_UNCOVERED");
 	if (sandboxState.enabled) {
 		const probe = (options.probeSandbox ?? probeSandboxAvailability)();
 		if (!probe.ok) throw new Error(`PIDEX sandbox is enabled but unavailable: ${probe.summary}`);
@@ -4030,22 +4104,62 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	const runner = sandboxState.enabled && SANDBOXED_AGENT_NAMES.has(params.agent)
 		? (options.runSandboxed ?? runSandboxedConfiguredAgent)
 		: (options.runConfigured ?? runConfiguredAgent);
+	if (!reviewDispatch && params.closeout) {
+		if (options.signal?.aborted) throw new Error("PIPELINE_CLOSEOUT_ABORT_HOLD");
+		assertExecutionSupport();
+		const definition = loadAgent(params.agent);
+		const definitionDigest = executionValueDigest(definition);
+		const systemPromptDigest = executionValueDigest(buildAgentSystemPrompt(params.agent, definition.body, "pi"));
+		const scope = executionValueDigest({ protocol: EXECUTION_PROTOCOL_DIGEST, root: PACKAGE_ROOT, route, tools: params.tools, definitionDigest, systemPromptDigest, rules: hostRuntime.taskContext, learning: "deferred-no-model-replay" });
+		const ticket = beginRecoverableHostCloseout({ stateDir: configuredLifecycle.stateDir, project: options.agentCwd, actor: params.agent, request: params.closeout, scope });
+		const abort = () => { try { ticket.abort(); } catch { /* no success after signal; process stop still must run */ } };
+		options.signal?.addEventListener("abort", abort, { once: true });
+		try {
+			if (params.closeout.action === "start") {
+				const result = await runner({ ...runParams, task: runParams.task + ticket.instruction,
+					closeoutExecution: { stateRoot: configuredLifecycle.stateDir, binding: ticket.executionBinding, definitionDigest, systemPromptDigest },
+					onProcessStarted: ticket.pinStart, onCloseoutReturned: ticket.capture });
+				if (!ticket.isCaptured()) ticket.capture(result);
+			}
+			if (options.signal?.aborted) throw new Error("PIPELINE_CLOSEOUT_ABORT_HOLD");
+			// Explicit opt-in recovery defers automatic rule learning. Replay never
+			// launches a hidden coordinator/model or adopts configuration changes.
+			return await ticket.complete(async () => "deferred") as RpResult;
+		} catch (error: any) {
+			throw new Error(`${error?.message ?? error}; closeout_dispatch=${ticket.id}; no automatic retry`);
+		} finally { options.signal?.removeEventListener("abort", abort); }
+	}
 	if (!reviewDispatch) {
-		const result = await runner(runParams);
+		const closeout = process.platform === "linux" && !sandboxState.enabled && !request.secondary
+			? beginHostCloseoutDispatch({ stateDir: configuredLifecycle.stateDir, project: options.agentCwd, planId: normalizePlanKey(extractPlanId(params.task)), actor: params.agent }) : null;
+		const result = await runner({ ...runParams, task: runParams.task + (closeout?.instruction ?? "") });
 		if (params.agent === "pidex-retrospective") {
 			(result as any).automatic_learning = await runHostRetrospectiveAutomaticLearning({ result, agentCwd: options.agentCwd, source: options.automaticRetrospectiveSource?.() });
 		}
+		if (closeout) (result as any).closeoutCompletion = closeout.finish(result);
 		return result;
 	}
 	if (options.signal?.aborted) throw new Error("REVIEW_DISPATCH_ABORTED");
 	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
 	const hostHeld = (reviewCompletion: any) => ({ agent: params.agent, provider: route.provider, exitCode: 0, stderr: "", finalText: "", reviewCompletion });
+	let executionScope: { scope: string; definitionDigest: string; systemPromptDigest: string } | undefined;
+	if (process.platform === "linux" && !sandboxState.enabled && isPiProvider(route.provider) && runner === runConfiguredAgent && fs.realpathSync(options.agentCwd) === options.agentCwd) {
+		assertExecutionSupport();
+		const definition = loadAgent(params.agent);
+		const definitionDigest = executionValueDigest(definition);
+		const systemPromptDigest = executionValueDigest(buildAgentSystemPrompt(params.agent, definition.body, "pi"));
+		executionScope = { definitionDigest, systemPromptDigest, scope: executionValueDigest({ protocol: EXECUTION_PROTOCOL_DIGEST, root: PACKAGE_ROOT, route, tools: params.tools, definitionDigest, systemPromptDigest, rules: hostRuntime.taskContext }) };
+		const recovered = reconcileReviewExecution({ ...lifecycle, identity, actor: params.agent, scope: executionScope.scope });
+		if (recovered.status === "held") return hostHeld(recovered.reviewCompletion);
+		if (["running", "uncertain"].includes(recovered.status)) return hostHeld({ status: "REVIEW_DISPATCH_UNCERTAIN", executionState: recovered.status, code: recovered.code });
+		if (!["not_pending", "reconciled"].includes(recovered.status)) throw new Error(recovered.code || "REVIEW_EXECUTION_UNAVAILABLE");
+	}
 	let physicalGeneration = 0;
 	let resume = reviewResumeFrom(params, request.secondary);
 	for (const physicalOrdinal of [0, 1]) {
 		const requestedPhysical = resume ? undefined : deriveReviewPhysicalAttempt(identity, physicalGeneration, physicalOrdinal);
 		if (!resume && !requestedPhysical) throw new Error("REVIEW_PHYSICAL_ATTEMPT_INVALID");
-		const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, physical: requestedPhysical, resume, start: (onProcessStarted) => runner({ ...runParams, onProcessStarted, reviewDispatch: true }) });
+		const reservation = await reserveReviewStartAsync({ ...lifecycle, identity, physical: requestedPhysical, resume, start: (onProcessStarted, physical) => runner({ ...runParams, onProcessStarted, reviewDispatch: true, reviewExecution: executionScope ? { stateRoot: lifecycle.stateDir, definitionDigest: executionScope.definitionDigest, systemPromptDigest: executionScope.systemPromptDigest, binding: { project: options.agentCwd, pipelineId: lifecycle.pipelineId, identity, physical, actor: params.agent, scope: executionScope.scope } } : undefined }) });
 		const status = reviewReservationStatus(identity, reservation, (c) => hostHeld(c), () => hostHeld({ status: "REVIEW_DISPATCH_UNCERTAIN" }), (p) => hostHeld(recordReviewHold({ ...lifecycle, identity, physical: p, status: "PRIMARY_REVIEW_UNAVAILABLE" })));
 		if (status?.retry) { physicalGeneration = status.generation; resume = undefined; continue; }
 		if (status?.done) return status.done;
@@ -4080,6 +4194,10 @@ export const PidexAgentParams = Type.Object({
 	agent: Type.String({ description: "pidex-* agent to run, e.g. pidex-planner, pidex-critic, pidex-implementer" }),
 	task: Type.String({ description: "Full task/context for the agent. Include relevant doc paths and required output path." }),
 	cwd: Type.Optional(Type.String({ description: "Project working directory. Defaults to current Pi cwd." })),
+	closeout: Type.Optional(Type.Object({
+		action: Type.Union([Type.Literal("start"), Type.Literal("resume")]),
+		planId: Type.String(), pipelineId: Type.String(), artifactPath: Type.String(), dispatchId: Type.Optional(Type.String()),
+	}, { additionalProperties: false, description: "Opt-in Linux primary Pi closeout receipt/replay. Explicit canonical plan/pipeline and relative agents.output artifact. resume requires original dispatchId and never starts a model. Automatic rule learning is explicitly deferred; no automatic retry or waiver." })),
 	projectId: Type.Optional(Type.String({ description: "Explicit Project Pipeline registry project id. Required for direct project-pipeline agent calls." })),
 	expectedInputPath: Type.Optional(Type.String({ description: "Exact container-relative agents.output/** input artifact for Project Pipeline review calls." })),
 	expectedOutputPath: Type.Optional(Type.String({ description: "Exact container-relative agents.output/** assigned output artifact for Project Pipeline calls." })),
@@ -4157,6 +4275,7 @@ export function resolveProjectPipelineAuthorityRoot(projectId: string): string {
 }
 
 function validateProjectPipelineAgentParams(params: any): void {
+	if (params?.closeout !== undefined) throw new Error("PIPELINE_CLOSEOUT_RECOVERY_UNCOVERED");
 	if (params?.provider !== undefined || params?.model !== undefined || params?.effort !== undefined) throw new Error("Direct Project Pipeline pidex_agent calls reject caller-supplied provider, model, or effort.");
 	if (!params?.projectId) throw new Error("Direct Project Pipeline pidex_agent calls require projectId; no host fallback was used.");
 	if (!isRelativeAgentsOutputPath(params?.expectedOutputPath)) throw new Error("Direct Project Pipeline pidex_agent calls require expectedOutputPath under agents.output/**.");
@@ -4165,6 +4284,7 @@ function validateProjectPipelineAgentParams(params: any): void {
 
 export function runProjectPipelineAgentTool(params: any): any {
 	validateProjectPipelineAgentParams(params);
+	assertRuntimeBaseline("project-pipeline");
 	const suppliedIdentity = [params?.runFamilyId, params?.planId, params?.reviewGate, params?.reviewMode, params?.attemptId].some((value) => value !== undefined);
 	const trackedCandidate = PROJECT_PIPELINE_REVIEW_AGENTS.has(String(params?.agent || "")) || (CORRECTION_OWNERS.has(String(params?.agent || "")) && (suppliedIdentity || extractPlanId(String(params?.task || "")) !== "unknown-plan"));
 	const authority = trackedCandidate ? resolveProjectPipelineAuthority(String(params.projectId)) : undefined;
@@ -4233,6 +4353,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	});
 
 	if (process.env[PIDEX_CHILD_ENV] === "1") return;
+	registerRuntimeBaseline(pi, { bootstrapRoot: BOOTSTRAP_ROOT, runtimeRoot: PACKAGE_ROOT, stateRoot: STATE_DIR }, PI_VERSION);
 
 	pi.registerCommand("pidexaudit", {
 		description: "Audit pidex context usage from metrics + child logs.",
@@ -4261,6 +4382,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	});
 
 	const startRunningPi = async (args: string | undefined, ctx: any) => {
+		assertRuntimeBaseline();
 		const task = args?.trim();
 		const homeStatus = canonicalHomeStatus();
 		if (!homeStatus.ok) {
@@ -4276,6 +4398,7 @@ export default function runningPi(pi: ExtensionAPI) {
 		}
 		if (!deferProjectSelection) {
 			projectPipelineMode = await resolveProjectPipelineModeForCommand(ctx, selectedProjectRoot);
+			if (projectPipelineMode?.mode) assertRuntimeBaseline(projectPipelineMode.mode);
 			if (!projectPipelineMode) {
 				ctx.ui.notify("PIDEX project mode selection cancelled; no fallback was used.", "warning");
 				return;
@@ -4490,9 +4613,14 @@ export default function runningPi(pi: ExtensionAPI) {
 					signal,
 					onUpdate: (text: string) => onUpdate?.({ content: [{ type: "text", text: clipEnd(text, MAX_UPDATE_CHARS) }], details: {} }),
 				});
-				const contentText = formatToolContent(result);
+				const closeoutStatus = (result as any).closeoutCompletion;
+				const contentText = formatToolContent(result) + (closeoutStatus ? `\n\nPIDEX closeout: ${closeoutStatus.status}; ${closeoutStatus.learningDisposition ? `learning=${closeoutStatus.learningDisposition}; replayed=${closeoutStatus.replayed === true}; ` : ""}pending obligations=${JSON.stringify(closeoutStatus.pendingObligations)}. Each successful dispatch was validated against ITS OWN artifact/nonce. Different calls MUST have different dispatch IDs; never compare IDs across agents as an equality requirement. This is not pipeline completion; use the canonical terminal validator after task obligations are done.` : "");
 				const missingRouting = !hasRoutingBlock(result.finalText);
-				const invalidContextFile = !missingRouting && !hasValidRoutingContextFile(result.finalText, params.cwd ?? ctx.cwd);
+				// A successful producer closeout already validated exact ROUTING,
+				// artifact and invocation (v2 finish or v3 receipt/replay). Do not
+				// contradict that result with the ordinary line-only/disk check.
+				const closeoutValidated = closeoutStatus?.status === "dispatch_completed";
+				const invalidContextFile = !closeoutValidated && !missingRouting && !hasValidRoutingContextFile(result.finalText, params.cwd ?? ctx.cwd);
 				if (result.exitCode !== 0 || missingRouting || invalidContextFile) {
 					const reason = result.exitCode !== 0
 						? `pidex_agent '${params.agent}' failed with exitCode=${result.exitCode}`

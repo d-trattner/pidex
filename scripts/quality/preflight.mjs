@@ -4,9 +4,10 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const STATE = path.join(ROOT, 'state');
+const STATE = resolveStateRoot({ root: ROOT });
 const TASK_CLASSES = new Set(['feature', 'bugfix', 'ui', 'cleanup', 'qa', 'release', 'unknown']);
 const GRILL_SKILLS = new Set(['grill-with-docs', 'grill-me', 'none']);
 
@@ -29,6 +30,7 @@ function usage() {
   return `Usage: node scripts/quality/preflight.mjs record --project <path> --plan <plan> --pipeline-id <id> [options]\n\nOptions:\n  --task-class <feature|bugfix|ui|cleanup|qa|release|unknown>\n  --grill-skill <grill-with-docs|grill-me|none>\n  --epic-ready <true|false>\n  --existing-project <true|false>\n  --context-read <comma-separated paths>\n  --context-touched <comma-separated paths>\n  --acceptance-count <n>\n  --out-of-scope-count <n>\n  --reason <text>\n  --dry-run`;
 }
 function record(args) {
+  if (!args.dryRun && !String(args.pipelineId || '').trim()) throw new Error('PREFLIGHT_PIPELINE_ID_REQUIRED: pass the exact pipeline_id returned by pipeline_started; no run ID is inferred for persisted preflight events.');
   const project = path.resolve(args.project || process.cwd());
   const plan = normalizePlan(args.plan);
   const taskClass = TASK_CLASSES.has(args.taskClass) ? args.taskClass : 'unknown';

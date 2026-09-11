@@ -4,9 +4,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const STATE = path.join(ROOT, 'state');
+const STATE = resolveStateRoot({ root: ROOT });
 
 export const DECISION_TYPES = new Set([
   'skip_step',

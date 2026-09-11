@@ -19,7 +19,7 @@ import { resolveStateRoot } from '../../../analysis-metrics-history/lib/state-ro
 import { isSafeSchema2VerdictRoute, loadPersistedSchema2EvidenceSnapshot, runProjectPipelineBrowserSmokeRequest } from './browser-smoke-bridge.mjs';
 import { parseCredentialEntries } from './run-flow.mjs';
 import { traceProjectPipelineExposure } from './rule-exposure-tracer.mjs';
-import { closedLifecycleActionHistoryAdapter, invokeLifecycleActionFromOrdinaryResult } from './rule-exposure-tracer.mjs';
+import { invokeLifecycleActionFromOrdinaryResult } from './rule-exposure-tracer.mjs';
 import { bootstrapRuleInventoryProjections, openRuleLifecycleStore, prepareLifecycleRuntimeContext } from '../../../../../scripts/quality/rule-lifecycle-store.mjs';
 import { normalizeAutomaticLearningLsRemoteOutput, normalizeAutomaticLearningRunnerResult, openAutomaticLearningRuntimeSource, runAutomaticRuleLearningCoordinatorAsync } from '../../../../../scripts/quality/rule-lifecycle.mjs';
 
@@ -34,12 +34,18 @@ export function copyAuthenticatedMeasurement(telemetry = {}) {
 /** Plan048 Slice3B/4: invokes the closed lifecycle-action seam only for attested, enabled, sourced ordinary results. Never exposes raw result/cadence bytes outward. */
 export async function runProjectLifecycleActionInvocation({ nonAttestationFlag, source, invoker = invokeLifecycleActionFromOrdinaryResult, env = process.env, now = new Date().toISOString() } = {}) {
   if (nonAttestationFlag) return Object.freeze({ status: 'no_op', reason: 'non_attested' });
+  if (!env?.PIDEX_LIFECYCLE_ACTION_ENABLED) return Object.freeze({ status: 'no_op', reason: 'kill_switch' });
   if (typeof source !== 'function' || typeof invoker !== 'function') return Object.freeze({ status: 'no_op', reason: 'action_unavailable' });
   let input;
   try { input = source(); } catch { return Object.freeze({ status: 'no_op', reason: 'action_unavailable' }); }
   if (!input || !Buffer.isBuffer(input.result_bytes) || typeof input.result_digest !== 'string' || !input.current || typeof input.current !== 'object') return Object.freeze({ status: 'no_op', reason: 'action_unavailable' });
-  const outcome = await invoker({ store: input.store, result_bytes: input.result_bytes, result_digest: input.result_digest, current: input.current, env, now });
-  return outcome && typeof outcome.status === 'string' ? outcome : Object.freeze({ status: 'no_op', reason: 'action_unavailable' });
+  // This helper opens no resources. A supplied store remains caller-owned.
+  try {
+    const outcome = await invoker({ store: input.store, result_bytes: input.result_bytes, result_digest: input.result_digest, current: input.current, env, now });
+    return outcome && typeof outcome.status === 'string' ? outcome : Object.freeze({ status: 'no_op', reason: 'action_unavailable' });
+  } catch {
+    return Object.freeze({ status: 'no_op', reason: 'action_unavailable' });
+  }
 }
 
 // Single lifecycle-action kill switch (PIDEX_LIFECYCLE_ACTION_ENABLED) governs global and project tiers.
@@ -878,24 +884,17 @@ export async function runProjectPipelineOrchestration(options = {}) {
     ruleExposure = { quality: 'recorder_degraded', quality_flags: ['recorder_failure'], usable_for_evidence: false, state_root_class: stateRootClass };
   }
   const exposureQuality = ruleExposure.exposure?.quality || ruleExposure.quality;
-  // Plan048 Slice3B/4: automatic lifecycle action is gated by the single kill switch (PIDEX_LIFECYCLE_ACTION_ENABLED) and attested ordinary evidence only.
-  let lifecycleAction = Object.freeze({ status: 'no_op', reason: 'kill_switch' });
-  if (exposureEnv?.PIDEX_LIFECYCLE_ACTION_ENABLED) {
-    try {
-      lifecycleAction = await runProjectLifecycleActionInvocation({
-        nonAttestationFlag,
-        source: () => {
-          const lifecycleStore = openRuleLifecycleStore({ stateRoot: resolveStateRoot({ root: pidexRoot, env: exposureEnv }) });
-          return { store: lifecycleStore, result_bytes: Buffer.from(String(traced?.exposure?.publication_digest || traced?.artifacts?.exposure_id || ''), 'utf8'), result_digest: String(traced?.artifacts?.exposure_id || '0'.repeat(64)).replace(/^exposure:/, '') || '0'.repeat(64), current: { tier: 'project', scope_id: telemetryRecord.project_id, rule_id: `project:${createHash('sha256').update(telemetryRecord.project_id || 'unknown').digest('hex').slice(0, 24)}:pidex-implementer:quality` } };
-        },
-        invoker: async (input) => { try { return invokeLifecycleActionFromOrdinaryResult({ ...input, env: exposureEnv, now: new Date().toISOString(), trace: closedLifecycleActionHistoryAdapter }); } finally { input.store?.close(); } },
-        env: exposureEnv,
-      });
-    } catch { lifecycleAction = Object.freeze({ status: 'no_op', reason: 'action_unavailable' }); }
-  }
+  // An exposure receipt is NOT a canonical Impact Evaluation or current rule authority.
+  // No enrolled result/history source is wired to this terminal path. Stay explicitly
+  // unavailable instead of manufacturing inputs or opening a store that cannot be used.
+  // A future source-owned integration must supply validated result bytes + current state;
+  // caller telemetry/options must never mint that authority.
+  const lifecycleAction = exposureEnv?.PIDEX_LIFECYCLE_ACTION_ENABLED
+    ? await runProjectLifecycleActionInvocation({ nonAttestationFlag, env: exposureEnv })
+    : Object.freeze({ status: 'no_op', reason: 'kill_switch' });
   appendProjectPipelineTelemetryEvent({ pidexRoot, record: telemetryRecord, pipelineId: telemetryPipelineId, planKey: telemetryPlan, eventType: 'pipeline_completed', status: 'complete', metadata: { runs, exposure_quality: exposureQuality, rule_exposure: ruleExposure, lifecycle_action: lifecycleAction } });
   projectPipelineProgress(options, anyMirrorDegraded ? `Project Pipeline complete ${projectId}; archive complete; project mirror degraded` : `Project Pipeline complete ${projectId}`, { phase: 'complete', project_id: projectId, anyMirrorDegraded, latest_project_mirror_status: latestProjectMirrorStatus, exposure_quality: exposureQuality, rule_exposure: ruleExposure });
-  return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, latest_project_mirror_status: latestProjectMirrorStatus, any_mirror_degraded: anyMirrorDegraded, rule_exposure: ruleExposure, no_fallback: true };
+  return { ok: true, lifecycle: setup.lifecycle, source: setup.source, credentials, phases, runs, final_context_file: previous?.context_file, final_archive_context_file: previous?.archive_context_file, latest_project_mirror_status: latestProjectMirrorStatus, any_mirror_degraded: anyMirrorDegraded, rule_exposure: ruleExposure, lifecycle_action: lifecycleAction, no_fallback: true };
 }
 
 export function parseArgs(argv) {

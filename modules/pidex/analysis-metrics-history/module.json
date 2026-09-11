@@ -49,7 +49,7 @@
         "passthrough": true,
         "passthrough_policy": {
           "allowed_patterns": [
-            "^--(project|state-dir|project-slug|slug|pipeline-id|plan|event|event-type|status|actor|message|source|project-mode|test-project|metadata-json)$"
+            "^--(project|state-dir|project-slug|slug|pipeline-id|plan|event|event-type|status|actor|message|source|project-mode|test-project|metadata-json|confirm-closeout)$"
           ],
           "allowed_value_patterns": {
             "--project": [
