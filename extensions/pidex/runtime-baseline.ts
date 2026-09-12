@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { canonicalJson, RuntimeBaselineError } from '../../scripts/runtime/contracts.mjs';
 import { sourceBinding } from '../../scripts/runtime/identity.mjs';
 import { observeRuntime, formatRuntimeStatus } from '../../scripts/runtime/status.mjs';
+import { projectDecisionStatus } from '../../scripts/runtime/decision-status.mjs';
 
 const key=Symbol.for('pidex.runtime-baseline.generations.v1');
 let active: any = null;
@@ -19,12 +20,16 @@ export function registerRuntimeBaseline(pi:any, roots:any, piVersion:string, obs
   (process as any)[key]=generations;
   const generation=randomUUID();
   let live=true,assurance='observed_at_load';
-  const initial=observe(roots,{boundId});
+  const initial=observe(roots,{boundId,observer:'pi'});
   const load={schema_version:1,pid:process.pid,generation_id:generation,launch_id:launchId??null,baseline_id:boundId??null,source:sourceBinding(initial.source),config_digest:initial.config.digest,assurance};
   const scope=(mode:string)=>({platform:process.platform,arch:process.arch,node_version:process.versions.node,pi_version:piVersion,mode});
-  const inspect=(mode='host-direct')=>observe(roots,{boundId,load:{...load,assurance:live&&(process as any)[key]===generations?assurance:'observed_at_load'},scope:scope(mode)});
+  const inspect=(mode='host-direct')=>observe(roots,{boundId,load:{...load,assurance:live&&(process as any)[key]===generations?assurance:'observed_at_load'},scope:scope(mode),observer:'pi'});
   active={inspect,boundId};
-  pi.registerCommand('pdstatus',{description:'Read-only working-baseline status for this Pi process.',handler:async(_args:any,ctx:any)=>{ctx.ui.notify(formatRuntimeStatus(inspect()),'info');}});
+  pi.registerCommand('pdstatus',{description:'Read-only decision status: source, validation, load, installation, readiness and next step for this Pi process.',handler:async(_args:any,ctx:any)=>{
+    let status;
+    try { status=inspect(); } catch { status={decision:projectDecisionStatus(null,{observer:'pi'})}; }
+    ctx.ui.notify(formatRuntimeStatus(status),'info');
+  }});
   let cleanup=()=>{};
   pi.on('session_shutdown',()=>{live=false;assurance='observed_at_load';cleanup();});
   pi.on('session_start',async(event:any)=>{

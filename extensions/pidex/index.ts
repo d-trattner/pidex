@@ -3801,7 +3801,7 @@ function reviewDispatchFor(agent: string, identity: Record<string, unknown>, _ta
 // Shared review-dispatch resolution for both seams: derives identity from the
 // task/authority when no explicit identity is supplied; both seams must resolve
 // identically so retry/hold authority cannot drift.
-function resolveReviewDispatch(params: any, suppliedIdentity: any, agent: string, task: string, lifecycle: { stateDir: string; pipelineId: string }, project: string, secondary: boolean): { reviewDispatch: boolean; resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined } {
+function resolveReviewDispatch(params: any, suppliedIdentity: any, agent: string, task: string, lifecycle: { stateDir: string; pipelineId?: string }, project: string, secondary: boolean): { reviewDispatch: boolean; resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined } {
 	let reviewDispatch = reviewDispatchFor(agent, suppliedIdentity, task, secondary);
 	let resolvedReview: { identity: Record<string, string>; pipelineId: string } | undefined;
 	if (!secondary && CORRECTION_OWNERS.has(agent) && !Object.values(suppliedIdentity).some((value) => value !== undefined) && extractPlanId(task) !== "unknown-plan") {
@@ -3817,7 +3817,7 @@ function derivedAttemptId(runFamilyId: string, reviewGate: string, reviewMode: s
 	return `attempt-${createHash("sha256").update(`${runFamilyId}|${reviewGate}|${reviewMode}`).digest("hex").slice(0, 16)}`;
 }
 
-function resolveHostRuntimeContext(task: string, agent: string, lifecycle: { stateDir: string; pipelineId: string }, project: string, options: HostAgentBoundaryOptions): { runtimeContext: unknown; taskContext: string } {
+function resolveHostRuntimeContext(task: string, agent: string, lifecycle: { stateDir: string }, project: string, options: HostAgentBoundaryOptions): { runtimeContext: unknown; taskContext: string } {
 	const planId = normalizePlanKey(extractPlanId(task));
 	if (planId === "unknown-plan") return { runtimeContext: undefined, taskContext: "Rule runtime context: non_attested; descriptive only, not usable_for_evidence." };
 	let pipelineId: string;
@@ -3860,12 +3860,16 @@ function resolveHostRuntimeContext(task: string, agent: string, lifecycle: { sta
 	}
 }
 
-function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipelineId: string }, project: string): { identity: Record<string, string>; pipelineId: string } | undefined {
+function resolveReviewIdentity(params: any, lifecycle: { stateDir: string; pipelineId?: string }, project: string): { identity: Record<string, string>; pipelineId: string } | undefined {
 	const supplied = { runFamilyId: params?.runFamilyId, planId: params?.planId, reviewGate: params?.reviewGate, reviewMode: params?.reviewMode, attemptId: params?.attemptId };
 	if (Object.values(supplied).some((value) => value !== undefined)) {
 		if (!validateReviewIdentity(supplied).ok) throw new Error("REVIEW_IDENTITY_INVALID");
 		if (!reviewAgentMatches(String(params?.agent), supplied)) throw new Error("REVIEW_DISPATCH_DENIED");
-		return { identity: supplied as Record<string, string>, pipelineId: lifecycle.pipelineId };
+		// A fresh host may have no ambient pipeline context. Resolve the recorded
+		// plan authority, never invent a stream from cwd or from runFamilyId.
+		// Supplied context stays binding: downstream mismatch checks must reject it.
+		const pipelineId = lifecycle.pipelineId ?? resolvePlanReviewAuthority({ stateDir: lifecycle.stateDir, project, planId: supplied.planId }).pipelineId;
+		return { identity: supplied as Record<string, string>, pipelineId };
 	}
 	const planId = normalizePlanKey(extractPlanId(String(params?.task || "")));
 	let pipelineId = "";
@@ -4059,7 +4063,7 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 	assertRuntimeBaseline(options.agentProjectMode?.mode ?? "host-direct");
 	const request = validateHostAgentRequestShape(params);
 	const suppliedIdentity = { runFamilyId: params.runFamilyId, planId: params.planId, reviewGate: params.reviewGate, reviewMode: params.reviewMode, attemptId: params.attemptId };
-	const configuredLifecycle = options.reviewLifecycle ?? { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || `${path.basename(options.agentCwd)}-${params.planId}` };
+	const configuredLifecycle = options.reviewLifecycle ?? { stateDir: STATE_DIR, pipelineId: process.env.RUNNING_PI_PIPELINE_ID || process.env.PIDEX_PIPELINE_ID || undefined };
 	const { reviewDispatch, resolvedReview } = resolveReviewDispatch(params, suppliedIdentity, params.agent, params.task, configuredLifecycle, options.agentCwd, request.secondary);
 	const identity = resolvedReview?.identity ?? suppliedIdentity;
 	const eligibleLanes = request.secondary
@@ -4140,7 +4144,7 @@ export async function executeHostAgentBoundary(params: HostAgentRequest & { task
 		return result;
 	}
 	if (options.signal?.aborted) throw new Error("REVIEW_DISPATCH_ABORTED");
-	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview?.pipelineId ?? configuredLifecycle.pipelineId, project: options.agentCwd };
+	const lifecycle = { ...configuredLifecycle, pipelineId: resolvedReview!.pipelineId, project: options.agentCwd };
 	const hostHeld = (reviewCompletion: any) => ({ agent: params.agent, provider: route.provider, exitCode: 0, stderr: "", finalText: "", reviewCompletion });
 	let executionScope: { scope: string; definitionDigest: string; systemPromptDigest: string } | undefined;
 	if (process.platform === "linux" && !sandboxState.enabled && isPiProvider(route.provider) && runner === runConfiguredAgent && fs.realpathSync(options.agentCwd) === options.agentCwd) {

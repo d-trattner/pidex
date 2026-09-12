@@ -104,6 +104,7 @@ test('real status and baseline CLI emit one JSON object and do not create a stor
  const f=evidenceFixture(t),env={PATH:process.env.PATH,PIDEX_ROOT:f.root,PIDEX_STATE_DIR:f.roots.stateRoot};
  for(const [script,args] of [['status.mjs',['--pidex-root',f.root,'--json']],['baseline.mjs',['inspect','--pidex-root',f.root,'--json']]]){
   const p=spawnSync(process.execPath,[fileURLToPath(new URL(script,import.meta.url)),...args],{env,encoding:'utf8',timeout:10000});assert.equal(p.status,0,p.stderr);assert.doesNotThrow(()=>JSON.parse(p.stdout));assert.equal(p.stderr,'');
+  if(script==='status.mjs'){const value=JSON.parse(p.stdout);assert.equal(value.decision.schema,'pidex-decision-status-v1');assert.equal(value.decision.observer,'cli');assert.notEqual(value.decision.readiness.state,'ready_bound_scope');assert.equal(value.next_action,value.decision.next_action.text);}
  }
  const invalid=spawnSync(process.execPath,[fileURLToPath(new URL('baseline.mjs',import.meta.url)),'select'],{env,encoding:'utf8',timeout:10000});assert.equal(invalid.status,2);assert.equal(JSON.parse(invalid.stdout).error,'USAGE');assert.equal(fs.existsSync(f.roots.stateRoot),false);
 });

@@ -8,7 +8,8 @@
     "dev": "vite --host 127.0.0.1 --port 18777",
     "build": "vite build",
     "start": "vite preview --host 127.0.0.1 --port 18777",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:decision-browser": "node tests/runtime-decision.browser.test.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.80.7",

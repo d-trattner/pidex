@@ -7,6 +7,7 @@ import { canonicalJson, RuntimeBaselineError, parseCliOptions } from './contract
 import { observeSource, sourceBinding } from './identity.mjs';
 import { observeEffectiveConfig } from './config-observation.mjs';
 import { readSelection, readBaseline, validateBaseline, errorExit } from './baseline.mjs';
+import { projectDecisionStatus, formatDecisionStatus } from './decision-status.mjs';
 import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 
 export function resolveRuntimeRoots({bootstrapRoot,env=process.env}) {
@@ -51,10 +52,10 @@ export function evaluateRuntimeStatus({source,config,load=null,boundBaseline=nul
   const binding=boundBaseline?'baseline':'unbound';
   const unboundStatus=experimental?'experimental':'unregistered';
   const status=boundBaseline?boundStatus({source,config,load,boundBaseline,scope,issues},reasons):unboundStatus;
-  return {schema_version:1,status,binding,bound_baseline_id:boundBaseline?.id??null,selected_baseline_id:selectedId,can_dispatch:binding==='unbound'||status==='ready',reasons,
+  return {schema_version:1,status,binding,observed_scope:scope,load_observed_source_commit:load?.source?.runtime?.commit??null,bound_baseline_id:boundBaseline?.id??null,selected_baseline_id:selectedId,can_dispatch:binding==='unbound'||status==='ready',reasons,
     next_action:status==='ready'?'Continue within accepted scope.':binding==='unbound'?'Unbound session: inspect before selecting a working baseline.':'Do not dispatch. Inspect differences and start a fresh confirmed session.',source,config,load_assurance:load?.assurance??null};
 }
-export function observeRuntime(roots,{env=process.env,load=null,boundId=null,scope=null}={}) {
+export function observeRuntime(roots,{env=process.env,load=null,boundId=null,scope=null,observer='cli'}={}) {
   const source=observeSource(roots),config=observeEffectiveConfig({runtimeRoot:roots.runtimeRoot,env});
   const issues=[];let selectedId=null,boundBaseline=null;
   try {selectedId=readSelection(roots.stateRoot)?.id??null;if(boundId)boundBaseline=readBaseline({stateRoot:roots.stateRoot,id:boundId});}
@@ -63,10 +64,12 @@ export function observeRuntime(roots,{env=process.env,load=null,boundId=null,sco
   const result=evaluateRuntimeStatus({source,config,load,boundBaseline,selectedId,scope,issues,experimental});
   // A missing/corrupt explicitly bound record must not downgrade to unbound.
   if(boundId&&!boundBaseline)Object.assign(result,{status:'invalid',binding:'baseline',bound_baseline_id:boundId,can_dispatch:false});
+  result.decision = projectDecisionStatus(result,{observer});
+  result.next_action = result.decision.next_action.text;
   return result;
 }
 export function formatRuntimeStatus(status) {
-  return [`PIDEX: ${status.status}`,`Baseline: ${status.bound_baseline_id??'not bound'} (selected: ${status.selected_baseline_id??'none'})`,`Source: ${status.source.runtime.commit??'unknown'} / ${status.source.runtime.root}`,`Loaded: ${status.load_assurance??'not observed in this process'}`,`Config: ${status.config.coverage}`,`Reasons: ${status.reasons.map(r=>r.code).join(', ')||'none'}`,status.next_action].join('\n');
+  return formatDecisionStatus(status.decision ?? projectDecisionStatus(status));
 }
 export function statusCli(argv) {
   const opts=parseCliOptions(argv,['--pidex-root'],['--json']);
@@ -77,5 +80,5 @@ export function statusCli(argv) {
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try{const {json,status}=statusCli(process.argv.slice(2));console.log(json?JSON.stringify(status):formatRuntimeStatus(status));}
-  catch(error){console.log(JSON.stringify({error:error instanceof RuntimeBaselineError?error.code:error.message==='USAGE'?'USAGE':'SOURCE_UNAVAILABLE'}));process.exitCode=errorExit(error);}
+  catch(error){console.log(JSON.stringify({error:error instanceof RuntimeBaselineError?error.code:error.message==='USAGE'?'USAGE':'SOURCE_UNAVAILABLE',decision:projectDecisionStatus(null,{observer:'cli'})}));process.exitCode=errorExit(error);}
 }

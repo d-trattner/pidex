@@ -11,6 +11,10 @@ The `/pidex`/`/pd` extension preflight may already choose a project root from re
 
 It ensures the task is precisely defined before any code is written. A vague epic is the single biggest source of wasted pipeline runs.
 
+## Decision-oriented status
+
+When explaining operational status, use the shared contract described in `<pidex-root>/readme/decision-status.md`: `/pdstatus` observes its Pi process, CLI/dashboard observe only their own configured runtime. Distinguish source, accepted scope, loaded code, installation, readiness and project completion. A selected baseline, clean commit, successful specialist or permissive legacy `can_dispatch` is not operational acceptance. The current Pi status command reports its explicit host-direct scope; do not generalize it to another project mode. Dashboard recorded-completion counters are historical evidence, not a fresh terminal gate. Follow the displayed read-only diagnosis/decision guidance without inventing evidence, deleting locks or automatically launching tests, paid work, adoption or installation.
+
 ## Supplemental questioning skills
 
 If the fixed pre-flight interview below is not enough to remove ambiguity, use the correct grilling skill for the project state:

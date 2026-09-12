@@ -13,6 +13,7 @@ import { URLSearchParams } from 'node:url';
 import { paginateTokenBuckets } from './token-pagination';
 import { summarizeModelQualityRows } from './model-quality';
 import { DASHBOARD_ROOT, PIDEX_ROOT } from './paths';
+import { pipelineSummarySql } from './pipeline-summary';
 
 export type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
 export interface JsonObject {
@@ -25,6 +26,7 @@ export interface DashboardSummary {
   pipeline_runs: string;
   pipeline_runs_started: number;
   pipeline_runs_completed: number;
+  pipeline_evidence_basis: 'recorded_pipeline_events';
   pipeline_events: number;
   agent_runs: number;
   secondary_artifacts: number;
@@ -60,20 +62,8 @@ export async function getSummary(search = ''): Promise<DashboardSummary> {
   const where = `WHERE 1=1 ${projectFilter.sql}`;
 
   const pipeline = await queryRow<{ started: number; completed: number }>(
-    `WITH started AS (
-      SELECT DISTINCT ar.project_id, ar.plan_key
-      FROM agent_runs ar JOIN projects p ON p.id = ar.project_id
-      WHERE ar.plan_key IS NOT NULL ${projectFilter.sql}
-    ), completed AS (
-      SELECT DISTINCT ar.project_id, ar.plan_key
-      FROM agent_runs ar JOIN projects p ON p.id = ar.project_id
-      WHERE ar.plan_key IS NOT NULL ${projectFilter.sql}
-        AND (ar.agent IN ('pidex-devops','pidex-roadmap','pidex-pi')
-          OR ar.route_to IN ('pidex-roadmap','user')
-          OR ar.verdict IN ('Released','COMPLETE'))
-    )
-    SELECT (SELECT COUNT(*) FROM started) AS started, (SELECT COUNT(*) FROM completed) AS completed`,
-    [...projectFilter.params, ...projectFilter.params],
+    pipelineSummarySql(projectFilter.sql),
+    [...projectFilter.params],
   ) || { started: 0, completed: 0 };
 
   const [pipelineEvents, agentRuns, secondaryArtifacts, mergeArtifacts, malformedSecondary, cost, byModel, byAgent, byMode, projects] =
@@ -124,6 +114,7 @@ export async function getSummary(search = ''): Promise<DashboardSummary> {
     pipeline_runs: `${pipeline.started || 0} / ${pipeline.completed || 0}`,
     pipeline_runs_started: Number(pipeline.started || 0),
     pipeline_runs_completed: Number(pipeline.completed || 0),
+    pipeline_evidence_basis: 'recorded_pipeline_events',
     pipeline_events: pipelineEvents || 0,
     agent_runs: Number(agentRuns || 0),
     secondary_artifacts: Number(secondaryArtifacts || 0),

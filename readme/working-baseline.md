@@ -21,6 +21,10 @@ node scripts/runtime/baseline.mjs inspect --pidex-root "$PWD" --json
 These commands do not create a baseline store or call a provider. Disk status
 cannot prove what an existing Pi process loaded. In a Pi process that actually
 loaded the new extension, `/pdstatus` displays that process's own observation.
+The shared [decision status](decision-status.md) separates source, scope validation,
+load, installation, readiness and project completion. CLI JSON adds a `decision`
+projection; a dashboard-host observation cannot confirm a Pi-session load. Legacy
+dispatch permission is not accepted operation.
 
 Bound-session priority:
 

@@ -6,12 +6,14 @@ import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectPa
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { MetricTile } from '../components/ui/metric-tile';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
+import { RuntimeDecisionPanel } from '../components/runtime-decision-panel';
 
 type SummaryPayload = {
   projects: number;
   pipeline_runs: string;
   pipeline_runs_started: number;
   pipeline_runs_completed: number;
+  pipeline_evidence_basis?: 'recorded_pipeline_events';
   pipeline_events: number;
   agent_runs: number;
   secondary_artifacts: number;
@@ -28,15 +30,15 @@ function DashboardOverviewPage() {
   const project = readProjectFromSearch(location.search);
   const includeTestProjects = readIncludeTestProjectsFromSearch(location.search);
   const summaryQuery = useDashboardQuery<SummaryPayload>(['summary', project, includeTestProjects], withProjectParam('/api/summary', project, includeTestProjects));
-  const data = summaryQuery.data ?? null;
+  const data = !summaryQuery.isError && summaryQuery.data?.pipeline_evidence_basis === 'recorded_pipeline_events' ? summaryQuery.data : null;
   const isLoading = summaryQuery.isLoading;
 
   const cards: Array<{ label: string; value: string; subtitle?: string; icon: ReactNode }> = data
     ? [
         {
-          label: 'Pipeline Runs',
+          label: 'Recorded Pipeline Identities',
           value: data.pipeline_runs,
-          subtitle: `${data.pipeline_runs_started} started · ${data.pipeline_runs_completed} completed`,
+          subtitle: `${data.pipeline_runs_started} opened · ${data.pipeline_runs_completed} recorded successes (not live readiness)`,
           icon: <GitBranch size={18} />,
         },
         { label: 'Agent Runs', value: String(data.agent_runs), subtitle: 'specialist executions', icon: <Bot size={18} /> },
@@ -54,6 +56,10 @@ function DashboardOverviewPage() {
         <p className="muted">KPI landing for pipeline, quality, and token metrics.</p>
       </GlassPanel>
 
+      <RuntimeDecisionPanel />
+
+      {summaryQuery.isError ? <p role="alert">Kennzahlen nicht verfügbar. Keine erfolgreichen Abschlüsse aus fehlenden Daten ableiten.</p> : null}
+      <p className="muted" style={{ gridColumn: '1 / -1' }}>Pipeline-Zähler basieren auf expliziten Opening-/Terminal-Ereignissen der importierten Historie, nicht auf Agentenverdikten. Kein frischer Closeout-, Installations- oder Betriebsnachweis.</p>
       {isLoading ? (
         <LoadingIndicator label="Loading overview…" />
       ) : (

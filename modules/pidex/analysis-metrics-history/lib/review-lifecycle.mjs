@@ -3,6 +3,7 @@ export {
   beginHostCloseoutDispatch,
   beginRecoverableHostCloseout,
   inspectHostCloseout,
+  confirmPipelineCloseout,
   promoteTbrLocked,
   recordPipelineEvent,
   recordReviewCompletion,

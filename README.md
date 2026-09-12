@@ -39,6 +39,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 - [Project modes](readme/modes.md)
 - [Bounded lifecycle review budgets](readme/review-budgets.md)
 - [Opt-in Linux closeout return/replay](readme/closeout-recovery.md)
+- [Decision-oriented status in Pi, CLI and dashboard](readme/decision-status.md)
 - [Project Pipeline](readme/project-pipeline.md)
 - [Automatic quality reports](readme/automatic-quality-reports.md)
 - [Quality governance](readme/quality-governance.md)

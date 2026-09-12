@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { recordPipelineEvent, resolvePlanReviewAuthority } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
 import { confirmPipelineCloseout } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
@@ -20,7 +21,7 @@ async function until(read, timeout = 12_000) {
 
 // Real exported host boundary + real process supervision + a deliberately fake,
 // provider-free Pi executable. This is not a live model or specialist verdict.
-test('host correction survives owner loss with one remaining retry and unchanged identity', { skip: process.platform !== 'linux', timeout: 60_000 }, async t => {
+for (const explicit of [false, true]) test(`host correction survives owner loss with one remaining retry and unchanged identity (${explicit ? 'explicit, no ambient context' : 'implicit'})`, { skip: process.platform !== 'linux', timeout: 60_000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pidex-host-recovery-'));
   const runtime = path.join(root, 'runtime'); const project = path.join(root, 'project'); const stateDir = path.join(root, 'state'); const bin = path.join(root, 'bin');
   for (const dir of [project, stateDir, bin, path.join(root, 'home'), path.join(runtime, 'config'), path.join(runtime, 'scripts')]) fs.mkdirSync(dir, { recursive: true });
@@ -56,8 +57,11 @@ if(agent==='pidex-implementer'&&n===1){setInterval(()=>{},1000);}else{
 `;
   fs.writeFileSync(path.join(bin, 'pi'), fake, { mode: 0o700 });
   const driver = path.join(root, 'driver.mjs');
-  fs.writeFileSync(driver, `import fs from 'node:fs';import {executeHostAgentBoundary} from ${JSON.stringify(new URL('../../extensions/pidex/index.ts', import.meta.url).href)};const stage=process.argv[2];try{const result=await executeHostAgentBoundary({agent:stage==='correction'?'pidex-implementer':'pidex-security',task:'Plan 003 '+stage},{agentCwd:${JSON.stringify(project)},reviewLifecycle:{stateDir:${JSON.stringify(stateDir)},pipelineId:'host-recovery-003'},resolveSandboxState:()=>({enabled:false})});fs.writeFileSync(${JSON.stringify(path.join(root, 'result-'))}+stage+'.json',JSON.stringify(result));}catch(e){console.error(e.message);process.exitCode=1;}`);
+  const correctionIdentity = explicit ? { runFamilyId: 'host-recovery-003', planId: 'plan-003', reviewGate: 'security', reviewMode: 'correction1', attemptId: 'attempt-' + createHash('sha256').update('host-recovery-003|security|correction1').digest('hex').slice(0, 16) } : {};
+  fs.writeFileSync(driver, `import fs from 'node:fs';import {executeHostAgentBoundary} from ${JSON.stringify(new URL('../../extensions/pidex/index.ts', import.meta.url).href)};const stage=process.argv[2];try{const result=await executeHostAgentBoundary({agent:stage==='correction'?'pidex-implementer':'pidex-security',task:'Plan 003 '+stage,...(stage==='correction'?${JSON.stringify(correctionIdentity)}:{})},{agentCwd:${JSON.stringify(project)},${explicit ? '' : `reviewLifecycle:{stateDir:${JSON.stringify(stateDir)},pipelineId:'host-recovery-003'},`}resolveSandboxState:()=>({enabled:false})});fs.writeFileSync(${JSON.stringify(path.join(root, 'result-'))}+stage+'.json',JSON.stringify(result));}catch(e){console.error(e.message);process.exitCode=1;}`);
   const env = { ...process.env, HOME: path.join(root, 'home'), PIDEX_ROOT: runtime, PIDEX_STATE_DIR: stateDir, RUNNING_PI_STATE_DIR: stateDir, PATH: bin + path.delimiter + process.env.PATH, NODE_OPTIONS: '' };
+  delete env.PIDEX_PIPELINE_ID;
+  delete env.RUNNING_PI_PIPELINE_ID;
   const run = stage => {
     const proc = spawn(process.execPath, [driver, stage], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] }); owners.push(proc);
     let stderr = ''; proc.stderr.on('data', b => { stderr += b.toString(); }); proc.stdout.resume();

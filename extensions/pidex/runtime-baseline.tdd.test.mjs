@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerRuntimeBaseline, assertRuntimeBaseline } from './runtime-baseline.ts';
+import { projectDecisionStatus } from '../../scripts/runtime/decision-status.mjs';
 import runningPi, { executeHostAgentBoundary, runProjectPipelineAgentTool } from './index.ts';
 
 const key=Symbol.for('pidex.runtime-baseline.generations.v1');
@@ -21,6 +22,13 @@ function observe(_roots,{load}={}) {
  const ready=load?.assurance==='controlled_start';
  return {source,config:{digest,coverage:'complete'},status:ready?'ready':'unconfirmed',can_dispatch:ready,reasons:ready?[]:[{code:'LOAD_UNCONFIRMED'}]};
 }
+// Prepared for the deferred Point4 test phase; no startup/model call required.
+test('pdstatus renders the common projection explicitly as this Pi observer',async t=>{
+ environment(t,false);const pi=piMock(),observers=[];
+ registerRuntimeBaseline(pi,{},'0.85.1',(roots,options)=>{observers.push(options.observer);const value=observe(roots,options);return {...value,decision:projectDecisionStatus({...value,schema_version:1},{observer:options.observer})};});
+ let text='';await pi.commands.get('pdstatus').handler('',{ui:{notify:value=>{text=value;}}});
+ assert.deepEqual(observers,['pi','pi']);assert.match(text,/Beobachter: pi/);assert.match(text,/Installiert: Nicht nachgewiesen/);
+});
 test('unbound sessions remain additive; no guard IO on every dispatch',t=>{
  environment(t,false);let reads=0;registerRuntimeBaseline(piMock(),{},'0.85.1',(...args)=>{reads++;return observe(...args);});
  const before=reads;assert.doesNotThrow(()=>assertRuntimeBaseline());assert.equal(reads,before);

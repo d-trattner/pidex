@@ -4,7 +4,7 @@ import { configDigest, RuntimeBaselineError } from './contracts.mjs';
 import { readJson, issue } from './io.mjs';
 import { loadModuleSystem, moduleEnabled } from '../modules/lib.mjs';
 import { observeInventory } from './identity.mjs';
-import { normalizeConfig as normalizeParallelConfig } from '../../modules/pidex/parallel-agents/scripts/status.mjs';
+import { normalizeConfig as normalizeParallelConfig } from '../../modules/pidex/parallel-agents/lib/config.mjs';
 
 const fail = () => {throw new RuntimeBaselineError('CONFIG_UNCOVERED');};
 const object = v => {if(!v || typeof v!=='object' || Array.isArray(v))fail();return v;};

@@ -2,6 +2,7 @@ import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { HelpPopover } from '../components/ui/help-popover';
+import { RuntimeDecisionPanel } from '../components/runtime-decision-panel';
 import { LoadingIndicator } from '../components/ui/loading-indicator';
 import { readIncludeTestProjectsFromSearch, readProjectFromSearch, withProjectParam } from '../lib/client/project-query';
 import { useDashboardQuery } from '../lib/client/use-dashboard-query';
@@ -10,6 +11,7 @@ type SummaryPayload = {
   projects: number;
   pipeline_runs_started: number;
   pipeline_runs_completed: number;
+  pipeline_evidence_basis?: 'recorded_pipeline_events';
   pipeline_events: number;
   agent_runs: number;
 };
@@ -48,12 +50,13 @@ function statusForQuality(latest: QualitySummary | null): { label: string; tone:
   if (!latest) return { label: 'unknown', tone: 'warn', next: 'Generate a PDQ report for this scope.' };
   if (latest.critical_missing_operators > 0) return { label: 'needs attention', tone: 'bad', next: 'Fix critical missing operator evidence, then refresh PDQ.' };
   if (latest.trace_gaps > 0) return { label: 'instrumentation debt', tone: 'warn', next: 'Repair repeated low-severity trace gaps and validate on the next real pipeline.' };
-  if ((latest.plans?.length || 0) < 6) return { label: 'clean, low sample', tone: 'warn', next: 'Run more comparable pipelines before trusting trend direction.' };
+  if ((latest.plans?.length || 0) < 6) return { label: 'clean, low sample', tone: 'warn', next: 'Review existing comparable evidence; schedule any additional runs explicitly before trusting trend direction.' };
   return { label: 'clean', tone: 'good', next: 'Keep monitoring trend and refresh stale reports.' };
 }
 
 function quotaRisk(records: ProviderLimitsPayload['records']): { label: string; tone: 'good' | 'warn' | 'bad'; detail: string } {
   const values = records || [];
+  if (!values.length) return { label: 'unknown', tone: 'warn', detail: 'No provider limit records available; quota safety is not confirmed.' };
   if (values.some((record) => record.limit_reached || record.status === 'exhausted')) return { label: 'blocked', tone: 'bad', detail: 'A provider quota appears exhausted.' };
   if (values.some((record) => Number(record.used_percent || 0) >= 85 || record.forecast_status === 'forecast-hit-before-reset')) return { label: 'risk', tone: 'warn', detail: 'A provider window is close to limit.' };
   return { label: 'safe', tone: 'good', detail: values.length ? 'No provider limit risk detected.' : 'No provider limit records available.' };
@@ -70,9 +73,9 @@ function DashboardLayout() {
   const limitsQuery = useDashboardQuery<ProviderLimitsPayload>(['dashboard-provider-limits'], '/api/provider-limits');
   const loading = summaryQuery.isLoading || qualityQuery.isLoading || historyQuery.isLoading || limitsQuery.isLoading;
   const summary = summaryQuery.data;
-  const latest = qualityQuery.data?.latest ?? null;
+  const latest = qualityQuery.isError ? null : qualityQuery.data?.latest ?? null;
   const status = statusForQuality(latest);
-  const quota = quotaRisk(limitsQuery.data?.records);
+  const quota = quotaRisk(limitsQuery.isError ? undefined : limitsQuery.data?.records);
   const history = (historyQuery.data?.history || []).slice().reverse().map((row, index) => ({
     label: row.generated_at ? new Date(row.generated_at).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }) : `#${index + 1}`,
     trace_gaps: Number(row.trace_gaps || 0),
@@ -81,7 +84,8 @@ function DashboardLayout() {
   }));
   const confidenceData = Object.entries(latest?.confidence_mix || (latest?.confidence ? { [latest.confidence]: 1 } : {})).map(([name, value]) => ({ name, value }));
   const included = latest?.included_projects || [];
-  const completion = pct(summary?.pipeline_runs_completed || 0, summary?.pipeline_runs_started || 0);
+  const recordedPipelineBasis = !summaryQuery.isError && summary?.pipeline_evidence_basis === 'recorded_pipeline_events';
+  const completion = recordedPipelineBasis ? pct(summary?.pipeline_runs_completed || 0, summary?.pipeline_runs_started || 0) : 'unconfirmed';
 
   return (
     <section className="dashboard-overview grid" style={{ marginTop: 12 }}>
@@ -102,6 +106,8 @@ function DashboardLayout() {
         </div>
       </article>
 
+      <RuntimeDecisionPanel />
+
       {loading ? <LoadingIndicator label="Loading dashboard overview…" /> : null}
       {!loading ? (
         <>
@@ -116,9 +122,9 @@ function DashboardLayout() {
             <p className="muted">{status.next}</p>
           </article>
           <article className="glass-card glass metric-card-tight">
-            <div className="card-heading-row"><p className="muted">Completion</p><HelpPopover title="Completion rate" shows="Completed plans over started plans for the selected scope." source="/api/summary from dashboard SQLite pipeline/agent data." reading="Low completion can mean failed, paused, or still-running work; inspect Runs for details." improve="Close terminal pipeline events cleanly and resolve failed review loops." /></div>
+            <div className="card-heading-row"><p className="muted">Recorded completion</p><HelpPopover title="Recorded pipeline completion" shows="Explicit successful terminal events over identities with opening events for the selected scope." source="/api/summary from imported pipeline_events, not agent verdicts." reading="Historical display, not fresh closeout validation, installation or runtime readiness. Conflicting/incomplete events are not counted as successful." improve="Inspect the exact pipeline identity and canonical closeout blockers; never create an event just to improve this metric." /></div>
             <p className="metric-value">{completion}</p>
-            <p className="muted">{summary?.pipeline_runs_completed || 0}/{summary?.pipeline_runs_started || 0} completed · {summary?.agent_runs || 0} agent runs</p>
+            <p className="muted">{recordedPipelineBasis ? `${summary?.pipeline_runs_completed || 0}/${summary?.pipeline_runs_started || 0} recorded successes` : 'Pipeline event basis unavailable'} · {summary?.agent_runs || 0} agent runs</p>
           </article>
           <article className="glass-card glass metric-card-tight">
             <div className="card-heading-row"><p className="muted">Quota risk</p><HelpPopover title="Provider quota risk" shows="Whether Codex/Spark provider windows are close to blocking new work." source="/api/provider-limits." reading="Safe means no window currently looks likely to block; risk/block requires changing profile or waiting." improve="Switch profiles, reduce expensive lanes, or wait for provider reset." /></div>

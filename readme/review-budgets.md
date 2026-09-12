@@ -18,6 +18,8 @@ Critic corrections go to the Planner. Code Review, Security, and QA corrections 
 
 For a plan and gate, `${planId}.current` points to the root stream. That pointed root stream is the only ordered authority for review history.
 
+A fresh host caller may supply the complete `reviewIdentity` tuple without setting a pipeline environment variable. When no lifecycle/pipeline context was supplied, PIDEX resolves the existing opening from canonical project + `planId`; it never invents an ID from the working-directory name or equates `runFamilyId` with the pipeline ID. The selected supplied context (explicit lifecycle, otherwise `RUNNING_PI_PIPELINE_ID`, then `PIDEX_PIPELINE_ID`) remains binding and must match the recorded authority; existing precedence is unchanged. Missing/corrupt authority is not created or repaired by dispatch. Recovery still uses the same identity, remaining physical ordinal and authenticated execution evidence; an accepted identity cannot be dispatched again.
+
 An explicit tuple cannot select a different stream. PIDEX fails closed with bounded errors when history is missing, malformed, mismatched, or split across streams. Old split-stream histories may fail closed; do not manually repair them.
 
 New lifecycle histories derive a collision-resistant key from the full canonical project path, so unrelated same-basename projects do not share review authority. An existing legacy history is reused only when exactly one active candidate identifies the same canonical project; ambiguity fails closed without migration or merging.

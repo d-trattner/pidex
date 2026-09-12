@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inspectHostCloseout } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
+import { inspectHostCloseout } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
 import { resolveStateRoot } from '../../modules/pidex/analysis-metrics-history/lib/state-root.mjs';
 export function closeoutStatusCli(argv, env = process.env) {
   const values = {}; const allowed = ['--project', '--plan', '--pipeline-id', '--dispatch-id', '--state-dir'];

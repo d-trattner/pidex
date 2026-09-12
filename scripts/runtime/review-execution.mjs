@@ -5,10 +5,11 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from './contracts.mjs';
 import { readJson, readBounded, safePath } from './io.mjs';
+import { executionProtocolInputs } from '../../modules/pidex/analysis-metrics-history/lib/execution-protocol-inputs.mjs';
 
 const sourceRoot = fs.realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
 // Narrow executable contract pin, not a claim of complete WorkingBaseline identity.
-const protocolFiles = ['scripts/runtime/review-execution.mjs', 'scripts/runtime/review-supervisor.mjs', 'scripts/runtime/review-subreaper.py', 'scripts/runtime/io.mjs', 'scripts/runtime/contracts.mjs', 'scripts/runtime/closeout-obligations.mjs', 'scripts/runtime/closeout-receipt.mjs', 'scripts/runtime/closeout-recovery.mjs', 'extensions/pidex/index.ts', 'extensions/pidex/review-budget.ts', 'modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs'];
+const protocolFiles = ['scripts/runtime/review-execution.mjs', 'scripts/runtime/review-supervisor.mjs', 'scripts/runtime/review-subreaper.py', 'scripts/runtime/io.mjs', 'scripts/runtime/contracts.mjs', 'scripts/runtime/closeout-obligations.mjs', 'scripts/runtime/closeout-receipt.mjs', 'scripts/runtime/closeout-recovery.mjs', 'extensions/pidex/index.ts', 'extensions/pidex/review-budget.ts', ...executionProtocolInputs];
 function observeProtocolDigest() { return createHash('sha256').update(Buffer.concat(protocolFiles.map(file => Buffer.concat([Buffer.from(file + '\0'), readBounded(sourceRoot, file).bytes])))).digest('hex'); }
 export const EXECUTION_PROTOCOL_DIGEST = observeProtocolDigest();
 
