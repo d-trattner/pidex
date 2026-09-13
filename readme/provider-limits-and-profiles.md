@@ -1,6 +1,6 @@
 # Provider Limits and Profiles
 
-PIDEX tracks provider-native Codex quota windows and uses profiles to switch complete agent-routing configurations. The supported catalog contains three evidence-selected GPT-5.6 profiles. Spark was evaluated across the role matrix but is not routed by the current catalog.
+PIDEX tracks provider-native Codex quota windows and uses profiles to switch complete agent-routing configurations. The catalog contains two Astra presets and three retained GPT-5.6 presets. Astra balanced is the selected default; operational adoption requires its own bounded live validation. The earlier GPT-5.6 evidence remains profile-specific. Spark was evaluated across the role matrix but is not routed by the current catalog.
 
 ## Tracked quota families
 
@@ -60,16 +60,39 @@ List or activate a profile from the canonical checkout:
 
 ```bash
 cd ~/pidex
-node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project . -- use 5.6-hybrid-balanced
+node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project "$PWD" -- use astra-balanced
 ```
 
-Activating a profile replaces `config/agents.json` with that complete preset. Commit profile files, but treat `config/agents.json` as the currently selected routing configuration.
+Activating a profile replaces `config/agents.json` with that complete preset. Commit profile files, but treat `config/agents.json` as the currently selected routing configuration. The reported active profile is matched against the actual configuration, not inferred from alphabetical order or a stale cached label; unmatched configurations report `custom`. This is configuration observation, not proof that a running Pi session loaded it.
 
-## GPT-5.6 profiles
+## Astra profiles
+
+The local Pi catalog identifies Astra as `openai-codex/gpt-6-astra`. Profiles are named `astra-balanced` and `astra-quality` rather than implying a GPT-5.6 Astra model. Both use the Pi provider and preserve all existing role efforts, timeouts, principals, UI conditions, default Terra fallback and zero automatic retries. They do not switch the main Pi session model or enable secondary lanes.
+
+### `astra-balanced` — selected candidate default
+
+- **Astra high:** analyst, architect, planner, code reviewer, roadmap and security.
+- **Astra medium:** critic and PI.
+- **Sol high:** designer and QA.
+- **Terra high:** implementer.
+- **Terra medium:** DevOps and UAT.
+- **Luna medium:** retrospective.
+
+### `astra-quality` — manual opt-in
+
+Same as Astra balanced, with implementation and QA on **Astra high**, and retrospective on **Astra medium**. Designer stays Sol high; DevOps/UAT stay Terra medium. This is an explicit option, not an automatic quality escalation or fallback.
+
+### Acceptance and rollback
+
+These are user-selected routing choices, not claims of benchmark-proven superiority. Astra balanced requires a bounded real pipeline acceptance before operational adoption; Astra quality has no independent live acceptance. The successful previous Medium run used Sol/Terra/Luna and cannot be relabelled as an Astra run. A profile change does not erase earlier lifecycle/budget evidence or authorize extra model starts.
+
+Rollback explicitly with `use 5.6-hybrid-balanced` through the same capability shown above. The three original profile files remain unchanged. Do not switch profiles during an active review/closeout; finish or hold the current run under its original scope first.
+
+## Retained GPT-5.6 profiles
 
 ### `5.6-hybrid-balanced`
 
-The recommended general-purpose default uses each GPT-5.6 variant for the roles where it is intended to be strongest:
+The previous evidence-selected general-purpose default remains available as the rollback preset:
 
 - **Sol high:** analyst, architect, code reviewer, designer, planner, QA, roadmap, and security
 - **Sol medium:** critic
@@ -121,7 +144,8 @@ The lesson is not that one model caused the incident. Strong models can all prod
 
 Controlled real `/pd` fixture runs produced these practical recommendations:
 
-- Keep `5.6-hybrid-balanced` as the quality-oriented daily default.
+- Retain `5.6-hybrid-balanced` as the evidence-backed previous default and explicit rollback.
+- `astra-balanced` is the newly selected candidate default; finish its separate bounded live check before operational adoption. `astra-quality` remains manual and independently unvalidated.
 - Select `5.6-hybrid-lowcost` explicitly when token conservation is more important than maximum review/evidence depth.
 - Use `5.6-sol-quality` selectively rather than promoting it globally.
 - Keep retired GPT-5.4/GPT-5.5 routing as historical benchmark evidence rather than selectable production profiles.

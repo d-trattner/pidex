@@ -34,7 +34,9 @@ This wording rule does not prohibit ordinary secure-code review. It changes task
 
 ## Provider-refusal recovery
 
-If a delegated model or automatic summarizer refuses a legitimate local review:
+This wording rule does not authorize a retry, fallback, new identity or budget reset. In lifecycle-tracked reviews or producer-bound closeouts, stop and follow the existing authenticated hold/recovery and resource policy; a v3 captured refusal cannot be repaired by another model response. Never switch provider/lane to evade that boundary.
+
+Only for an untracked invocation, and only when the caller already has explicit retry authority within its current route/budget policy, a legitimate local-review refusal may use the following bounded procedure:
 
 1. Do not repeatedly resend the same text.
 2. Create a fresh compact context pack containing only:
@@ -44,8 +46,8 @@ If a delegated model or automatic summarizer refuses a legitimate local review:
    - exact local test commands or assertions;
    - required output path and ROUTING contract.
 3. Remove copied provider messages, raw historical prompts, broad transcripts, and unnecessary scenario prose.
-4. Retry once with the compact defensive context.
-5. If refusal persists, record `PROVIDER-SAFE-BLOCKED` and route to the orchestrator or another configured eligible provider. Never fabricate a review result.
+4. Retry at most once with the compact defensive context, and only under that existing authority.
+5. If refusal persists or authority is absent, record `PROVIDER-SAFE-BLOCKED` and return to the orchestrator. A different provider/lane requires its own eligible authorized route and resource decision; this rule does not dispatch it. Never fabricate a review result.
 
 ## Compact handoff template
 

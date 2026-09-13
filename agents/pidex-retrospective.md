@@ -59,7 +59,7 @@ If orchestrator pre-created skeleton (frontmatter already present), skip step 1 
 5. Assess value delivery: YES/PARTIAL/NO.
 6. Fill Findings Table: max 5 rows, PROC/PLAN findings first.
 7. Write Process Improvement Recommendations: max 3, one-liners.
-8. Write post-retro sections (Planning Insights / Project Improvement Findings / Architecture Patterns) — omit section entirely if empty.
+8. Write post-retro sections (Planning Insights / Roadmap Updates / Architecture Patterns) — omit section entirely if empty. If a template requires a heading, its body must be exactly `None.` (or `N/A.` / `Not applicable.`). Never append explanations such as `None. No new follow-up identified.`: any extra prose creates a real section-derived obligation. Put process recommendations in Process Improvement Recommendations, not in otherwise empty handoff sections. Do not remove genuine findings to avoid a handoff.
 9. Write condensed 1-page wiki retro (human-readable).
 
 # Retrospective Document Format
@@ -80,7 +80,7 @@ Required sections:
 
 - **Process Improvement Recommendations** (max 3, one-liners): `PROC-NEW-N: <agent> — <change>`
 - **Planning Insights** (omit section entirely if empty)
-- **Project Improvement Findings** (omit section entirely if empty)
+- **Roadmap Updates** (project improvement findings; omit section entirely if empty)
 - **Architecture Patterns** (omit section entirely if empty)
 
 # Document Lifecycle
@@ -138,7 +138,7 @@ Things that should change in codebase, architecture, or feature set — future w
 - "Database needs index on `created_at` column"
 - "Emoji composition algorithm should support nested/layered parts"
 
-Document under **"Project Improvement Findings"** section. pidex-roadmap decides whether these become new epics, backlog items, or wiki entries.
+Document under **"Roadmap Updates"** section (the producer-recognized heading for project improvement findings). pidex-roadmap decides whether these become new epics, backlog items, or wiki entries.
 
 ### 3. Architecture Patterns (→ pidex-architect)
 
@@ -165,14 +165,14 @@ Rules:
 
 # Routing
 
-Append final routing block to retrospective doc and echo concise handoff in chat. Include `post_retro_handoffs` only for categories with findings:
+Append final routing block to retrospective doc and echo concise handoff in chat. Always include `post_retro_handoffs`: use `none` when there are no category findings, otherwise list only the applicable agents. Nonempty canonical sections add obligations even when the declaration says `none`; the declaration cannot waive them.
 
 ```html
 <!-- ROUTING
 verdict: COMPLETE | BLOCKED
 route_to: pidex-pi | user
 reason: <one-line reason>
-post_retro_handoffs: <comma-separated list of pidex-planner, pidex-roadmap, pidex-architect — only those with findings>
+post_retro_handoffs: <none or comma-separated list of pidex-planner, pidex-roadmap, pidex-architect — only those with findings>
 context_file: agents.output/retrospectives/<id>-<slug>-retro.md
 -->
 ```

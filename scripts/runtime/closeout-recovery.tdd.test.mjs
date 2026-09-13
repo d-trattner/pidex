@@ -18,7 +18,7 @@ function fixture(t) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const scope = 'a'.repeat(64);
   const start = (actor = 'pidex-retrospective') => {
-    const request = { action: 'start', planId: context.planId, pipelineId: context.pipelineId, artifactPath: `agents.output/${actor}/001.md` };
+    const request = { action: 'start', planId: context.planId, pipelineId: context.pipelineId, artifactPath: `agents.output/${actor === 'pidex-pi' ? 'process-improvement' : actor}/001.md` };
     const ticket = beginRecoverableHostCloseout({ ...context, actor, request, scope });
     return { actor, request, ticket };
   };
@@ -37,6 +37,34 @@ function output(f, call, { compact = false, bad = false, sections = '', exitCode
   const finalText = bad ? 'unparseable but durably captured' : compact ? text.replace(/\n/g, '; ').replace('ROUTING; ', 'ROUTING ').replace('; -->', ' -->') : text;
   return { agent: call.actor, provider: 'pi', exitCode, finalText };
 }
+
+test('PI decision matrix: captured successes replay, G7/legacy routes/verdicts remain held without another execution', linux, async t => {
+  for (const [verdict, route, expectedError] of [
+    ['COMPLETE', 'orchestrator', null],
+    ['DEFERRED', 'orchestrator', null],
+    ['DEFERRED', 'pidex-roadmap', /ROUTING_INVALID/],
+    ['REJECTED', 'orchestrator', /VERDICT_INVALID/],
+    ['BLOCKED', 'user', /VERDICT_INVALID/],
+  ]) {
+    const f = fixture(t); const call = f.start('pidex-pi'); await physical(f, call);
+    const result = output(f, call);
+    result.finalText = result.finalText.replace('verdict: DEFERRED', `verdict: ${verdict}`).replace('route_to: orchestrator', `route_to: ${route}`);
+    fs.writeFileSync(path.join(f.context.project, call.request.artifactPath), result.finalText);
+    call.ticket.capture(result);
+    if (expectedError) {
+      await assert.rejects(call.ticket.complete(), expectedError);
+      assert.equal(inspectHostCloseout({ ...f.context, dispatchId: call.ticket.id }).status, 'returned_invalid');
+      assert.throws(f.complete, /OBLIGATIONS_PENDING/);
+      await assert.rejects(f.resume(call).complete(), expectedError);
+    } else {
+      assert.equal((await call.ticket.complete()).closeoutCompletion.status, 'dispatch_completed');
+      assert.equal((await f.resume(call).complete()).replayed, true);
+    }
+    assert.throws(() => f.start('pidex-pi'), /ALREADY_DISPATCHED/);
+    assert.equal(resolvePlanReviewAuthority(f.context).rows.filter(r => r.event_type === 'pipeline_closeout_execution_pinned').length, 1);
+    assert.equal(inspectHostCloseout({ ...f.context, dispatchId: call.ticket.id }).modelCallsAllowed, 0);
+  }
+});
 
 test('real dummy process return supports fresh-process replay and artifact removal without model calls', linux, async t => {
   const f = fixture(t); const call = f.start(); await physical(f, call);

@@ -12,10 +12,10 @@
     {"path":"agents/pidex-designer.md","byte_hash":"098d52b4d47dcf5525e8e08e6ee02a265763072870ed2c029b44a46439f96ac2"},
     {"path":"agents/pidex-devops.md","byte_hash":"2248ed71d6c2d6c6b6534a043367bab47208126cf0ab181eee31fc140610874f"},
     {"path":"agents/pidex-implementer.md","byte_hash":"77927d899c5096fb26708100db1b9b7852fa2103c2cb3fc72ad1c9b7a1d22931"},
-    {"path":"agents/pidex-pi.md","byte_hash":"9de09e3700b6aec77a7b43a68f664a17a2d0151b17ed5663659c693cf2874b48"},
+    {"path":"agents/pidex-pi.md","byte_hash":"7d54678967aa936263bcf1e5eb80eb79675e7760ed0dfed16b26260648fa6286"},
     {"path":"agents/pidex-planner.md","byte_hash":"78b5eb9d007d822dc41610a64b33e73a43e9826019c05a6352706b103eff51be"},
     {"path":"agents/pidex-qa.md","byte_hash":"3bc00540e1ba2f5ea55b246566141d020b5e4367acef4ab1a7b4798a207278d3"},
-    {"path":"agents/pidex-retrospective.md","byte_hash":"7b680f55e1c40c3ad3390da04265d228d1119063785974ad22952e64fa88524d"},
+    {"path":"agents/pidex-retrospective.md","byte_hash":"1fc518fcb914bbfc8e2c7fde6f11f95b519bc4e123800a6c9499ee49e5af26bd"},
     {"path":"agents/pidex-roadmap.md","byte_hash":"3f4a28e25a85e4500102ecab5c098378f167cdf4e30002cb4c1bc0abb0e827fc"},
     {"path":"agents/pidex-security.md","byte_hash":"d4f06595f4e042fe08b2817eef7144a529ef8c98028f37685c1bae7f3604ebce"},
     {"path":"agents/pidex-uat.md","byte_hash":"e75b7914671fb8856478755c25b7ffdfec527eb880ba9f7583467d0620469667"},
@@ -142,9 +142,9 @@
     {"rule_id":"legacy:rules:pidex-implementer:touched-suite-contract-gate","path":"rules/pidex-implementer/touched-suite-contract-gate.md","byte_hash":"2d9a10d1444e60e29b9aa600f5102e056aa9e52f90862fa3475c06b8cd4a19de","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:pidex-implementer:wiki-concept-update-required","path":"rules/pidex-implementer/wiki-concept-update-required.md","byte_hash":"d94f2c568406f54d49c2a22a9ff7e0f4386648b5f42b184ca521be23db97ed9d","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:pidex-implementer:write-path-security-checklist","path":"rules/pidex-implementer/write-path-security-checklist.md","byte_hash":"359b2c30e1a8c7e3fc2643660029b6b176ee2870511f1cbfa6d775c98e613679","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:pidex-pi:hold-sync-manifest-bundle","path":"rules/pidex-pi/hold-sync-manifest-bundle.md","byte_hash":"5092dc97fc66773914ccabb1e61103cc46e3a174504ab0a166271d9fb45e36b2","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:pidex-pi:index","path":"rules/pidex-pi/index.md","byte_hash":"f91f248b3c470ff77bb4f9a21073416a1e4cd516d0c5529e301c502c8d219972","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:pidex-pi:user-decision-routing-consistency","path":"rules/pidex-pi/user-decision-routing-consistency.md","byte_hash":"ea65563f23346e720b0c5a430625ed1bee2186ea14f82dfcde0bf160ebd228c2","protection_class":"legacy_baseline"},
+    {"rule_id":"legacy:rules:pidex-pi:hold-sync-manifest-bundle","path":"rules/pidex-pi/hold-sync-manifest-bundle.md","byte_hash":"1582ec71461de12bb9c769bfffed034af946e33c90d8c2743b84cec0127672c8","protection_class":"legacy_baseline"},
+    {"rule_id":"legacy:rules:pidex-pi:index","path":"rules/pidex-pi/index.md","byte_hash":"8ab665d416fb9e6108bd12b4d7a2f0b0afe093a9f84babc405d7e828203ce49a","protection_class":"legacy_baseline"},
+    {"rule_id":"legacy:rules:pidex-pi:user-decision-routing-consistency","path":"rules/pidex-pi/user-decision-routing-consistency.md","byte_hash":"da633d32642295b53877dd9215b62aa837014b52bd5de5e8bbf282ab8d050cef","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:pidex-pi:validation-taxonomy","path":"rules/pidex-pi/validation-taxonomy.md","byte_hash":"0fdf235aa8fab833563db6e1289d5e6d4b616c557bd96bb3132dbb063067c6be","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:pidex-pipeline-analyst-template","path":"rules/pidex-pipeline-analyst-template.md","byte_hash":"83d257f222b5980fa48bedae243fa6ed0865a145613d7be0eba67939a246e7fe","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:pidex-planner:adapter-lazy-init-requirement","path":"rules/pidex-planner/adapter-lazy-init-requirement.md","byte_hash":"1afadd4bd15d1081beb3fc8d68ef135d29448fa0e4b008d925cef9d1c6334f2f","protection_class":"legacy_baseline"},
@@ -273,9 +273,9 @@
     {"rule_id":"legacy:rules:shared:local-operator-config-guard","path":"rules/shared/local-operator-config-guard.md","byte_hash":"730ce1fb0f60db650707d0c0afcab896f59a19b35ac923d9d9f9f1d4e54ec8d3","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:no-force-add-ignored-files","path":"rules/shared/no-force-add-ignored-files.md","byte_hash":"372af6d31c9a3d1e1dcb844d9f5afe06df7cc68c5340945818d78a97f09e855e","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:package-manager-equivalence","path":"rules/shared/package-manager-equivalence.md","byte_hash":"7f3ace8155b059b026e7b19b92a8a21d19676f86031df7914911f9168c0cd796","protection_class":"legacy_baseline"},
-    {"rule_id":"legacy:rules:shared:provider-safe-defensive-review-language","path":"rules/shared/provider-safe-defensive-review-language.md","byte_hash":"9a2c2968fd3731919f24a0ade3db5b08748cad1f248ce9c25e3395df509eeccf","protection_class":"legacy_baseline"},
+    {"rule_id":"legacy:rules:shared:provider-safe-defensive-review-language","path":"rules/shared/provider-safe-defensive-review-language.md","byte_hash":"79999d3ca3bbd3a3bbf27108c9e910a1b2c3e83bbad70941ee9f28b99327dbee","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:structural-code-search","path":"rules/shared/structural-code-search.md","byte_hash":"8c5dfa4926ea992c967013ee9fc6b1d0b56ac26e93d092c17eaedc71c45b18c4","protection_class":"legacy_baseline"},
     {"rule_id":"legacy:rules:shared:structured-review-outcome","path":"rules/shared/structured-review-outcome.md","byte_hash":"045efc216b6aa955f5979edc5131219337e3b790c410374beaa1d04856966d9a","protection_class":"legacy_baseline"}
   ],
-  "aggregate_digest": "43a6b4d2e74495ad6e50e6aeed882489d1ad5847f9fcd68aaa06ddff1f7ba4f9"
+  "aggregate_digest": "3d5e4fa0f848d19229e5799807a6b2de700cb382d3faddddaed6f17e45e74982"
 }

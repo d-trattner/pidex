@@ -6,6 +6,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { isDeepStrictEqual } from 'node:util';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const STATE = path.join(ROOT, 'state', 'provider-limits');
@@ -45,7 +46,12 @@ function listProfiles() {
 function activeProfile() {
   const data = loadJson(path.join(STATE, 'active-profile.json'));
   const profiles = listProfiles();
-  return profiles.includes(data.active_profile) ? data.active_profile : (profiles[0] || 'custom');
+  const configured = loadJson(path.join(ROOT, 'config', 'agents.json'));
+  if (!configured.agents || !Object.keys(configured.agents).length) return 'custom';
+  const matches = (name) => isDeepStrictEqual(configured, loadJson(path.join(PROFILES, `${name}.json`)));
+  // A saved label or alphabetical order cannot attest different routing bytes.
+  if (profiles.includes(data.active_profile) && matches(data.active_profile)) return data.active_profile;
+  return profiles.find(matches) || 'custom';
 }
 function nativeRecords() {
   const rows = loadJson(path.join(STATE, 'native-records.json')).records;
@@ -195,7 +201,7 @@ function latestSnapshot() {
   if (!Object.keys(data).length) data = { active_profile: activeProfile(), profiles: listProfiles(), records: [], generated_at: nowIso(), latest: nowIso() };
   const profiles = listProfiles();
   data.profiles = profiles;
-  if (!profiles.includes(data.active_profile)) data.active_profile = activeProfile();
+  data.active_profile = activeProfile();
   if (!Array.isArray(data.records) || !data.records.length) data.records = nativeRecords();
   delete data.recommended_profile;
   data = autoSwitchIfNeeded(data);

@@ -27,6 +27,24 @@ function result(f, agent, { verdict = 'COMPLETE', handoffs = 'none', artifactHan
 }
 function publish(f) { f.begin('pidex-retrospective').finish(result(f, 'pidex-retrospective', { handoffs: 'pidex-planner, pidex-architect' })); }
 
+test('ordinary v2 PI uses the same successful route while blocked/rejected decisions cannot close', linux, t => {
+  for (const [verdict, route, error] of [
+    ['COMPLETE', 'orchestrator', null], ['DEFERRED', 'orchestrator', null],
+    ['DEFERRED', 'pidex-roadmap', /ROUTING_INVALID/], ['REJECTED', 'orchestrator', /VERDICT_INVALID/],
+    ['BLOCKED', 'user', null],
+  ]) {
+    const f = fixture(t);
+    f.begin('pidex-retrospective').finish(result(f, 'pidex-retrospective'));
+    const ticket = f.begin('pidex-pi'); const value = result(f, 'pidex-pi', { verdict });
+    value.finalText = value.finalText.replace('route_to: orchestrator', `route_to: ${route}`);
+    fs.writeFileSync(path.join(f.context.project, 'agents.output/pidex-pi/001.md'), value.finalText);
+    if (error) assert.throws(() => ticket.finish(value), error);
+    else ticket.finish(value);
+    if (error || verdict === 'BLOCKED') assert.throws(f.complete, /OBLIGATIONS_PENDING/);
+    else assert.equal(f.complete().confirmed, true);
+  }
+});
+
 test('real regression: retro + PI DEFERRED cannot close declared planner/architect obligations', linux, t => {
   const f = fixture(t); publish(f);
   f.begin('pidex-pi').finish(result(f, 'pidex-pi', { verdict: 'DEFERRED', handoffs: 'pidex-planner, pidex-architect' }));

@@ -1,59 +1,59 @@
-# Rule: PI User Decision Routing Consistency
+# Rule: PI Mode and User Decision Routing Consistency
 
 PROC-NEW-PI-DECISION | pidex-pi / orchestrator
 
-## Rule
+## Authority
 
-When `pidex-pi` proposes agent, rule, workflow, or process-instruction changes that require user approval, it must route to `user`, not `pidex-roadmap`.
+This rule defines PI routing and decision interpretation for both explicit unbound work and producer-bound ordinary v2/recoverable v3 work. Producer IDs must belong to the current invocation; historical IDs in input documents are not a binding. Missing/ambiguous mode or identity remains blocked, never guessed or reconstructed.
 
-A PI artifact has an unresolved user decision when it contains any of these markers:
+Headings and keywords alone do not establish a pending decision. `User Decision Required`, `Suggested Agent Instruction Updates`, `defer` and `reject` may appear in a settled analysis. Read the actual proposal, requested action and task/user decision evidence. A self-written `decision_state` cannot grant approval and cannot override an actual unresolved user decision.
 
-- `User Decision Required`
-- `Gate G7`
-- `approve-all`
-- `defer`
-- `reject`
-- `Suggested Agent Instruction Updates`
-- proposed edits to `agents/*.md`, `rules/**`, workflow docs, or project-specific rule files
+## Decision states
 
-In that case final ROUTING must be:
+- `not_requested`: task explicitly excludes adoption, or there is no proposed change requiring a decision; advisory analysis only. No unsolicited implementation/approval cycle.
+- `approved`: explicit user approval identifies exact changes and scope. Current write/frozen-source/operation boundaries must also permit them.
+- `deferred`: user/task explicitly defers adoption; no implementation in this invocation.
+- `rejected`: user explicitly rejects the proposed adoption; no implementation in this invocation.
+- `pending`: an actual required user decision has not been answered.
+- `unknown`: decision evidence, scope or authorization is missing/contradictory.
 
-```html
-<!-- ROUTING
-verdict: BLOCKED
-route_to: user
-context_file: <pi-artifact>
-gate: G7
-reason: user approval required before applying/defering/rejecting PI rule/instruction changes
-<!-- /ROUTING -->
-```
+Missing or contradictory authorization evidence means `unknown`, not implicit approval. Do not use `not_requested` or `deferred` to hide an actual pending adoption request. General encouragement to continue is not approval of unspecified changes or a held-dispatch retry.
 
-If the PI artifact only records advisory observations and no decision markers, it may route to `pidex-roadmap`.
+## Completed-analysis matrix
+
+Applies only when analysis actually completed; other failures remain BLOCKED. `producer` means current boundary-assigned v2/v3 IDs; `unbound` must be explicit. `artifact_only` permits only the assigned analysis artifact. `approved_scope` additionally permits exact authorized changes, never unrelated maintenance or operations.
+
+| Binding | decision_state | verdict | route_to | gate | writes |
+|---|---|---|---|---|---|
+| producer | not_requested | COMPLETE | orchestrator | none | artifact_only |
+| producer | approved | COMPLETE | orchestrator | none | approved_scope |
+| producer | deferred | DEFERRED | orchestrator | none | artifact_only |
+| producer | rejected | DEFERRED | orchestrator | none | artifact_only |
+| producer | pending | BLOCKED | user | G7 | artifact_only |
+| producer | unknown | BLOCKED | user | G7 | artifact_only |
+| unbound | not_requested | COMPLETE | pidex-roadmap | none | artifact_only |
+| unbound | approved | COMPLETE | pidex-roadmap | none | approved_scope |
+| unbound | deferred | DEFERRED | pidex-roadmap | none | artifact_only |
+| unbound | rejected | REJECTED | pidex-roadmap | none | artifact_only |
+| unbound | pending | BLOCKED | user | G7 | artifact_only |
+| unbound | unknown | BLOCKED | user | G7 | artifact_only |
+
+Rejecting adoption is not rejection of the analysis itself: producer mode uses DEFERRED plus `decision_state: rejected`. Do not emit REJECTED as a successful producer completion. Successful PI returns to orchestrator, which dispatches only actual pending consumers and owns terminal ACK. Unbound roadmap routing does not apply to producer-bound calls.
 
 ## Orchestrator enforcement
 
-After every `pidex-pi` return, orchestrator must read the returned `context_file` and scan for unresolved decision markers above before following ROUTING.
+Before dispatch, provide mode, exact artifact path, inherited metadata, intended analysis/adoption scope and actual decision evidence. Resolve known approval needs before requesting implementation. Do not send incompatible read/write instructions.
 
-If ROUTING says `pidex-roadmap` but the PI doc contains unresolved decision markers:
+After return, inspect the artifact's actual disposition and requested actions, not mere headings. If a required decision is pending, unknown or contradicted by the evidence, stop and ask the user through the current session with G7. Do not auto-complete, adopt changes, or silently relabel the state to fit the matrix. If settled, still require the producer's actual accepted return and all outstanding obligations.
 
-1. Treat ROUTING as inconsistent.
-2. Do **not** continue to roadmap.
-3. Ask user to choose: `approve-all`, `approve selected`, `defer`, or `reject`.
-4. Resume according to user answer.
+The matrix is an instruction contract, not a new executable authorization token or a replacement for producer validation. Real user approval, runtime authority and operation boundaries remain required.
 
-## Why
+## G7 and bounded recovery
 
-PI can correctly analyze process improvements while accidentally emitting `route_to: pidex-roadmap`. Without this rule, pipelines can auto-complete while approval-needed rule changes remain unresolved. That creates false completion and loses improvement decisions.
+v3 resume cannot invoke a model, replace captured output, change a route or implement a new user answer. A BLOCKED/invalid captured return remains held; later approval does not repair that dispatch. Report the unresolved work and seek an explicit next workflow decision outside that held execution; do not create a replacement nonce/pipeline as an automatic workaround. Do not promise in-dispatch conversational continuation.
 
-## Evidence pattern
+For unbound work, a user answer may authorize a new scoped task only under the actual current budget/route policy. This rule grants no automatic retries, fallback, extra starts or configuration adoption. Ordinary v2 and review lifecycles retain their existing executable limits; no v3 recovery is inferred for them.
 
-Record in PI doc or orchestrator notes:
+## Evidence
 
-```text
-PI decision scan: found User Decision Required + Suggested Agent Instruction Updates.
-Action: paused pipeline; asked user before roadmap.
-```
-
-## Scope
-
-Global PIDEX pipeline rule. Applies to all projects because PI approval semantics are process-level, not product-specific.
+Record the actual task/user authorization reference, scoped proposal disposition, changes made or none, and pending questions. Never fabricate approval records, receipts or runtime verdicts. Preserve G7 for genuine unresolved decisions while allowing genuinely settled advisory reports to complete.

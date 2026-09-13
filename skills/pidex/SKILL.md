@@ -1408,12 +1408,23 @@ When stopped, summarize user-visible progress, elapsed/rework cost when known, a
 
 Each lifecycle-tracked review gate has its own executable aggregate policy: `critic`, `code-review`, `security`, and `qa` independently use initial → correction1 → review1 → correction2 → review2. Families, slices, remediations, and hardened choices aggregate within that gate only; a transition, approval, or exhaustion in one gate never consumes, closes, resets, or raises another gate's budget. Maximum three reviewer dispatches and two corrections per gate. Approval closes that gate. A valid `review2` in-contract rejection archives every remaining active and immediate finding, completes `closed`, and returns the typed status `CLOSED_WITH_TBR` — the gate advances exactly once, so no correction3, review3, or fourth reviewer exists. The typed completion status is authoritative over contradictory ROUTING text, and the ordinary rejection count alone never asks the user. No declared-mode split, legacy second-rejection override, or user choice may raise or reset a gate's budget. Nontracked review guidance remains unchanged.
 
+**PI handoff pre-dispatch (ordinary and recoverable closeout)**
+
+Before invoking PI, read its role contract and `<pidex-root>/rules/pidex-pi/user-decision-routing-consistency.md`; verify mode, actual decision evidence and allowed side effects together. This applies to ordinary producer-bound v2 as well as explicit v3, not just requests carrying a `closeout` object. Provide analysis-only/approved scope explicitly. Settled producer PI returns to orchestrator; roadmap routing is reserved for explicit unbound work. Actual pending/unknown approval remains G7, never inferred from headings alone. A v3 G7/invalid captured return cannot be continued by a new model call after a user answer. Verify the task is consistent with these requirements:
+- Assign `agents.output/process-improvement/<plan-id>-<slug>-pi.md`, never `agents.output/pi/`. Task output, any `closeout.artifactPath`, and expected ROUTING `context_file` must identify that same file. Retrospective's canonical output directory is `agents.output/retrospectives/`.
+- Request only retrospective `## Findings` and `## Process Improvement Recommendations`, using targeted reads; never request a full-file Read or a whole-retrospective analysis from PI.
+- Pass exact ID, Origin, UUID from the source header and `post_retro_handoffs` from its final ROUTING as handoff metadata, so PI does not need wider reads. Do not synthesize missing identities; resolve missing source metadata before dispatch.
+- The orchestrator inspects other retrospective sections and tracks the producer's actual pending obligations. `post_retro_handoffs: none` never overrides those obligations.
+- Tell retrospective to omit empty handoff sections or use an exact empty sentinel without explanations. Preserve substantive findings and their required consumers.
+
+See the role-consistent PI example in `<pidex-root>/readme/closeout-recovery.md`. This is a pre-dispatch instruction check, not a new runtime path validator. A conflicting already-captured return remains held: never move/rewrite its artifact, change its identity or rerun the actor to manufacture acceptance.
+
 **6. After pidex-pi: post-retro handoffs (up to 3, optional, auto-proceed)**
 
 Check retrospective doc sections and invoke corresponding agents. Run in parallel if multiple apply. Post-retro handoffs are primary calls: omit provider/model/effort so each resolves its configured route.
 
 - **"Planning Insights"** → invoke pidex-planner to capture learnings in wiki (`concepts/` or `decisions/`)
-- **"Project Improvement Findings"** → invoke pidex-roadmap to evaluate as future epics/backlog
+- **"Roadmap Updates"** → invoke pidex-roadmap to evaluate project improvement findings as future epics/backlog
 - **"Architecture Patterns"** → invoke pidex-architect to update `system-architecture.md`
 
 Only invoke agents whose sections have content.
