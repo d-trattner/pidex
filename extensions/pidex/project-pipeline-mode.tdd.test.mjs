@@ -9,6 +9,102 @@ import { Check } from 'typebox/value';
 
 const mod = await import('./index.ts');
 
+test('upgrade-pi is an explicitly confirmed native command, never a read-only tool action', () => {
+  assert.deepEqual(mod.parsePdProjectArgs('upgrade-pi pp-demo --confirm pp-demo'), { command: 'upgrade-pi', projectId: 'pp-demo', confirm: 'pp-demo' });
+  assert.throws(() => mod.parsePdProjectArgs('upgrade-pi pp-demo'), /requires --confirm/);
+  assert.throws(() => mod.parsePdProjectArgs('upgrade-pi pp-demo --confirm other'), /requires --confirm/);
+  assert.throws(() => mod.buildPdProjectCommandFromToolParams({ command: 'upgrade-pi', projectId: 'pp-demo' }), /unsupported pidex_project command/);
+  assert.match(mod.pdProjectUsage(), /upgrade-pi/);
+});
+
+for (const outcome of ['verified', 'held', 'malformed']) test(`upgrade-pi native Node bridge: ${outcome}, bounded public output`, t => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-upgrade-bridge-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const helper = path.join(dir, 'upgrade-pi.mjs');
+  const argvFile = path.join(dir, 'args.json');
+  const response = outcome === 'malformed' ? 'SECRET-LIKE raw helper output' : JSON.stringify({ ok: outcome === 'verified', status: outcome, target: '0.85.1', after: '0.85.1', error: 'SECRET-LIKE /pidex-secrets/auth.json' });
+  writeFileSync(helper, `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2))); console.log(${JSON.stringify(response)}); process.exitCode=${outcome === 'verified' ? 0 : 1};`);
+  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', "const m=await import('./extensions/pidex/index.ts'); console.log(JSON.stringify(m.runPdProjectCommand({command:'upgrade-pi',projectId:'pp-demo',confirm:'pp-demo'})));"], {
+    cwd: process.cwd(), env: { ...process.env, PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: path.join(dir, 'lifecycle.mjs') }, encoding: 'utf8',
+  });
+  assert.equal(proc.status, 0, proc.stderr);
+  const result = JSON.parse(proc.stdout);
+  assert.equal(result.ok, outcome === 'verified');
+  assert.doesNotMatch(result.summary, /SECRET-LIKE|pidex-secrets/);
+  const args = JSON.parse(readFileSync(argvFile, 'utf8'));
+  assert.equal(args[args.indexOf('--project-id') + 1], 'pp-demo');
+  assert.equal(args[args.indexOf('--confirm') + 1], 'pp-demo');
+});
+
+test('maintenance tool requires a real interactive approval, not a model-supplied confirmation', async () => {
+  const params = { action: 'upgrade-pi', projectId: 'pp-demo' };
+  let runs = 0;
+  const run = (request) => { runs++; assert.deepEqual(request, { command: 'upgrade-pi', projectId: 'pp-demo', confirm: 'pp-demo' }); return { ok: true, summary: 'verified' }; };
+  for (const choice of [undefined, 'Cancel']) {
+    const result = await mod.requestProjectPiMaintenance(params, { hasUI: true, ui: { select: async () => choice } }, { run });
+    assert.equal(result.ok, false);
+  }
+  assert.equal((await mod.requestProjectPiMaintenance(params, { hasUI: false }, { run })).ok, false);
+  assert.equal(runs, 0);
+  assert.equal((await mod.requestProjectPiMaintenance(params, { hasUI: true, ui: { select: async () => 'Upgrade Pi' } }, { run })).ok, true);
+  assert.equal(runs, 1);
+  await assert.rejects(mod.requestProjectPiMaintenance({ ...params, confirm: true }, { hasUI: true }, { run }), /invalid maintenance request/);
+  await assert.rejects(mod.requestProjectPiMaintenance({ ...params, projectId: '../other' }, {}, { run }), /invalid maintenance request/);
+  assert.equal(runs, 1);
+});
+
+test('maintenance approval is per invocation, abort-aware and bound to the displayed project', async () => {
+  let runs = 0;
+  const run = request => { runs++; assert.equal(request.projectId, 'pp-demo'); return { ok: true, summary: 'verified' }; };
+  const params = { action: 'upgrade-pi', projectId: 'pp-demo' };
+  const controller = new AbortController();
+  const denied = await mod.requestProjectPiMaintenance(params, { hasUI: true, ui: { select: async () => { controller.abort(); return 'Upgrade Pi'; } } }, { run, signal: controller.signal });
+  assert.equal(denied.ok, false);
+  assert.equal(runs, 0);
+  const accepted = await mod.requestProjectPiMaintenance(params, { hasUI: true, ui: { select: async () => { params.projectId = 'pp-other'; return 'Upgrade Pi'; } } }, { run });
+  assert.equal(accepted.ok, true);
+  assert.equal(runs, 1);
+  assert.equal((await mod.requestProjectPiMaintenance({ action: 'upgrade-pi', projectId: 'pp-demo' }, { hasUI: true, ui: { select: async () => { throw new Error('dialog unavailable'); } } }, { run })).ok, false);
+  assert.equal(runs, 1);
+});
+
+test('maintenance is denied in child/container contexts even with a synthetic UI', async () => {
+  let runs = 0;
+  for (const key of ['PIDEX_CHILD', 'PIDEX_PROJECT_PIPELINE_CHILD', 'PIDEX_PROJECT_PIPELINE_CONTAINER']) {
+    const prior = process.env[key];
+    try {
+      process.env[key] = '1';
+      const result = await mod.requestProjectPiMaintenance({ action: 'upgrade-pi', projectId: 'pp-demo' }, { hasUI: true, ui: { select: async () => 'Upgrade Pi' } }, { run: () => { runs++; return { ok: true, summary: 'bad' }; } });
+      assert.equal(result.ok, false);
+    } finally { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; }
+  }
+  assert.equal(runs, 0);
+});
+
+test('maintenance schema cannot carry self-approved flags or arbitrary Docker actions', () => {
+  const schema = mod.PidexProjectMaintenanceParams;
+  assert.equal(Check(schema, { action: 'upgrade-pi', projectId: 'pp-demo' }), true);
+  for (const extra of [{ confirm: true }, { approved: true }, { command: 'rm' }, { version: 'latest' }]) assert.equal(Check(schema, { action: 'upgrade-pi', projectId: 'pp-demo', ...extra }), false);
+  assert.equal(Check(schema, { action: 'remove', projectId: 'pp-demo' }), false);
+});
+
+for (const choice of ['Upgrade Pi', 'Cancel', 'headless']) test(`registered maintenance tool uses native helper only after approval: ${choice}`, t => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'pidex-maintenance-tool-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const marker = path.join(dir, 'spawned.json');
+  writeFileSync(path.join(dir, 'upgrade-pi.mjs'), `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify(process.argv.slice(2))); console.log(JSON.stringify({ok:true,status:'verified',target:'0.85.1',after:'0.85.1'}));`);
+  const code = `const m=await import('./extensions/pidex/index.ts'); const tools=new Map(); m.default({on:()=>{},registerCommand:()=>{},registerTool:t=>tools.set(t.name,t),sendUserMessage:()=>{}}); const result=await tools.get('pidex_project_maintenance').execute('call-1',{action:'upgrade-pi',projectId:'pp-demo'},undefined,undefined,{hasUI:${choice !== 'headless'},cwd:process.cwd(),ui:{select:async()=>${JSON.stringify(choice)}}}); console.log(JSON.stringify(result));`;
+  const proc = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', code], { cwd: process.cwd(), env: { ...process.env, PIDEX_CHILD: '0', PIDEX_PROJECT_PIPELINE_CHILD: '0', PIDEX_PROJECT_PIPELINE_CONTAINER: '0', PIDEX_PROJECT_PIPELINE_LIFECYCLE_SCRIPT: path.join(dir, 'lifecycle.mjs') }, encoding: 'utf8' });
+  assert.equal(proc.status, 0, proc.stderr);
+  const result = JSON.parse(proc.stdout.trim().split('\n').at(-1));
+  assert.equal(result.details.ok, choice === 'Upgrade Pi');
+  assert.equal(existsSync(marker), choice === 'Upgrade Pi');
+  if (choice === 'Upgrade Pi') {
+    const args = JSON.parse(readFileSync(marker, 'utf8'));
+    assert.equal(args[args.indexOf('--confirm') + 1], 'pp-demo');
+  }
+});
+
 test('pidex_agent public schema exposes review identity atomically', () => {
   const schema = mod.PidexAgentParams;
   const properties = schema.properties;

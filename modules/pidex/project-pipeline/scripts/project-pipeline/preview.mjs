@@ -8,6 +8,8 @@ import { ensurePreviewContainerPublished, publishedPortsForContainer } from './l
 import { createProcessManager } from './process.mjs';
 import { loadProjectRecord, saveProjectRecord, safeProjectId } from './registry.mjs';
 
+import { withProjectPiLease } from './pi-maintenance.mjs';
+
 export function parsePreviewArgs(argv) {
   const separator = argv.indexOf('--');
   const prefix = separator === -1 ? argv : argv.slice(0, separator);
@@ -161,6 +163,10 @@ export function adoptPublishedPreviewPorts(record, options = {}) {
 }
 
 export async function previewStart(options) {
+  return withProjectPiLease(options, () => previewStartOwned(options));
+}
+
+async function previewStartOwned(options) {
   const projectId = safeProjectId(options.projectId);
   const existingRecord = loadProjectRecord(options.pidexRoot, projectId);
   let record = existingRecord.preview?.ports ? existingRecord : adoptPublishedPreviewPorts(existingRecord, options);
@@ -249,6 +255,10 @@ export async function previewLogs(options) {
 }
 
 export async function previewStop(options) {
+  return withProjectPiLease(options, () => previewStopOwned(options));
+}
+
+async function previewStopOwned(options) {
   const projectId = safeProjectId(options.projectId);
   const record = loadProjectRecord(options.pidexRoot, projectId);
   const ports = previewPortsFromRecord(record);

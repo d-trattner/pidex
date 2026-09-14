@@ -6,6 +6,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createProjectSandbox, openProjectSandbox } from './lifecycle.mjs';
+import { withProjectPiLease } from './pi-maintenance.mjs';
 import { buildImage, DEFAULT_TAG, imageStatus } from './image.mjs';
 import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
@@ -608,6 +609,10 @@ function resolveProjectPipelineRuntimeContext({ pidexRoot, projectId, pipelineId
 }
 
 export async function runProjectPipelineOrchestration(options = {}) {
+  return withProjectPiLease(options, () => runProjectPipelineOrchestrationOwned(options));
+}
+
+async function runProjectPipelineOrchestrationOwned(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = options.projectId;
   if (!projectId) throw new Error('--project-id is required');

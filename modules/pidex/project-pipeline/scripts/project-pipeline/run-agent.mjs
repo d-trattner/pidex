@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { dockerSpawnSync } from './docker-spawn.mjs';
+import { withProjectPiLease } from './pi-maintenance.mjs';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -303,6 +304,10 @@ export function buildDockerExecArgs(record, params = {}) {
 }
 
 export function runProjectPipelineAgent(options = {}) {
+  return withProjectPiLease(options, () => runProjectPipelineAgentOwned(options));
+}
+
+function runProjectPipelineAgentOwned(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
   if (process.env[CHILD_ENV] === '1') return { ok: false, exitCode: 2, error: 'project-pipeline-recursion-guard', reason: 'project-pipeline child must not docker-exec itself' };

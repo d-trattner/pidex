@@ -60,7 +60,33 @@ On Linux, if the current shell has not picked up Docker group membership yet, us
 
 A PIDEX Git update or a host Pi update does **not** update Pi inside an existing image/container. An earlier image may still contain Pi 0.80.3 even though the current profiles select Astra. `No models matching astra` is a useful diagnostic, but available-model listing also depends on provider authentication; a version update alone does not prove the failed run's root cause is resolved.
 
-For the **default local image**, after updating the PIDEX checkout, rebuild explicitly in Windows PowerShell/ISE:
+### Pi-only update in the existing container
+
+For an existing idle sandbox, use this **user command in Pi** after updating the canonical checkout and loading the updated extension in a fresh session:
+
+```text
+/pdproject upgrade-pi <project-id> --confirm <project-id>
+```
+
+This uses the native Node/Docker bridge, including on Windows; no Bash, WSL or PowerShell tool channel is required. It is deliberately **not** a write action on the read-only `pidex_project` tool.
+
+Alternatively, ask the main agent to update Pi in the selected sandbox. It can invoke the separate **`pidex_project_maintenance`** tool with `action: "upgrade-pi"` and the exact `projectId`. Pi then presents an interactive confirmation dialog; **Cancel is the first option**, and only your explicit **Upgrade Pi** selection starts maintenance. Model-supplied approval flags are rejected. Each invocation needs a fresh confirmation; cancellation, unavailable UI, headless/child/container contexts or an abort before dispatch make no changes. Once execution starts, cancellation is not a rollback guarantee; keep the session open and inspect maintenance status if interrupted. The agent must not automatically retry a denied/held action or continue the pipeline.
+
+Both entry points use the same guarded backend. The agent-accessible tool is available only after loading the updated extension in an interactive host Pi session; ordinary Bash/WSL Docker access is not needed.
+
+- Target version comes exclusively from the exact Dockerfile pin (currently `0.85.1`), with no arbitrary package/version argument and no downgrade. A matching installed version is a verified no-op.
+- Requires the registered local container, expected ownership labels, exact workspace/secrets/cache volume mounts, no active recorded run, and only the normal idle `sleep` process. Stop managed previews explicitly first. Unknown/custom runtime layouts, runtime overlays and unsafe Node/loader environment overrides are refused.
+- A project execution lease excludes concurrent upgraded PIDEX orchestrator/agent, legacy run-flow, open/repair/remove and preview start/stop operations. Do not run independent/manual Docker maintenance concurrently, or leave an older pre-upgrade orchestrator running.
+- Installs the pinned package as container root in a separate `/opt/pidex-pi/` prefix. npm runs with isolated config/cache, engine checks and disabled lifecycle scripts/audit, without reading project npm configuration or copied provider credentials. It downloads npm dependencies but makes no model request.
+- Verifies the staged CLI before atomically switching `/usr/local/bin/pi`, then checks the real node-user CLI. The previous installation remains intact. A failed post-switch controller check attempts pointer rollback; failed/unknown transport, timeout or verification outcomes retain a maintenance HOLD rather than claiming success.
+- Does not replace/restart the container or image, update Node, modify project source/volumes/credentials/registry/run history, or resume/retry the pipeline. The change lives in the container's writable layer; rebuilding/replacing that container still uses the image's Pi version. Use `pi --version`, not the old global npm package inventory, to identify the selected CLI.
+- Bounded receipts/journal entries live under `state/project-pi-maintenance/`. `diagnose` shows the recorded maintenance disposition and execution-lock presence, not a fresh runtime-version proof. Unknown owners and held/in-progress receipts are never automatically cleared; inspect before any manual recovery. Do not delete locks or receipts to force continuation.
+
+The local implementation is covered by model-free controller, lifecycle, concurrency and native-bridge tests. This is not a real Windows upgrade or Astra pipeline acceptance claim. After a verified update, check provider/Astra availability separately before authorizing continuation of the held pipeline.
+
+### Image rebuild / Node or OS updates
+
+For future containers or broader runtime changes, retain the image rebuild path. For the **default local image**, after updating the PIDEX checkout, rebuild explicitly in Windows PowerShell/ISE:
 
 ```powershell
 cd "$HOME\pidex"

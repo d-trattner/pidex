@@ -887,6 +887,7 @@ type PdProjectCommand =
 	| { command: "artifacts"; projectId: string }
 	| { command: "open"; projectId: string }
 	| { command: "repair"; projectId: string; confirm: string }
+	| { command: "upgrade-pi"; projectId: string; confirm: string }
 	| { command: "credentials"; action: "status" | "reset"; projectId: string; confirm?: string }
 	| { command: "preview"; action: "start" | "status" | "logs" | "stop"; projectId: string; commandArgs?: string[] }
 	| { command: "remove"; projectId: string; confirm: string };
@@ -978,7 +979,7 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 		if (runId) throw new Error(`unknown pdproject ${command} argument: --run-id`);
 		return { command, projectId };
 	}
-	if (command === "open" || command === "repair") {
+	if (command === "open" || command === "repair" || command === "upgrade-pi") {
 		let projectId = "";
 		let confirm = "";
 		for (let i = 0; i < parts.length; i += 1) {
@@ -994,9 +995,9 @@ export function parsePdProjectArgs(argsLine?: string): PdProjectCommand {
 			else throw new Error(`unknown pdproject ${command} argument: ${parts[i]}`);
 		}
 		if (!projectId) throw new Error(`pdproject ${command} requires a project id`);
-		if (command === "repair") {
-			if (confirm !== projectId) throw new Error(`pdproject repair requires --confirm ${projectId}`);
-			return { command: "repair", projectId, confirm };
+		if (command === "repair" || command === "upgrade-pi") {
+			if (confirm !== projectId) throw new Error(`pdproject ${command} requires --confirm ${projectId}`);
+			return { command, projectId, confirm };
 		}
 		if (confirm) throw new Error("unknown pdproject open argument: --confirm");
 		return { command: "open", projectId };
@@ -1054,6 +1055,7 @@ export function pdProjectUsage(): string {
 		"       /pdproject artifacts <project-id>",
 		"       /pdproject open <project-id>",
 		"       /pdproject repair <project-id> --confirm <project-id>",
+		"       /pdproject upgrade-pi <project-id> --confirm <project-id>",
 		"       /pdproject credentials status <project-id>",
 		"       /pdproject credentials reset <project-id> --confirm <project-id>",
 		"       /pdproject preview start <project-id> -- <command>",
@@ -1190,6 +1192,11 @@ function summarizeProjectDiagnose(project: any): string {
 	const volumeSummary = Object.entries(volumes).map(([kind, value]: [string, any]) => `${kind}=${value?.exists ? "ok" : "missing"}`).join(", ") || "not checked";
 	const dashboardVisible = dashboardDbContainsProject(project);
 	const archiveOk = archiveExistsForProject(project);
+	const maintenance = project?.pi_maintenance;
+	const maintenanceStatus = !maintenance ? "not-reported" : ["none", "in_progress", "held", "verified", "failed_unchanged", "rolled_back"].includes(maintenance.status) ? maintenance.status : "unknown";
+	const executionLock = ["present", "absent"].includes(maintenance?.execution_lock) ? maintenance.execution_lock : "unknown";
+	const maintenanceHeld = ["in_progress", "held", "unknown"].includes(maintenanceStatus) || executionLock === "present";
+	const observedPi = /^\d+\.\d+\.\d+$/.test(maintenance?.after || "") ? maintenance.after : "unknown";
 	const lines = [
 		`Project Pipeline diagnosis for ${projectId}`,
 		`registry: found name=${project?.name || "unknown"} status=${project?.status || "unknown"}`,
@@ -1197,6 +1204,7 @@ function summarizeProjectDiagnose(project: any): string {
 		`source: kind=${project?.source?.kind || "unknown"}${project?.source?.ref ? ` ref=${project.source.ref}` : ""}`,
 		`credentials: pi=${project?.credentials?.pi || "unknown"} git=${project?.credentials?.git || "unknown"}`,
 		`runs: ${runs.length}`,
+		`pi_maintenance: ${maintenanceStatus}; execution_lock=${executionLock}; last_observed_version=${observedPi} (recorded, not a live probe)`,
 		`archive: ${archiveOk ? "present" : "missing"}${project?.archive?.path ? ` path=${project.archive.path}` : ""}`,
 		`project_mirror: ${project?.project_mirror?.status || "unknown"}${project?.project_mirror?.degraded ? " degraded" : ""}`,
 		`dashboard_db: ${dashboardVisible === undefined ? "missing/not-readable" : dashboardVisible ? "project string present" : "project string not found"}`,
@@ -1205,8 +1213,9 @@ function summarizeProjectDiagnose(project: any): string {
 		"",
 		"Next actions:",
 	];
-	if (!docker?.exists || docker.status === "missing") lines.push(`- Repair/open Docker sandbox: /pdproject repair ${projectId} --confirm ${projectId}`);
-	if (!archiveOk) lines.push(`- Run or re-run Project Pipeline once so agents.output archive is synced: /pd <task>`);
+	if (maintenanceHeld) lines.push("- Maintenance/execution state requires inspection; do not delete locks or automatically restart the pipeline.");
+	if (!maintenanceHeld && (!docker?.exists || docker.status === "missing")) lines.push(`- Repair/open Docker sandbox: /pdproject repair ${projectId} --confirm ${projectId}`);
+	if (!archiveOk) lines.push("- Archive missing: inspect failed runs/HOLD before authorizing any new Project Pipeline run.");
 	if (dashboardVisible === false || dashboardVisible === undefined) lines.push("- Refresh dashboard DB without Bash from the PIDEX root: node dashboard/start.mjs  (or run: node scripts/dashboard/ingest.mjs --db dashboard/data/pidex.sqlite --project .)");
 	lines.push(`- Inspect registry/docker status: /pdproject status ${projectId}`);
 	lines.push(`- Inspect runs: /pdproject runs ${projectId}`);
@@ -1321,6 +1330,19 @@ export function runPdProjectCommand(parsed: PdProjectCommand, options: { project
 		} catch {
 			return { ok: false, summary: `project-pipeline credentials ${parsed.action} failed exit=${proc.status}; helper output omitted to avoid credential metadata exposure` };
 		}
+	}
+	if (parsed.command === "upgrade-pi") {
+		if (parsed.confirm !== parsed.projectId) return { ok: false, summary: "Project Pipeline upgrade-pi requires exact project confirmation" };
+		const script = path.join(path.dirname(PROJECT_PIPELINE_LIFECYCLE_SCRIPT), "upgrade-pi.mjs");
+		if (!fs.existsSync(script)) return { ok: false, summary: "Project Pipeline upgrade-pi helper missing; update the canonical PIDEX runtime" };
+		const proc = spawnSync(process.execPath, [script, "--pidex-root", PACKAGE_ROOT, "--project-id", parsed.projectId, "--confirm", parsed.confirm, "--json"], { cwd: PACKAGE_ROOT, encoding: "utf8", timeout: 300_000, maxBuffer: 1024 * 1024 });
+		try {
+			const json = JSON.parse(proc.stdout || "{}");
+			const ok = proc.status === 0 && json.ok === true && json.status === "verified" && /^\d+\.\d+\.\d+$/.test(json.after ?? "") && json.after === json.target;
+			const status = ["verified", "blocked", "held", "failed_unchanged", "rolled_back"].includes(json.status) ? json.status : "unconfirmed";
+			const reason = ["confirmation-required", "project-execution-busy", "pi-maintenance-held", "project-not-idle", "container-not-idle", "container-identity-mismatch", "container-mount-mismatch", "docker-unavailable", "version-probe-failed", "invalid-version-pin", "upgrade-unconfirmed", "unsupported-pi-layout", "downgrade-denied", "install-unconfirmed", "install-failed", "version-mismatch", "container-update-failed"].includes(json.error) ? json.error : "details-omitted";
+			return { ok, no_fallback: true, summary: ok ? `Project Pipeline Pi verified: ${json.after}. Container/image not replaced; pipeline not resumed.` : `Project Pipeline upgrade-pi ${status}: ${reason}; no pipeline continuation. Inspect maintenance receipts locally; helper output omitted.` };
+		} catch { return { ok: false, no_fallback: true, summary: "Project Pipeline upgrade-pi unconfirmed; keep HOLD. Helper output omitted." }; }
 	}
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: "project-pipeline lifecycle helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };
 	const lifecycleArgs = parsed.command === "open"
@@ -3771,6 +3793,26 @@ const PidexProjectParams = Type.Object({
 	runId: Type.Optional(Type.String({ description: "Project Pipeline run id. Required for show-run." })),
 });
 
+export const PidexProjectMaintenanceParams = Type.Object({
+	action: Type.Literal("upgrade-pi", { description: "Upgrade only the existing sandbox's Pi CLI to the exact Dockerfile pin. Requires interactive user approval." }),
+	projectId: Type.String({ pattern: "^[a-z0-9][a-z0-9_.-]{2,80}$", description: "Exact registered Project Pipeline project id. Ask the user if the target is ambiguous." }),
+}, { additionalProperties: false });
+
+export async function requestProjectPiMaintenance(params: any, ctx: any, options: { signal?: AbortSignal; run?: typeof runPdProjectCommand } = {}): Promise<{ ok: boolean; summary: string; no_fallback?: true }> {
+	if (!params || typeof params !== "object" || Array.isArray(params) || Object.keys(params).length !== 2 || !Object.hasOwn(params, "action") || !Object.hasOwn(params, "projectId") || params.action !== "upgrade-pi" || typeof params.projectId !== "string" || !/^[a-z0-9][a-z0-9_.-]{2,80}$/.test(params.projectId) || params.projectId.includes("..")) throw new Error("invalid maintenance request");
+	const projectId = params.projectId; // Capture the approved target before awaiting UI.
+	const denied = (summary: string) => ({ ok: false, no_fallback: true as const, summary });
+	if (process.env[PIDEX_CHILD_ENV] === "1" || process.env.PIDEX_PROJECT_PIPELINE_CHILD === "1" || process.env.PIDEX_PROJECT_PIPELINE_CONTAINER === "1") return denied("Pi maintenance is available only in the host main session; no changes made.");
+	if (!ctx?.hasUI || typeof ctx.ui?.select !== "function") return denied("Pi maintenance requires interactive user approval. No changes made; use an interactive host Pi session.");
+	if (options.signal?.aborted) return denied("Pi maintenance cancelled before execution; no changes made.");
+	let choice: string | undefined;
+	try {
+		choice = await ctx.ui.select(`Upgrade Dockerfile-pinned Pi as container root for ${projectId}? Downloads npm packages; no image replacement, project-data changes or pipeline continuation.`, ["Cancel", "Upgrade Pi"]);
+	} catch { return denied("Pi maintenance approval unavailable; no changes made."); }
+	if (choice !== "Upgrade Pi" || options.signal?.aborted) return denied("Pi maintenance not approved or cancelled; no changes made.");
+	return (options.run ?? runPdProjectCommand)({ command: "upgrade-pi", projectId, confirm: projectId }, { projectRoot: ctx.cwd ?? process.cwd() });
+}
+
 type HostAgentBoundaryOptions = {
 	agentCwd: string;
 	agentProjectMode?: ProjectPipelineModeResult;
@@ -4481,7 +4523,7 @@ export default function runningPi(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("pdproject", {
-		description: "Manage local Project Pipeline Docker sandboxes (status/open/remove/preview).",
+		description: "Manage local Project Pipeline Docker sandboxes (status/open/upgrade-pi/remove/preview).",
 		handler: async (argLine, ctx) => {
 			const homeStatus = canonicalHomeStatus();
 			if (!homeStatus.ok) {
@@ -4490,6 +4532,7 @@ export default function runningPi(pi: ExtensionAPI) {
 			}
 			try {
 				const parsed = parsePdProjectArgs(argLine);
+				if (parsed.command === "upgrade-pi") await ctx.ui.notify("Checking sandbox Pi upgrade. Installation may take several minutes; keep this session open. Pipeline will not resume automatically.", "info");
 				const result = runPdProjectCommand(parsed, { projectRoot: ctx.cwd ?? process.cwd() });
 				await ctx.ui.notify(result.summary, result.ok ? "info" : "error");
 			} catch (error: any) {
@@ -4580,6 +4623,31 @@ export default function runningPi(pi: ExtensionAPI) {
 		},
 	};
 	pi.registerTool(pidexProjectTool);
+
+	pi.registerTool({
+		name: "pidex_project_maintenance",
+		label: "PIDEX Project Maintenance",
+		description: "Request a Pi-only upgrade in an existing Project Sandbox through native Node/Docker, without Bash or WSL. Requires an interactive user approval dialog for this invocation. No arbitrary Docker commands or automatic pipeline continuation.",
+		promptSnippet: "When the user requests a sandbox Pi update, request the guarded native upgrade with an interactive confirmation.",
+		promptGuidelines: [
+			"Inspect the target with pidex_project first. If multiple projects could match, ask the user which project id to maintain.",
+			"Only action=upgrade-pi is supported. Never supply approval/confirmation fields; the actual user must approve the UI dialog.",
+			"Do not retry automatically after cancellation, headless denial, busy state or HOLD. Do not reset leases, receipts, failed runs or budgets.",
+			"Once approved, maintenance may take several minutes. Do not claim cancellation rolled back an update that already started; inspect its recorded status.",
+			"This updates only Pi in the existing container. It does not update Node/the image or authorize resuming the held pipeline.",
+		],
+		parameters: PidexProjectMaintenanceParams as any,
+		async execute(_toolCallId, params: any, signal, _onUpdate, ctx) {
+			const homeStatus = canonicalHomeStatus();
+			if (!homeStatus.ok) throw new Error("Pi maintenance requires a valid canonical PIDEX checkout; no changes made.");
+			const projectId = params?.projectId;
+			const result = await requestProjectPiMaintenance(params, ctx, { signal });
+			return {
+				content: [{ type: "text", text: result.summary }],
+				details: { ok: result.ok, no_fallback: true, action: "upgrade-pi", projectId },
+			};
+		},
+	} as any);
 
 	const rpAgentTool: any = {
 		name: "pidex_agent",

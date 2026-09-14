@@ -15,6 +15,8 @@ export class PreviewLifecycleError extends Error {
   }
 }
 
+import { withProjectPiLease } from './pi-maintenance.mjs';
+
 export const DEFAULT_IMAGE = 'pidex/project-node22:local';
 
 export function dockerLabels(projectId, kind) {
@@ -200,6 +202,10 @@ export function setProjectTestClassification(options = {}) {
 }
 
 export function openProjectSandbox(options = {}) {
+  return withProjectPiLease(options, () => openProjectSandboxOwned(options));
+}
+
+function openProjectSandboxOwned(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const record = loadProjectRecord(pidexRoot, options.projectId);
   try {
@@ -216,6 +222,10 @@ export function openProjectSandbox(options = {}) {
 }
 
 export function repairProjectSandbox(options = {}) {
+  return withProjectPiLease(options, () => repairProjectSandboxOwned(options));
+}
+
+function repairProjectSandboxOwned(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = safeProjectId(options.projectId);
   if (options.confirm !== projectId) throw new Error(`refusing to repair project sandbox without --confirm ${projectId}`);
@@ -253,6 +263,10 @@ export function repairProjectSandbox(options = {}) {
 }
 
 export function removeProjectSandbox(options = {}) {
+  return withProjectPiLease(options, () => removeProjectSandboxOwned(options));
+}
+
+function removeProjectSandboxOwned(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = safeProjectId(options.projectId);
   if (options.confirm !== projectId) throw new Error(`refusing to remove project sandbox without --confirm ${projectId}`);

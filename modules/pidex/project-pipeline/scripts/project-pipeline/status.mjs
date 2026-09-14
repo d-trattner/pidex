@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, registryRoot, safeProjectId } from './registry.mjs';
+import { maintenanceSummary } from './pi-maintenance.mjs';
 
 export function parseArgs(argv) {
   const out = { json: false };
@@ -73,7 +74,7 @@ function safePreviewSummary(record) {
 }
 
 function withDockerHealth(record, options) {
-  const safeRecord = { ...record, preview: safePreviewSummary(record) };
+  const safeRecord = { ...record, preview: safePreviewSummary(record), pi_maintenance: maintenanceSummary(options.pidexRoot || process.cwd(), record.project_id) };
   if (options.checkDocker === false) return safeRecord;
   return { ...safeRecord, docker_health: inspectDockerResources(record, options.runner) };
 }

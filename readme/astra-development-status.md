@@ -31,7 +31,7 @@ These choices are not evidence of universal Astra superiority or a new cross-pro
 
 Separate from the validation snapshot below, the Project Pipeline Docker build now pins Pi to **0.85.1** and asserts the installed version instead of using floating `latest`. An existing Windows sandbox was reported to run Pi 0.80.3 with no available Astra match and two failed child-Pi runs. This pin addresses runtime drift; it does not prove that authentication/model availability or the original failure is resolved.
 
-Existing images and containers are not automatically upgraded. See [the explicit rebuild and data-preserving replacement procedure](project-pipeline.md#updating-the-sandbox-pi-runtime). This follow-up has model-free image/lifecycle regression coverage only, not a real Docker-build or Windows pipeline acceptance claim.
+Existing images and containers are not automatically upgraded. The separately confirmed `/pdproject upgrade-pi <project-id> --confirm <project-id>` action can now update only Pi in an idle existing container through native Node/Docker, without WSL or container replacement. It stages the pinned package, verifies versions, excludes concurrent managed work and preserves uncertainty as HOLD. The main agent can request the same operation through the separate `pidex_project_maintenance` tool, but only a real interactive user confirmation authorizes its execution; headless/child use and model-supplied approval flags are refused. See [Pi-only maintenance and the separate image rebuild procedure](project-pipeline.md#updating-the-sandbox-pi-runtime). These follow-ups have model-free regression coverage only, not a real Docker-build, Windows upgrade or Windows pipeline acceptance claim.
 
 ## Validation and qualification
 

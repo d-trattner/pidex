@@ -7,6 +7,7 @@ import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
 import { copySelectedCredentials } from './credentials.mjs';
 import { runProjectPipelineAgent } from './run-agent.mjs';
+import { withProjectPiLease } from './pi-maintenance.mjs';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 
 const FLOW_SAFE_AGENT_FAILURE_CAUSES = new Set(['module-rule-injection-failed']);
@@ -31,6 +32,10 @@ export function parseCredentialEntries(options = {}) {
 }
 
 export function runProjectPipelineFlow(options = {}) {
+  return withProjectPiLease(options, () => runProjectPipelineFlowOwned(options));
+}
+
+function runProjectPipelineFlowOwned(options = {}) {
   const pidexRoot = path.resolve(options.pidexRoot || process.cwd());
   const projectId = options.projectId;
   if (!projectId) throw new Error('--project-id is required');
