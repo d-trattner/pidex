@@ -52,9 +52,35 @@ Project source is not mirrored back to the host by PIDEX. If you want source cha
 - Docker Engine/Desktop with Linux containers.
 - Pi credentials configured on the host if you choose to copy them into the Project Sandbox.
 
-The default local Project Pipeline Docker image is auto-built by the orchestrator when missing. It can also be built manually through the image helper for troubleshooting.
+The default local Project Pipeline Docker image is auto-built by the orchestrator **when missing**, not automatically refreshed when present. Its Pi CLI is pinned to **0.85.1**, the locally Astra-tested runtime; the build verifies the installed CLI version. This is a runtime pin, not independent Windows/Project Pipeline Astra acceptance. It can also be built manually through the image helper for troubleshooting.
 
 On Linux, if the current shell has not picked up Docker group membership yet, use a fresh login shell or `newgrp docker`.
+
+## Updating the sandbox Pi runtime
+
+A PIDEX Git update or a host Pi update does **not** update Pi inside an existing image/container. An earlier image may still contain Pi 0.80.3 even though the current profiles select Astra. `No models matching astra` is a useful diagnostic, but available-model listing also depends on provider authentication; a version update alone does not prove the failed run's root cause is resolved.
+
+For the **default local image**, after updating the PIDEX checkout, rebuild explicitly in Windows PowerShell/ISE:
+
+```powershell
+cd "$HOME\pidex"
+node scripts/modules/run-check.mjs --capability project-pipeline.image --agent orchestrator --phase maintenance --project "$PWD" -- build --json
+if ($LASTEXITCODE -ne 0) { throw "Sandbox image build failed; do not replace any container." }
+
+docker run --rm --network none --user node --entrypoint pi pidex/project-node22:local --version
+if ($LASTEXITCODE -ne 0) { throw "Sandbox Pi version probe failed." }
+```
+
+The probe must print `0.85.1`. Building downloads image/package dependencies but starts no Specialist/model request. The version probe creates only a disposable container without project or credential mounts. For a custom registered image, review its tag/build configuration separately rather than silently substituting the default image.
+
+**Existing project containers still use their original image after this build.** Updating one is a separate, explicitly confirmed maintenance step:
+
+1. Keep the failed pipeline on hold; ensure no active project work remains. Identify the exact registered container and verify its actual workspace, secrets and cache volume mounts. Preserve registry/run history and host archives; record/back up any needed changes in the container's writable layer outside those volumes.
+2. Replace only that confirmed container with the rebuilt image, reusing the same registered named volumes. Do not use `/pdproject remove`, volume removal/pruning, or a blanket Docker cleanup. Container replacement discards its writable layer; this must not be mistaken for a lossless operation on all container state.
+3. The confirmed `/pdproject repair <project-id> --confirm <project-id>` path can recreate a **missing** container from its registered image and existing volumes. On an **existing** container it only starts it; it does not upgrade its image. Do not remove a container merely to trigger repair before the ownership/data checks and explicit replacement approval above.
+4. Verify `pi --version` and available models inside the actual replacement container, using its configured user/workdir. Only then consider an authorized pipeline continuation under the existing HOLD/retry rules. Replacing the runtime does not reset failed runs or grant automatic retries.
+
+No automatic replacement, credential changes or pipeline restart is performed by rebuilding the image.
 
 ## Choosing Project Pipeline mode
 

@@ -1,6 +1,6 @@
 # Astra optimization — unreleased development status
 
-Status as of 2026-09-13: **implemented and integrated into `master`, not published as a release**. The code snapshot is `96065c6`. Package version remains `0.5.0`; this work adds no version bump, release tag or npm publication. Git pushes distribute this development source to other checkouts; they are not package releases. See [Unreleased changes](../CHANGELOG.md#unreleased).
+Status as of 2026-09-13: **implemented and integrated into `master`, not published as a release**. The stabilization/profile validation snapshot is `96065c6`. Package version remains `0.5.0`; this work adds no version bump, release tag or npm publication. Git pushes distribute this development source to other checkouts; they are not package releases. See [Unreleased changes](../CHANGELOG.md#unreleased).
 
 ## What changed
 
@@ -26,6 +26,12 @@ Astra is **`openai-codex/gpt-6-astra`**, not a GPT-5.6 alias. Profile changes se
 | `5.6-sol-quality` | Retained selective comparison profile, not the general default |
 
 These choices are not evidence of universal Astra superiority or a new cross-profile performance benchmark.
+
+## Sandbox runtime follow-up
+
+Separate from the validation snapshot below, the Project Pipeline Docker build now pins Pi to **0.85.1** and asserts the installed version instead of using floating `latest`. An existing Windows sandbox was reported to run Pi 0.80.3 with no available Astra match and two failed child-Pi runs. This pin addresses runtime drift; it does not prove that authentication/model availability or the original failure is resolved.
+
+Existing images and containers are not automatically upgraded. See [the explicit rebuild and data-preserving replacement procedure](project-pipeline.md#updating-the-sandbox-pi-runtime). This follow-up has model-free image/lifecycle regression coverage only, not a real Docker-build or Windows pipeline acceptance claim.
 
 ## Validation and qualification
 
