@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Astra profiles and workflow stabilization
+
+Implemented in development source and integrated into `master`; **not published as a new release**. Package version remains `0.5.0`; no release tag or npm publication is implied. Git pushes distribute development source, not a package release.
+
+- Added `astra-balanced` as the development default and `astra-quality` as manual opt-in, using `openai-codex/gpt-6-astra`. Retained all three GPT-5.6 presets for explicit selection/rollback; existing role efforts, timeouts and retry limits remain unchanged. Profiles do not change the main Pi session model.
+- Made active-profile reporting reflect the actual routing configuration rather than alphabetical order or stale selection metadata.
+- Added explicit working-baseline identities/acceptance/rollback, canonical review context and authenticated owner-loss recovery in the supported Linux host-direct Primary-Pi scope. Abort, uncertainty and scope drift remain holds.
+- Added bounded v3 closeout capture/replay with zero automatic retries, mandatory PI/downstream obligations and confirmed terminal acknowledgment; automatic rule learning is deferred in this opt-in path.
+- Aligned PI role/rule contracts for producer-bound routing, actual user decisions, targeted reads and artifact-only analysis. Removed implicit Runtime-State staging, cleanup and retry authority; refreshed bundled source digests without changing historical receipts or runtime adoption state.
+- Added shared decision-oriented Pi/CLI/dashboard status that distinguishes progress, holds and missing evidence.
+- Validated the code snapshot with 1,177 passing local tests/one platform-specific skip, plus ten profile tests. A real Astra-balanced Medium run completed full Retro/PI and terminal acknowledgment within its original budget, with one disclosed orchestrator clarification. Astra-quality and additional platform/mode acceptance are not inferred.
+
+See [Astra development status](readme/astra-development-status.md) for exact scope and qualifications. Historical release entries below are unchanged.
+
 ## 0.5.0 - 2026-09-06
 
 - Added one progressively disclosed `angular-application` skill backed by pinned Angular 22 guidance, conditional Material 3 and Nx profiles, and four benchmark-admitted rules for router leave authorization, async snapshot rebasing, template compiler/build contracts, and exact framework-migration toolchains.

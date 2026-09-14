@@ -1,6 +1,6 @@
 # Provider Limits and Profiles
 
-PIDEX tracks provider-native Codex quota windows and uses profiles to switch complete agent-routing configurations. The catalog contains two Astra presets and three retained GPT-5.6 presets. Astra balanced is the selected default; operational adoption requires its own bounded live validation. The earlier GPT-5.6 evidence remains profile-specific. Spark was evaluated across the role matrix but is not routed by the current catalog.
+PIDEX tracks provider-native Codex quota windows and uses profiles to switch complete agent-routing configurations. The catalog contains two Astra presets and three retained GPT-5.6 presets. Astra balanced is the selected **unreleased development default**, with bounded Linux host-direct live acceptance completed (including a disclosed orchestrator clarification). Local source integration is not a release or operational WorkingBaseline adoption. See [development status and validation limits](astra-development-status.md). The earlier GPT-5.6 evidence remains profile-specific. Spark was evaluated across the role matrix but is not routed by the current catalog.
 
 ## Tracked quota families
 
@@ -56,7 +56,7 @@ Profiles live under:
 
 The active routing config is controlled by PIDEX provider/profile logic and surfaced in the dashboard Usage and Settings sections.
 
-List or activate a profile from the canonical checkout:
+Activate a profile from the canonical checkout:
 
 ```bash
 cd ~/pidex
@@ -69,7 +69,7 @@ Activating a profile replaces `config/agents.json` with that complete preset. Co
 
 The local Pi catalog identifies Astra as `openai-codex/gpt-6-astra`. Profiles are named `astra-balanced` and `astra-quality` rather than implying a GPT-5.6 Astra model. Both use the Pi provider and preserve all existing role efforts, timeouts, principals, UI conditions, default Terra fallback and zero automatic retries. They do not switch the main Pi session model or enable secondary lanes.
 
-### `astra-balanced` — selected candidate default
+### `astra-balanced` — unreleased development default
 
 - **Astra high:** analyst, architect, planner, code reviewer, roadmap and security.
 - **Astra medium:** critic and PI.
@@ -84,7 +84,7 @@ Same as Astra balanced, with implementation and QA on **Astra high**, and retros
 
 ### Acceptance and rollback
 
-These are user-selected routing choices, not claims of benchmark-proven superiority. Astra balanced requires a bounded real pipeline acceptance before operational adoption; Astra quality has no independent live acceptance. The successful previous Medium run used Sol/Terra/Luna and cannot be relabelled as an Astra run. A profile change does not erase earlier lifecycle/budget evidence or authorize extra model starts.
+These are user-selected routing choices, not claims of benchmark-proven superiority. Astra balanced completed a real Linux/unsandboxed/host-direct/Primary-Pi Medium run through authenticated review recovery, full Retro/PI and confirmed terminal acknowledgment, with zero pending obligations. Its qualification is `PASS_WITH_ORCHESTRATOR_CLARIFICATION`: one explicit tool-call clarification was needed after the outer resume session merely echoed the request. Identity, original deadline and budget were preserved; this was not an unassisted run. Rule context was `non_attested`, not operational WorkingBaseline adoption. Astra quality has no independent live acceptance. See [the scoped evidence summary](astra-development-status.md#validation-and-qualification). The earlier Sol/Terra/Luna Medium result remains separate evidence, not an Astra result. A profile change does not erase earlier lifecycle/budget evidence or authorize extra model starts.
 
 Rollback explicitly with `use 5.6-hybrid-balanced` through the same capability shown above. The three original profile files remain unchanged. Do not switch profiles during an active review/closeout; finish or hold the current run under its original scope first.
 
@@ -115,9 +115,9 @@ Repeated H2 measurements retained the core outcome while materially reducing obs
 
 Routes every PIDEX role to `openai-codex/gpt-5.6-sol`. This preset is useful for controlled quality-focused comparisons and unusually difficult reasoning work. It is not the recommended broad default: follow-up evaluation passed UI and structural-refactor scenarios but failed the API-security scenario because the implementation used the wrong token environment variable.
 
-## Evaluation evidence
+## Retained GPT-5.6 evaluation evidence
 
-The routing decision used controlled test-server fixtures rather than model reputation alone:
+The earlier GPT-5.6 routing decision used controlled test-server fixtures rather than model reputation alone:
 
 - an initial five-fixture benchmark;
 - all-role C1 screening over 14 role-specific fixtures, 86 hidden truths, and 185 deterministic positive, negative, and anti-gaming evaluator cases;
@@ -145,13 +145,13 @@ The lesson is not that one model caused the incident. Strong models can all prod
 Controlled real `/pd` fixture runs produced these practical recommendations:
 
 - Retain `5.6-hybrid-balanced` as the evidence-backed previous default and explicit rollback.
-- `astra-balanced` is the newly selected candidate default; finish its separate bounded live check before operational adoption. `astra-quality` remains manual and independently unvalidated.
+- `astra-balanced` is the unreleased development default with the qualified Linux live result above; do not generalize it to other modes or all workloads. `astra-quality` remains manual and independently unvalidated.
 - Select `5.6-hybrid-lowcost` explicitly when token conservation is more important than maximum review/evidence depth.
 - Use `5.6-sol-quality` selectively rather than promoting it globally.
 - Keep retired GPT-5.4/GPT-5.5 routing as historical benchmark evidence rather than selectable production profiles.
 - Compare profiles per task category and repeat runs before treating small differences as conclusive.
 
-Detailed fixture outputs, holdout tables, and routing-decision records remain in the local PIDEX project wiki and are intentionally not included in the public npm package. The profile descriptions and recommendations above are the public release summary.
+Detailed fixture outputs, holdout tables, and routing-decision records remain in the local PIDEX project wiki and are intentionally not included in the public npm package. The profile descriptions and recommendations above document development source; the Astra changes remain unreleased.
 
 ## Estimate-only agent balances
 
