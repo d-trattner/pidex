@@ -8,7 +8,7 @@ const target = process.argv[1];
 const pi = '/usr/local/bin/pi';
 const root = '/opt/pidex-pi';
 const versionPattern = /^\d+\.\d+\.\d+$/;
-const env = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/tmp', LANG: 'C.UTF-8', NODE_ENV: 'production', NPM_CONFIG_USERCONFIG: '/dev/null', NPM_CONFIG_GLOBALCONFIG: '/dev/null' };
+const env = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: '/tmp', LANG: 'C.UTF-8', NODE_ENV: 'production' };
 const probe = (file) => {
   const p = spawnSync('/usr/local/bin/node', [file, '--version'], { cwd: '/', env, encoding: 'utf8', timeout: 10000, maxBuffer: 4096 });
   const value = String(p.stdout || '').trim();
@@ -37,6 +37,12 @@ try {
   if (!rs.isDirectory() || rs.isSymbolicLink() || rs.uid !== 0 || (rs.mode & 0o022)) throw new Error('unsupported-pi-layout');
   const stage = path.join(root, `${target}-${randomUUID()}`);
   fs.mkdirSync(stage, { mode: 0o755 });
+  // npm rejects loading the same path as both user and global config.
+  // Separate empty, exclusively created files keep both scopes isolated.
+  const userConfig = path.join(stage, 'user.npmrc');
+  const globalConfig = path.join(stage, 'global.npmrc');
+  for (const file of [userConfig, globalConfig]) fs.writeFileSync(file, '', { flag: 'wx', mode: 0o600 });
+  const installEnv = { ...env, NPM_CONFIG_USERCONFIG: userConfig, NPM_CONFIG_GLOBALCONFIG: globalConfig };
   // Isolated prefix: failure cannot overwrite the previous installation.
   // No workspace/npmrc, credential config, package lifecycle scripts or model calls.
   const install = spawnSync('/usr/local/bin/node', [
@@ -44,7 +50,7 @@ try {
     '--prefix', stage, '--cache', path.join(stage, 'cache'), '--registry', 'https://registry.npmjs.org',
     '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', '--engine-strict',
     `@earendil-works/pi-coding-agent@${target}`,
-  ], { cwd: stage, env, stdio: 'ignore', timeout: 180000, killSignal: 'SIGKILL' });
+  ], { cwd: stage, env: installEnv, stdio: 'ignore', timeout: 180000, killSignal: 'SIGKILL' });
   if (install.error || install.signal) { uncertain = true; throw new Error('install-unconfirmed'); }
   if (install.status !== 0) throw new Error('install-failed');
   const pkgRoot = path.join(stage, 'node_modules/@earendil-works/pi-coding-agent');
