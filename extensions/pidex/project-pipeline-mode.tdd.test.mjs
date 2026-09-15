@@ -105,6 +105,15 @@ for (const choice of ['Upgrade Pi', 'Cancel', 'headless']) test(`registered main
   }
 });
 
+test('upgrade identity summary reports bounded failed checks, not raw Docker metadata', () => {
+  const summary = mod.summarizeUpgradeIdentity({ ok: false, failed_checks: ['startup_command', 'SECRET-LIKE', 'project_label', 'startup_command'], startup_kind: '/SECRET-LIKE/private' });
+  assert.match(summary, /project_label,startup_command/);
+  assert.match(summary, /expected match\/true, observed mismatch\/false/);
+  assert.match(summary, /startup=unknown/);
+  assert.doesNotMatch(summary, /SECRET-LIKE/);
+  assert.equal(summary.match(/startup_command/g).length, 1);
+});
+
 test('pidex_agent public schema exposes review identity atomically', () => {
   const schema = mod.PidexAgentParams;
   const properties = schema.properties;

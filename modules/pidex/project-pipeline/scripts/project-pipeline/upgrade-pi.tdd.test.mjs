@@ -9,6 +9,7 @@ import { upgradeProjectPi, parseUpgradeArgs, targetPiVersion } from './upgrade-p
 import { maintenanceSummary, maintenancePaths, withProjectPiLease, readMaintenanceReceipt, writeMaintenanceReceipt } from './pi-maintenance.mjs';
 import { runProjectPipelineAgent } from './run-agent.mjs';
 import { runProjectPipelineOrchestration } from './orchestrator.mjs';
+import { projectPipelineStatus } from './status.mjs';
 
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), 'pidex-pi-upgrade-'));
@@ -44,6 +45,42 @@ test('exact confirmation and immutable build pin, strict CLI parsing', () => {
   assert.equal(upgradeProjectPi({ projectId: 'pp-demo', confirm: 'other' }).error, 'confirmation-required');
   assert.throws(() => parseUpgradeArgs(['--pidex-root', '/tmp', '--project-id', 'pp-demo', '--confirm', 'pp-demo', '--version', 'latest']));
   assert.throws(() => parseUpgradeArgs(['--pidex-root', '/tmp', '--project-id', 'pp-demo', '--confirm', 'pp-demo', '--confirm', 'pp-demo']));
+});
+
+test('stock Node entrypoint wrapping sleep infinity is accepted', t => {
+  const f = fixture(t);
+  f.inspect.Path = 'docker-entrypoint.sh';
+  f.inspect.Args = ['sleep', 'infinity'];
+  assert.equal(upgradeProjectPi(f.options).ok, true);
+  assert.equal(installs(f).length, 1);
+});
+
+test('read-only status reuses inspect metadata to expose safe upgrade predicates', t => {
+  const f = fixture(t);
+  f.inspect.Path = 'docker-entrypoint.sh'; f.inspect.Args = ['sleep', 'infinity'];
+  const result = projectPipelineStatus({ pidexRoot: f.root, projectId: 'pp-demo', runner(args) {
+    assert.ok(['inspect', 'volume'].includes(args[0]));
+    return args[0] === 'volume' ? { status: 0, stdout: '[]' } : f.options.runner(args);
+  } });
+  const assessment = result.projects[0].docker_health.upgrade_identity;
+  assert.equal(assessment.ok, true);
+  assert.equal(assessment.startup_kind, 'node-entrypoint-sleep-infinity');
+  assert.deepEqual(assessment.failed_checks, []);
+  assert.equal(installs(f).length, 0);
+});
+
+test('identity denial identifies failed predicates without leaking raw inspect data', t => {
+  const f = fixture(t);
+  f.inspect.Path = '/SECRET-LIKE/custom';
+  f.inspect.Args = ['private-token'];
+  f.inspect.Config.Labels['pidex.project_id'] = 'SECRET-LIKE-wrong-owner';
+  const result = upgradeProjectPi(f.options);
+  assert.equal(result.ok, false);
+  assert.ok(result.failed_checks.includes('project_label'));
+  assert.ok(result.failed_checks.includes('startup_command'));
+  assert.equal(result.startup_kind, 'other');
+  assert.doesNotMatch(JSON.stringify(result), /SECRET-LIKE|private-token/);
+  assert.equal(installs(f).length, 0);
 });
 
 test('verified in-place upgrade preserves registry/run bytes; repeat is a no-op', t => {

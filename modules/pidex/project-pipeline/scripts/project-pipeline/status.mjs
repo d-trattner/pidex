@@ -6,6 +6,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, registryRoot, safeProjectId } from './registry.mjs';
 import { maintenanceSummary } from './pi-maintenance.mjs';
+import { upgradeContainerAssessment } from './upgrade-pi.mjs';
 
 export function parseArgs(argv) {
   const out = { json: false };
@@ -57,6 +58,7 @@ export function inspectDockerResources(record, runner = docker) {
     },
     volumes,
     warnings,
+    upgrade_identity: container ? upgradeContainerAssessment(record, container) : { ok: false, failed_checks: ['inspection_unavailable'], startup_kind: 'unknown' },
   };
 }
 

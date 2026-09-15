@@ -1184,6 +1184,15 @@ function archiveExistsForProject(project: any): boolean {
 	try { return fs.existsSync(archive) && fs.lstatSync(archive).isDirectory(); } catch { return false; }
 }
 
+export function summarizeUpgradeIdentity(assessment: any): string {
+	const allowed = ["id_format", "registered_name", "project_label", "kind_label", "sandbox_label", "container_marker", "running", "unpaused", "loader_environment", "startup_command", "mount_workspace", "mount_pidex_secrets", "mount_cache", "runtime_overlays"];
+	if (!assessment) return "upgrade_identity: not checked";
+	const failed = Array.isArray(assessment.failed_checks) ? [...allowed, "inspection_unavailable"].filter(key => assessment.failed_checks.includes(key)) : [];
+	const startup = ["direct-sleep-infinity", "node-entrypoint-sleep-infinity", "other"].includes(assessment.startup_kind) ? assessment.startup_kind : "unknown";
+	const passed = assessment.ok === true && failed.length === 0 && startup !== "other" && startup !== "unknown" && allowed.every(key => assessment.checks?.[key] === true);
+	return `upgrade_identity: ${passed ? "pass" : failed.length ? "blocked" : "unknown"}; ${failed.length ? `failed_checks=${failed.join(",")} (expected match/true, observed mismatch/false)` : "no failed predicates reported"}; startup=${startup}; expected startup=direct-sleep-infinity or node-entrypoint-sleep-infinity`;
+}
+
 function summarizeProjectDiagnose(project: any): string {
 	const projectId = project?.project_id || "unknown-project";
 	const runs = Array.isArray(project?.runs) ? project.runs : [];
@@ -1205,6 +1214,7 @@ function summarizeProjectDiagnose(project: any): string {
 		`credentials: pi=${project?.credentials?.pi || "unknown"} git=${project?.credentials?.git || "unknown"}`,
 		`runs: ${runs.length}`,
 		`pi_maintenance: ${maintenanceStatus}; execution_lock=${executionLock}; last_observed_version=${observedPi} (recorded, not a live probe)`,
+		summarizeUpgradeIdentity(project?.docker_health?.upgrade_identity),
 		`archive: ${archiveOk ? "present" : "missing"}${project?.archive?.path ? ` path=${project.archive.path}` : ""}`,
 		`project_mirror: ${project?.project_mirror?.status || "unknown"}${project?.project_mirror?.degraded ? " degraded" : ""}`,
 		`dashboard_db: ${dashboardVisible === undefined ? "missing/not-readable" : dashboardVisible ? "project string present" : "project string not found"}`,
@@ -1341,7 +1351,7 @@ export function runPdProjectCommand(parsed: PdProjectCommand, options: { project
 			const ok = proc.status === 0 && json.ok === true && json.status === "verified" && /^\d+\.\d+\.\d+$/.test(json.after ?? "") && json.after === json.target;
 			const status = ["verified", "blocked", "held", "failed_unchanged", "rolled_back"].includes(json.status) ? json.status : "unconfirmed";
 			const reason = ["confirmation-required", "project-execution-busy", "pi-maintenance-held", "project-not-idle", "container-not-idle", "container-identity-mismatch", "container-mount-mismatch", "docker-unavailable", "version-probe-failed", "invalid-version-pin", "upgrade-unconfirmed", "unsupported-pi-layout", "downgrade-denied", "install-unconfirmed", "install-failed", "version-mismatch", "container-update-failed"].includes(json.error) ? json.error : "details-omitted";
-			return { ok, no_fallback: true, summary: ok ? `Project Pipeline Pi verified: ${json.after}. Container/image not replaced; pipeline not resumed.` : `Project Pipeline upgrade-pi ${status}: ${reason}; no pipeline continuation. Inspect maintenance receipts locally; helper output omitted.` };
+			return { ok, no_fallback: true, summary: ok ? `Project Pipeline Pi verified: ${json.after}. Container/image not replaced; pipeline not resumed.` : `Project Pipeline upgrade-pi ${status}: ${reason}; no pipeline continuation. ${Array.isArray(json.failed_checks) ? summarizeUpgradeIdentity(json) + ". " : ""}Inspect maintenance receipts locally; helper output omitted.` };
 		} catch { return { ok: false, no_fallback: true, summary: "Project Pipeline upgrade-pi unconfirmed; keep HOLD. Helper output omitted." }; }
 	}
 	if (!fs.existsSync(PROJECT_PIPELINE_LIFECYCLE_SCRIPT)) return { ok: false, summary: "project-pipeline lifecycle helper missing; run /pidex-init-home or update the canonical PIDEX runtime" };

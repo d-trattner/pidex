@@ -18,20 +18,42 @@ export function targetPiVersion() {
   return matches[0][1];
 }
 
-export function inspectUpgradeContainer(record, inspect) {
+export function upgradeContainerAssessment(record, inspect) {
   const labels = inspect?.Config?.Labels || {};
-  if ((inspect?.Config?.Env || []).some(v => /^(NODE_OPTIONS|NODE_PATH|LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT)=.+/.test(v))) throw new Error('container-identity-mismatch');
-  if (!/^[a-f0-9]{64}$/.test(inspect?.Id || '') || inspect.Name !== `/${record.docker.container_name}` ||
-      labels['pidex.project_id'] !== record.project_id || labels['pidex.kind'] !== 'project-container' ||
-      labels['pidex.project_sandbox'] !== 'true' || !(inspect.Config?.Env || []).includes('PIDEX_PROJECT_PIPELINE_CONTAINER=1') || !inspect.State?.Running || inspect.State.Paused ||
-      inspect.Path !== 'sleep' || JSON.stringify(inspect.Args) !== '["infinity"]') throw new Error('container-identity-mismatch');
+  const env = Array.isArray(inspect?.Config?.Env) ? inspect.Config.Env : [];
+  const mounts = Array.isArray(inspect?.Mounts) ? inspect.Mounts : [];
+  const direct = inspect?.Path === 'sleep' && JSON.stringify(inspect.Args) === '["infinity"]';
+  const wrapped = ['docker-entrypoint.sh', '/usr/local/bin/docker-entrypoint.sh'].includes(inspect?.Path) && JSON.stringify(inspect.Args) === '["sleep","infinity"]';
+  const checks = {
+    id_format: /^[a-f0-9]{64}$/.test(inspect?.Id || ''),
+    registered_name: inspect?.Name === `/${record.docker.container_name}`,
+    project_label: labels['pidex.project_id'] === record.project_id,
+    kind_label: labels['pidex.kind'] === 'project-container',
+    sandbox_label: labels['pidex.project_sandbox'] === 'true',
+    container_marker: env.includes('PIDEX_PROJECT_PIPELINE_CONTAINER=1'),
+    running: inspect?.State?.Running === true,
+    unpaused: inspect?.State?.Paused === false,
+    loader_environment: !env.some(v => /^(NODE_OPTIONS|NODE_PATH|LD_PRELOAD|LD_LIBRARY_PATH|LD_AUDIT)=.+/.test(v)),
+    startup_command: direct || wrapped,
+  };
   const expected = { '/workspace': record.docker.workspace_volume, '/pidex-secrets': record.docker.secrets_volume, '/cache': record.docker.cache_volume };
   for (const [destination, name] of Object.entries(expected)) {
-    const mounts = (inspect.Mounts || []).filter(m => m.Destination === destination);
-    if (mounts.length !== 1 || mounts[0].Type !== 'volume' || mounts[0].Name !== name || mounts[0].RW !== true) throw new Error('container-mount-mismatch');
+    const found = mounts.filter(m => m.Destination === destination);
+    checks[`mount_${destination.slice(1).replace('-', '_')}`] = found.length === 1 && found[0].Type === 'volume' && found[0].Name === name && found[0].RW === true;
   }
-  // No bind/volume overlays on the runtime being maintained.
-  if ((inspect.Mounts || []).some(m => !Object.hasOwn(expected, m.Destination) && !(m.Type === 'tmpfs' && m.Destination === '/tmp'))) throw new Error('container-mount-mismatch');
+  checks.runtime_overlays = mounts.every(m => Object.hasOwn(expected, m.Destination) || (m.Type === 'tmpfs' && m.Destination === '/tmp'));
+  const failed_checks = Object.keys(checks).filter(key => !checks[key]);
+  return { ok: failed_checks.length === 0, checks, failed_checks, startup_kind: direct ? 'direct-sleep-infinity' : wrapped ? 'node-entrypoint-sleep-infinity' : 'other' };
+}
+
+export function inspectUpgradeContainer(record, inspect) {
+  const assessment = upgradeContainerAssessment(record, inspect);
+  if (!assessment.ok) {
+    const mountsOnly = assessment.failed_checks.every(key => key.startsWith('mount_') || key === 'runtime_overlays');
+    const error = new Error(mountsOnly ? 'container-mount-mismatch' : 'container-identity-mismatch');
+    error.assessment = assessment;
+    throw error;
+  }
   return inspect.Id;
 }
 
@@ -89,7 +111,7 @@ export function upgradeProjectPi(options = {}) {
       }
     }, true);
   } catch (error) {
-    return { ok: false, status: receipt ? 'held' : 'blocked', error: safeErrors.has(error.message) ? error.message : receipt ? 'upgrade-unconfirmed' : 'upgrade-preflight-failed' };
+    return { ok: false, status: receipt ? 'held' : 'blocked', error: safeErrors.has(error.message) ? error.message : receipt ? 'upgrade-unconfirmed' : 'upgrade-preflight-failed', ...(error.assessment ? { failed_checks: error.assessment.failed_checks, startup_kind: error.assessment.startup_kind } : {}) };
   }
 }
 
