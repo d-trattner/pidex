@@ -5,6 +5,7 @@ import process from 'node:process';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { safeProjectId } from './registry.mjs';
+import { importProblemReports, recordHostProblem } from './problem-journal.mjs';
 import { readTbrTreeItems, renderIndex, renderTbrItem, validateTbrTree } from '../../../../../scripts/quality/tbr.mjs';
 import { acquireProjectTbrLock, releaseProjectTbrLock } from '../../../analysis-metrics-history/lib/tbr-lock.mjs';
 import { resolveStateRoot } from '../../../analysis-metrics-history/lib/state-root.mjs';
@@ -38,6 +39,7 @@ export function pathWithin(root, target) {
 export function classifyArchivePath(rel) {
   const normalized = normalizeRel(rel);
   if (!normalized || normalized === '.') return { ok: true };
+  if (normalized === 'agents.output/pipeline-problems' || normalized.startsWith('agents.output/pipeline-problems/')) return { ok: false, reason: 'problem-report-journal-only' };
   if (normalized.split('/').some((part) => part === '..' || part === '')) return { ok: false, reason: 'path-traversal' };
   const parts = normalized.split('/');
   for (const part of parts) {
@@ -268,11 +270,27 @@ function reconcileTbrArchive({ archiveRoot, nextRoot, workspace, report, state }
 }
 
 export function syncProjectArchive(options = {}) {
+  const journalFailure = () => recordHostProblem(options, { error: 'archive-sync-failed' }, 'transfer');
+  try {
+    const result = syncProjectArchiveOwned(options);
+    if (!result.ok && options.pidexRoot && options.projectId && !options.unsafeAllowCustomArchiveRoot) result.problem_journal = { ...(result.problem_journal || {}), failure: journalFailure() };
+    return result;
+  } catch (error) {
+    if (options.pidexRoot && options.projectId && !options.unsafeAllowCustomArchiveRoot && error && typeof error === 'object') error.problem_journal = { failure: journalFailure() };
+    throw error;
+  }
+}
+
+function syncProjectArchiveOwned(options = {}) {
   const workspace = path.resolve(options.workspace || '.');
   const archiveRoot = resolveArchiveRoot(options);
   const limits = { ...DEFAULT_LIMITS, ...(options.limits || {}) };
   const sources = ['agents.output', 'wiki'];
   const report = { ok: true, copied: [], skipped: [], warnings: [], limits, archive_root: archiveRoot };
+  if (options.pidexRoot && options.projectId && !options.unsafeAllowCustomArchiveRoot) {
+    report.problem_journal = importProblemReports({ pidexRoot: options.pidexRoot, projectId: options.projectId, workspace });
+    if (report.problem_journal.status !== 'complete') report.warnings.push({ source: 'problem-journal', reason: report.problem_journal.status });
+  }
   let stageIdentity;
   let nextRoot;
   let lock;

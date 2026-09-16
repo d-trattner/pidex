@@ -7,6 +7,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { createProjectSandbox, openProjectSandbox } from './lifecycle.mjs';
 import { withProjectPiLease } from './pi-maintenance.mjs';
+import { recordHostProblem } from './problem-journal.mjs';
 import { buildImage, DEFAULT_TAG, imageStatus } from './image.mjs';
 import { importLocalProject } from './import-local.mjs';
 import { cloneProject } from './clone.mjs';
@@ -609,7 +610,20 @@ function resolveProjectPipelineRuntimeContext({ pidexRoot, projectId, pipelineId
 }
 
 export async function runProjectPipelineOrchestration(options = {}) {
-  return withProjectPiLease(options, () => runProjectPipelineOrchestrationOwned(options));
+  const problemContext = { phase: 'start' };
+  try {
+    return await withProjectPiLease(options, async () => {
+      const result = await runProjectPipelineOrchestrationOwned({ ...options, problemContext });
+      // Agent failures already have run-bound entries. Setup failures have a
+      // host attempt identity and must not pretend a child run was started.
+      if (!result.ok && !result.runs?.length) result.problem_journal = recordHostProblem(options, result, problemContext.phase);
+      return result;
+    });
+  } catch (error) {
+    const failure = recordHostProblem(options, { error: error?.message }, problemContext.phase);
+    if (error && typeof error === 'object') error.problem_journal = failure;
+    throw error;
+  }
 }
 
 async function runProjectPipelineOrchestrationOwned(options = {}) {
@@ -638,6 +652,7 @@ async function runProjectPipelineOrchestrationOwned(options = {}) {
     return { ok: false, error: 'credential-bootstrap-failed', reason: error.message || String(error), lifecycle: setup.lifecycle, source: setup.source, no_fallback: true };
   }
 
+  options.problemContext.phase = 'run';
   const telemetryRecord = loadProjectRecord(pidexRoot, projectId);
   const telemetryPipelineId = `project-pipeline-${projectId}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
   const telemetryPlan = telemetryPlanKey(options.task);

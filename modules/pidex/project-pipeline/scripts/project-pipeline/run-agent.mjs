@@ -9,6 +9,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadProjectRecord, saveProjectRecord } from './registry.mjs';
 import { resolveArchiveRoot, syncProjectArchive } from './archive-sync.mjs';
+import { classifyProblemCause, importProblemReports, recordHostProblem } from './problem-journal.mjs';
 import { syncProjectMirror } from './project-mirror.mjs';
 import { loadModuleSystem, matchedAgentRules, renderMatchedAgentRules, validateSystem } from '../../../../../scripts/modules/lib.mjs';
 import { renderVerifiedRuntimeRules, validateRequiredReviewerProducer } from '../../../../../scripts/quality/rule-mirror-sync.mjs';
@@ -87,16 +88,23 @@ function docker(args, opts = {}) {
 // non-retryable class. Only genuine transient child failures keep `child-pi-failed`.
 const DOCKER_INFRA_DENIAL_PATTERN = /Cannot connect to the Docker daemon|Error response from daemon|is not running|No such container|No such image|docker: command not found|connection refused|permission denied while trying to connect to the Docker daemon socket|failed to create shim|oci runtime/i;
 
-export function copyArchiveWorkspaceFromContainer(record, runner = docker) {
+export function copyArchiveWorkspaceFromContainer(record, runner = docker, problemsOnly = false) {
   const temp = mkdtempSync(path.join(tmpdir(), 'pidex-project-archive-'));
   const workspace = path.join(temp, 'workspace');
   mkdirSync(workspace, { recursive: true });
   const warnings = [];
-  for (const source of ['agents.output', 'wiki']) {
-    const proc = runner(['cp', `${record.docker.container_name}:/workspace/${source}`, path.join(workspace, source)]);
-    if (proc.status !== 0) warnings.push({ source, reason: 'container-source-missing-or-copy-failed', stderr: proc.stderr || proc.stdout || '' });
+  try {
+    for (const source of problemsOnly ? ['agents.output/pipeline-problems'] : ['agents.output', 'wiki']) {
+      const destination = path.join(workspace, source);
+      mkdirSync(path.dirname(destination), { recursive: true });
+      const proc = runner(['cp', `${record.docker.container_name}:/workspace/${source}`, destination]);
+      if (proc.status !== 0) warnings.push({ source, reason: 'container-source-missing-or-copy-failed', stderr: proc.stderr || proc.stdout || '' });
+    }
+    return { temp, workspace, warnings };
+  } catch (error) {
+    rmSync(temp, { recursive: true, force: true });
+    throw error;
   }
-  return { temp, workspace, warnings };
 }
 
 export function extractRouting(finalText) {
@@ -304,7 +312,19 @@ export function buildDockerExecArgs(record, params = {}) {
 }
 
 export function runProjectPipelineAgent(options = {}) {
-  return withProjectPiLease(options, () => runProjectPipelineAgentOwned(options));
+  const context = { phase: 'start' };
+  const scoped = { ...options, project_run_id: options.project_run_id || projectRunId(), problemContext: context };
+  try {
+    return withProjectPiLease(scoped, () => {
+      const result = runProjectPipelineAgentOwned(scoped);
+      if (!result.ok || result.sync_degraded) result.problem_journal = { ...(result.problem_journal || {}), failure: recordHostProblem(scoped, result.sync_degraded ? { ...result, error: 'project-mirror-degraded' } : result, result.sync_degraded ? 'transfer' : context.phase) };
+      return result;
+    });
+  } catch (error) {
+    const failure = recordHostProblem(scoped, { error: error?.message }, context.phase);
+    if (error && typeof error === 'object') error.problem_journal = { failure };
+    throw error;
+  }
 }
 
 function runProjectPipelineAgentOwned(options = {}) {
@@ -353,6 +373,7 @@ function runProjectPipelineAgentOwned(options = {}) {
   record.status = 'running';
   record.runs = [...(record.runs || []), { project_run_id, retry_of_project_run_id: options.retryOfProjectRunId || '', expected_output_path: expectedOutputPath || '', agent: options.agent || '', container_exec_id: '', started_at: started, archive_sync_status: 'pending', image_digest: record.docker.image || '', config_bundle_hash: options.configBundleHash || '', credential_inventory_hash: options.credentialInventoryHash || '' }];
   saveProjectRecord(pidexRoot, record);
+  options.problemContext.phase = 'run';
   const proc = runner(built.args);
   const dockerInfraDenied = Boolean(proc?.spawnError) || DOCKER_INFRA_DENIAL_PATTERN.test(proc?.stderr || '');
   const finalText = `${proc.stdout || ''}${proc.stderr ? `\nSTDERR:\n${proc.stderr}` : ''}`;
@@ -412,7 +433,19 @@ function runProjectPipelineAgentOwned(options = {}) {
     }
     loaded.status = 'ready';
     saveProjectRecord(pidexRoot, loaded);
-    return { ok: false, ...failure, finalText, routing, write_fence, project_run_id };
+    // Failure artifacts use the same bounded Docker-copy transport, but never
+    // publish failed output as an authoritative archive/context or run a model.
+    let problem_journal = { status: 'not-transferred' };
+    let copied;
+    try {
+      if (options.archiveWorkspace || (options.archiveFromContainer !== false && (record.control_project_path || record.source?.kind === 'host-path'))) {
+        copied = options.archiveWorkspace ? null : copyArchiveWorkspaceFromContainer(record, options.archiveCopyRunner || runner, true);
+        problem_journal = importProblemReports({ pidexRoot, projectId: record.project_id, workspace: options.archiveWorkspace || copied.workspace });
+        if (copied?.warnings?.length) problem_journal.transfer_failure = recordHostProblem(options, { project_run_id, error: 'artifact-transfer-unavailable' }, 'transfer');
+      }
+    } catch { problem_journal = { status: 'unavailable', transfer_failure: recordHostProblem(options, { project_run_id, error: 'artifact-transfer-unavailable' }, 'transfer') }; }
+    finally { if (copied) rmSync(copied.temp, { recursive: true, force: true }); }
+    return { ok: false, ...failure, finalText, routing, write_fence, project_run_id, problem_journal, problem_cause: failure.error === 'child-pi-failed' ? classifyProblemCause(proc.stderr) : null };
   }
   loaded.status = 'sync-pending';
   saveProjectRecord(pidexRoot, loaded);
@@ -421,9 +454,11 @@ function runProjectPipelineAgentOwned(options = {}) {
   let project_mirror;
   let copiedArchiveWorkspace;
   if (options.archiveWorkspace || options.archiveFromContainer !== false) {
+    options.problemContext.phase = 'transfer';
+    try {
     copiedArchiveWorkspace = options.archiveWorkspace ? undefined : copyArchiveWorkspaceFromContainer(record, options.archiveCopyRunner || runner);
     const archiveWorkspace = options.archiveWorkspace || copiedArchiveWorkspace.workspace;
-    archiveSyncReport = syncProjectArchive({ workspace: archiveWorkspace, pidexRoot, projectId: record.project_id });
+    archiveSyncReport = syncProjectArchive({ workspace: archiveWorkspace, pidexRoot, projectId: record.project_id, project_run_id });
     if (copiedArchiveWorkspace?.warnings?.length) archiveSyncReport.warnings.push(...copiedArchiveWorkspace.warnings);
     const afterSync = loadProjectRecord(pidexRoot, record.project_id);
     const afterRun = afterSync.runs.find((run) => run.project_run_id === project_run_id) || afterSync.runs.at(-1);
@@ -435,7 +470,6 @@ function runProjectPipelineAgentOwned(options = {}) {
     afterSync.status = archiveSyncReport.ok ? 'ready' : 'sync-failed';
     saveProjectRecord(pidexRoot, afterSync);
     if (!archiveSyncReport.ok) {
-      if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
       return { ok: false, exitCode: 1, error: 'archive-sync-failed', finalText, routing, archiveSyncReport };
     }
     if (!existsSync(archiveContextFile)) {
@@ -444,7 +478,6 @@ function runProjectPipelineAgentOwned(options = {}) {
       if (missingRun) missingRun.archive_sync_status = 'failed';
       missingRecord.status = 'sync-failed';
       saveProjectRecord(pidexRoot, missingRecord);
-      if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
       return { ok: false, exitCode: 1, error: 'archive-context-missing', reason: sanitizeReason(`routed context file not found in archive: ${routingCheck.context_file}`), finalText, routing, archiveSyncReport };
     }
     project_mirror = syncProjectMirror({ pidexRoot, projectId: record.project_id, internalDisposable: options.internalDisposable === true });
@@ -458,9 +491,11 @@ function runProjectPipelineAgentOwned(options = {}) {
     }
     mirrorRecord.project_mirror = { status: project_mirror.status, degraded: project_mirror.degraded === true, counts: mirrorCounts, updated_at: new Date().toISOString() };
     saveProjectRecord(pidexRoot, mirrorRecord);
-    if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
+    } finally {
+      if (copiedArchiveWorkspace) rmSync(copiedArchiveWorkspace.temp, { recursive: true, force: true });
+    }
   }
-  return { ok: true, exitCode: 0, finalText, routing, routing_recovered, context_file: routingCheck.context_file, expected_context_file: expectedOutputPath, write_fence, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, project_mirror, sync_degraded: project_mirror?.degraded === true, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
+  return { ok: true, exitCode: 0, finalText, routing, routing_recovered, context_file: routingCheck.context_file, expected_context_file: expectedOutputPath, write_fence, archive_context_file: archiveContextFile, archive_sync_status: archiveSyncReport ? 'complete' : 'pending', archiveSyncReport, problem_journal: archiveSyncReport?.problem_journal, project_mirror, sync_degraded: project_mirror?.degraded === true, containerExecId: project_run_id, project_run_id, warnings: archiveSyncReport ? [] : ['archive sync pending; archive_context_file not available until sync completes'] };
 }
 
 function takeArg(argv, index, flag) {

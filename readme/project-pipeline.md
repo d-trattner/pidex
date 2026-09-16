@@ -156,6 +156,16 @@ The bridge asks Windows Git/GCM for the existing HTTPS credential, writes a temp
 
 If GCM is not already signed in for the remote, `git credential fill` may prompt or trigger browser sign-in. SSH remotes are not handled by this bridge; use the existing explicit SSH key credential flow instead.
 
+## Structured problem reports
+
+Versioned diagnostic events from `agents.output/pipeline-problems/<event_id>.json`
+use the existing artifact transfer and are appended, deduplicated and sanitized,
+to `<registered host project>/pidex/state/pipeline-projects/journal.jsonl`.
+Start/run/transfer failures can write host events without an artifact. The reserved
+report subtree is journal-only, not a raw archive/mirror copy. Reports never grant
+retries, change review verdicts, clear holds or resume a pipeline. See the
+[schema, example, privacy rules and limits](pipeline-problem-reports.md).
+
 ## Artifacts and archive
 
 After a Project Pipeline run, authoritative host-visible evidence is under:
