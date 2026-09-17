@@ -3,3 +3,12 @@ dashboard/app/routeTree.gen.ts text eol=lf
 
 # Bash scripts must stay LF-only so Git Bash/MSYS can execute them on Windows.
 *.sh text eol=lf
+
+# Digest-locked upstream corpus: preserve Git blob bytes exactly on every OS.
+# -text disables checkout/add EOL conversion, including core.autocrlf=true.
+# Do not normalize these files or regenerate their hashes to mask checkout drift.
+/skills/angular-application/references/official-angular/** -text
+/skills/angular-application/references/official-material/** -text
+/skills/angular-application/references/official-nx/** -text
+/skills/angular-application/references/upstream/** -text
+/modules/pidex/angular/config/source-lock.json -text

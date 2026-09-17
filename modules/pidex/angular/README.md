@@ -7,6 +7,10 @@ Capabilities:
 - `angular.source-check` — verifies pinned Angular, Material and Nx references and attribution.
 - `angular.inspect` — reads bounded workspace metadata to detect Angular, Material and Nx versions/profiles.
 
+For CRLF-related digest failures in a Windows source checkout, see the
+[byte-preserving checkout policy and guarded repair procedure](../../../readme/angular-source-checkout.md).
+The integrity gate is not relaxed and the lock must not be regenerated to accept checkout drift.
+
 Both capabilities are read-only. This module does not provide an Angular build, test, lint, affected, generator, package-manager, Git, network, or benchmark runner. Application work uses the project's existing tools through normal coding-agent facilities and explicit user authority.
 
 Use capabilities through `scripts/modules/run-check.mjs`. Do not call module scripts directly from agents, rules, skills, or public documentation.
