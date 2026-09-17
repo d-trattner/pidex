@@ -20,32 +20,38 @@ rewrite already present, unchanged files. If the gate still reports a digest
 failure, use the following **in the native Windows PIDEX checkout**, with no
 concurrent editor/Git operation. Review the paths before running it.
 
-The checks stop on staged changes or content changes other than CR-at-EOL. They
-must not be removed. Back up and inspect real edits separately; do not overwrite
-them to make the gate pass.
+`text: unset`, a clean Git diff, or a completed `git restore` is not proof of the
+actual disk bytes. The reported case has 10,760 bytes/143 CRLF pairs instead of the
+pinned 10,617 bytes. Use the binary maintenance helper rather than repeating Git
+restore or redirecting `git show` through PowerShell text output:
 
 ```powershell
-$locked = @(
-  "skills/angular-application/references/official-angular",
-  "skills/angular-application/references/official-material",
-  "skills/angular-application/references/official-nx",
-  "skills/angular-application/references/upstream",
-  "modules/pidex/angular/config/source-lock.json"
-)
-
-git diff --cached --quiet -- $locked
-if ($LASTEXITCODE -ne 0) { throw "Stop: staged changes or Git error" }
-
-git diff --ignore-cr-at-eol --quiet -- $locked
-if ($LASTEXITCODE -ne 0) { throw "Stop: real local edits or Git error; preserve them" }
-
-git restore --source=HEAD --worktree -- $locked
-if ($LASTEXITCODE -ne 0) { throw "Stop: source restore failed" }
+node scripts/maintenance/restore-angular-source-bytes.mjs --check
+node scripts/maintenance/restore-angular-source-bytes.mjs --apply
 ```
 
-Only the listed tracked source paths are restored from the current commit. The
-index, other project files and global Git settings are untouched. This does not
-remove untracked/extra files or grant an exception for them. Verify again through
+Default/`--check` only plans and reports byte counts. `--apply` repeats all checks
+before writing. It pins HEAD, reads raw blobs using binary `git cat-file` output,
+and proves the complete candidate with the **unchanged** source-lock verifier.
+The selected index entries must exactly match HEAD (including modes), regardless
+of assume-unchanged/stat-cache state. Every existing file is read directly; only
+exact bytes or CRLF-to-LF-only drift relative to that proven blob are accepted.
+Replacement bytes come from the Git blob, never from text decoding/normalization.
+
+All locked members and both lock copies are preflighted before the first write.
+Real/staged edits, missing/extra members, unsafe links, a corrupt HEAD corpus,
+active index/repair locks and partial clones are refused. No fetch or global Git
+configuration change is performed. An owned lock lives at the checkout's Git-dir
+`pidex-angular-source-restore.lock`; unknown owners are not removed automatically.
+HEAD/index, directory identity and file bytes are rechecked before each atomic
+replacement, and the original verifier runs again afterwards. Only existing,
+validated source paths are replaced; the index and unrelated files are untouched.
+
+Stop on `blocked`, `held-partial` or `held-cleanup`. A late edit/I/O failure can
+leave some files already repaired; the result lists them. No automatic rollback
+may overwrite concurrent edits, and no pipeline is resumed. The pipeline must
+remain HOLD even when byte repair succeeds. Back up and inspect real changes
+separately; never discard them to make the gate pass. Verify again through
 the normal module gate (replace the project placeholder with the original
 application project, so its module configuration remains authoritative):
 
@@ -65,8 +71,13 @@ The source-lock tests create an isolated local Git repository and exercise real
 checkout/index operations with `core.autocrlf=true`, `input` and `false`, including
 `core.eol=crlf`. An unprotected text-file control really becomes CRLF, while every
 locked member and both lock copies remain byte-identical and pass the gate.
-Forced CRLF edits still fail the digest check. Targeted restore is tested against
-an immutable tree; staged and unstaged content edits are detected rather than
-silently discarded. No network, model calls, product commits or global Git
-configuration changes are needed. This is checkout-conversion regression evidence,
+Forced CRLF edits still fail the digest check. The binary-helper regression
+reproduces the exact 10,760/10,617-byte case: a fixture skip-worktree flag makes
+Git restore succeed without repairing the bytes, while the binary helper restores
+them exactly and leaves the index unchanged. This demonstrates the failure mode;
+it does not establish which Git flags caused the user's reported failure. It also covers every
+locked member and both lock copies, corrupt HEAD blobs, real/staged edits, links,
+extra files, active locks, concurrent edits, partial completion and changed lock
+ownership. Test-only repositories are local fixtures. No network, model calls,
+product commits or global Git configuration changes are needed. This is checkout-conversion regression evidence,
 not a claim that the user's Windows machine was repaired or live-tested.
