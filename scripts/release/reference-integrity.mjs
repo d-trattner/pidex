@@ -79,6 +79,8 @@ function isConcrete(ref) {
   if (ref.includes('*') || ref.includes('{') || ref.includes('[')) return false;
   if (generatedOrRuntimePrefixes.some((p) => ref.startsWith(p))) return false;
   if (!hasKnownPrefix(ref)) return false;
+  // Docker image coordinates can legitimately use the public pidex/* namespace.
+  if (/^pidex\/[^/\s:]+:[^/\s]+$/.test(ref)) return false;
   // Project-local optional/generated surfaces are examples/contracts, not PIDEX package files.
   if (/^pidex\/rules\/[^/]+\.md$/.test(ref)) return false;
   if (ref === 'pidex/context/CONTEXT-MAP.md' || ref.startsWith('pidex/context/contexts/') || ref.startsWith('pidex/context/adr/')) return false;

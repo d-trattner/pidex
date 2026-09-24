@@ -14,7 +14,7 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 ## Current status
 
-**Unreleased development update (2026-09-24):** GPT-6 profiles and the baseline/review/closeout/status stabilization are integrated into `master`, but have not been published as a new release. `gpt-6-economy` is the local development default after all-role screening and repeated holdouts. The earlier bounded Linux host-direct acceptance used the routing now named `gpt-6-balanced`; `gpt-6-quality` and Economy have no independent live acceptance. Package version stays `0.5.0`. See [Astra development status and validation limits](readme/astra-development-status.md) and [Unreleased changes](CHANGELOG.md#unreleased).
+**v0.6.0 release candidate (2026-09-24):** GPT-6 profiles and the baseline/review/closeout/status stabilization are integrated into `master`, but the candidate has not yet been tagged or published. `gpt-6-economy` is the development default after all-role screening and repeated holdouts. The earlier bounded Linux host-direct acceptance used the routing now named `gpt-6-balanced`; `gpt-6-quality` and Economy have no independent live acceptance. See [Astra development status and validation limits](readme/astra-development-status.md) and [v0.6.0 changes](CHANGELOG.md#060---2026-09-24).
 
 PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary supported path today. Local Docker Project Pipeline is validated for the current MVP on Linux and has focused native Windows Docker Desktop evidence, including automatic managed preview approval flows and host-side browser-smoke checks for Vite React UI fixtures.
 

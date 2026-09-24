@@ -1,6 +1,6 @@
-# Astra optimization — unreleased development status
+# Astra optimization — v0.6.0 release-candidate status
 
-Status as of 2026-09-13: **implemented and integrated into `master`, not published as a release**. The stabilization/profile validation snapshot is `96065c6`. Package version remains `0.5.0`; this work adds no version bump, release tag or npm publication. Git pushes distribute this development source to other checkouts; they are not package releases. See [Unreleased changes](../CHANGELOG.md#unreleased).
+Status as of 2026-09-24: **implemented and integrated into `master`, with package metadata prepared for `0.6.0`, but not tagged or published**. The original stabilization/profile validation snapshot is `96065c6`; subsequent GPT-6 profile selection and release preparation retain the scoped qualifications below. A version declaration is not a release tag, GitHub Release or npm publication. See [v0.6.0 changes](../CHANGELOG.md#060---2026-09-24).
 
 ## What changed
 

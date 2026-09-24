@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-09-24
+
 ### Astra profiles and workflow stabilization
 
-Implemented in development source and integrated into `master`; **not published as a new release**. Package version remains `0.5.0`; no release tag or npm publication is implied. Git pushes distribute development source, not a package release.
+Prepared as the `0.6.0` release candidate; a version declaration does not itself create a release tag, GitHub Release or npm publication.
 
 - Added `gpt-6-balanced` and `gpt-6-quality` manual profiles using `openai-codex/gpt-6-astra`; these replace the temporary `astra-balanced`/`astra-quality` filenames before publication. Retained all three GPT-5.6 presets for explicit selection/rollback. Profiles do not change the main Pi session model.
 - Added and selected `gpt-6-economy` as the local development default after all-role screening and independent holdouts: eight Astra, four Luna and two Sol routes, with no legacy model fallback. Designer/Sol and Retrospective/Luna explicitly accept bounded non-deep critical-miss regressions; QA remains Astra. This local selection is not an installation, push, release or publication.
