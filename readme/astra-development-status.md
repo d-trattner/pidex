@@ -9,7 +9,7 @@ Status as of 2026-09-13: **implemented and integrated into `master`, not publish
 - **Closeout:** opt-in v3 captures real returns before postprocessing, supports receipt-only replay, retains mandatory Retro/PI and actual downstream obligations, and requires the normal terminal acknowledgment. One physical closeout call per actor/pipeline, zero automatic retries; automatic rule learning is deferred in this path.
 - **PI instructions:** consistent bound/unbound routing, evidence-backed decision states, targeted retrospective reads and artifact-only analysis. Genuine missing approval remains G7. No implicit cleanup, rule adoption, Runtime-State commits or additional calls after a held capture.
 - **Status:** shared decision-oriented Pi/CLI/dashboard reporting distinguishes actual progress, holds and incomplete evidence instead of inferring success from stale state or agent settlement.
-- **Profiles:** `astra-balanced` is the development default; `astra-quality` is an explicit option. Active-profile reporting matches the actual configuration rather than a cached label. Original GPT-5.6 presets remain available for rollback.
+- **Profiles:** `gpt-6-economy` is the local development default; `gpt-6-balanced` and `gpt-6-quality` are explicit options. Active-profile reporting matches the actual configuration rather than a cached label. Original GPT-5.6 presets remain available for rollback.
 
 See [Working baseline](working-baseline.md), [review budgets](review-budgets.md), [closeout recovery](closeout-recovery.md), [decision status](decision-status.md) and [profile assignments](provider-limits-and-profiles.md#astra-profiles).
 
@@ -19,8 +19,9 @@ Astra is **`openai-codex/gpt-6-astra`**, not a GPT-5.6 alias. Profile changes se
 
 | Profile | Development status |
 | --- | --- |
-| `astra-balanced` | Selected default; bounded real Medium acceptance completed in the scope below |
-| `astra-quality` | Manual opt-in; no independent live acceptance |
+| `gpt-6-economy` | Local development default; benchmarked but no independent live acceptance |
+| `gpt-6-balanced` | Manual strict option; bounded real Medium acceptance completed under its earlier filename |
+| `gpt-6-quality` | Manual opt-in; no independent live acceptance |
 | `5.6-hybrid-balanced` | Retained previous default and explicit rollback |
 | `5.6-hybrid-lowcost` | Retained explicit token-efficient option |
 | `5.6-sol-quality` | Retained selective comparison profile, not the general default |

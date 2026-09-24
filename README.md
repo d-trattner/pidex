@@ -14,7 +14,7 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 ## Current status
 
-**Unreleased development update (2026-09-13):** Astra profiles and the baseline/review/closeout/status stabilization are integrated into `master`, but have not been published as a new release. `astra-balanced` is the development default. Its bounded Linux host-direct live run completed through PI and the normal terminal acknowledgment, with one disclosed orchestrator clarification. `astra-quality` remains independently unvalidated. Package version stays `0.5.0`. See [Astra development status and validation limits](readme/astra-development-status.md) and [Unreleased changes](CHANGELOG.md#unreleased).
+**Unreleased development update (2026-09-24):** GPT-6 profiles and the baseline/review/closeout/status stabilization are integrated into `master`, but have not been published as a new release. `gpt-6-economy` is the local development default after all-role screening and repeated holdouts. The earlier bounded Linux host-direct acceptance used the routing now named `gpt-6-balanced`; `gpt-6-quality` and Economy have no independent live acceptance. Package version stays `0.5.0`. See [Astra development status and validation limits](readme/astra-development-status.md) and [Unreleased changes](CHANGELOG.md#unreleased).
 
 PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary supported path today. Local Docker Project Pipeline is validated for the current MVP on Linux and has focused native Windows Docker Desktop evidence, including automatic managed preview approval flows and host-side browser-smoke checks for Vite React UI fixtures.
 
@@ -269,9 +269,9 @@ The profile catalog includes GPT-6-only Economy routing, Astra presets with reta
 
 | Profile | Routing | Recommended use |
 | --- | --- | --- |
-| `astra-balanced` | GPT-6 Astra for analysis, architecture, planning, critique, code review, security, roadmap and PI; other routes unchanged | Unreleased development default; bounded Linux live acceptance completed with disclosed clarification |
-| `astra-quality` | Astra balanced plus Astra for implementation, QA and retrospective | Manual opt-in for demanding tasks; not independently live-accepted |
-| `gpt-6-economy` | GPT-6 Astra for eight deep/quality-sensitive roles, Luna for Analyst/UAT/Retrospective/Roadmap, Sol for Designer/DevOps | Manual candidate with explicit bounded non-deep quality trade-off; not active or live-accepted |
+| `gpt-6-balanced` | GPT-6 Astra for analysis, architecture, planning, critique, code review, security, roadmap and PI; retained GPT-5.6 execution routes elsewhere | Manual strict candidate; its earlier name completed bounded Linux live acceptance with disclosed clarification |
+| `gpt-6-quality` | GPT-6 Balanced plus Astra for implementation, QA and retrospective | Manual opt-in for demanding tasks; not independently live-accepted |
+| `gpt-6-economy` | GPT-6 Astra for eight deep/quality-sensitive roles, Luna for Analyst/UAT/Retrospective/Roadmap, Sol for Designer/DevOps | Local development default with explicit bounded non-deep quality trade-off; not independently live-accepted |
 | `5.6-hybrid-balanced` | Evidence-selected GPT-5.6 routing: Sol for quality-critical reasoning/review/design/QA/security, Terra for implementation/operations/UAT/Pi, Luna for retrospectives | Validated previous default and explicit rollback |
 | `5.6-hybrid-lowcost` | Same critical routes, with Terra medium for bounded code review and QA | Explicit token-efficient mode |
 | `5.6-sol-quality` | GPT-5.6 Sol for every PIDEX role | Selective quality-focused experiments; not the general default |
@@ -279,7 +279,7 @@ The profile catalog includes GPT-6-only Economy routing, Astra presets with reta
 Switch profiles from the canonical PIDEX checkout:
 
 ```bash
-node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project "$PWD" -- use astra-balanced
+node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project "$PWD" -- use gpt-6-economy
 ```
 
 Profile selection changes specialist routing, not the model of an already running Pi orchestrator. Astra is the locally registered `openai-codex/gpt-6-astra`, not a GPT-5.6 alias. Existing timeouts, principals and zero-retry fallback remain unchanged; the Economy candidate uses high effort for its unresolved PI fallback. Selecting a profile is not acceptance of that model combination. Economy's Designer and Retrospective routes deliberately accept bounded non-deep evaluator regressions and are not equivalent to the stricter Balanced policy.

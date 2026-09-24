@@ -38,7 +38,7 @@ test('profile catalog preserves GPT-5.6 rollback presets and adds GPT-6 presets'
     .filter((name) => name.endsWith('.json'))
     .map((name) => name.slice(0, -5))
     .sort();
-  assert.deepEqual(profiles, ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'astra-balanced', 'astra-quality', 'gpt-6-economy']);
+  assert.deepEqual(profiles, ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'gpt-6-balanced', 'gpt-6-economy', 'gpt-6-quality']);
 });
 
 test('Sol-quality profile retains all 14 roles and only supported Sol routes', () => {
@@ -86,13 +86,13 @@ test('lowcost differs from balanced only for bounded code review and QA routes',
 test('supported profiles preserve every configured principal authority field', () => {
   const authorities = Object.entries(activeAgents.agents).filter(([, route]) => route.principal).map(([agent, route]) => [agent, route.principal]);
   assert.ok(authorities.length > 0);
-  for (const profile of [balanced, lowcost, solQuality, load('astra-balanced'), load('astra-quality'), economy]) {
+  for (const profile of [balanced, lowcost, solQuality, load('gpt-6-balanced'), load('gpt-6-quality'), economy]) {
     for (const [agent, principal] of authorities) assert.equal(profile.agents[agent]?.principal, principal, `${profile.description}:${agent}`);
   }
 });
 
 test('supported profiles keep schema/version/fallback contract and do not use low effort', () => {
-  for (const profile of [balanced, lowcost, solQuality, load('astra-balanced'), load('astra-quality'), economy]) {
+  for (const profile of [balanced, lowcost, solQuality, load('gpt-6-balanced'), load('gpt-6-quality'), economy]) {
     assert.equal(profile.$schema, 'https://pidex.dev/agents.schema.json');
     assert.equal(profile.version, '1.3.0');
     assert.deepEqual(profile.fallback, { on_error: 'pi', retries: 0, reason_prefix: 'DELEGATE_FAIL' });
@@ -105,8 +105,8 @@ test('supported profiles keep schema/version/fallback contract and do not use lo
 
 const astraRoles = ['pidex-analyst', 'pidex-architect', 'pidex-planner', 'pidex-critic', 'pidex-code-reviewer', 'pidex-security', 'pidex-roadmap', 'pidex-pi'];
 for (const [name, promoted] of [
-  ['astra-balanced', astraRoles],
-  ['astra-quality', [...astraRoles, 'pidex-implementer', 'pidex-qa', 'pidex-retrospective']],
+  ['gpt-6-balanced', astraRoles],
+  ['gpt-6-quality', [...astraRoles, 'pidex-implementer', 'pidex-qa', 'pidex-retrospective']],
 ]) {
   test(`${name} changes only the approved role models, preserving all other controls`, () => {
     const profile = load(name);
@@ -144,9 +144,9 @@ test('GPT-6 Economy matches the approved 8 Astra / 4 Luna / 2 Sol table', () => 
   assert.doesNotMatch(JSON.stringify(economy), /gpt-5\.6|codex-spark/i);
 });
 
-test('candidate default is Astra balanced; unspecified roles retain Terra fallback', () => {
-  assert.deepEqual(activeAgents, load('astra-balanced'));
-  assert.deepEqual(activeAgents.defaults, balanced.defaults);
+test('development default is GPT-6 Economy with no legacy default fallback', () => {
+  assert.deepEqual(activeAgents, economy);
+  assert.deepEqual(activeAgents.defaults, { provider: 'pi', model: 'openai-codex/gpt-6-astra', timeout_seconds: 300 });
 });
 
 test('real profile CLI selects, reports and rolls back without quota/model access', () => {
@@ -157,11 +157,11 @@ test('real profile CLI selects, reports and rolls back without quota/model acces
     mkdirSync(path.dirname(script), { recursive: true });
     copyFileSync(path.join(root, relative), script);
     mkdirSync(path.join(fixture, 'config/profiles'), { recursive: true });
-    for (const name of ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'astra-balanced', 'astra-quality', 'gpt-6-economy']) {
+    for (const name of ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'gpt-6-balanced', 'gpt-6-quality', 'gpt-6-economy']) {
       copyFileSync(path.join(root, 'config/profiles', `${name}.json`), path.join(fixture, 'config/profiles', `${name}.json`));
     }
     const target = path.join(fixture, 'config/agents.json');
-    writeFileSync(target, JSON.stringify(load('astra-balanced')));
+    writeFileSync(target, JSON.stringify(economy));
     const guard = path.join(fixture, 'no-network.mjs');
     writeFileSync(guard, "import net from 'node:net';globalThis.fetch=()=>{throw Error('NETWORK_FORBIDDEN')};net.Socket.prototype.connect=function(){throw Error('NETWORK_FORBIDDEN')};");
     const invoke = (...args) => {
@@ -172,14 +172,14 @@ test('real profile CLI selects, reports and rolls back without quota/model acces
       assert.equal(result.status, 0, result.stderr);
       return JSON.parse(result.stdout);
     };
-    assert.equal(invoke('latest').active_profile, 'astra-balanced', 'fresh checkout must not infer alphabetical first profile');
-    assert.equal(invoke('use', 'astra-quality').active_profile, 'astra-quality');
-    assert.deepEqual(JSON.parse(readFileSync(target)), load('astra-quality'));
+    assert.equal(invoke('latest').active_profile, 'gpt-6-economy', 'fresh checkout must report the actual Economy bytes');
+    assert.equal(invoke('use', 'gpt-6-quality').active_profile, 'gpt-6-quality');
+    assert.deepEqual(JSON.parse(readFileSync(target)), load('gpt-6-quality'));
     assert.equal(invoke('use', 'gpt-6-economy').active_profile, 'gpt-6-economy');
     assert.deepEqual(JSON.parse(readFileSync(target)), economy);
     assert.equal(invoke('use', '5.6-hybrid-balanced').active_profile, '5.6-hybrid-balanced');
     assert.deepEqual(JSON.parse(readFileSync(target)), balanced);
-    assert.equal(invoke('use', 'astra-balanced').active_profile, 'astra-balanced');
+    assert.equal(invoke('use', 'gpt-6-balanced').active_profile, 'gpt-6-balanced');
     // A cached valid selection is not authority for different actual routing bytes.
     writeFileSync(target, JSON.stringify(balanced));
     assert.equal(invoke('latest').active_profile, '5.6-hybrid-balanced');
