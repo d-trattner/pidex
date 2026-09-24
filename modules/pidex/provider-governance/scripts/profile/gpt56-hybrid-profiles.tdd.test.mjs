@@ -11,6 +11,7 @@ const load = (name) => JSON.parse(readFileSync(path.join(root, 'config', 'profil
 const balanced = load('5.6-hybrid-balanced');
 const lowcost = load('5.6-hybrid-lowcost');
 const solQuality = load('5.6-sol-quality');
+const economy = load('gpt-6-economy');
 const activeAgents = JSON.parse(readFileSync(path.join(root, 'config', 'agents.json'), 'utf8'));
 
 const expectedBalanced = {
@@ -32,12 +33,12 @@ const expectedBalanced = {
 
 const selectedRoute = (profile, agent) => [profile.agents[agent].model, profile.agents[agent].effort];
 
-test('profile catalog preserves GPT-5.6 rollback presets and adds Astra presets', () => {
+test('profile catalog preserves GPT-5.6 rollback presets and adds GPT-6 presets', () => {
   const profiles = readdirSync(path.join(root, 'config', 'profiles'))
     .filter((name) => name.endsWith('.json'))
     .map((name) => name.slice(0, -5))
     .sort();
-  assert.deepEqual(profiles, ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'astra-balanced', 'astra-quality']);
+  assert.deepEqual(profiles, ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'astra-balanced', 'astra-quality', 'gpt-6-economy']);
 });
 
 test('Sol-quality profile retains all 14 roles and only supported Sol routes', () => {
@@ -85,19 +86,19 @@ test('lowcost differs from balanced only for bounded code review and QA routes',
 test('supported profiles preserve every configured principal authority field', () => {
   const authorities = Object.entries(activeAgents.agents).filter(([, route]) => route.principal).map(([agent, route]) => [agent, route.principal]);
   assert.ok(authorities.length > 0);
-  for (const profile of [balanced, lowcost, solQuality, load('astra-balanced'), load('astra-quality')]) {
+  for (const profile of [balanced, lowcost, solQuality, load('astra-balanced'), load('astra-quality'), economy]) {
     for (const [agent, principal] of authorities) assert.equal(profile.agents[agent]?.principal, principal, `${profile.description}:${agent}`);
   }
 });
 
 test('supported profiles keep schema/version/fallback contract and do not use low effort', () => {
-  for (const profile of [balanced, lowcost, solQuality, load('astra-balanced'), load('astra-quality')]) {
+  for (const profile of [balanced, lowcost, solQuality, load('astra-balanced'), load('astra-quality'), economy]) {
     assert.equal(profile.$schema, 'https://pidex.dev/agents.schema.json');
     assert.equal(profile.version, '1.3.0');
     assert.deepEqual(profile.fallback, { on_error: 'pi', retries: 0, reason_prefix: 'DELEGATE_FAIL' });
     for (const route of Object.values(profile.agents)) {
       assert.ok(['medium', 'high'].includes(route.effort));
-      assert.match(route.model, /^openai-codex\/(gpt-5\.6-(sol|terra|luna)|gpt-6-astra)$/);
+      assert.match(route.model, /^openai-codex\/(gpt-5\.6-(sol|terra|luna)|gpt-6-(astra|sol|luna))$/);
     }
   }
 });
@@ -116,6 +117,33 @@ for (const [name, promoted] of [
   });
 }
 
+test('GPT-6 Economy matches the approved 8 Astra / 4 Luna / 2 Sol table', () => {
+  const expected = {
+    'pidex-analyst': ['openai-codex/gpt-6-luna', 'high'],
+    'pidex-architect': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-code-reviewer': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-critic': ['openai-codex/gpt-6-astra', 'medium'],
+    'pidex-designer': ['openai-codex/gpt-6-sol', 'high'],
+    'pidex-devops': ['openai-codex/gpt-6-sol', 'medium'],
+    'pidex-implementer': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-pi': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-planner': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-qa': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-retrospective': ['openai-codex/gpt-6-luna', 'medium'],
+    'pidex-roadmap': ['openai-codex/gpt-6-luna', 'high'],
+    'pidex-security': ['openai-codex/gpt-6-astra', 'high'],
+    'pidex-uat': ['openai-codex/gpt-6-luna', 'medium'],
+  };
+  assert.deepEqual(Object.keys(economy.agents).sort(), Object.keys(expectedBalanced).sort());
+  for (const [agent, route] of Object.entries(expected)) assert.deepEqual(selectedRoute(economy, agent), route, agent);
+  assert.deepEqual(economy.defaults, { provider: 'pi', model: 'openai-codex/gpt-6-astra', timeout_seconds: 300 });
+  assert.equal(economy.agents['pidex-designer'].condition, 'plan_has_ui_scope');
+  assert.equal(Object.values(economy.agents).filter((route) => route.model.endsWith('gpt-6-astra')).length, 8);
+  assert.equal(Object.values(economy.agents).filter((route) => route.model.endsWith('gpt-6-luna')).length, 4);
+  assert.equal(Object.values(economy.agents).filter((route) => route.model.endsWith('gpt-6-sol')).length, 2);
+  assert.doesNotMatch(JSON.stringify(economy), /gpt-5\.6|codex-spark/i);
+});
+
 test('candidate default is Astra balanced; unspecified roles retain Terra fallback', () => {
   assert.deepEqual(activeAgents, load('astra-balanced'));
   assert.deepEqual(activeAgents.defaults, balanced.defaults);
@@ -129,7 +157,7 @@ test('real profile CLI selects, reports and rolls back without quota/model acces
     mkdirSync(path.dirname(script), { recursive: true });
     copyFileSync(path.join(root, relative), script);
     mkdirSync(path.join(fixture, 'config/profiles'), { recursive: true });
-    for (const name of ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'astra-balanced', 'astra-quality']) {
+    for (const name of ['5.6-hybrid-balanced', '5.6-hybrid-lowcost', '5.6-sol-quality', 'astra-balanced', 'astra-quality', 'gpt-6-economy']) {
       copyFileSync(path.join(root, 'config/profiles', `${name}.json`), path.join(fixture, 'config/profiles', `${name}.json`));
     }
     const target = path.join(fixture, 'config/agents.json');
@@ -147,6 +175,8 @@ test('real profile CLI selects, reports and rolls back without quota/model acces
     assert.equal(invoke('latest').active_profile, 'astra-balanced', 'fresh checkout must not infer alphabetical first profile');
     assert.equal(invoke('use', 'astra-quality').active_profile, 'astra-quality');
     assert.deepEqual(JSON.parse(readFileSync(target)), load('astra-quality'));
+    assert.equal(invoke('use', 'gpt-6-economy').active_profile, 'gpt-6-economy');
+    assert.deepEqual(JSON.parse(readFileSync(target)), economy);
     assert.equal(invoke('use', '5.6-hybrid-balanced').active_profile, '5.6-hybrid-balanced');
     assert.deepEqual(JSON.parse(readFileSync(target)), balanced);
     assert.equal(invoke('use', 'astra-balanced').active_profile, 'astra-balanced');

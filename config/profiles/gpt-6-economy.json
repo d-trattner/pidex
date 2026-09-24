@@ -1,0 +1,106 @@
+{
+  "$schema": "https://pidex.dev/agents.schema.json",
+  "version": "1.3.0",
+  "description": "PIDEX GPT-6 Economy: Astra for eight deep or quality-sensitive roles, Luna for Analyst/UAT/Retrospective/Roadmap, and Sol for Designer/DevOps. Explicit bounded non-deep quality trade-off; GPT-6-only and manual opt-in.",
+  "defaults": {
+    "provider": "pi",
+    "model": "openai-codex/gpt-6-astra",
+    "timeout_seconds": 300
+  },
+  "agents": {
+    "pidex-analyst": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-luna",
+      "timeout_seconds": 300,
+      "effort": "high"
+    },
+    "pidex-architect": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 360,
+      "effort": "high"
+    },
+    "pidex-code-reviewer": {
+      "principal": "pidex-code-reviewer",
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 600,
+      "effort": "high"
+    },
+    "pidex-critic": {
+      "principal": "pidex-critic",
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 480,
+      "effort": "medium"
+    },
+    "pidex-designer": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-sol",
+      "timeout_seconds": 600,
+      "effort": "high",
+      "condition": "plan_has_ui_scope"
+    },
+    "pidex-devops": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-sol",
+      "timeout_seconds": 1200,
+      "effort": "medium"
+    },
+    "pidex-implementer": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 1800,
+      "effort": "high"
+    },
+    "pidex-pi": {
+      "principal": "pidex-pi",
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 300,
+      "effort": "high"
+    },
+    "pidex-planner": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 360,
+      "effort": "high"
+    },
+    "pidex-qa": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 1200,
+      "effort": "high"
+    },
+    "pidex-retrospective": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-luna",
+      "timeout_seconds": 600,
+      "effort": "medium"
+    },
+    "pidex-roadmap": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-luna",
+      "timeout_seconds": 600,
+      "effort": "high"
+    },
+    "pidex-security": {
+      "principal": "pidex-security",
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-astra",
+      "timeout_seconds": 900,
+      "effort": "high"
+    },
+    "pidex-uat": {
+      "provider": "pi",
+      "model": "openai-codex/gpt-6-luna",
+      "timeout_seconds": 600,
+      "effort": "medium"
+    }
+  },
+  "fallback": {
+    "on_error": "pi",
+    "retries": 0,
+    "reason_prefix": "DELEGATE_FAIL"
+  }
+}

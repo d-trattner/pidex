@@ -265,12 +265,13 @@ The dashboard provides Overview, Live, Runs, Quality, Modules, Usage, Wiki, Cont
 
 PIDEX tracks provider-native Codex and Spark quota windows. The current profile catalog does not route to Spark; Spark was benchmarked across the role matrix and deferred after only UAT met the quality gate, which did not justify a separate one-role profile and fallback lifecycle.
 
-The current presets combine GPT-6 Astra with the retained GPT-5.6 routes:
+The profile catalog includes GPT-6-only Economy routing, Astra presets with retained GPT-5.6 routes, and explicit GPT-5.6 rollback presets:
 
 | Profile | Routing | Recommended use |
 | --- | --- | --- |
 | `astra-balanced` | GPT-6 Astra for analysis, architecture, planning, critique, code review, security, roadmap and PI; other routes unchanged | Unreleased development default; bounded Linux live acceptance completed with disclosed clarification |
 | `astra-quality` | Astra balanced plus Astra for implementation, QA and retrospective | Manual opt-in for demanding tasks; not independently live-accepted |
+| `gpt-6-economy` | GPT-6 Astra for eight deep/quality-sensitive roles, Luna for Analyst/UAT/Retrospective/Roadmap, Sol for Designer/DevOps | Manual candidate with explicit bounded non-deep quality trade-off; not active or live-accepted |
 | `5.6-hybrid-balanced` | Evidence-selected GPT-5.6 routing: Sol for quality-critical reasoning/review/design/QA/security, Terra for implementation/operations/UAT/Pi, Luna for retrospectives | Validated previous default and explicit rollback |
 | `5.6-hybrid-lowcost` | Same critical routes, with Terra medium for bounded code review and QA | Explicit token-efficient mode |
 | `5.6-sol-quality` | GPT-5.6 Sol for every PIDEX role | Selective quality-focused experiments; not the general default |
@@ -281,7 +282,7 @@ Switch profiles from the canonical PIDEX checkout:
 node scripts/modules/run-check.mjs --capability provider-governance.probe --agent orchestrator --phase maintenance --project "$PWD" -- use astra-balanced
 ```
 
-Profile selection changes specialist routing, not the model of an already running Pi orchestrator. Astra is the locally registered `openai-codex/gpt-6-astra`, not a GPT-5.6 alias. Existing efforts, timeouts, principals and zero-retry fallback remain unchanged. Selecting a profile is not acceptance of that model combination; previous benchmark evidence does not transfer automatically to Astra.
+Profile selection changes specialist routing, not the model of an already running Pi orchestrator. Astra is the locally registered `openai-codex/gpt-6-astra`, not a GPT-5.6 alias. Existing timeouts, principals and zero-retry fallback remain unchanged; the Economy candidate uses high effort for its unresolved PI fallback. Selecting a profile is not acceptance of that model combination. Economy's Designer and Retrospective routes deliberately accept bounded non-deep evaluator regressions and are not equivalent to the stricter Balanced policy.
 
 The original five-fixture benchmark selected Hybrid as the previous general default. All-role C1 screening and independent H2 holdouts then refined that GPT-5.6 profile: Hybrid Balanced uses Sol medium for Critic, Sol high for Designer and QA, and Sol high instead of xhigh for Security. Lowcost preserves the critical planning, design, implementation, and security routes but uses Terra medium for Code Reviewer and QA, where repeated holdouts showed large token reductions with correct core outcomes. Spark was tested rather than assumed unsuitable: UAT Spark high was the only eligible offload, while functional, recall, evidence, stability, latency, or operational-complexity results prevented a general Spark profile. See [Provider limits and profiles](readme/provider-limits-and-profiles.md) for the public routing summary and selection guidance.
 

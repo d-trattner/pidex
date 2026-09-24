@@ -82,6 +82,20 @@ The local Pi catalog identifies Astra as `openai-codex/gpt-6-astra`. Profiles ar
 
 Same as Astra balanced, with implementation and QA on **Astra high**, and retrospective on **Astra medium**. Designer stays Sol high; DevOps/UAT stay Terra medium. This is an explicit option, not an automatic quality escalation or fallback.
 
+### `gpt-6-economy` — manual candidate
+
+GPT-6-only routing selected by the separate Economy policy after all-role screening and independent holdouts:
+
+- **Astra high:** architect, planner, code reviewer, implementer, QA and security.
+- **Astra medium:** critic.
+- **Astra high provisional fallback:** PI.
+- **Luna high:** analyst and roadmap.
+- **Luna medium:** UAT and retrospective.
+- **Sol high:** designer.
+- **Sol medium:** DevOps.
+
+Economy keeps the95/90/80% deep/standard/routine quality floors but explicitly permits at most+1.5 critical misses per standard-role run and+0.5 per routine-role run; deep roles remain at zero. This admits Designer/Sol and Retrospective/Luna while rejecting QA/Luna's+4/run result. Critic and PI remain unresolved Astra fallbacks. The profile is not active or independently live-accepted.
+
 ### Acceptance and rollback
 
 These are user-selected routing choices, not claims of benchmark-proven superiority. Astra balanced completed a real Linux/unsandboxed/host-direct/Primary-Pi Medium run through authenticated review recovery, full Retro/PI and confirmed terminal acknowledgment, with zero pending obligations. Its qualification is `PASS_WITH_ORCHESTRATOR_CLARIFICATION`: one explicit tool-call clarification was needed after the outer resume session merely echoed the request. Identity, original deadline and budget were preserved; this was not an unassisted run. Rule context was `non_attested`, not operational WorkingBaseline adoption. Astra quality has no independent live acceptance. See [the scoped evidence summary](astra-development-status.md#validation-and-qualification). The earlier Sol/Terra/Luna Medium result remains separate evidence, not an Astra result. A profile change does not erase earlier lifecycle/budget evidence or authorize extra model starts.
@@ -146,6 +160,7 @@ Controlled real `/pd` fixture runs produced these practical recommendations:
 
 - Retain `5.6-hybrid-balanced` as the evidence-backed previous default and explicit rollback.
 - `astra-balanced` is the unreleased development default with the qualified Linux live result above; do not generalize it to other modes or all workloads. `astra-quality` remains manual and independently unvalidated.
+- `gpt-6-economy` is a manual GPT-6-only candidate with an explicit bounded non-deep quality trade-off; it is neither active nor a replacement for strict Balanced evidence.
 - Select `5.6-hybrid-lowcost` explicitly when token conservation is more important than maximum review/evidence depth.
 - Use `5.6-sol-quality` selectively rather than promoting it globally.
 - Keep retired GPT-5.4/GPT-5.5 routing as historical benchmark evidence rather than selectable production profiles.
