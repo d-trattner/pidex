@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
   CHECK_STAGES,
@@ -52,4 +55,27 @@ test('dispatcher preserves stage order and stops at the first failure', () => {
     CHECK_STAGES.slice(0, 3).map((name) => `pnpm.cmd run ${name}`),
   );
   assert.ok(calls.every((call) => call.options.shell === false));
+});
+
+test('Windows dispatcher reaches standalone pnpm.cmd through the real command processor', {
+  skip: process.platform !== 'win32' ? 'native Windows only' : false,
+}, () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-check-dispatch-'));
+  const log = path.join(root, 'stages.log');
+  const shim = path.join(root, 'pnpm.cmd');
+  try {
+    writeFileSync(shim, '@echo off\r\necho %*>>"%PIDEX_STAGE_LOG%"\r\nexit /b 0\r\n');
+    const env = {
+      ...process.env,
+      PATH: `${root};${process.env.PATH || ''}`,
+      PIDEX_STAGE_LOG: log,
+    };
+    assert.equal(runCheckStages({ platform: 'win32', env }), 0);
+    assert.deepEqual(
+      readFileSync(log, 'utf8').trim().split(/\r?\n/),
+      CHECK_STAGES.map((name) => `run ${name}`),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
