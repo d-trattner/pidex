@@ -9,7 +9,7 @@ ENV PNPM_HOME=/usr/local/share/pnpm \
 
 # Keep the sandbox CLI aligned with the locally Astra-tested runtime.
 # Existing images/containers require an explicit rebuild/replacement.
-ARG PI_CODING_AGENT_VERSION=0.85.1
+ARG PI_CODING_AGENT_VERSION=0.87.1
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \

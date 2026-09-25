@@ -41,7 +41,7 @@ function fixture(t) {
 const installs = f => f.calls.filter(a => a.includes('--input-type=module'));
 
 test('exact confirmation and immutable build pin, strict CLI parsing', () => {
-  assert.equal(targetPiVersion(), '0.85.1');
+  assert.equal(targetPiVersion(), '0.87.1');
   assert.equal(upgradeProjectPi({ projectId: 'pp-demo', confirm: 'other' }).error, 'confirmation-required');
   assert.throws(() => parseUpgradeArgs(['--pidex-root', '/tmp', '--project-id', 'pp-demo', '--confirm', 'pp-demo', '--version', 'latest']));
   assert.throws(() => parseUpgradeArgs(['--pidex-root', '/tmp', '--project-id', 'pp-demo', '--confirm', 'pp-demo', '--confirm', 'pp-demo']));
@@ -86,7 +86,7 @@ test('identity denial identifies failed predicates without leaking raw inspect d
 test('verified in-place upgrade preserves registry/run bytes; repeat is a no-op', t => {
   const f = fixture(t), before = readFileSync(projectFile(f.root, 'pp-demo'));
   const result = upgradeProjectPi(f.options);
-  assert.deepEqual(result, { ok: true, status: 'verified', before: '0.80.3', after: '0.85.1', target: '0.85.1', changed: true });
+  assert.deepEqual(result, { ok: true, status: 'verified', before: '0.80.3', after: '0.87.1', target: '0.87.1', changed: true });
   assert.deepEqual(readFileSync(projectFile(f.root, 'pp-demo')), before);
   assert.equal(installs(f).length, 1);
   assert.equal(upgradeProjectPi(f.options).changed, false);
@@ -164,7 +164,7 @@ test('maintenance diagnostics are read-only and omit receipt internals', t => {
   assert.deepEqual(maintenanceSummary(f.root, 'pp-demo'), { status: 'none', execution_lock: 'absent' });
   assert.equal(existsSync(paths.dir), false);
   upgradeProjectPi(f.options);
-  assert.deepEqual(maintenanceSummary(f.root, 'pp-demo'), { status: 'verified', execution_lock: 'absent', before: '0.80.3', after: '0.85.1', target: '0.85.1' });
+  assert.deepEqual(maintenanceSummary(f.root, 'pp-demo'), { status: 'verified', execution_lock: 'absent', before: '0.80.3', after: '0.87.1', target: '0.87.1' });
 });
 
 test('unknown locks and malformed receipts are never silently repaired', t => {

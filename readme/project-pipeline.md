@@ -52,7 +52,7 @@ Project source is not mirrored back to the host by PIDEX. If you want source cha
 - Docker Engine/Desktop with Linux containers.
 - Pi credentials configured on the host if you choose to copy them into the Project Sandbox.
 
-The default local Project Pipeline Docker image is auto-built by the orchestrator **when missing**, not automatically refreshed when present. Its Pi CLI is pinned to **0.85.1**, the locally Astra-tested runtime; the build verifies the installed CLI version. This is a runtime pin, not independent Windows/Project Pipeline Astra acceptance. It can also be built manually through the image helper for troubleshooting.
+The default local Project Pipeline Docker image is auto-built by the orchestrator **when missing**, not automatically refreshed when present. Its Pi CLI is pinned to **0.87.1**, the GPT-6 Astra/Sol/Luna-tested runtime; the build verifies the installed CLI version. This is a runtime pin, not independent Windows/Project Pipeline Astra acceptance. It can also be built manually through the image helper for troubleshooting.
 
 On Linux, if the current shell has not picked up Docker group membership yet, use a fresh login shell or `newgrp docker`.
 
@@ -74,7 +74,7 @@ Alternatively, ask the main agent to update Pi in the selected sandbox. It can i
 
 Both entry points use the same guarded backend. The agent-accessible tool is available only after loading the updated extension in an interactive host Pi session; ordinary Bash/WSL Docker access is not needed.
 
-- Target version comes exclusively from the exact Dockerfile pin (currently `0.85.1`), with no arbitrary package/version argument and no downgrade. A matching installed version is a verified no-op.
+- Target version comes exclusively from the exact Dockerfile pin (currently `0.87.1`), with no arbitrary package/version argument and no downgrade. A matching installed version is a verified no-op.
 - Requires the registered local container, expected ownership labels, exact workspace/secrets/cache volume mounts, no active recorded run, and only the normal idle `sleep` process. Startup metadata accepts either direct `sleep infinity` or the stock Node image's `docker-entrypoint.sh sleep infinity`; arbitrary wrapper arguments remain blocked. Stop managed previews explicitly first. Unknown/custom runtime layouts, runtime overlays and unsafe Node/loader environment overrides are refused.
 - A project execution lease excludes concurrent upgraded PIDEX orchestrator/agent, legacy run-flow, open/repair/remove and preview start/stop operations. Do not run independent/manual Docker maintenance concurrently, or leave an older pre-upgrade orchestrator running.
 - Installs the pinned package as container root in a separate `/opt/pidex-pi/` prefix. npm runs with isolated config/cache, engine checks and disabled lifecycle scripts/audit, without reading project npm configuration or copied provider credentials. It downloads npm dependencies but makes no model request.
@@ -97,7 +97,7 @@ docker run --rm --network none --user node --entrypoint pi pidex/project-node22:
 if ($LASTEXITCODE -ne 0) { throw "Sandbox Pi version probe failed." }
 ```
 
-The probe must print `0.85.1`. Building downloads image/package dependencies but starts no Specialist/model request. The version probe creates only a disposable container without project or credential mounts. For a custom registered image, review its tag/build configuration separately rather than silently substituting the default image.
+The probe must print `0.87.1`. Building downloads image/package dependencies but starts no Specialist/model request. The version probe creates only a disposable container without project or credential mounts. For a custom registered image, review its tag/build configuration separately rather than silently substituting the default image.
 
 **Existing project containers still use their original image after this build.** Updating one is a separate, explicitly confirmed maintenance step:
 

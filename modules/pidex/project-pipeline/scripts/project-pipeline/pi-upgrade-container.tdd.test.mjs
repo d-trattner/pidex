@@ -11,7 +11,7 @@ import vm from 'node:vm';
 // runs only the installed CLI's offline config parser in an owned temp directory.
 const source = readFileSync(new URL('./pi-upgrade-container.mjs', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '');
 function run(mode = 'success') {
-  const target = '0.85.1', previous = mode === 'downgrade' ? '0.86.0' : '0.80.3';
+  const target = '0.87.1', previous = mode === 'downgrade' ? '0.88.0' : '0.80.3';
   const pi = '/usr/local/bin/pi';
   const old = '../lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js';
   const links = new Map([[pi, old]]), writes = [], configFiles = [], calls = [], outputs = [];
@@ -59,7 +59,7 @@ for (const [mode, status] of [
 
 test('container install isolates npm config/cache/prefix, disables scripts, and never touches models or credentials', () => {
   const r = run(), install = r.calls.find(c => c.args[1] === 'install');
-  assert.ok(install.args.includes('@earendil-works/pi-coding-agent@0.85.1'));
+  assert.ok(install.args.includes('@earendil-works/pi-coding-agent@0.87.1'));
   for (const flag of ['--ignore-scripts', '--no-audit', '--no-fund', '--engine-strict']) assert.ok(install.args.includes(flag));
   const userConfig = install.opts.env.NPM_CONFIG_USERCONFIG;
   const globalConfig = install.opts.env.NPM_CONFIG_GLOBALCONFIG;

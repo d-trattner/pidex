@@ -30,7 +30,7 @@ test('Dockerfile installs Pi CLI without lifecycle scripts or secrets', () => {
 
 test('Dockerfile pins the Astra-tested Pi version and verifies the installed CLI', () => {
   const dockerfile = readFileSync(path.resolve('modules/pidex/project-pipeline/Dockerfile'), 'utf8');
-  assert.match(dockerfile, /^ARG PI_CODING_AGENT_VERSION=0\.85\.1$/m);
+  assert.match(dockerfile, /^ARG PI_CODING_AGENT_VERSION=0\.87\.1$/m);
   assert.doesNotMatch(dockerfile, /^ARG PI_CODING_AGENT_VERSION=latest$/m);
   assert.ok(dockerfile.includes('test "$(pi --version)" = "${PI_CODING_AGENT_VERSION}"'));
 });
