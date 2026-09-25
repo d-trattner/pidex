@@ -279,6 +279,10 @@ test('F-254-02 host E2E enrolls profile through producer then closes and reopens
 });
 
 test('root check executes host route guardrail regression', () => {
-  const check = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts.check;
+  const scripts = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).scripts;
+  const check = Object.entries(scripts)
+    .filter(([name]) => name === 'check' || name.startsWith('check:'))
+    .map(([, command]) => command)
+    .join(' && ');
   assert.match(check, /node --experimental-strip-types extensions\/pidex\/agent-route-guardrails\.tdd\.test\.mjs/);
 });

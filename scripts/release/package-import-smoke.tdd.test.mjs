@@ -140,7 +140,10 @@ test('package ships Plan047 publication authority and check runs its contract su
   const shipped = new Set(packageJson.files);
   for (const file of plan047PackageFiles) assert.ok(shipped.has(file), `package files missing ${file}`);
 
-  const check = packageJson.scripts.check;
+  const check = Object.entries(packageJson.scripts)
+    .filter(([name]) => name === 'check' || name.startsWith('check:'))
+    .map(([, command]) => command)
+    .join(' && ');
   let previous = -1;
   for (const testFile of plan047CheckTests) {
     const position = check.indexOf(`node scripts/quality/${testFile}`);

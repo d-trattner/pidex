@@ -280,8 +280,12 @@ test('PB-03 package allowlist and root check wire packaged baseline proof', () =
   assert.ok(pkg.files.includes('agents/'));
   assert.ok(pkg.files.includes('rules/'));
   assert.ok(pkg.files.includes('config/rule-baseline-manifest.json'));
-  assert.match(pkg.scripts.check, /scripts\/quality\/rule-lifecycle\.tdd\.test\.mjs/);
-  assert.match(pkg.scripts.check, /scripts\/release\/package-import-smoke\.tdd\.test\.mjs/);
+  const check = Object.entries(pkg.scripts)
+    .filter(([name]) => name === 'check' || name.startsWith('check:'))
+    .map(([, command]) => command)
+    .join(' && ');
+  assert.match(check, /scripts\/quality\/rule-lifecycle\.tdd\.test\.mjs/);
+  assert.match(check, /scripts\/release\/package-import-smoke\.tdd\.test\.mjs/);
 });
 test('CR-073-07 accepts exact initial parent only for package seed, then exact accepted-head first-parent mode', () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-baseline-'));
