@@ -1,8 +1,9 @@
 # Keep generated TanStack route tree stable across Windows/Linux checkouts.
 dashboard/app/routeTree.gen.ts text eol=lf
 
-# Bash scripts must stay LF-only so Git Bash/MSYS can execute them on Windows.
+# Executable and module source must stay LF-only across native Windows tools.
 *.sh text eol=lf
+*.mjs text eol=lf
 
 # Digest-locked PIDEX agent/rule baseline: preserve manifest-hashed bytes exactly.
 # These paths are consumed as raw bytes by the bundled baseline verifier.

@@ -13,10 +13,19 @@ import {
 const packageJson = JSON.parse(
   await readFile(new URL('../../package.json', import.meta.url), 'utf8'),
 );
+const parallelStatusSource = await readFile(
+  new URL('../../modules/pidex/parallel-agents/scripts/status.mjs', import.meta.url),
+  'utf8',
+);
 
 // cmd.exe rejects command lines near 8191 characters. Keep a safety margin for
 // pnpm's wrapper and environment-specific quoting.
 const WINDOWS_SAFE_SCRIPT_LENGTH = 7000;
+
+test('Windows checkout preserves executable module shebang as LF bytes', () => {
+  assert.ok(parallelStatusSource.startsWith('#!/usr/bin/env node\n'));
+  assert.equal(parallelStatusSource.includes('\r\n'), false);
+});
 
 test('check dispatches ordered Windows-safe stages through a short Node entrypoint', () => {
   assert.equal(
