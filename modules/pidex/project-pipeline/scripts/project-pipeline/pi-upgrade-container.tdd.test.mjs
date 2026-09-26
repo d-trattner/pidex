@@ -9,7 +9,15 @@ import vm from 'node:vm';
 // Execute the exact shipped controller with isolated filesystem/process doubles.
 // Controller fixtures never invoke Docker/npm. The separate npm regression below
 // runs only the installed CLI's offline config parser in an owned temp directory.
-const source = readFileSync(new URL('./pi-upgrade-container.mjs', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '');
+const stripModuleImports = text => text.replace(/^import .*;\r?\n/gm, '');
+const source = stripModuleImports(readFileSync(new URL('./pi-upgrade-container.mjs', import.meta.url), 'utf8'));
+
+test('controller fixture strips module imports from LF and CRLF checkouts', () => {
+  const imports = "import fs from 'node:fs';\nimport path from 'node:path';\nconst value = 1;\n";
+  assert.equal(stripModuleImports(imports), 'const value = 1;\n');
+  assert.equal(stripModuleImports(imports.replaceAll('\n', '\r\n')), 'const value = 1;\r\n');
+});
+
 function run(mode = 'success') {
   const target = '0.87.1', previous = mode === 'downgrade' ? '0.88.0' : '0.80.3';
   const pi = '/usr/local/bin/pi';
