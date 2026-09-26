@@ -49,7 +49,7 @@ function run(mode = 'success') {
     return { status: 0, stdout: args[0] === pi && !switched ? previous : target };
   };
   const proc = { env: { PIDEX_PROJECT_PIPELINE_CONTAINER: mode === 'host' ? undefined : '1' }, argv: ['node', target], getuid: () => 0, exitCode: 0, exit() { throw new Error('unexpected no-op in fixture'); } };
-  vm.runInNewContext(source, { fs, path, randomUUID: () => `owned-${++counter}`, spawnSync: spawn, process: proc, console: { log: text => outputs.push(JSON.parse(text)) } });
+  vm.runInNewContext(source, { fs, path: path.posix, randomUUID: () => `owned-${++counter}`, spawnSync: spawn, process: proc, console: { log: text => outputs.push(JSON.parse(text)) } });
   return { result: outputs.at(-1), calls, writes, configFiles, links, old };
 }
 
@@ -75,7 +75,7 @@ test('container install isolates npm config/cache/prefix, disables scripts, and 
   assert.equal(r.configFiles.length, 2);
   for (const file of r.configFiles) {
     assert.ok([userConfig, globalConfig].includes(file.path));
-    assert.equal(path.dirname(file.path), install.opts.cwd);
+    assert.equal(path.posix.dirname(file.path), install.opts.cwd);
     assert.equal(file.data, '');
     assert.equal(file.options.flag, 'wx');
     assert.equal(file.options.mode, 0o600);
