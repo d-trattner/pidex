@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 const qualityRoute = readFileSync(new URL('../routes/quality.tsx', import.meta.url), 'utf8');
 const themeCss = readFileSync(new URL('../app/styles/theme.css', import.meta.url), 'utf8');
+
+function assertMobileLayout(routeSource, cssSource) {
+// Layout semantics do not depend on Git's host-specific checkout line endings.
+const qualityRoute = routeSource.replaceAll('\r\n', '\n');
+const themeCss = cssSource.replaceAll('\r\n', '\n');
 
 assert.match(qualityRoute, /className="grid quality-metrics-grid"/, 'cards section must use dedicated mobile metrics grid class');
 assert.match(qualityRoute, /className="glass-card glass quality-metric-card"/g, 'metric cards must use dedicated class for mobile full-row behavior');
@@ -35,4 +41,23 @@ assert.match(qualityRoute, /\.quality-lifecycle-control:focus-visible,\s*\.quali
 assert.match(qualityRoute, /\.quality-lifecycle-digest\s*\{[^}]*overflow-wrap:\s*anywhere;/, 'long lifecycle identities must wrap anywhere at mobile width');
 assert.doesNotMatch(qualityRoute, /overflow-x:\s*hidden/, 'page overflow must not be masked with overflow-x hidden');
 
-console.log('quality mobile layout assertions passed');
+}
+
+for (const [label, eol] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+  const route = qualityRoute.replace(/\r?\n/g, eol);
+  const css = themeCss.replace(/\r?\n/g, eol);
+  test(`quality mobile layout preserves every assertion with ${label} sources`, () => {
+    assertMobileLayout(route, css);
+  });
+  test(`quality mobile layout rejects missing base rule with ${label} sources`, () => {
+    assert.throws(() => assertMobileLayout(route, css.replace('.glass-card {', '.missing-card {')),
+      /base glass-card span rule must exist/);
+  });
+  test(`quality mobile layout rejects late base rule with ${label} sources`, () => {
+    const base = `.glass-card {${eol}  grid-column: span 4;`;
+    assert.ok(css.includes(base));
+    const moved = css.replace(base, '.missing-card {') + eol + base + eol + '}';
+    assert.throws(() => assertMobileLayout(route, moved),
+      /quality-card mobile override must appear after base glass-card rule/);
+  });
+}
