@@ -2,6 +2,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { resolveStateRoot } from '../../lib/state-root.mjs';
 
 function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unknown'; }
@@ -9,7 +10,7 @@ function parse(argv) { const out = { project: '', plan: '' }; for (let i = 0; i 
 function isCodexRecord(rec) { if (['1', 'true', 'yes'].includes(String(process.env.PIDEX_SUMMARY_INCLUDE_ALL || '0').toLowerCase())) return true; const provider = String(rec.provider || '').toLowerCase(); const model = String(rec.model || '').toLowerCase(); return provider.includes('codex') || provider.includes('openai-codex') || model.includes('codex') || model.startsWith('gpt-5.') || model.startsWith('openai-codex/'); }
 function esc(value) { return String(value ?? '').replaceAll('|', '\\|'); }
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const root = fileURLToPath(new URL('../../../../../', import.meta.url));
 const stateDir = resolveStateRoot({ root });
 const args = parse(process.argv.slice(2));
 const planSlug = slug(args.plan);

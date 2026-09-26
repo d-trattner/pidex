@@ -3,10 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
 import { recordPipelineEvent } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 // Immutable-inventory tests need a real committed authority for the candidate
 // module manifests, not whichever commit happens to underlie a dirty worktree.
 // Commit only an isolated fixture copy; never stage/change the working repository.

@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { resolveStateRoot } from '../../lib/state-root.mjs';
 
 function parse(argv) {
@@ -16,7 +17,7 @@ function isCodexProvider(provider, model) { const v = String(provider || '').toL
 function slug(value) { return String(value || 'unknown').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'unknown'; }
 function asInt(value, fallback = 0) { const n = Math.trunc(Number(value)); return Number.isFinite(n) ? n : fallback; }
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const root = fileURLToPath(new URL('../../../../../', import.meta.url));
 const stateDir = resolveStateRoot({ root });
 const pricingFile = process.env.RUNNING_PI_PRICING_FILE || path.join(root, 'config', 'pricing.json');
 const args = parse(process.argv.slice(2));

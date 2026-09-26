@@ -171,6 +171,22 @@ export function pairedBootstrapDistribution({ left_point, right_point, left_repl
 function u32(value) { if (!Number.isInteger(value) || value < 0 || value > 0xffffffff) invalid(); const bytes = Buffer.allocUnsafe(4); bytes.writeUInt32BE(value); return bytes; }
 function frameField(tag, value, kind) { const payload = kind === 'text' ? Buffer.from(text(value), 'utf8') : kind === 'digest' ? Buffer.from(digest(value), 'hex') : kind === 'u32' ? u32(value) : Buffer.isBuffer(value) && value.length === 32 ? value : invalid(); return Buffer.concat([Buffer.from([tag]), u32(payload.length), payload]); }
 function framedHash(fields) { return createHash('sha256').update(Buffer.concat(fields)).digest(); }
+
+// Each comparison/stratum/cohort has an invariant frame shape. Reuse its bytes
+// rather than allocate five fields and two concatenations for every draw.
+// Hash.update consumes the buffer synchronously; only the fresh digest escapes.
+export function createBootstrapDrawHasher({ tags, seed, cohortCode, stratumOrdinal }) {
+  const seedField = frameField(tags.seed, seed);
+  const frame = Buffer.concat([seedField, frameField(tags.replicate, 0, 'u32'), frameField(tags.cohort_code, cohortCode, 'text'), frameField(tags.stratum_ordinal, stratumOrdinal, 'u32'), frameField(tags.draw, 0, 'u32')]);
+  const replicateOffset = seedField.length + 5;
+  const drawOffset = frame.length - 4;
+  return (replicate, draw) => {
+    if (![replicate, draw].every((value) => Number.isInteger(value) && value >= 0 && value <= 0xffffffff)) invalid();
+    frame.writeUInt32BE(replicate, replicateOffset);
+    frame.writeUInt32BE(draw, drawOffset);
+    return createHash('sha256').update(frame).digest();
+  };
+}
 function normalizedValue(entry, dimension) { const value = entry.outcome.values[dimension.id]; const oriented = dimension.adverse_direction === 'higher' ? value : -value; return numeric(oriented); }
 function fold(values) { return values.reduce((sum, value) => numeric(sum + value), 0); }
 function comparisonSeed(policy, input, dimension, comparison) { const tags = policy.bootstrap.frame.tags; return framedHash([frameField(tags.policy_id, policy.policy_id, 'text'), frameField(tags.input_digest, input.input_digest, 'digest'), frameField(tags.dimension_id, dimension.id, 'text'), frameField(tags.comparison_code, comparison, 'text')]); }
@@ -300,13 +316,17 @@ function bootstrapEffects(input, policy, accepted, supported, comparisons) {
     for (const [comparison, operands] of Object.entries(comparisons)) {
       const [leftCode, rightCode] = comparison.split('/'); const seed = comparisonSeed(policy, input, dimension, comparison); const strata = [...supported].sort(scalarCompare).map((key, ordinal) => {
         const members = (code) => accepted[code].filter((entry) => entry.fingerprint.key_digest === key).sort((left, right) => scalarCompare(left.family_id, right.family_id));
-        return { key, ordinal, left: members(leftCode), right: members(rightCode), weight: operands.stratum_masses[key] };
+        return { key, ordinal, left: members(leftCode), right: members(rightCode), weight: operands.stratum_masses[key],
+          drawHash: {
+            left: createBootstrapDrawHasher({ tags, seed, cohortCode: leftCode, stratumOrdinal: ordinal }),
+            right: createBootstrapDrawHasher({ tags, seed, cohortCode: rightCode, stratumOrdinal: ordinal }),
+          } };
       });
       const effect = (sampled) => numeric(fold(strata.map((stratum) => numeric(stratum.weight * numeric(fold(sampled(stratum, 'left').map((entry) => normalizedValue(entry, dimension))) / stratum.left.length - fold(sampled(stratum, 'right').map((entry) => normalizedValue(entry, dimension))) / stratum.right.length)))) / dimension.absolute_materiality);
       const point = effect((stratum, side) => stratum[side]); const replicates = [];
       for (let replicate = 0; replicate < policy.bootstrap.replicates; replicate += 1) {
         const selected = (stratum, side) => Array.from({ length: stratum[side].length }, (_, draw) => {
-          const hash = framedHash([frameField(tags.seed, seed), frameField(tags.replicate, replicate, 'u32'), frameField(tags.cohort_code, side === 'left' ? leftCode : rightCode, 'text'), frameField(tags.stratum_ordinal, stratum.ordinal, 'u32'), frameField(tags.draw, draw, 'u32')]);
+          const hash = stratum.drawHash[side](replicate, draw);
           const index = Number(hash.readBigUInt64BE(0) % BigInt(stratum[side].length)); allDraws.update(hash); allDraws.update(u32(index)); return stratum[side][index];
         });
         replicates.push(effect(selected));
