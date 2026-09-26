@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { validateCloseoutRequest } from './closeout-recovery.mjs';
 import { closeoutResultRouting } from './closeout-obligations.mjs';
-const read = name => fs.readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8');
+const read = name => fs.readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 
 test('published PI handoff assigns the role-owned artifact and targeted input', () => {
   const doc = read('readme/closeout-recovery.md');

@@ -4,6 +4,11 @@ dashboard/app/routeTree.gen.ts text eol=lf
 # Bash scripts must stay LF-only so Git Bash/MSYS can execute them on Windows.
 *.sh text eol=lf
 
+# Digest-locked PIDEX agent/rule baseline: preserve manifest-hashed bytes exactly.
+# These paths are consumed as raw bytes by the bundled baseline verifier.
+/agents/** -text
+/rules/** -text
+
 # Digest-locked upstream corpus: preserve Git blob bytes exactly on every OS.
 # -text disables checkout/add EOL conversion, including core.autocrlf=true.
 # Do not normalize these files or regenerate their hashes to mask checkout drift.
