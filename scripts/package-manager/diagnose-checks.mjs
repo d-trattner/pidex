@@ -22,23 +22,41 @@ export function diagnosticEnvironment(parent, source, suite) {
 
 // Sharing seed dependencies is allowed only when they are self-contained,
 // copied (not hardlinked to a package store), and unchanged after every suite.
-export function dependencyDigest(root) {
-  if (realpathSync(root) !== path.resolve(root)) throw new Error('Dependency root must not be a link');
+export function dependencyDigest(root, { workspaceRoots = [] } = {}) {
+  const roots = [root, ...workspaceRoots];
+  for (const directory of roots) if (realpathSync(directory) !== path.resolve(directory)) throw new Error('Dependency/workspace root must not be a link');
+  const contained = target => roots.some(directory => {
+    const relative = path.relative(directory, target);
+    return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+  });
   const hash = createHash('sha256');
   const walk = directory => {
     for (const name of readdirSync(directory).sort()) {
       const file = path.join(directory, name); const stat = lstatSync(file);
       const relative = path.relative(root, file); hash.update(`${relative.length}:${relative}`);
       if (stat.isSymbolicLink()) {
-        const target = path.relative(root, realpathSync(file));
-        if (target.startsWith('..') || path.isAbsolute(target)) throw new Error('Dependency link escapes seed');
+        if (!contained(realpathSync(file))) throw new Error('Dependency link escapes seed');
         hash.update(`link:${readlinkSync(file)}`);
       } else if (stat.isDirectory()) { hash.update('directory'); walk(file); }
       else if (stat.isFile() && stat.nlink === 1) { hash.update(`file:${stat.size}:`); hash.update(readFileSync(file)); }
       else throw new Error('Dependencies must contain only copied files and internal links');
     }
   };
-  walk(root); return hash.digest('hex');
+  // Scan each complete allowed tree without following symlinks: workspace
+  // links back into node_modules cannot recurse, and workspace mutations are
+  // part of the digest rather than being silently trusted.
+  for (const directory of roots) walk(directory);
+  return hash.digest('hex');
+}
+
+export function seedDependencyDigest(source) {
+  const dashboard = path.join(source, 'dashboard');
+  const workspaceRoots = [];
+  if (existsSync(path.join(dashboard, 'package.json'))) {
+    if (JSON.parse(readFileSync(path.join(dashboard, 'package.json'), 'utf8')).name !== '@pidex/dashboard') throw new Error('Unexpected dashboard workspace identity');
+    workspaceRoots.push(dashboard);
+  }
+  return dependencyDigest(path.join(source, 'node_modules'), { workspaceRoots });
 }
 
 function git(source, args) {
@@ -128,8 +146,7 @@ export async function runDiagnosticCandidate({ owned, commit, tree, from, to }) 
   if (path.dirname(seed) !== owned) throw new Error('Seed source escapes owned root');
   assertIdentity(seed, commit, tree);
   if (!existsSync(path.join(seed, 'node_modules'))) throw new Error('Prepared seed dependencies required; diagnostic never installs');
-  const dependencies = path.join(seed, 'node_modules');
-  const dependencyHash = dependencyDigest(dependencies);
+  const dependencyHash = seedDependencyDigest(seed);
   const inventory = checkInventory(JSON.parse(readFileSync(path.join(seed, 'package.json'), 'utf8')).scripts);
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to > inventory.length) throw new Error('Invalid explicit command range');
   const resultRoot = path.join(owned, 'diagnostic');
@@ -162,7 +179,7 @@ export async function runDiagnosticCandidate({ owned, commit, tree, from, to }) 
     },
     verify(fixture) {
       assertIdentity(fixture.source, commit, tree); assertIdentity(seed, commit, tree);
-      if (dependencyDigest(dependencies) !== dependencyHash) throw new Error('Shared seed dependencies changed; campaign evidence invalid');
+      if (seedDependencyDigest(seed) !== dependencyHash) throw new Error('Shared seed dependencies changed; campaign evidence invalid');
     },
   });
   writeFileSync(path.join(resultRoot, 'result.json'), JSON.stringify({ diagnosticOnly: true, commit, tree, platform: process.platform, dependencies: 'copied seed files, digest checked after each suite; not an OS sandbox', ...result }, null, 2));
