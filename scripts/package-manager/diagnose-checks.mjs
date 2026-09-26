@@ -16,7 +16,7 @@ export function diagnosticEnvironment(parent, source, suite) {
   for (const [key, value] of Object.entries(parent)) if (allowed.has(key.toUpperCase())) env[key] = value;
   return { ...env, HOME: path.join(suite, 'home'), USERPROFILE: path.join(suite, 'home'), APPDATA: path.join(suite, 'home', 'AppData', 'Roaming'), LOCALAPPDATA: path.join(suite, 'home', 'AppData', 'Local'),
     TEMP: path.join(suite, 'temp'), TMP: path.join(suite, 'temp'), TMPDIR: path.join(suite, 'temp'),
-    PIDEX_ROOT: source, PIDEX_STATE_DIR: path.join(suite, 'state'), RUNNING_PI_STATE_DIR: path.join(suite, 'state'),
+    PIDEX_ROOT: source, PIDEX_HOME_ROOT: source, PIDEX_STATE_DIR: path.join(suite, 'state'), RUNNING_PI_STATE_DIR: path.join(suite, 'state'),
     GIT_CONFIG_GLOBAL: path.join(suite, 'home', '.gitconfig'), GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', CI: '1' };
 }
 

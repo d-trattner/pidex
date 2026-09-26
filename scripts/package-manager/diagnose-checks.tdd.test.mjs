@@ -78,11 +78,12 @@ test('setup failures and campaign deadline stop before another suite starts', as
   assert.equal(result.status, 'HOLD'); assert.deepEqual(budget.calls, []);
 });
 test('diagnostic environment strips credentials, ambient config and real home', () => {
-  const env = diagnosticEnvironment({ PATH: 'tools', SystemRoot: 'windows', OPENAI_API_KEY: 'test_placeholder_not_a_credential', NODE_OPTIONS: '--require ambient', HOME: 'real-home', PIDEX_ROOT: 'installed', PIDEX_STATE_DIR: 'real-state', NPM_CONFIG_USERCONFIG: 'real-npmrc' }, '/fixture/source', '/fixture');
+  const env = diagnosticEnvironment({ PATH: 'tools', SystemRoot: 'windows', OPENAI_API_KEY: 'test_placeholder_not_a_credential', NODE_OPTIONS: '--require ambient', HOME: 'real-home', PIDEX_ROOT: 'installed', PIDEX_HOME_ROOT: 'installed-home', PIDEX_STATE_DIR: 'real-state', NPM_CONFIG_USERCONFIG: 'real-npmrc' }, '/fixture/source', '/fixture');
   assert.equal(env.PATH, 'tools'); assert.equal(env.SystemRoot, 'windows');
   for (const key of ['OPENAI_API_KEY', 'NODE_OPTIONS', 'NPM_CONFIG_USERCONFIG']) assert.equal(env[key], undefined);
   assert.equal(env.HOME, path.join('/fixture', 'home'));
-  assert.equal(env.PIDEX_ROOT, '/fixture/source'); assert.equal(env.PIDEX_STATE_DIR, path.join('/fixture', 'state'));
+  assert.equal(env.PIDEX_ROOT, '/fixture/source'); assert.equal(env.PIDEX_HOME_ROOT, '/fixture/source');
+  assert.equal(env.PIDEX_STATE_DIR, path.join('/fixture', 'state'));
 });
 test('dependency guard detects byte changes, external links and shared hardlinks', () => {
   const fixture = mkdtempSync(path.join(os.tmpdir(), 'pidex-diag-deps-'));
