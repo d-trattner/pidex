@@ -1,9 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readlinkSync, realpathSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { performance } from 'node:perf_hooks';
 import { checkInventory } from './check-inventory.mjs';
 
 // Diagnostic only. Never called by `check` or release acceptance. The CLI needs
@@ -20,44 +20,9 @@ export function diagnosticEnvironment(parent, source, suite) {
     GIT_CONFIG_GLOBAL: path.join(suite, 'home', '.gitconfig'), GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', CI: '1' };
 }
 
-// Sharing seed dependencies is allowed only when they are self-contained,
-// copied (not hardlinked to a package store), and unchanged after every suite.
-export function dependencyDigest(root, { workspaceRoots = [] } = {}) {
-  const roots = [root, ...workspaceRoots];
-  for (const directory of roots) if (realpathSync(directory) !== path.resolve(directory)) throw new Error('Dependency/workspace root must not be a link');
-  const contained = target => roots.some(directory => {
-    const relative = path.relative(directory, target);
-    return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-  });
-  const hash = createHash('sha256');
-  const walk = directory => {
-    for (const name of readdirSync(directory).sort()) {
-      const file = path.join(directory, name); const stat = lstatSync(file);
-      const relative = path.relative(root, file); hash.update(`${relative.length}:${relative}`);
-      if (stat.isSymbolicLink()) {
-        if (!contained(realpathSync(file))) throw new Error('Dependency link escapes seed');
-        hash.update(`link:${readlinkSync(file)}`);
-      } else if (stat.isDirectory()) { hash.update('directory'); walk(file); }
-      else if (stat.isFile() && stat.nlink === 1) { hash.update(`file:${stat.size}:`); hash.update(readFileSync(file)); }
-      else throw new Error('Dependencies must contain only copied files and internal links');
-    }
-  };
-  // Scan each complete allowed tree without following symlinks: workspace
-  // links back into node_modules cannot recurse, and workspace mutations are
-  // part of the digest rather than being silently trusted.
-  for (const directory of roots) walk(directory);
-  return hash.digest('hex');
-}
-
-export function seedDependencyDigest(source) {
-  const dashboard = path.join(source, 'dashboard');
-  const workspaceRoots = [];
-  if (existsSync(path.join(dashboard, 'package.json'))) {
-    if (JSON.parse(readFileSync(path.join(dashboard, 'package.json'), 'utf8')).name !== '@pidex/dashboard') throw new Error('Unexpected dashboard workspace identity');
-    workspaceRoots.push(dashboard);
-  }
-  return dependencyDigest(path.join(source, 'node_modules'), { workspaceRoots });
-}
+// Preserve the public synchronous APIs while keeping the worker independent
+// of the campaign controller (and its command-execution capabilities).
+export { dependencyDigest, seedDependencyDigest } from './dependency-digest.mjs';
 
 function git(source, args) {
   const result = spawnSync('git', ['-c', 'core.longpaths=true', '-C', source, ...args], { encoding: 'utf8', timeout: 60000, shell: false });
@@ -90,11 +55,11 @@ export function diagnosticProcess({ bin, args, cwd, env, logRoot, timeoutMs }) {
       if (settled) return;
       settled = true; clearTimeout(timer); clearTimeout(watchdog);
       closeSync(stdout); closeSync(stderr);
-      resolve({ ...result, elapsedMs: Date.now() - started });
+      resolve({ pid: child.pid ?? null, exitObserved: false, ...result, elapsedMs: Date.now() - started });
     };
     const child = spawn(bin, args, { cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', stdout, stderr] });
     child.once('error', error => finish({ kind: 'spawn-error', code: error.code }));
-    child.once('close', (code, signal) => finish({ kind: timedOut ? 'timeout' : signal ? 'signal' : 'exit', code, signal }));
+    child.once('close', (code, signal) => finish({ kind: timedOut ? 'timeout' : signal ? 'signal' : 'exit', code, signal, exitObserved: true }));
     timer = setTimeout(() => {
       timedOut = true;
       if (process.platform === 'win32') {
@@ -108,10 +73,39 @@ export function diagnosticProcess({ bin, args, cwd, env, logRoot, timeoutMs }) {
   });
 }
 
+// A complete hash only: partial output or an unobserved exit cannot become a
+// baseline. The worker uses identical framing/guards to the synchronous API.
+export async function boundedSeedDependencyDigest({ source, logRoot, timeoutMs }) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Dependency audit deadline exhausted');
+  mkdirSync(logRoot); // Fresh receipts only; never overwrite/reuse an audit.
+  const env = diagnosticEnvironment(process.env, source, logRoot);
+  for (const directory of [env.HOME, env.APPDATA, env.LOCALAPPDATA, env.TEMP, env.PIDEX_STATE_DIR]) mkdirSync(directory, { recursive: true });
+  const result = await diagnosticProcess({ bin: process.execPath,
+    args: [fileURLToPath(new URL('./dependency-digest-worker.mjs', import.meta.url)), source],
+    cwd: source, env, logRoot, timeoutMs });
+  writeFileSync(path.join(logRoot, 'process.json'), JSON.stringify(result, null, 2));
+  if (result.kind !== 'exit' || result.code !== 0 || !result.exitObserved) throw new Error(`Dependency audit did not complete: ${result.kind}`);
+  const output = path.join(logRoot, 'stdout.log');
+  if (lstatSync(output).size > 256 * 1024) throw new Error('Dependency audit receipt exceeds limit');
+  return dependencyAuditReceipt(readFileSync(output, 'utf8'));
+}
+
+export function dependencyAuditReceipt(text) {
+  if (typeof text !== 'string' || Buffer.byteLength(text) > 256 * 1024) throw new Error('Invalid dependency audit output');
+  let receipt;
+  try { receipt = JSON.parse(text.trim().split('\n').at(-1)); } catch { throw new Error('Missing terminal dependency audit receipt'); }
+  const counts = receipt?.counts;
+  if (receipt?.event !== 'complete' || receipt.scope !== 'seed-dependency-digest' || typeof receipt.digest !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.digest) || counts?.operation !== 'complete' ||
+      !['entries', 'files', 'directories', 'links', 'bytes'].every(key => Number.isSafeInteger(counts[key]) && counts[key] >= 0) ||
+      counts.entries !== counts.files + counts.directories + counts.links) throw new Error('Invalid terminal dependency audit receipt');
+  return receipt.digest;
+}
+
 // Hooks make failure/identity policy independently testable without cloning a
 // real candidate or running its tests. No retry path exists.
-export async function collectDiagnostics({ commands, prepare, execute, verify, record, budgetMs = 2700000, now = Date.now }) {
-  const start = now(); const results = [];
+export async function collectDiagnostics({ commands, prepare, execute, verify, record, budgetMs = 2700000, now = () => performance.now(), startedAt }) {
+  const start = startedAt ?? now(); const results = [];
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0 || !Number.isFinite(start)) throw new Error('Invalid diagnostic budget');
   for (const command of commands) {
     if (now() - start >= budgetMs) return { status: 'HOLD', reason: 'campaign-timeout', results };
     try {
@@ -121,11 +115,14 @@ export async function collectDiagnostics({ commands, prepare, execute, verify, r
       const result = await execute(command, fixture, remaining);
       results.push({ ...command, ...result }); await record(results);
       if (result.kind !== 'exit' || !Number.isInteger(result.code) || result.code < 0) return { status: 'HOLD', reason: result.kind, results };
+      if (now() - start >= budgetMs) return { status: 'HOLD', reason: 'campaign-timeout', results };
       await verify(fixture);
+      if (now() - start >= budgetMs) return { status: 'HOLD', reason: 'campaign-timeout', results };
       // Only an ordinary test exit permits the next independently cloned suite.
       // Failure remains in results and cannot produce a campaign PASS.
     } catch (error) { return { status: 'HOLD', reason: error.message, results }; }
   }
+  if (now() - start >= budgetMs) return { status: 'HOLD', reason: 'campaign-timeout', results };
   return { status: results.some(result => result.code !== 0) ? 'FAIL' : 'PASS', results };
 }
 
@@ -141,48 +138,62 @@ async function main() {
   return runDiagnosticCandidate({ owned, commit, tree, from: Number(fromArg), to: Number(toArg) });
 }
 
-export async function runDiagnosticCandidate({ owned, commit, tree, from, to }) {
+export async function runDiagnosticCandidate({ owned, commit, tree, from, to, budgetMs = 2700000, scanTimeoutMs = 180000, now = () => performance.now() }) {
+  const startedAt = now();
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0 || !Number.isFinite(scanTimeoutMs) || scanTimeoutMs <= 0) throw new Error('Invalid diagnostic budget');
+  const remaining = () => budgetMs - (now() - startedAt);
+  const ensureBudget = () => { if (remaining() <= 0) throw new Error('campaign-timeout'); };
   const seed = realpathSync(path.join(owned, 'source'));
   if (path.dirname(seed) !== owned) throw new Error('Seed source escapes owned root');
-  assertIdentity(seed, commit, tree);
-  if (!existsSync(path.join(seed, 'node_modules'))) throw new Error('Prepared seed dependencies required; diagnostic never installs');
-  const dependencyHash = seedDependencyDigest(seed);
-  const inventory = checkInventory(JSON.parse(readFileSync(path.join(seed, 'package.json'), 'utf8')).scripts);
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to > inventory.length) throw new Error('Invalid explicit command range');
   const resultRoot = path.join(owned, 'diagnostic');
   mkdirSync(resultRoot); // EEXIST is intentional: never retry/reuse results.
   const persist = results => writeFileSync(path.join(resultRoot, 'progress.json'), JSON.stringify({ commit, tree, results }, null, 2));
-  const result = await collectDiagnostics({ commands: inventory.slice(from - 1, to), record: persist,
-    prepare(command) {
-      assertIdentity(seed, commit, tree);
-      const suite = path.join(resultRoot, `suite-${String(command.ordinal).padStart(3, '0')}`);
-      mkdirSync(suite); const source = path.join(suite, 'source');
-      git(suite, ['clone', '--no-hardlinks', '--no-checkout', '--', seed, source]);
-      git(source, ['config', 'core.autocrlf', 'true']);
-      git(source, ['config', 'core.longpaths', 'true']);
-      git(source, ['checkout', '--detach', commit]);
-      assertIdentity(source, commit, tree);
-      const env = diagnosticEnvironment(process.env, source, suite);
-      for (const directory of [env.HOME, env.APPDATA, env.LOCALAPPDATA, env.TEMP, env.PIDEX_STATE_DIR]) mkdirSync(directory, { recursive: true });
-      writeFileSync(env.GIT_CONFIG_GLOBAL, '[core]\n  autocrlf = true\n  longpaths = true\n');
-      // Git's directory-only node_modules/ ignore does not cover a POSIX
-      // symlink. Ignore only this runner-owned link, never other fixture edits.
-      const excludes = path.join(source, '.git', 'info', 'exclude');
-      mkdirSync(path.dirname(excludes), { recursive: true });
-      writeFileSync(excludes, `${existsSync(excludes) ? readFileSync(excludes, 'utf8') : ''}\n/node_modules\n`);
-      symlinkSync(path.join(seed, 'node_modules'), path.join(source, 'node_modules'), 'junction');
-      return { source, suite, env };
-    },
-    execute(command, fixture, remaining) {
-      const timeoutMs = Math.min(remaining, command.command.includes('rule-impact-evaluator.tdd.test.mjs') ? 1200000 : 180000);
-      return diagnosticProcess({ ...expand(command.command, fixture.source), cwd: fixture.source, env: fixture.env, logRoot: fixture.suite, timeoutMs });
-    },
-    verify(fixture) {
-      assertIdentity(fixture.source, commit, tree); assertIdentity(seed, commit, tree);
-      if (seedDependencyDigest(seed) !== dependencyHash) throw new Error('Shared seed dependencies changed; campaign evidence invalid');
-    },
-  });
-  writeFileSync(path.join(resultRoot, 'result.json'), JSON.stringify({ diagnosticOnly: true, commit, tree, platform: process.platform, dependencies: 'copied seed files, digest checked after each suite; not an OS sandbox', ...result }, null, 2));
+  let result;
+  try {
+    ensureBudget(); assertIdentity(seed, commit, tree);
+    if (!existsSync(path.join(seed, 'node_modules'))) throw new Error('Prepared seed dependencies required; diagnostic never installs');
+    const inventory = checkInventory(JSON.parse(readFileSync(path.join(seed, 'package.json'), 'utf8')).scripts);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from || to > inventory.length) throw new Error('Invalid explicit command range');
+    ensureBudget();
+    const dependencyHash = await boundedSeedDependencyDigest({ source: seed, logRoot: path.join(resultRoot, 'audit-baseline'), timeoutMs: Math.min(scanTimeoutMs, remaining()) });
+    ensureBudget();
+    result = await collectDiagnostics({ commands: inventory.slice(from - 1, to), record: persist, budgetMs, now, startedAt,
+      prepare(command) {
+        assertIdentity(seed, commit, tree);
+        const suite = path.join(resultRoot, `suite-${String(command.ordinal).padStart(3, '0')}`);
+        mkdirSync(suite); const source = path.join(suite, 'source');
+        git(suite, ['clone', '--no-hardlinks', '--no-checkout', '--', seed, source]);
+        git(source, ['config', 'core.autocrlf', 'true']);
+        git(source, ['config', 'core.longpaths', 'true']);
+        git(source, ['checkout', '--detach', commit]);
+        assertIdentity(source, commit, tree);
+        const env = diagnosticEnvironment(process.env, source, suite);
+        for (const directory of [env.HOME, env.APPDATA, env.LOCALAPPDATA, env.TEMP, env.PIDEX_STATE_DIR]) mkdirSync(directory, { recursive: true });
+        writeFileSync(env.GIT_CONFIG_GLOBAL, '[core]\n  autocrlf = true\n  longpaths = true\n');
+        // Git's directory-only node_modules/ ignore does not cover a POSIX
+        // symlink. Ignore only this runner-owned link, never other fixture edits.
+        const excludes = path.join(source, '.git', 'info', 'exclude');
+        mkdirSync(path.dirname(excludes), { recursive: true });
+        writeFileSync(excludes, `${existsSync(excludes) ? readFileSync(excludes, 'utf8') : ''}\n/node_modules\n`);
+        symlinkSync(path.join(seed, 'node_modules'), path.join(source, 'node_modules'), 'junction');
+        return { source, suite, env };
+      },
+      execute(command, fixture, remainingMs) {
+        const timeoutMs = Math.min(remainingMs, command.command.includes('rule-impact-evaluator.tdd.test.mjs') ? 1200000 : 180000);
+        return diagnosticProcess({ ...expand(command.command, fixture.source), cwd: fixture.source, env: fixture.env, logRoot: fixture.suite, timeoutMs });
+      },
+      async verify(fixture) {
+        assertIdentity(fixture.source, commit, tree); assertIdentity(seed, commit, tree);
+        ensureBudget();
+        const digest = await boundedSeedDependencyDigest({ source: seed, logRoot: path.join(fixture.suite, 'dependency-audit'), timeoutMs: Math.min(scanTimeoutMs, remaining()) });
+        ensureBudget();
+        if (digest !== dependencyHash) throw new Error('Shared seed dependencies changed; campaign evidence invalid');
+      },
+    });
+  } catch (error) { result = { status: 'HOLD', reason: error.message, results: [] }; }
+  const elapsedMs = now() - startedAt;
+  if (result.status !== 'HOLD' && elapsedMs >= budgetMs) result = { ...result, status: 'HOLD', reason: 'campaign-timeout' };
+  writeFileSync(path.join(resultRoot, 'result.json'), JSON.stringify({ diagnosticOnly: true, commit, tree, platform: process.platform, budgetMs, elapsedMs, dependencies: 'copied seed files, complete bounded digest checked after each suite; not an OS sandbox', ...result }, null, 2));
   return result;
 }
 

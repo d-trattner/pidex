@@ -77,6 +77,57 @@ test('setup failures and campaign deadline stop before another suite starts', as
   const result = await collectDiagnostics(budget.options);
   assert.equal(result.status, 'HOLD'); assert.deepEqual(budget.calls, []);
 });
+test('last verification cannot return PASS or FAIL after exhausting the budget', async () => {
+  for (const exit of [0, 1]) {
+    let clock = 0;
+    const { options } = campaign({ commands: [{ ordinal: 1 }], now: () => clock, budgetMs: 10,
+      execute: async () => { clock = 1; return { kind: 'exit', code: exit }; },
+      verify: async () => { clock = 101; } });
+    const result = await collectDiagnostics(options);
+    assert.equal(result.status, 'HOLD'); assert.equal(result.reason, 'campaign-timeout');
+    assert.equal(result.results.length, 1); assert.equal(result.results[0].code, exit);
+  }
+});
+test('recording overruns stop before verify and the baseline consumes the same deadline', async () => {
+  let clock = 0; let verified = false;
+  const first = campaign({ now: () => clock, budgetMs: 10,
+    record: async () => { clock = 10; }, verify: async () => { verified = true; } });
+  assert.equal((await collectDiagnostics(first.options)).status, 'HOLD'); assert.equal(verified, false);
+  const baseline = campaign({ now: () => 20, startedAt: 0, budgetMs: 10 });
+  assert.equal((await collectDiagnostics(baseline.options)).status, 'HOLD'); assert.deepEqual(baseline.calls, []);
+});
+test('exhausted candidate deadline leaves a HOLD receipt without starting a baseline or suite', async () => {
+  const fixture = candidateFixture('process.exit(0)'); let clock = 0;
+  try {
+    const result = await runDiagnosticCandidate({ ...fixture, budgetMs: 1, now: () => clock++ });
+    assert.equal(result.status, 'HOLD'); assert.equal(result.reason, 'campaign-timeout');
+    assert.equal(existsSync(path.join(fixture.owned, 'diagnostic/audit-baseline')), false);
+    assert.equal(existsSync(path.join(fixture.owned, 'diagnostic/suite-001')), false);
+    assert.equal(JSON.parse(readFileSync(path.join(fixture.owned, 'diagnostic/result.json'))).status, 'HOLD');
+  } finally { rmSync(fixture.owned, { recursive: true, force: true }); }
+});
+
+test('a completed baseline that consumed the campaign budget cannot start a suite', async () => {
+  const fixture = candidateFixture('process.exit(0)');
+  const receipt = path.join(fixture.owned, 'diagnostic/audit-baseline/process.json');
+  try {
+    const result = await runDiagnosticCandidate({ ...fixture, budgetMs: 10000, now: () => existsSync(receipt) ? 10001 : 0 });
+    assert.equal(result.status, 'HOLD'); assert.equal(result.reason, 'campaign-timeout');
+    assert.equal(JSON.parse(readFileSync(receipt)).code, 0);
+    assert.equal(existsSync(path.join(fixture.owned, 'diagnostic/suite-001')), false);
+  } finally { rmSync(fixture.owned, { recursive: true, force: true }); }
+});
+test('a baseline worker timeout retains process evidence and never starts a suite', async () => {
+  const fixture = candidateFixture('process.exit(0)');
+  try {
+    const result = await runDiagnosticCandidate({ ...fixture, scanTimeoutMs: 1 });
+    assert.equal(result.status, 'HOLD'); assert.match(result.reason, /Dependency audit did not complete: timeout/);
+    const receipt = JSON.parse(readFileSync(path.join(fixture.owned, 'diagnostic/audit-baseline/process.json')));
+    assert.equal(receipt.exitObserved, true); assert.equal(receipt.kind, 'timeout');
+    assert.equal(existsSync(path.join(fixture.owned, 'diagnostic/suite-001')), false);
+  } finally { rmSync(fixture.owned, { recursive: true, force: true }); }
+});
+
 test('diagnostic environment strips credentials, ambient config and real home', () => {
   const env = diagnosticEnvironment({ PATH: 'tools', SystemRoot: 'windows', OPENAI_API_KEY: 'test_placeholder_not_a_credential', NODE_OPTIONS: '--require ambient', HOME: 'real-home', PIDEX_ROOT: 'installed', PIDEX_HOME_ROOT: 'installed-home', PIDEX_STATE_DIR: 'real-state', NPM_CONFIG_USERCONFIG: 'real-npmrc' }, '/fixture/source', '/fixture');
   assert.equal(env.PATH, 'tools'); assert.equal(env.SystemRoot, 'windows');
