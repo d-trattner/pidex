@@ -45,17 +45,25 @@ function expand(command, source) {
   }) };
 }
 
-export function diagnosticProcess({ bin, args, cwd, env, logRoot, timeoutMs }) {
+// Only boundedSeedDependencyDigest can grant this capability. Its fixed worker
+// imports the audited fs/crypto-only digest module and cannot start descendants;
+// its environment strips Node loaders/injection. Arbitrary commands remain trees.
+const DIGEST_WORKER_LEAF = Symbol('dedicated hash worker, no descendants');
+
+export function diagnosticProcess({ bin, args, cwd, env, logRoot, timeoutMs, leafProof }) {
   const stdout = openSync(path.join(logRoot, 'stdout.log'), 'wx');
   const stderr = openSync(path.join(logRoot, 'stderr.log'), 'wx');
   return new Promise(resolve => {
-    let settled = false; let timer; let watchdog; let timedOut = false;
+    let settled = false; let timer; let watchdog; let timedOut = false; let termination = null;
+    const knownLeaf = leafProof === DIGEST_WORKER_LEAF;
     const started = Date.now();
     const finish = result => {
       if (settled) return;
       settled = true; clearTimeout(timer); clearTimeout(watchdog);
       closeSync(stdout); closeSync(stderr);
-      resolve({ pid: child.pid ?? null, exitObserved: false, ...result, elapsedMs: Date.now() - started });
+      resolve({ pid: child.pid ?? null, exitObserved: false,
+        cleanupScope: knownLeaf ? 'dedicated-hash-worker' : 'process-tree', termination,
+        ...result, elapsedMs: Date.now() - started });
     };
     const child = spawn(bin, args, { cwd, env, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', stdout, stderr] });
     child.once('error', error => finish({ kind: 'spawn-error', code: error.code }));
@@ -64,7 +72,14 @@ export function diagnosticProcess({ bin, args, cwd, env, logRoot, timeoutMs }) {
       timedOut = true;
       if (process.platform === 'win32') {
         const killed = spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeout: 10000, stdio: 'ignore', shell: false });
-        if (killed.error || killed.status !== 0) return finish({ kind: 'cleanup-uncertain', code: null });
+        // Keep bounded, path/content-free evidence even when taskkill fails.
+        termination = { tool: 'taskkill.exe', status: killed.status ?? null,
+          errorCode: killed.error?.code ?? null, signal: killed.signal ?? null };
+        // spawnSync blocks delivery of a close event. A short-lived worker may
+        // already have exited before taskkill finds it. For this proven leaf
+        // ONLY, wait for its actual close (or the existing cleanup watchdog).
+        // Never infer arbitrary descendant cleanup from a root exit alone.
+        if ((killed.error || killed.status !== 0) && !knownLeaf) return finish({ kind: 'cleanup-uncertain', code: null });
       } else {
         try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') return finish({ kind: 'cleanup-uncertain', code: null }); }
       }
@@ -82,7 +97,7 @@ export async function boundedSeedDependencyDigest({ source, logRoot, timeoutMs }
   for (const directory of [env.HOME, env.APPDATA, env.LOCALAPPDATA, env.TEMP, env.PIDEX_STATE_DIR]) mkdirSync(directory, { recursive: true });
   const result = await diagnosticProcess({ bin: process.execPath,
     args: [fileURLToPath(new URL('./dependency-digest-worker.mjs', import.meta.url)), source],
-    cwd: source, env, logRoot, timeoutMs });
+    cwd: source, env, logRoot, timeoutMs, leafProof: DIGEST_WORKER_LEAF });
   writeFileSync(path.join(logRoot, 'process.json'), JSON.stringify(result, null, 2));
   if (result.kind !== 'exit' || result.code !== 0 || !result.exitObserved) throw new Error(`Dependency audit did not complete: ${result.kind}`);
   const output = path.join(logRoot, 'stdout.log');

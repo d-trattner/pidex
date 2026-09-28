@@ -4,6 +4,8 @@ import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { EventEmitter } from 'node:events';
+import { runInNewContext } from 'node:vm';
 import { boundedSeedDependencyDigest, dependencyAuditReceipt, diagnosticEnvironment, diagnosticProcess, seedDependencyDigest } from './diagnose-checks.mjs';
 
 function fixture() {
@@ -51,6 +53,7 @@ test('bounded worker and observed sync digest preserve legacy bytes and include 
     assert.equal(lines.includes(f.source), false); assert.equal(lines.includes('content-only-placeholder'), false);
     const process = JSON.parse(readFileSync(path.join(logRoot, 'process.json')));
     assert.equal(process.exitObserved, true); assert.ok(process.pid > 0); assert.equal(process.code, 0);
+    assert.equal(process.cleanupScope, 'dedicated-hash-worker'); assert.equal(process.termination, null);
     await assert.rejects(boundedSeedDependencyDigest({ source: f.source, logRoot, timeoutMs: 10000 }), /EEXIST/);
     writeFileSync(path.join(f.source, 'dashboard/ignored/ü # %.txt'), 'changed');
     assert.notEqual(await boundedSeedDependencyDigest({ source: f.source, logRoot: path.join(f.owned, 'changed'), timeoutMs: 10000 }), expected);
@@ -98,6 +101,75 @@ test('parent deadline terminates a child blocked in a synchronous loop, not a ch
   } finally { f.close(); }
 });
 
+// Execute the actual supervisor function with deterministic Windows event ordering.
+// This is a control-flow test, NOT native taskkill or process-tree qualification.
+function windowsDeadlineFixture({ leaf = true, killResult = { status: 128 }, platform = 'win32' } = {}) {
+  const child = new EventEmitter(); child.pid = 123;
+  const token = Symbol('test-only leaf capability'); const timers = []; const closed = []; let nextFd = 1;
+  const run = runInNewContext(`(${diagnosticProcess.toString()})`, {
+    DIGEST_WORKER_LEAF: token, path, Date,
+    process: { platform, kill() {} },
+    spawn: () => child, spawnSync: () => killResult,
+    openSync: () => nextFd++, closeSync: fd => closed.push(fd),
+    setTimeout: (fn, ms) => { const timer = { fn, ms, active: true }; timers.push(timer); return timer; },
+    clearTimeout: timer => { if (timer) timer.active = false; },
+  });
+  const promise = run({ bin: 'node', args: [], cwd: 'fixture', env: {}, logRoot: 'logs', timeoutMs: 1, leafProof: leaf === true ? token : leaf });
+  const fire = ms => { const timer = timers.find(row => row.active && row.ms === ms); assert.ok(timer, `active timer ${ms}`); timer.active = false; timer.fn(); };
+  return { child, promise, fire, closed };
+}
+
+test('failed taskkill followed by observed dedicated-worker exit stays timeout, never digest success', async () => {
+  for (const killResult of [{ status: 128 }, { status: null, error: { code: 'ENOENT' } }, { status: null, signal: 'SIGTERM' }]) {
+    const f = windowsDeadlineFixture({ killResult });
+    f.fire(1);
+    let settled = false; f.promise.then(() => { settled = true; }); await Promise.resolve();
+    assert.equal(settled, false, 'must wait for real root close, not infer exit from taskkill');
+    f.child.emit('close', 0, null);
+    const result = await f.promise;
+    assert.equal(result.kind, 'timeout'); assert.equal(result.exitObserved, true); assert.equal(result.code, 0);
+    assert.equal(result.cleanupScope, 'dedicated-hash-worker');
+    assert.equal(result.termination.status, killResult.status);
+    assert.equal(result.termination.errorCode, killResult.error?.code ?? null);
+    assert.equal(result.termination.signal, killResult.signal ?? null);
+    assert.deepEqual(f.closed, [1, 2]);
+  }
+});
+
+test('unknown trees and unobserved leaf exits stay cleanup-uncertain', async () => {
+  for (const leaf of [false, 'dedicated-hash-worker', Symbol('fake capability')]) {
+    const f = windowsDeadlineFixture({ leaf }); f.fire(1); f.child.emit('close', 0, null);
+    const result = await f.promise;
+    assert.equal(result.kind, 'cleanup-uncertain'); assert.equal(result.exitObserved, false);
+    assert.equal(result.cleanupScope, 'process-tree');
+  }
+  const f = windowsDeadlineFixture(); f.fire(1); f.fire(5000);
+  const result = await f.promise;
+  assert.equal(result.kind, 'cleanup-uncertain'); assert.equal(result.exitObserved, false);
+  f.child.emit('close', 0, null); assert.equal(f.closed.length, 2, 'late exit must not settle/close twice');
+});
+
+test('ordinary exit, confirmed taskkill and pre-deadline signal keep their classifications', async () => {
+  const normal = windowsDeadlineFixture(); normal.child.emit('close', 3, null);
+  assert.equal((await normal.promise).kind, 'exit'); assert.equal((await normal.promise).code, 3);
+  const missing = windowsDeadlineFixture(); missing.child.emit('error', { code: 'ENOENT' });
+  assert.equal((await missing.promise).kind, 'spawn-error'); assert.equal((await missing.promise).exitObserved, false);
+  const signalled = windowsDeadlineFixture(); signalled.child.emit('close', null, 'SIGTERM');
+  assert.equal((await signalled.promise).kind, 'signal');
+  for (const leaf of [true, false]) {
+    const f = windowsDeadlineFixture({ leaf, killResult: { status: 0 } }); f.fire(1); f.child.emit('close', 1, null);
+    const result = await f.promise; assert.equal(result.kind, 'timeout'); assert.equal(result.exitObserved, true);
+  }
+});
+
+test('private leaf capability depends on the unchanged no-spawn worker and pure digest closure', () => {
+  for (const [name, digest] of [
+    ['dependency-digest-worker.mjs', '21ed30f496b2a124770904e23212298b19418d569e0c282415f3d48d67feebad'],
+    ['dependency-digest.mjs', '235e1227cad44104bffa8f159158bbb06229986e4d1ba3a0b389a71809ba9c9c'],
+  ]) assert.equal(createHash('sha256').update(readFileSync(new URL(name, import.meta.url))).digest('hex'), digest,
+    'Worker closure changed: re-audit no descendants before retaining the private leaf proof');
+});
+
 test('external deadline kills an actual hash worker; partial output never returns a digest', async () => {
   const f = fixture();
   try {
@@ -105,6 +177,8 @@ test('external deadline kills an actual hash worker; partial output never return
     await assert.rejects(boundedSeedDependencyDigest({ source: f.source, logRoot, timeoutMs: 1 }), /did not complete: timeout/);
     const result = JSON.parse(readFileSync(path.join(logRoot, 'process.json')));
     assert.equal(result.kind, 'timeout'); assert.equal(result.exitObserved, true); assert.ok(result.pid > 0);
+    assert.equal(result.cleanupScope, 'dedicated-hash-worker');
+    if (process.platform === 'win32') assert.equal(result.termination.tool, 'taskkill.exe');
     assert.throws(() => process.kill(result.pid, 0), /ESRCH/);
     await assert.rejects(boundedSeedDependencyDigest({ source: f.source, logRoot: path.join(f.owned, 'expired'), timeoutMs: 0 }), /deadline exhausted/);
   } finally { f.close(); }
