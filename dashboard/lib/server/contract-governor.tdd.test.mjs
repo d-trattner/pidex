@@ -1,12 +1,24 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import os from 'node:os';
 import path from 'node:path';
-import { contractGovernorApiGet, contractGovernorApiPost, contractGovernorReadResponse, getContractGovernorStatus, rejectContractGovernorWrite } from './contract-governor.ts';
+import { contractGovernorApiGet as apiGet, contractGovernorApiPost as apiPost, contractGovernorReadResponse as readResponse, getContractGovernorStatus as readStatus, rejectContractGovernorWrite } from './contract-governor.ts';
 import { openRuleLifecycleStore } from '../../../scripts/quality/rule-lifecycle-store.mjs';
+
+// Test-only adapters: bind state reads/writes to each fixture root, without
+// mutating inherited overrides or changing the runtime's state-root precedence.
+// Explicit env cases below still exercise canonical/legacy external state.
+const fixtureEnv = Object.freeze({});
+const inheritedState = [process.env.PIDEX_STATE_DIR, process.env.RUNNING_PI_STATE_DIR];
+const getContractGovernorStatus = (root, env = fixtureEnv) => readStatus(root, env);
+const contractGovernorReadResponse = (root, env = fixtureEnv) => readResponse(root, env);
+const contractGovernorApiGet = (request, options = {}) => apiGet(request, { ...options, env: options.env ?? fixtureEnv });
+const contractGovernorApiPost = (request, options = {}) => apiPost(request, { ...options, env: options.env ?? fixtureEnv });
 
 function root() { const value = mkdtempSync(path.join(os.tmpdir(), 'pidex-governor-read-model-')); mkdirSync(path.join(value, 'config'), { recursive: true }); mkdirSync(path.join(value, 'state/quality'), { recursive: true }); writeFileSync(path.join(value, 'config/contract-governor.json'), JSON.stringify({ version: 2, capability: 'manual-pending-only', max_proposals_per_run: 5 })); return value; }
 function canonical(value) { return Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}` : JSON.stringify(value); }
@@ -89,7 +101,11 @@ try {
   assert.equal(post.status, 405); assert.deepEqual(await post.json(), { error: 'Method not allowed' }); assert.equal(readFileSync(localPath, 'utf8'), localBefore);
 
   const externalRoot = root(); roots.push(externalRoot); const externalState = mkdtempSync(path.join(os.tmpdir(), 'pidex-governor-read-state-')); roots.push(externalState); mkdirSync(path.join(externalState, 'quality'), { recursive: true }); writeFileSync(path.join(externalState, 'quality/contract-corrections.jsonl'), `${JSON.stringify({ id: 'external', status: 'pending' })}\n`);
-  const externalStatus = await getContractGovernorStatus(externalRoot, { PIDEX_STATE_DIR: externalState, RUNNING_PI_STATE_DIR: path.join(externalRoot, 'legacy') }); assert.equal(externalStatus.pending[0].id, 'external');
+  const externalEnv = { PIDEX_STATE_DIR: externalState, RUNNING_PI_STATE_DIR: path.join(externalRoot, 'legacy') };
+  const externalStatus = await getContractGovernorStatus(externalRoot, externalEnv); assert.equal(externalStatus.pending[0].id, 'external');
+  const legacyStatus = await getContractGovernorStatus(externalRoot, { RUNNING_PI_STATE_DIR: externalState }); assert.equal(legacyStatus.pending[0].id, 'external');
+  const externalResponse = await contractGovernorReadResponse(externalRoot, externalEnv); assert.equal((await externalResponse.json()).pending[0].id, 'external');
+  const externalApi = await contractGovernorApiGet(new Request('http://127.0.0.1:18777/api/quality/contract-governor'), { root: externalRoot, env: externalEnv }); assert.equal((await externalApi.json()).pending[0].id, 'external');
 
   const malformedConfig = root(); roots.push(malformedConfig); writeFileSync(path.join(malformedConfig, 'config/contract-governor.local.json'), '{bad');
   const badConfig = await getContractGovernorStatus(malformedConfig);
@@ -122,6 +138,8 @@ try {
   const globalRetry = await requestRefinement(globalReady, 'nonce-global'); assert.equal(globalRetry.status, 202); assert.equal((await globalRetry.json()).request_id, globalPayload.request_id); assert.equal(requestCount(lifecycleRoot), 1);
   const globalConflict = await requestRefinement(globalReady, 'nonce-global-next'); assert.equal(globalConflict.status, 409); assert.deepEqual(await globalConflict.json(), { error: 'Invalid or stale refinement request' });
   const projectCreated = await requestRefinement(projectReady, 'nonce-project'); assert.equal(projectCreated.status, 202); assert.equal((await projectCreated.json()).scope_id, projectReady.scope_id); assert.equal(requestCount(lifecycleRoot), 2);
+  const externalPost = await contractGovernorApiPost(new Request('http://127.0.0.1:18777/api/quality/contract-governor', { method: 'POST', headers: { origin: 'http://127.0.0.1:18777', 'content-type': 'application/json' }, body: JSON.stringify({ action: 'request_refinement', rule_id: globalReady.rule_id, receipt_digest: globalReady.receipt_digest, request_nonce: 'nonce-global' }) }), { root: apiRoot, env: { PIDEX_STATE_DIR: globalReady.stateRoot } });
+  assert.equal(externalPost.status, 202); assert.equal((await externalPost.json()).request_id, globalPayload.request_id); assert.equal(requestCount(lifecycleRoot), 2);
 
   for (const [name, change] of [
     ['stopped', (target) => { const store = openRuleLifecycleStore({ stateRoot: target.stateRoot }); try { store.setLocalRuleStop({ repository: target.repository, scope_id: target.scope_id || 'pidex-global', rule_id: target.rule_id, reason_code: 'operator_stop' }); } finally { store.close(); } }],
@@ -234,4 +252,35 @@ try {
   assert.equal(h1NoToken.status, 403, 'F-296-01: lifecycle mutation requires configured token even on loopback/same-origin');
   assert.deepEqual(await h1NoToken.json(), { error: 'Operator access required' });
 } finally { for (const value of roots) rmSync(value, { recursive: true, force: true }); }
+assert.deepEqual([process.env.PIDEX_STATE_DIR, process.env.RUNNING_PI_STATE_DIR], inheritedState, 'fixture isolation must not clear inherited state overrides');
+
+// Rerun the unchanged assertions with inherited state overrides. Child mode
+// avoids recursion; a fixture must never read/write these unrelated state roots.
+if (!process.argv.includes('--fixture-environment-child')) {
+  const environmentRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-governor-environment-'));
+  try {
+    for (const mode of ['canonical', 'legacy', 'both']) {
+      const canonicalState = path.join(environmentRoot, mode, 'canonical state');
+      const legacyState = path.join(environmentRoot, mode, 'legacy state');
+      for (const state of [canonicalState, legacyState]) {
+        mkdirSync(state, { recursive: true });
+        writeFileSync(path.join(state, 'sentinel.txt'), 'unrelated state must remain untouched');
+      }
+      const env = { ...process.env };
+      delete env.PIDEX_STATE_DIR;
+      delete env.RUNNING_PI_STATE_DIR;
+      if (mode !== 'legacy') env.PIDEX_STATE_DIR = canonicalState;
+      if (mode !== 'canonical') env.RUNNING_PI_STATE_DIR = legacyState;
+      const child = spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', fileURLToPath(import.meta.url), '--fixture-environment-child'], { env, encoding: 'utf8', timeout: 60000, maxBuffer: 512 * 1024 });
+      assert.ifError(child.error);
+      assert.equal(child.status, 0, `${mode} inherited state must not redirect fixtures:\n${child.stderr}`);
+      assert.match(child.stdout, /contract governor read model tests passed/);
+      for (const state of [canonicalState, legacyState]) {
+        assert.deepEqual(readdirSync(state), ['sentinel.txt'], `${mode}: no lifecycle DB or other state may escape the fixture`);
+        assert.equal(readFileSync(path.join(state, 'sentinel.txt'), 'utf8'), 'unrelated state must remain untouched');
+      }
+    }
+  } finally { rmSync(environmentRoot, { recursive: true, force: true }); }
+  console.log('contract governor inherited-state regressions passed: canonical, legacy, both');
+}
 console.log('contract governor read model tests passed');
