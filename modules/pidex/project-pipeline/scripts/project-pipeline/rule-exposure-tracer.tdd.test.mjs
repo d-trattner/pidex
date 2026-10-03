@@ -5,9 +5,18 @@ import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { traceProjectPipelineExposure, verifyPublicationWitness } from './rule-exposure-tracer.mjs';
+import { traceProjectPipelineExposure as traceProjectPipelineExposureActual, verifyPublicationWitness as verifyPublicationWitnessActual } from './rule-exposure-tracer.mjs';
 import { createActivationEpochCatalog } from '../../../../../scripts/quality/rule-exposure.mjs';
 import { captureRuleImpactFanout } from '../../../../../scripts/quality/rule-impact-results.mjs';
+
+// Publication env is independent of impact stateRoot; preserve explicit caller env.
+const FIXTURE_ENV = Object.freeze({});
+function traceProjectPipelineExposure(options) {
+  return traceProjectPipelineExposureActual({ ...options, env: options.env ?? FIXTURE_ENV });
+}
+function verifyPublicationWitness(options) {
+  return verifyPublicationWitnessActual({ ...options, env: options.env ?? FIXTURE_ENV });
+}
 
 function write(root, relativePath, content) {
   const file = path.join(root, relativePath);
@@ -229,6 +238,31 @@ test('C2 production tracer retains one same-store authority through capture and 
     assert.doesNotMatch(JSON.stringify(result), /rule-impact-input:/);
   } finally { rmSync(sourceRoot, { recursive: true, force: true }); rmSync(terminalRoot, { recursive: true, force: true }); rmSync(stateRoot, { recursive: true, force: true }); }
 });
+
+for (const mode of ['canonical', 'legacy', 'both']) {
+  test(`fixture explicit ${mode} tracer and readback preserve publication precedence, not impact stateRoot`, () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-tracer-explicit-env-'));
+    try {
+      write(root, 'agents/pidex-alpha.md', '# Alpha\n');
+      const canonical = path.join(root, 'canonical'); const legacy = path.join(root, 'legacy');
+      const env = Object.freeze({ ...(mode !== 'legacy' ? { PIDEX_STATE_DIR: canonical } : {}), ...(mode !== 'canonical' ? { RUNNING_PI_STATE_DIR: legacy } : {}) });
+      const selected = mode === 'legacy' ? legacy : canonical;
+      const stateRoot = path.join(root, 'impact-state');
+      const run = { run_id: `explicit-${mode}`, model_identity: 'pi@fixture', config_fingerprint: 'config:fixture', correlation_id: `explicit-${mode}` };
+      const input = { pidexRoot: root, stateRoot, env, run, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] };
+      const first = traceProjectPipelineExposure(input);
+      const replay = traceProjectPipelineExposure(input);
+      const storage = createHash('sha256').update(JSON.stringify({ run_id: run.run_id })).digest('hex');
+      const manifest = JSON.parse(readFileSync(path.join(selected, 'quality/rule-exposure', storage, 'commit-manifest.json'), 'utf8'));
+      assert.equal(first.state_root_class, 'external');
+      assert.deepEqual(manifest.public_ids, first.artifacts);
+      assert.deepEqual(replay.artifacts, first.artifacts);
+      const identity = { run_id: run.run_id, terminal_outcome_ref: 'complete', reconciliation_revision: first.reconciliation.reconciliation_revision, snapshot_id: first.snapshot.snapshot_id, exposure_id: first.exposure.exposure_id };
+      assert.equal(verifyPublicationWitness({ root, identity, env }).verified, true);
+      for (const absent of [mode === 'legacy' ? canonical : legacy, path.join(root, 'state/quality/rule-exposure'), path.join(stateRoot, 'quality/rule-exposure')]) assert.equal(existsSync(absent), false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+}
 
 // ---- Plan048 Slice3B/4: closed lifecycle action invocation seam (RED) ----
 import { closedLifecycleActionHistoryAdapter, invokeLifecycleActionFromOrdinaryResult } from './rule-exposure-tracer.mjs';

@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { classifyDirectorySyncFailure, classifyRecoveryObservation, createActivationEpochCatalog, createPassiveQuality, faultBoundaryCensus, loadActivationEpochCatalog, publicationFaultLedger, proveRecoveryObservationPartition, publishPassiveBundle, publishRuleSnapshot, recoverPassiveBundle, recoveryFaultLedger, recordTerminalExposure, saveActivationEpochCatalog, transitionActivationEpoch } from './rule-exposure.mjs';
+import { classifyDirectorySyncFailure, classifyRecoveryObservation, createActivationEpochCatalog, createPassiveQuality, faultBoundaryCensus, loadActivationEpochCatalog, publicationFaultLedger, proveRecoveryObservationPartition, publishPassiveBundle, publishRuleSnapshot, recoverPassiveBundle as recoverPassiveBundleActual, recoveryFaultLedger, recordTerminalExposure, saveActivationEpochCatalog, transitionActivationEpoch } from './rule-exposure.mjs';
 import fs, { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+const FIXTURE_ENV = Object.freeze({});
+function recoverPassiveBundle(options) {
+  return recoverPassiveBundleActual({ ...options, env: options.env ?? FIXTURE_ENV });
+}
 
 const completeInventory = Object.freeze({
   complete: true,
@@ -245,6 +250,27 @@ test('PIDEX_STATE_DIR overrides legacy/default publication root without leaking 
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(external, { recursive: true, force: true }); rmSync(legacy, { recursive: true, force: true }); }
 });
 
+for (const mode of ['canonical', 'legacy', 'both']) {
+  test(`fixture explicit ${mode} publication and recovery preserve external precedence`, () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-explicit-env-'));
+    try {
+      const canonical = path.join(root, 'canonical'); const legacy = path.join(root, 'legacy');
+      const env = Object.freeze({ ...(mode !== 'legacy' ? { PIDEX_STATE_DIR: canonical } : {}), ...(mode !== 'canonical' ? { RUNNING_PI_STATE_DIR: legacy } : {}) });
+      const selected = mode === 'legacy' ? legacy : canonical;
+      const input = { ...fullProducerBundle(root, { run_id: `explicit-${mode}` }), env };
+      const result = publishPassiveBundle(input);
+      const storage = createHash('sha256').update(JSON.stringify({ run_id: input.identity.run_id })).digest('hex');
+      const manifest = JSON.parse(readFileSync(path.join(selected, 'quality/rule-exposure', storage, 'commit-manifest.json'), 'utf8'));
+      const ids = { reconciliation_id: input.reconciliation.reconciliation_id, snapshot_id: input.snapshot.snapshot_id, exposure_id: input.exposure.exposure_id };
+      assert.deepEqual(manifest.public_ids, ids);
+      assert.deepEqual(process.platform === 'win32' ? result.artifacts : result, ids);
+      assert.deepEqual(recoverPassiveBundle({ root, identity: input.identity, env }).artifacts, ids);
+      assert.equal(existsSync(mode === 'legacy' ? canonical : legacy), false);
+      assert.equal(existsSync(path.join(root, 'state/quality/rule-exposure')), false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+}
+
 test('Windows UC-1B-WIN publication stays unconfirmed in publisher and re-verifies only in fresh process', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-rule-windows-'));
   const identity = { run_id: 'windows-run', terminal_outcome_ref: 'outcome-1', reconciliation_revision: 'recon-v1', snapshot_id: 'snapshot:'.concat('b'.repeat(64)), exposure_id: 'exposure:'.concat('c'.repeat(64)) };
@@ -276,9 +302,9 @@ test('Windows UC-1B-WIN publication stays unconfirmed in publisher and re-verifi
     assert.deepEqual(recoverPassiveBundle({ root, identity }), expected, 'same-process recovery remains unconfirmed');
     const source = pathToFileURL(path.resolve('scripts/quality/rule-exposure.mjs')).href;
     const reloaded = await import(`${source}?same-process-reentry=${Date.now()}`);
-    assert.deepEqual(reloaded.recoverPassiveBundle({ root, identity }), expected, 'cache-busted module re-entry is still publisher process');
+    assert.deepEqual(reloaded.recoverPassiveBundle({ root, identity, env: FIXTURE_ENV }), expected, 'cache-busted module re-entry is still publisher process');
     const child = await new Promise((resolve) => {
-      const childProcess = spawn(process.execPath, ['--input-type=module', '--eval', `import { recoverPassiveBundle } from ${JSON.stringify(source)}; console.log(JSON.stringify(recoverPassiveBundle(JSON.parse(process.argv[1]))));`, JSON.stringify({ root, identity })]);
+      const childProcess = spawn(process.execPath, ['--input-type=module', '--eval', `import { recoverPassiveBundle } from ${JSON.stringify(source)}; console.log(JSON.stringify(recoverPassiveBundle(JSON.parse(process.argv[1]))));`, JSON.stringify({ root, identity, env: FIXTURE_ENV })]);
       let output = '';
       childProcess.stdout.on('data', (chunk) => { output += chunk; });
       childProcess.on('close', (status) => resolve({ status, output }));
@@ -532,6 +558,7 @@ function fullProducerBundle(root, identity = {}) {
   const nullableRunFields = { plan_id: null, project_scope: null, pipeline_version: null, model_identity: null, config_fingerprint: null, correlation_id: null };
   return {
     root,
+    env: FIXTURE_ENV,
     reconciliation: { schema: 1, reconciliation_revision: 'recon-v1', inventory_count: 1, inventory_digest: 'digest-v1', reconciliation_id: ids.reconciliation_id, artifact_id: ids.reconciliation_id },
     snapshot: { schema: 1, snapshot_id: ids.snapshot_id, complete: true, quality_flags: [], active_rules: [activeRule], resolver_revision: 'resolver-v1', inventory_revision: 'inventory-v1', reconciliation_revision: 'recon-v1', inventory_count: 1, projection_revision: 'projection-v1', run_id: resolvedIdentity.run_id, ...nullableRunFields, created_at: '2026-07-27T00:00:00.000Z' },
     exposure: { schema: 1, exposure_id: ids.exposure_id, snapshot_id: ids.snapshot_id, run_id: resolvedIdentity.run_id, ...nullableRunFields, resolver_revision: 'resolver-v1', inventory_revision: 'inventory-v1', reconciliation_revision: 'recon-v1', projection_revision: 'projection-v1', active_rules: [activeRule], activation_epochs: { [activeRule.rule_id]: activeRule.activation_epoch }, terminal_outcome_ref: resolvedIdentity.terminal_outcome_ref, timestamp: '2026-07-27T00:00:00.000Z', quality: 'complete', quality_flags: [], usable_for_evidence: false, attestation: 'project-pipeline-tracer' },

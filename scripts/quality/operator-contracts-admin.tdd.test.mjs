@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -10,7 +10,12 @@ import { CONTRACTS, loadContracts, resetContractCache } from './operator-contrac
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const script = path.join(ROOT, 'scripts/quality/operator-contracts-admin.mjs');
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-contract-admin-'));
-function run(args) { return spawnSync(process.execPath, [script, ...args, '--root', tmp], { encoding: 'utf8' }); }
+function run(args, env = {}) {
+  // Default fixture state; explicit canonical/legacy cases retain production precedence.
+  const stateEnv = { PIDEX_STATE_DIR: path.join(tmp, 'state'), RUNNING_PI_STATE_DIR: '' };
+  if (Object.hasOwn(env, 'PIDEX_STATE_DIR') || Object.hasOwn(env, 'RUNNING_PI_STATE_DIR')) stateEnv.PIDEX_STATE_DIR = '';
+  return spawnSync(process.execPath, [script, ...args, '--root', tmp], { encoding: 'utf8', env: { ...process.env, ...stateEnv, ...env } });
+}
 try {
   const unsupported = run(['propose', '--id', 'bad', '--operator-type', 'OpQualityReview', '--change-type', 'required_when', '--new-value', 'never', '--reason', 'bad']);
   assert.equal(unsupported.status, 1);
@@ -55,6 +60,20 @@ try {
   assert.match(malformed.stderr, /CONTRACT_OVERRIDE_JSON_INVALID/);
   assert.equal(readFileSync(localPath, 'utf8'), malformedBefore);
   assert.equal(readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8'), ledgerBeforeMalformed);
+
+  for (const mode of ['canonical', 'legacy', 'both']) {
+    const canonical = path.join(tmp, `explicit-${mode}-canonical`);
+    const legacy = path.join(tmp, `explicit-${mode}-legacy`);
+    const env = Object.freeze({ ...(mode !== 'legacy' ? { PIDEX_STATE_DIR: canonical } : {}), ...(mode !== 'canonical' ? { RUNNING_PI_STATE_DIR: legacy } : {}) });
+    const selected = mode === 'legacy' ? legacy : canonical;
+    const result = run(['propose', '--id', `explicit-${mode}`, '--operator-type', 'OpQualityReview', '--change-type', 'allowed_skip_reasons', '--new-value', reasons, '--reason', 'explicit state precedence'], env);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const externalRows = readFileSync(path.join(selected, 'quality/contract-corrections.jsonl'), 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(externalRows.length, 1);
+    assert.equal(externalRows[0].id, `explicit-${mode}`);
+    assert.equal(existsSync(mode === 'legacy' ? canonical : legacy), false);
+    assert.equal(readFileSync(path.join(tmp, 'state/quality/contract-corrections.jsonl'), 'utf8'), ledgerBeforeMalformed);
+  }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
   resetContractCache();

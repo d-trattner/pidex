@@ -5,13 +5,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { acquireGovernorLock } from './contract-governor.mjs';
+import { acquireGovernorLock as acquireGovernorLockActual } from './contract-governor.mjs';
+
+const FIXTURE_ENV = Object.freeze({});
+function acquireGovernorLock(root, options = {}) {
+  return acquireGovernorLockActual(root, { ...options, env: options.env ?? FIXTURE_ENV });
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const script = path.join(ROOT, 'scripts/quality/contract-governor.mjs');
 const tmp = mkdtempSync(path.join(os.tmpdir(), 'pidex-governor-v2-'));
 const project = path.join(tmp, 'project');
-function run(args = [], env = {}) { return spawnSync(process.execPath, [script, ...args, '--root', tmp, '--project', project], { encoding: 'utf8', env: { ...process.env, ...env } }); }
+function run(args = [], env = {}) {
+  // CLI and direct lock calls must address the same fixture state directory.
+  const stateEnv = { PIDEX_STATE_DIR: path.join(tmp, 'state'), RUNNING_PI_STATE_DIR: '' };
+  if (Object.hasOwn(env, 'PIDEX_STATE_DIR') || Object.hasOwn(env, 'RUNNING_PI_STATE_DIR')) stateEnv.PIDEX_STATE_DIR = '';
+  return spawnSync(process.execPath, [script, ...args, '--root', tmp, '--project', project], { encoding: 'utf8', env: { ...process.env, ...stateEnv, ...env } });
+}
 try {
   mkdirSync(path.join(tmp, 'config'), { recursive: true });
   mkdirSync(project, { recursive: true });
@@ -100,6 +110,27 @@ try {
   ]) {
     const raced = acquireGovernorLock(tmp, { onReleaseStep: (current, details) => { if (current === step) mutate(details); } });
     assert.ok(raced); assert.equal(raced.release(), false, `${step} replacement must fail closed`); assert.ok(existsSync(raced.releaseDir)); rmSync(raced.releaseDir, { recursive: true, force: true });
+  }
+  for (const mode of ['canonical', 'legacy', 'both']) {
+    const canonical = path.join(tmp, `explicit-${mode}-canonical`);
+    const legacy = path.join(tmp, `explicit-${mode}-legacy`);
+    const env = Object.freeze({ ...(mode !== 'legacy' ? { PIDEX_STATE_DIR: canonical } : {}), ...(mode !== 'canonical' ? { RUNNING_PI_STATE_DIR: legacy } : {}) });
+    const selected = mode === 'legacy' ? legacy : canonical;
+    const lock = acquireGovernorLock(tmp, { env });
+    assert.ok(lock);
+    try {
+      assert.equal(lock.lockDir, path.join(selected, 'quality/contract-governor/.lock'));
+      const held = run(['run', '--report', reportFile], env);
+      assert.equal(held.status, 0, held.stderr || held.stdout);
+      assert.equal(JSON.parse(held.stdout).status, 'locked', 'CLI must observe direct API lock in the same explicit store');
+    } finally { assert.equal(lock.release(), true); }
+    const released = run(['run', '--report', reportFile], env);
+    assert.equal(released.status, 0, released.stderr || released.stdout);
+    assert.equal(JSON.parse(released.stdout).status, 'completed_no_proposals');
+    assert.equal(existsSync(path.join(selected, 'quality/contract-governor')), true);
+    assert.equal(existsSync(mode === 'legacy' ? canonical : legacy), false);
+    assert.equal(readFileSync(ledgerPath, 'utf8'), ledgerBytes);
+    assert.equal(existsSync(lockDir), false);
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });

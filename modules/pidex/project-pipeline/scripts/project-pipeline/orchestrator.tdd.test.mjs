@@ -1,17 +1,116 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import fs, { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, symlinkSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { createProjectRecord, loadProjectRecord, saveProjectRecord } from './registry.mjs';
-import { buildBrowserSmokeVerdictTask, buildPhaseTask, createProjectAutomaticLearningSource, buildProjectPipelineAdjudicationTask, buildProjectPipelineSecondaryLaneTask, createProjectAutomaticLearningProcessAdapter, discoverBrowserSmokeRequests, ensureProjectImage, materializeProjectAutomaticLearningInput, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, projectTelemetryRoot, renderProjectPipelineModuleRules, runProjectLifecycleActionInvocation, runProjectPipelineOrchestration, runProjectPipelineRetrospectiveAutomaticLearning, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
+import { buildBrowserSmokeVerdictTask, buildPhaseTask, createProjectAutomaticLearningSource, buildProjectPipelineAdjudicationTask, buildProjectPipelineSecondaryLaneTask, createProjectAutomaticLearningProcessAdapter, discoverBrowserSmokeRequests, ensureProjectImage, materializeProjectAutomaticLearningInput, parsePhaseList, projectPipelineParallelArtifactPath, projectPipelineRulePhase, projectTelemetryRoot, renderProjectPipelineModuleRules, runProjectLifecycleActionInvocation, runProjectPipelineOrchestration as orchestrate, runProjectPipelineRetrospectiveAutomaticLearning, sanitizeBrowserSmokeResultForSandbox } from './orchestrator.mjs';
 import { canonicalProjectIdentity } from '../../../analysis-metrics-history/lib/project-key.mjs';
 import { openRuleLifecycleStore } from '../../../../../scripts/quality/rule-lifecycle-store.mjs';
 import { enrollAutomaticLearningProfileFromFile, resolveAutomaticLearningRoutes } from '../../../../../scripts/quality/rule-lifecycle.mjs';
 import { materializeVerifiedMirror } from '../../../../../scripts/quality/rule-mirror-sync.mjs';
+
+// Test-only adapter: omitted exposure env means fixture-local state, not the
+// launcher's inherited root. Explicit external env cases retain production
+// canonical/legacy precedence. Runtime-context bootstrap remains unchanged.
+const fixtureEnv = Object.freeze({});
+const runProjectPipelineOrchestration = (options = {}) => orchestrate({ ...options, ruleExposureEnv: options.ruleExposureEnv ?? fixtureEnv });
+
+// Snapshot only: fixture isolation must not mutate launcher-owned state overrides.
+const inheritedState = [process.env.PIDEX_STATE_DIR, process.env.RUNNING_PI_STATE_DIR];
+
+if (process.env.PIDEX_ORCHESTRATOR_FIXTURE_CHILD !== '1') {
+  for (const mode of ['canonical', 'legacy', 'both']) {
+    test(`orchestrator fixtures preserve inherited-state isolation: ${mode}`, () => {
+      const root = tmp();
+      try {
+        const canonical = path.join(root, 'canonical state');
+        const legacy = path.join(root, 'legacy state');
+        for (const state of [canonical, legacy]) {
+          mkdirSync(path.join(state, 'foreign'), { recursive: true });
+          writeFileSync(path.join(state, 'foreign/sentinel.txt'), 'foreign state unchanged');
+        }
+        const env = { ...process.env, PIDEX_ORCHESTRATOR_FIXTURE_CHILD: '1' };
+        delete env.PIDEX_STATE_DIR;
+        delete env.RUNNING_PI_STATE_DIR;
+        // A fresh runner must not inherit the parent's node:test IPC context.
+        delete env.NODE_TEST_CONTEXT;
+        if (mode !== 'legacy') env.PIDEX_STATE_DIR = canonical;
+        if (mode !== 'canonical') env.RUNNING_PI_STATE_DIR = legacy;
+        const child = spawnSync(process.execPath, ['--test', '--test-reporter=tap', fileURLToPath(import.meta.url)], { env, encoding: 'utf8', timeout: 60000, maxBuffer: 2 * 1024 * 1024 });
+        assert.ifError(child.error);
+        assert.equal(child.status, 0, `${mode} inherited state must not redirect exposure fixtures:\n${child.stdout}\n${child.stderr}`);
+        assert.match(child.stdout, /# tests 66\b/, 'child must execute the full suite, not silently skip tests');
+        assert.match(child.stdout, /# fail 0\b/);
+        const selected = mode === 'legacy' ? legacy : canonical;
+        for (const state of [canonical, legacy]) {
+          assert.deepEqual(readdirSync(path.join(state, 'foreign')), ['sentinel.txt']);
+          assert.equal(readFileSync(path.join(state, 'foreign/sentinel.txt'), 'utf8'), 'foreign state unchanged');
+          // Runtime-context bootstrap and review locking still use inherited
+          // state. Allow only their lifecycle store and empty lock directory;
+          // exposure fixtures and the unselected root must stay untouched.
+          assert.deepEqual(readdirSync(state).sort(), state === selected ? ['foreign', 'pipeline-events', 'quality'] : ['foreign']);
+          if (state === selected) {
+            assert.deepEqual(readdirSync(path.join(state, 'quality')), ['rule-lifecycle']);
+            assert.deepEqual(readdirSync(path.join(state, 'pipeline-events')), []);
+          }
+        }
+      } finally { rmSync(root, { recursive: true, force: true }); }
+      assert.deepEqual([process.env.PIDEX_STATE_DIR, process.env.RUNNING_PI_STATE_DIR], inheritedState);
+    });
+  }
+}
+
+test('orchestrator fixtures do not mutate inherited state overrides', () => {
+  assert.deepEqual([process.env.PIDEX_STATE_DIR, process.env.RUNNING_PI_STATE_DIR], inheritedState);
+});
+
+for (const mode of ['canonical', 'legacy', 'both']) {
+  test(`explicit exposure environment retains external state precedence: ${mode}`, async () => {
+    const pidexRoot = tmp();
+    try {
+      const projectId = 'pp-orch-explicit-state';
+      const archiveWorkspace = path.join(pidexRoot, 'archive-workspace');
+      mkdirSync(path.join(archiveWorkspace, 'agents.output'), { recursive: true });
+      mkdirSync(path.join(pidexRoot, 'agents'));
+      writeFileSync(path.join(pidexRoot, 'agents/pidex-alpha.md'), '# Alpha\n');
+      execFileSync('git', ['init', '-q', pidexRoot]);
+      execFileSync('git', ['-C', pidexRoot, 'add', 'agents/pidex-alpha.md']);
+      seedRecord(pidexRoot, projectId, true);
+      const canonical = path.join(pidexRoot, 'canonical state');
+      const legacy = path.join(pidexRoot, 'legacy state');
+      for (const state of [canonical, legacy]) {
+        mkdirSync(state);
+        writeFileSync(path.join(state, 'sentinel.txt'), 'unchanged');
+      }
+      const ruleExposureEnv = {};
+      if (mode !== 'legacy') ruleExposureEnv.PIDEX_STATE_DIR = canonical;
+      if (mode !== 'canonical') ruleExposureEnv.RUNNING_PI_STATE_DIR = legacy;
+      const runner = (args) => {
+        if (args[0] !== 'exec' || !args.includes('pi')) return 'ok';
+        const context = 'agents.output/pidex-planner/artifact.md';
+        mkdirSync(path.join(archiveWorkspace, path.dirname(context)), { recursive: true });
+        writeFileSync(path.join(archiveWorkspace, context), '# planner\n');
+        return { status: 0, stdout: `<!-- ROUTING\ncontext_file: ${context}\n-->` };
+      };
+      const result = await runProjectPipelineOrchestration({ pidexRoot, projectId, task: 'explicit state', phases: ['pidex-planner'], archiveWorkspace, runner, moduleRules: false, ruleExposureEnv });
+      assert.equal(result.ok, true);
+      assert.equal(result.rule_exposure.state_root_class, 'external');
+      const selected = mode === 'legacy' ? legacy : canonical;
+      const unselected = mode === 'legacy' ? canonical : legacy;
+      const bundles = path.join(selected, 'quality/rule-exposure');
+      const manifest = JSON.parse(readFileSync(path.join(bundles, readdirSync(bundles)[0], 'commit-manifest.json'), 'utf8'));
+      assert.deepEqual(manifest.public_ids, result.rule_exposure.artifacts);
+      assert.deepEqual(readdirSync(unselected), ['sentinel.txt']);
+      assert.equal(existsSync(path.join(pidexRoot, 'state/quality/rule-exposure')), false);
+      for (const state of [canonical, legacy]) assert.equal(readFileSync(path.join(state, 'sentinel.txt'), 'utf8'), 'unchanged');
+    } finally { rmSync(pidexRoot, { recursive: true, force: true }); }
+  });
+}
 
 function tmp() { return mkdtempSync(path.join(os.tmpdir(), 'pidex-project-orch-test-')); }
 function canonicalJson(value) { return Array.isArray(value) ? `[${value.map(canonicalJson).join(',')}]` : value && typeof value === 'object' ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}` : JSON.stringify(value); }

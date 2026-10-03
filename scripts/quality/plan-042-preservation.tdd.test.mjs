@@ -5,7 +5,15 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { traceProjectPipelineExposure } from '../../modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.mjs';
+// Existing ordinary entry point also runs focused env regressions. Child name filters
+// exclude their "inherited ..." names, so no recursive suite multiplication occurs.
+import './inherited-state-fixtures.tdd.test.mjs';
+import { traceProjectPipelineExposure as traceProjectPipelineExposureActual } from '../../modules/pidex/project-pipeline/scripts/project-pipeline/rule-exposure-tracer.mjs';
+
+const FIXTURE_ENV = Object.freeze({});
+function traceProjectPipelineExposure(options) {
+  return traceProjectPipelineExposureActual({ ...options, env: options.env ?? FIXTURE_ENV });
+}
 
 const MEMBERS = Object.freeze(['reconciliation', 'snapshot', 'exposure', 'epoch', 'catalog_contribution']);
 const STORAGE_KEY = 'a'.repeat(64);
@@ -228,6 +236,16 @@ function seedResidue(root) { file(root, path.relative(root, runtime(root, `${STO
 const SEED_ACTIONS = Object.freeze({ protected: seedProtected, ignored: seedIgnored, untracked: seedUntracked, content: seedContent, 'internal-link': seedInternalLink, 'escape-link': seedEscapeLink, 'hard-link': seedHardLink, 'tracked-runtime': seedTrackedRuntime, residue: seedResidue });
 function seed(root, kind, detail) { SEED_ACTIONS[kind]?.(root, detail); }
 
+function assertRuntimePublication(root, run, artifacts) {
+  const storage = hash(JSON.stringify({ run_id: run.run_id }));
+  const manifestFile = runtime(root, `${storage}/commit-manifest.json`);
+  assert.equal(existsSync(manifestFile), true, 'real runtime must publish at inspected fixture location');
+  const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+  assert.deepEqual(manifest.public_ids, artifacts);
+  assert.equal(committedManifestValid(manifest), true);
+  assert.equal(committedBundleValid(root, storage), true, 'all five persisted member digests and identities must match');
+}
+
 test('P42-49-V1 exact fixture preserves bytes, type, Git index, report, empty lifecycle, and real replay runtime', () => {
   const { root, baseline } = fixture();
   try {
@@ -236,6 +254,7 @@ test('P42-49-V1 exact fixture preserves bytes, type, Git index, report, empty li
     const run = { run_id: 'p42-49-run', plan_id: '049', project_scope: 'fixture', pipeline_version: 'project-pipeline-v1', model_identity: 'pi@fixture', config_fingerprint: 'sha256:fixture', correlation_id: 'p42-49' };
     const first = traceProjectPipelineExposure({ pidexRoot: root, run, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] });
     const replay = traceProjectPipelineExposure({ pidexRoot: root, run, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] });
+    assertRuntimePublication(root, run, first.artifacts);
     assert.deepEqual(replay.artifacts, first.artifacts);
     assert.equal(repositoryProof(root, baseline).result, 'REPOSITORY_PROOF_EXACT');
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -247,9 +266,32 @@ test('RPV-49-1 seeded tracked, ignored, untracked, residue, link, reparse, hard-
   ];
   for (const [row, kind, detail, expected] of cases) {
     const { root, baseline } = fixture();
-    try { if (kind === 'reparse') { const token = `state/quality/rule-exposure/${STORAGE_KEY}/members/reconciliation.json`; file(root, token, '{}'); assert.equal(repositoryProof(root, baseline, { reparse: new Set([token]) }).result, expected, row); } else { if (kind === 'runtime') traceProjectPipelineExposure({ pidexRoot: root, run: { run_id: 'rp49-s3', plan_id: '049', project_scope: 'fixture', pipeline_version: 'project-pipeline-v1', model_identity: 'pi@fixture', config_fingerprint: 'sha256:fixture', correlation_id: 'rp49-s3' }, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] }); else if (kind) seed(root, kind, detail); const observed = repositoryProof(root, baseline); assert.equal(observed.result, expected, `${row}:${observed.token}`); } } finally { rmSync(root, { recursive: true, force: true }); }
+    try { if (kind === 'reparse') { const token = `state/quality/rule-exposure/${STORAGE_KEY}/members/reconciliation.json`; file(root, token, '{}'); assert.equal(repositoryProof(root, baseline, { reparse: new Set([token]) }).result, expected, row); } else { if (kind === 'runtime') { const result = traceProjectPipelineExposure({ pidexRoot: root, run: { run_id: 'rp49-s3', plan_id: '049', project_scope: 'fixture', pipeline_version: 'project-pipeline-v1', model_identity: 'pi@fixture', config_fingerprint: 'sha256:fixture', correlation_id: 'rp49-s3' }, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] }); assertRuntimePublication(root, { run_id: 'rp49-s3' }, result.artifacts); } else if (kind) seed(root, kind, detail); const observed = repositoryProof(root, baseline); assert.equal(observed.result, expected, `${row}:${observed.token}`); } } finally { rmSync(root, { recursive: true, force: true }); }
   }
 });
+
+for (const mode of ['canonical', 'legacy', 'both']) {
+  test(`fixture explicit ${mode} preservation tracer leaves inspected runtime empty only when explicitly requested`, () => {
+    const { root } = fixture();
+    const external = mkdtempSync(path.join(os.tmpdir(), 'pidex-p42-explicit-env-'));
+    try {
+      const canonical = path.join(external, 'canonical'); const legacy = path.join(external, 'legacy');
+      const env = Object.freeze({ ...(mode !== 'legacy' ? { PIDEX_STATE_DIR: canonical } : {}), ...(mode !== 'canonical' ? { RUNNING_PI_STATE_DIR: legacy } : {}) });
+      const selected = mode === 'legacy' ? legacy : canonical;
+      const run = { run_id: `explicit-${mode}`, model_identity: 'pi@fixture', config_fingerprint: 'config:fixture', correlation_id: `explicit-${mode}` };
+      const input = { pidexRoot: root, env, run, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] };
+      const first = traceProjectPipelineExposure(input);
+      assert.deepEqual(traceProjectPipelineExposure(input).artifacts, first.artifacts);
+      const storage = hash(JSON.stringify({ run_id: run.run_id }));
+      const manifest = JSON.parse(readFileSync(path.join(selected, 'quality/rule-exposure', storage, 'commit-manifest.json'), 'utf8'));
+      assert.deepEqual(manifest.public_ids, first.artifacts);
+      assert.equal(committedManifestValid(manifest), true);
+      assert.equal(first.state_root_class, 'external');
+      assert.deepEqual(readdirSync(runtime(root)), []);
+      assert.equal(existsSync(mode === 'legacy' ? canonical : legacy), false);
+    } finally { rmSync(root, { recursive: true, force: true }); rmSync(external, { recursive: true, force: true }); }
+  });
+}
 
 test('RPV-49-2 RP-49-S7 forbidden categories return redacted category and root-relative token only', () => {
   for (const [field, value, expected] of FORBIDDEN) {
@@ -294,6 +336,7 @@ test('RP-49 concurrent result tree stays classified after independent replay pat
     const run = { run_id: 'p42-49-concurrent', plan_id: '049', project_scope: 'fixture', pipeline_version: 'project-pipeline-v1', model_identity: 'pi@fixture', config_fingerprint: 'sha256:fixture', correlation_id: 'p42-49-concurrent' };
     const first = traceProjectPipelineExposure({ pidexRoot: root, run, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] });
     const second = traceProjectPipelineExposure({ pidexRoot: root, run, terminal_outcome_ref: 'complete', gitTrackedPaths: ['agents/pidex-alpha.md'] });
+    assertRuntimePublication(root, run, first.artifacts);
     assert.deepEqual(second.artifacts, first.artifacts);
     assert.equal(repositoryProof(root, baseline).result, 'REPOSITORY_PROOF_EXACT');
   } finally { rmSync(root, { recursive: true, force: true }); }
