@@ -4,11 +4,69 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { canonicalProjectIdentity } from './project-key.mjs';
-import { executeHostAgentBoundary, executeProjectPipelineReviewBoundary } from '../../../../extensions/pidex/index.ts';
-import { foldReviewHistory } from '../../../../extensions/pidex/review-budget.ts';
-import { deriveReviewPhysicalAttempt, recordReviewAbortHold, recordReviewCompletion, recordReviewHold, recordReviewPhysicalOutcome, reserveReviewStart } from './review-lifecycle.mjs';
-import { resumeReviewHold } from '../scripts/pipeline/event.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+// Runtime roots are captured at import time. Run lifecycle fixtures in one child,
+// not a temporary process.env mutation that leaks into concurrently importing suites.
+// Real Git-authority integration remains in rule-resolver-consumer-guard.tdd.test.mjs.
+if (process.argv[2] !== '--review-lifecycle-fixture') {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-lifecycle-fixture-'));
+  const runtime = path.join(fixture, 'runtime');
+  const temp = path.join(fixture, 'tmp');
+  try {
+    for (const dir of ['runtime/agents', 'runtime/config', 'runtime/scripts', 'tmp', 'home', 'canonical-state', 'legacy-state']) mkdirSync(path.join(fixture, dir), { recursive: true });
+    writeFileSync(path.join(runtime, 'package.json'), JSON.stringify({ name: 'pidex', version: '0.0.0-fixture' }));
+    writeFileSync(path.join(runtime, 'config', 'agents.json'), JSON.stringify({ defaults: { provider: 'pi' }, agents: {} }));
+    writeFileSync(path.join(fixture, 'gitconfig'), '');
+    // Allow only OS essentials; never inherit provider/baseline credentials,
+    // NODE_OPTIONS, NODE_TEST_CONTEXT, or --test/--import through execArgv.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|LANG|LC_ALL|TZ)$/i.test(key)));
+    Object.assign(env, {
+      HOME: path.join(fixture, 'home'), USERPROFILE: path.join(fixture, 'home'),
+      TMPDIR: temp, TMP: temp, TEMP: temp,
+      PIDEX_ROOT: runtime, PIDEX_HOME_ROOT: runtime,
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(fixture, 'gitconfig'),
+      GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_CEILING_DIRECTORIES: fixture,
+    });
+    // Exercise inherited override shapes without writing to inherited state roots.
+    if (process.env.PIDEX_STATE_DIR) env.PIDEX_STATE_DIR = path.join(fixture, 'canonical-state');
+    if (process.env.RUNNING_PI_STATE_DIR) env.RUNNING_PI_STATE_DIR = path.join(fixture, 'legacy-state');
+    const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--review-lifecycle-fixture'], { cwd: runtime, env, encoding: 'utf8', timeout: 120_000, killSignal: 'SIGKILL' });
+    if (child.stdout) process.stdout.write(child.stdout);
+    if (child.stderr) process.stderr.write(child.stderr);
+    assert.equal(child.error, undefined, 'isolated lifecycle child must finish within existing 120s bound');
+    assert.equal(child.status, 0, 'isolated lifecycle child must pass');
+    assert.match(child.stdout, /review lifecycle Plan062 tests passed/);
+    assert.deepEqual(readdirSync(temp), [], 'all lifecycle state/project fixtures cleaned before outer safety cleanup');
+    assert.deepEqual(readdirSync(path.join(fixture, 'canonical-state')), [], 'explicit lifecycle state never leaks into canonical ambient state');
+    assert.deepEqual(readdirSync(path.join(fixture, 'legacy-state')), [], 'explicit lifecycle state never leaks into legacy ambient state');
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+} else {
+const { canonicalProjectIdentity } = await import('./project-key.mjs');
+const { executeHostAgentBoundary: hostBoundary, executeProjectPipelineReviewBoundary: pipelineBoundary } = await import('../../../../extensions/pidex/index.ts');
+const { foldReviewHistory } = await import('../../../../extensions/pidex/review-budget.ts');
+const { deriveReviewPhysicalAttempt, recordReviewAbortHold, recordReviewCompletion, recordReviewHold, recordReviewPhysicalOutcome, reserveReviewStart } = await import('./review-lifecycle.mjs');
+const { resumeReviewHold } = await import('../scripts/pipeline/event.mjs');
+
+let hostCalls = 0; let fakeCalls = 0; let pipelineCalls = 0; let pipelineStarts = 0;
+async function executeHostAgentBoundary(params, options) {
+  hostCalls += 1;
+  assert.equal(typeof options.runConfigured, 'function', 'every host scenario supplies a fake runner');
+  return hostBoundary(params, { ...options, runConfigured: async (runParams) => {
+    fakeCalls += 1;
+    assert.equal(runParams.runtimeContext, undefined, 'non-Git lifecycle fixture must not attest rule authority');
+    const expectedContext = params.task.startsWith('Plan 038')
+      ? 'Rule runtime context: non_attested; verified runtime inputs unavailable, not usable_for_evidence.'
+      : 'Rule runtime context: non_attested; descriptive only, not usable_for_evidence.';
+    assert.equal(runParams.task, `${params.task}\n\n${expectedContext}`, 'real boundary resolves expected context; missing lifecycle authority is not equivalent');
+    return options.runConfigured(runParams);
+  } });
+}
+function executeProjectPipelineReviewBoundary(params, lifecycle, start) {
+  pipelineCalls += 1;
+  return pipelineBoundary(params, lifecycle, () => { pipelineStarts += 1; return start(); });
+}
 
 const state = mkdtempSync(path.join(os.tmpdir(), 'pidex-plan062-lifecycle-'));
 const project = mkdtempSync(path.join(os.tmpdir(), 'pidex-plan062-project-'));
@@ -90,9 +148,12 @@ try {
   const attempt = (mode) => ({ runFamilyId: 'multi-family', planId: 'plan-062', reviewGate: 'code-review', reviewMode: mode, attemptId: `attempt-multi-${mode}` });
   const physicalFor = (current, ordinal, generation = 0) => deriveReviewPhysicalAttempt(current, generation, ordinal);
   const row = (event_type, metadata) => `${JSON.stringify({ event_type, metadata })}\n`;
+  const multiFixtures = [];
   const freshMulti = () => {
     const st = mkdtempSync(path.join(os.tmpdir(), 'pidex-plan062-multi2-state-'));
+    multiFixtures.push(st);
     const pr = mkdtempSync(path.join(os.tmpdir(), 'pidex-plan062-multi2-project-'));
+    multiFixtures.push(pr);
     const base = path.join(st, 'pipeline-events', canonicalProjectIdentity(pr).projectKey);
     mkdirSync(base, { recursive: true });
     writeFileSync(path.join(base, 'plan-062.current'), 'multi2-pipeline');
@@ -204,7 +265,10 @@ try {
     ];
     writeFileSync(sec1Fold.stream, sec1Rows.join(''));
     assert.deepEqual(foldReviewHistory(readFileSync(sec1Fold.stream, 'utf8').trim().split('\n').map(JSON.parse), sec1FoldIdentity), { status: 'denied', code: 'REVIEW_HISTORY_INVALID' }, 'accepted 5-event FAILED_TO_START_TRANSIENT is an unknown permutation and is denied');
-  } finally { rmSync(multiState, { recursive: true, force: true }); rmSync(multiProject, { recursive: true, force: true }); }
+  } finally {
+    for (const directory of multiFixtures) rmSync(directory, { recursive: true, force: true });
+    rmSync(multiState, { recursive: true, force: true }); rmSync(multiProject, { recursive: true, force: true });
+  }
 
 // Plan062 QA-correction2: relocated host-boundary coverage from the published
 // review-budget test. The published extension test keeps only ownership assertions;
@@ -415,8 +479,10 @@ try {
   assert.deepEqual(syncArtifactRows().map((row) => row.metadata.evidence.artifactPresent), [true, true], 'sync seam reports present artifact truthfully');
 } finally { rmSync(syncArtifactState, { recursive: true, force: true }); rmSync(syncArtifactProject, { recursive: true, force: true }); }
 
+  assert.deepEqual({ hostCalls, fakeCalls, pipelineCalls, pipelineStarts }, { hostCalls: 20, fakeCalls: 19, pipelineCalls: 3, pipelineStarts: 5 }, 'complete original host and synchronous scenario inventory executed');
   console.log('review lifecycle Plan062 tests passed');
 } finally {
   rmSync(state, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
+}
 }
