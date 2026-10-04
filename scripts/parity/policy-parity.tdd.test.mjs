@@ -212,7 +212,12 @@ const STATE_CONSUMERS = [
   'modules/pidex/project-pipeline/scripts/project-pipeline/archive-sync.mjs',
 ];
 for (const consumer of STATE_CONSUMERS) assert.match(read(consumer), /resolveStateRoot/, `${consumer} must resolve its state root through the shared helper`);
-// Shell history consumers mirror the same precedence (PIDEX_STATE_DIR > RUNNING_PI_STATE_DIR > <root>/state).
+// History core owns state resolution; compatibility shells forward path values.
+assert.match(read('modules/pidex/analysis-metrics-history/scripts/history/history.mjs'), /resolveStateRoot/, 'history core uses shared state-root authority');
+for (const name of ['append', 'list']) {
+  assert.match(read(`modules/pidex/analysis-metrics-history/scripts/history/${name}.mjs`), /historyMain/, `${name} delegates to the shared history core`);
+}
+// Shell history consumers forward the same precedence (PIDEX_STATE_DIR > RUNNING_PI_STATE_DIR > <root>/state).
 for (const shellConsumer of ['modules/pidex/analysis-metrics-history/scripts/history/append.sh', 'modules/pidex/analysis-metrics-history/scripts/history/list.sh']) {
   const source = read(shellConsumer);
   assert.match(source, /PIDEX_STATE_DIR/, `${shellConsumer} honors the canonical PIDEX_STATE_DIR override`);

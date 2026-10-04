@@ -1,3 +1,4 @@
+import './list.tdd.test.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';

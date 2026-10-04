@@ -135,9 +135,9 @@
         "writes-artifacts"
       ],
       "command": {
-        "bin": "bash",
+        "bin": "node",
         "args": [
-          "modules/pidex/analysis-metrics-history/scripts/history/append.sh"
+          "modules/pidex/analysis-metrics-history/scripts/history/append.mjs"
         ],
         "passthrough": true,
         "passthrough_policy": {
@@ -198,9 +198,9 @@
         "read-only"
       ],
       "command": {
-        "bin": "bash",
+        "bin": "node",
         "args": [
-          "modules/pidex/analysis-metrics-history/scripts/history/list.sh"
+          "modules/pidex/analysis-metrics-history/scripts/history/list.mjs"
         ],
         "passthrough": true,
         "passthrough_policy": {
