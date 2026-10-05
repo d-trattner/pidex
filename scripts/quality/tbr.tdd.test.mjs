@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { closeReviewWithTbr, promoteTbr, readTbrTreeItems, renderIndex, renderTbrItem, validateReviewOutcome, validateTbrTree, writeTbr } from './tbr.mjs';
 
 const immediate = {
@@ -242,8 +243,12 @@ try {
 
 // Plan 157 Slice 1 RED: stored terminal records must parse/render deterministically,
 // while writeTbr retains authority only for open records.
-const repositoryTbr = path.resolve('wiki');
-const storedArchive = validateTbrTree(path.resolve('.'));
+// Static synthetic archive: never depend on the ignored developer wiki or cwd.
+// Keep stored bytes independent of the renderer under test (see fixture README).
+const archiveFixtureRoot = fileURLToPath(new URL('./fixtures/tbr-archive', import.meta.url));
+const repositoryTbr = path.join(archiveFixtureRoot, 'wiki');
+assert.ok(existsSync(path.join(repositoryTbr, 'tbr', 'index.md')), 'versioned archive fixture index must exist');
+const storedArchive = validateTbrTree(archiveFixtureRoot);
 const historicalIds = ['TBR-18e85fb4a129', 'TBR-1fff0cbba029', 'TBR-33ff593e189e', 'TBR-42bb07ce181e', 'TBR-6bda935cbb2b', 'TBR-d131e8cdcc17'];
 const historicalItems = historicalIds.map((stableTbrId) => storedArchive.items.get(stableTbrId));
 assert.equal(storedArchive.ok, true, 'historical and additive stored records validate under canonical archive contract');
@@ -259,7 +264,7 @@ const terminalStored = [...storedArchive.items.values()].find((item) => item.sta
 assert.ok([...storedArchive.items.values()].some((item) => item.status === 'resolved' && item.historyNotes?.includes('## Final resolution')), 'historical terminal narrative is losslessly retained in historyNotes');
 const storedTerminalRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-terminal-writer-'));
 try {
-  cpSync(path.resolve('wiki'), path.join(storedTerminalRoot, 'wiki'), { recursive: true });
+  cpSync(repositoryTbr, path.join(storedTerminalRoot, 'wiki'), { recursive: true });
   const terminalPath = path.join(storedTerminalRoot, 'wiki', 'tbr', 'items', terminalStored.file);
   const terminalBytes = readFileSync(terminalPath, 'utf8');
   const terminalWrite = writeTbr({ root: storedTerminalRoot, identity: { planId: terminalStored.originPlan, runFamilyId: terminalStored.originRun, reviewGate: terminalStored.originGate }, findings: [immediate] });
@@ -272,7 +277,7 @@ try {
 // before candidate, item, or index writes; only open and promoted retries qualify.
 const terminalPromotionRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-terminal-promotion-'));
 try {
-  cpSync(path.resolve('wiki'), path.join(terminalPromotionRoot, 'wiki'), { recursive: true });
+  cpSync(repositoryTbr, path.join(terminalPromotionRoot, 'wiki'), { recursive: true });
   const terminalPromotionItems = validateTbrTree(terminalPromotionRoot).items;
   const indexPath = path.join(terminalPromotionRoot, 'wiki', 'tbr', 'index.md');
   const indexBytes = readFileSync(indexPath, 'utf8');
@@ -291,7 +296,7 @@ try {
 
 const stateFieldRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-tbr-state-fields-'));
 try {
-  cpSync(path.resolve('wiki'), path.join(stateFieldRoot, 'wiki'), { recursive: true });
+  cpSync(repositoryTbr, path.join(stateFieldRoot, 'wiki'), { recursive: true });
   const stateItems = validateTbrTree(stateFieldRoot).items;
   const stateItemDir = path.join(stateFieldRoot, 'wiki', 'tbr', 'items');
   const stateIndexPath = path.join(stateFieldRoot, 'wiki', 'tbr', 'index.md');

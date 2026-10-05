@@ -5,13 +5,74 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { admitReviewDispatch, executeHostAgentBoundary, executeProjectPipelineReviewBoundary, normalizePublicReviewIdentity, runConfiguredProviderAttempts } from './index.ts';
-import { foldReviewHistory, normalizeReviewVerdict, validateReviewIdentity } from './review-budget.ts';
-import { closeReviewWithTbr, validateReviewOutcome, writeTbr } from '../../scripts/quality/tbr.mjs';
-import { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion, deriveReviewPhysicalAttempt, recordReviewPhysicalOutcome, recordReviewHold, recordReviewAbortHold } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
-import { canonicalProjectIdentity } from '../../modules/pidex/analysis-metrics-history/lib/project-key.mjs';
-import '../../scripts/quality/tbr.tdd.test.mjs';
-import '../../scripts/quality/orchestrator-events.tdd.test.mjs';
+import { fileURLToPath } from 'node:url';
+
+// Fake runners do not bypass runtime inventory bootstrap. Capture a supported
+// private runtime root BEFORE importing the extension, in a child so importers'
+// environment/module caches are untouched. Real Git-authority coverage remains
+// in rule-resolver-consumer-guard.tdd.test.mjs; lifecycle/artifact authority below
+// still uses the real boundary and real filesystem, not mocked Git or SDKs.
+if (process.argv[2] !== '--review-budget-fixture') {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), 'pidex-review-budget-fixture-'));
+  const runtime = path.join(fixture, 'runtime');
+  try {
+    for (const dir of ['runtime/agents', 'runtime/config', 'runtime/scripts', 'tmp', 'home', 'canonical-state', 'legacy-state']) mkdirSync(path.join(fixture, dir), { recursive: true });
+    writeFileSync(path.join(runtime, 'package.json'), JSON.stringify({ name: 'pidex', version: '0.0.0-review-budget-fixture' }));
+    writeFileSync(path.join(runtime, 'config/agents.json'), JSON.stringify({ defaults: { provider: 'pi' }, agents: {} }));
+    writeFileSync(path.join(fixture, 'gitconfig'), '');
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|LANG|LC_ALL|TZ)$/i.test(key)));
+    Object.assign(env, {
+      HOME: path.join(fixture, 'home'), USERPROFILE: path.join(fixture, 'home'),
+      TMPDIR: path.join(fixture, 'tmp'), TMP: path.join(fixture, 'tmp'), TEMP: path.join(fixture, 'tmp'),
+      PIDEX_ROOT: runtime, PIDEX_HOME_ROOT: runtime,
+      GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(fixture, 'gitconfig'),
+      GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_CEILING_DIRECTORIES: fixture,
+    });
+    if (process.env.PIDEX_STATE_DIR) env.PIDEX_STATE_DIR = path.join(fixture, 'canonical-state');
+    if (process.env.RUNNING_PI_STATE_DIR) env.RUNNING_PI_STATE_DIR = path.join(fixture, 'legacy-state');
+    const child = spawnSync(process.execPath, ['--experimental-strip-types', fileURLToPath(import.meta.url), '--review-budget-fixture'], {
+      cwd: fileURLToPath(new URL('../../', import.meta.url)), env, encoding: 'utf8', timeout: 120_000, killSignal: 'SIGKILL',
+    });
+    if (child.stdout) process.stdout.write(child.stdout);
+    if (child.stderr) process.stderr.write(child.stderr);
+    assert.equal(child.error, undefined, 'isolated review-budget child must finish within 120s');
+    assert.equal(child.status, 0, 'isolated review-budget child must pass');
+    for (const message of ['tbr.mjs tests passed', 'orchestrator-events.mjs tests passed', 'review budget TBR tests passed']) assert.ok(child.stdout.includes(message), message);
+    assert.deepEqual(readdirSync(path.join(fixture, 'canonical-state')), [], 'explicit review state never leaks into canonical ambient state');
+    assert.deepEqual(readdirSync(path.join(fixture, 'legacy-state')), [], 'explicit review state never leaks into legacy ambient state');
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
+  assert.equal(existsSync(fixture), false, 'outer cleanup removes all imported-suite temporary fixtures');
+} else {
+assert.equal(JSON.parse(readFileSync(path.join(process.env.PIDEX_ROOT, 'package.json'), 'utf8')).version, '0.0.0-review-budget-fixture');
+const { admitReviewDispatch, executeHostAgentBoundary: hostBoundary, executeProjectPipelineReviewBoundary, normalizePublicReviewIdentity, runConfiguredProviderAttempts } = await import('./index.ts');
+const { foldReviewHistory, normalizeReviewVerdict, validateReviewIdentity } = await import('./review-budget.ts');
+const { closeReviewWithTbr, validateReviewOutcome, writeTbr } = await import('../../scripts/quality/tbr.mjs');
+const { reserveReviewStart, reserveReviewStartAsync, recordReviewCompletion, deriveReviewPhysicalAttempt, recordReviewPhysicalOutcome, recordReviewHold, recordReviewAbortHold } = await import('../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs');
+const { canonicalProjectIdentity } = await import('../../modules/pidex/analysis-metrics-history/lib/project-key.mjs');
+await import('../../scripts/quality/tbr.tdd.test.mjs');
+await import('../../scripts/quality/orchestrator-events.tdd.test.mjs');
+
+let hostCalls = 0, fakeCalls = 0, physicalScenarios = 0;
+const contexts = { descriptive: 0, absent: 0, unavailable: 0 };
+async function executeHostAgentBoundary(params, options) {
+  hostCalls += 1;
+  assert.equal(typeof options.runConfigured, 'function', 'every host scenario supplies its own fake runner');
+  return hostBoundary(params, { ...options, runConfigured: async (runParams) => {
+    fakeCalls += 1;
+    assert.equal(runParams.runtimeContext, undefined, 'isolated fixture must not attest rule authority');
+    const prefix = `${params.task}\n\n`;
+    assert.ok(runParams.task.startsWith(prefix), 'real boundary preserves the requested task');
+    const context = runParams.task.slice(prefix.length);
+    const kind = {
+      'Rule runtime context: non_attested; descriptive only, not usable_for_evidence.': 'descriptive',
+      'Rule runtime context: non_attested; lifecycle authority absent or ambiguous, not usable_for_evidence.': 'absent',
+      'Rule runtime context: non_attested; verified runtime inputs unavailable, not usable_for_evidence.': 'unavailable',
+    }[context];
+    assert.ok(kind, 'real boundary emits an exact non-attested context, not fabricated authority');
+    contexts[kind] += 1;
+    return options.runConfigured(runParams);
+  } });
+}
 
 const structuredReviewContract = readFileSync('rules/shared/structured-review-outcome.md', 'utf8');
 assert.match(structuredReviewContract, /correction always finishes with `verdict: COMPLETE`/);
@@ -230,6 +291,7 @@ for (const spec of [
   { gate: 'critic', agent: 'pidex-planner', mode: 'correction1', reviewer: 'pidex-critic' },
   { gate: 'security', agent: 'pidex-security', mode: 'initial', reviewer: 'pidex-security' },
 ]) for (const state of ['accepted', 'retry', 'exhausted', 'primary-hold', 'abort-hold', 'partial-return']) {
+  physicalScenarios += 1;
   const fixture = mkdtempSync(path.join(os.tmpdir(), 'pidex-implicit-physical-'));
   const stateDir = path.join(fixture, 'state');
   const project = path.join(fixture, 'project');
@@ -637,9 +699,17 @@ try {
   assert.equal(result.context_file, directExpected, 'direct reviewer accepts only exact canonical archived context');
 
   const directHold = (pipelineId, child) => { resetDirectRoot(pipelineId); holdStatus(executeProjectPipelineReviewBoundary(directParams, { stateDir: directArtifactState, pipelineId, project: directArtifactProject }, child)); };
-  directHold('direct-foreign', () => directResult({ archive_context_file: foreignArchive }));
   const archiveForeign = path.join(directArtifactProject, 'archive-foreign.md');
   writeFileSync(archiveForeign, '# archive foreign\n');
+  let foreignReturns = 0;
+  directHold('direct-foreign', () => {
+    const returned = directResult({ archive_context_file: archiveForeign });
+    foreignReturns += 1;
+    return returned;
+  });
+  assert.equal(foreignReturns, 2, 'foreign-path denial must follow two successful fake-child returns, not callback exceptions');
+  assert.equal(readFileSync(archiveForeign, 'utf8'), '# archive foreign\n', 'foreign artifact exists and remains unchanged after denial');
+  assert.equal(readFileSync(directArchive, 'utf8'), '# archive\n', 'canonical archive remains unchanged after foreign-path denial');
   rmSync(directArchive);
   symlinkSync(archiveForeign, directArchive, 'file');
   directHold('direct-symlink', () => directResult());
@@ -933,4 +1003,10 @@ try {
   } finally { rmSync(terminalState, { recursive: true, force: true }); rmSync(terminalProject, { recursive: true, force: true }); }
 } finally { rmSync(structuredHostState, { recursive: true, force: true }); rmSync(structuredHostProject, { recursive: true, force: true }); }
 
+assert.equal(hostCalls, 44, 'all original host-boundary scenarios ran');
+assert.equal(fakeCalls, 26, 'real admission/completion still controls fake dispatch count');
+assert.deepEqual(contexts, { descriptive: 6, absent: 2, unavailable: 18 }, 'missing lifecycle authority stays distinct from unavailable rule inventory');
+assert.equal(physicalScenarios, 18, 'all original physical-state scenarios ran');
+console.log('review budget fixture witnesses', JSON.stringify({ hostCalls, fakeCalls, contexts, physicalScenarios }));
 console.log('review budget TBR tests passed');
+}

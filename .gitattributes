@@ -5,6 +5,9 @@ dashboard/app/routeTree.gen.ts text eol=lf
 *.sh text eol=lf
 *.mjs text eol=lf
 
+# Static canonical archive fixtures are byte-compared with the LF renderer.
+/scripts/quality/fixtures/tbr-archive/wiki/tbr/** text eol=lf
+
 # Digest-locked PIDEX agent/rule baseline: preserve manifest-hashed bytes exactly.
 # These paths are consumed as raw bytes by the bundled baseline verifier.
 /agents/** -text
