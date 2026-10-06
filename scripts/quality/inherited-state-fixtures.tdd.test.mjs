@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -27,7 +27,13 @@ for (const mode of ['canonical', 'legacy', 'both']) {
           mkdirSync(path.join(root, name, 'foreign'));
           writeFileSync(path.join(root, name, 'foreign', 'sentinel'), `untouched ${name}\n`);
         }
-        const env = { ...process.env, HOME: path.join(root, 'home'), USERPROFILE: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'), TMP: path.join(root, 'tmp'), TEMP: path.join(root, 'tmp'), XDG_CONFIG_HOME: path.join(root, 'home', 'config'), XDG_STATE_HOME: path.join(root, 'home', 'state'), GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: '1' };
+        // Git for Windows rejects Node's null-device path as a config file.
+        // A real empty file keeps global user configuration isolated on every OS.
+        const gitConfig = path.join(root, 'gitconfig');
+        writeFileSync(gitConfig, '', { flag: 'wx' });
+        const inheritedGitConfig = process.env.GIT_CONFIG_GLOBAL;
+        const env = { ...process.env, HOME: path.join(root, 'home'), USERPROFILE: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'), TMP: path.join(root, 'tmp'), TEMP: path.join(root, 'tmp'), XDG_CONFIG_HOME: path.join(root, 'home', 'config'), XDG_STATE_HOME: path.join(root, 'home', 'state'), GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1' };
+        assert.equal(lstatSync(env.GIT_CONFIG_GLOBAL).isFile(), true, 'Git global config must be a real private file, not a null device');
         // Child copy only: launcher environment and caller process.env remain intact.
         delete env.NODE_TEST_CONTEXT;
         delete env.PIDEX_STATE_DIR;
@@ -38,6 +44,8 @@ for (const mode of ['canonical', 'legacy', 'both']) {
         const child = spawnSync(process.execPath, args, { cwd: ROOT, env, encoding: 'utf8', timeout: 60_000 });
         assert.equal(child.error, undefined, child.error?.message);
         assert.equal(child.status, 0, `${child.stdout}\n${child.stderr}`);
+        assert.equal(readFileSync(gitConfig, 'utf8'), '', 'child leaves private global config empty');
+        assert.equal(process.env.GIT_CONFIG_GLOBAL, inheritedGitConfig, 'caller Git configuration remains unchanged');
         if (fixture.marker) assert.ok(child.stdout.includes(fixture.marker), 'ordinary assertion script must reach completion');
         else {
           assert.match(child.stdout, new RegExp(`# pass ${fixture.count}\\b`), 'selected child tests must actually execute');
