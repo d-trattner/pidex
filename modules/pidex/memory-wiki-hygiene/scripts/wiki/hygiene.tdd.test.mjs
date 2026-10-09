@@ -4,14 +4,15 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..','..');
 const script=path.join(root,'scripts/wiki/hygiene.mjs');
 const tmp=mkdtempSync(path.join(os.tmpdir(),'pidex-wiki-hygiene-'));
 try{mkdirSync(path.join(tmp,'wiki'),{recursive:true});writeFileSync(path.join(tmp,'wiki','index.md'),'# Index\n[missing](nope.md)\n','utf8');writeFileSync(path.join(tmp,'wiki','log.md'),'# Log\n','utf8');const cp=spawnSync(process.execPath,[script,'audit','--project',tmp,'--json-only'],{encoding:'utf8'});assert.equal(cp.status,0,cp.stderr||cp.stdout);const line=cp.stdout.split(/\r?\n/).find(l=>l.startsWith('PIDEX_WIKI_HYGIENE_RESULT='));assert.ok(line);const data=JSON.parse(line.slice('PIDEX_WIKI_HYGIENE_RESULT='.length));assert.equal(data.high,1);assert.ok(existsSync(data.report_json));const cad=spawnSync(process.execPath,[script,'cadence','--project',tmp,'--plan','plan-001','--pipeline-id','p','--terminal-event','pipeline_completed'],{encoding:'utf8'});assert.equal(cad.status,0,cad.stderr||cad.stdout);assert.ok(existsSync(path.join(tmp,'pidex','state','wiki-hygiene.json')))}finally{rmSync(tmp,{recursive:true,force:true})}
 // Exercise the real CLI. The narrow adapter models both existence and canonical
 // spelling for one existing alias; it is not a general Windows filesystem mock.
-const fixtures = mkdtempSync(path.join(os.tmpdir(), 'pidex-wiki-identity-'));
+// URI-reserved characters expose raw --import paths even on POSIX hosts.
+const fixtures = mkdtempSync(path.join(os.tmpdir(), 'pidex-wiki-identity é #%-'));
 const outcomes = [];
 function projectFixture(name, links) {
   const project = path.join(fixtures, name);
@@ -22,6 +23,14 @@ function projectFixture(name, links) {
   return project;
 }
 function auditFixture(project, imports = []) {
+  // Enforce the actual child argv contract, not just successful POSIX loading.
+  for (let index = 0; index < imports.length; index += 2) {
+    assert.equal(imports[index], '--import');
+    const url = new URL(imports[index + 1]);
+    assert.equal(url.protocol, 'file:', 'preloads must use portable file URLs');
+    assert.equal(url.hash, '');
+    assert.equal(url.search, '');
+  }
   const result = spawnSync(process.execPath, [...imports, script, 'audit', '--project', project, '--json-only'], { encoding: 'utf8', timeout: 20000 });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const marker = result.stdout.split(/\r?\n/).find((line) => line.startsWith('PIDEX_WIKI_HYGIENE_RESULT='));
@@ -36,6 +45,11 @@ function assertLinked(report, target, incoming = 1) {
   assert.ok(report.graph_conventions.top_hubs.some((hub) => hub.path === target.slice(5) && hub.inbound === incoming));
 }
 try {
+  // Cross-platform URL transport witness, not a simulated Windows filesystem.
+  const windowsPreload = String.raw`C:\wiki é #%\alias-observer.mjs`;
+  const windowsUrl = pathToFileURL(windowsPreload, { windows: true });
+  assert.equal(windowsUrl.href, 'file:///C:/wiki%20%C3%A9%20%23%25/alias-observer.mjs');
+  assert.equal(fileURLToPath(windowsUrl, { windows: true }), windowsPreload);
   for (const [name, link] of [['wiki', '[[concepts/Thing]]'], ['markdown', '[Thing](concepts/Thing.md)']]) {
     const project = projectFixture(name, link);
     const requested = path.join(project, 'wiki', 'concepts', 'Thing.md');
@@ -55,7 +69,9 @@ fs.realpathSync.native = function(file, ...args) { if (alias(file)) { seen.canon
 syncBuiltinESMExports();
 process.once('exit', () => fs.writeFileSync(${JSON.stringify(witness)}, JSON.stringify(seen)));
 `);
-    const report = auditFixture(project, ['--import', preload]);
+    const imports = ['--import', pathToFileURL(preload).href];
+    assert.equal(fileURLToPath(imports[1]), preload);
+    const report = auditFixture(project, imports);
     assertLinked(report, 'wiki/concepts/thing.md');
     assert.equal(report.graph_conventions.top_hubs.some((hub) => hub.path === 'concepts/Thing.md'), false);
     assert.equal(report.inventory.find((entry) => entry.path === 'wiki/index.md').outgoing_links_count, 1);
