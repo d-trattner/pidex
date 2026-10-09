@@ -742,6 +742,10 @@ test('API-09 assembles parser-accepted multi-family EI from real SQLite authorit
   } finally { store.close(); rmSync(stateRoot, { recursive: true, force: true }); }
 });
 test('F-152-01 closes aggregate authority across post-mint mutations, reads, faults, and writers', () => {
+  const withFixtureDb = (dbPath, action) => {
+    const db = new DatabaseSync(dbPath);
+    try { return action(db); } finally { db.close(); }
+  };
   const t0 = '2026-10-01T00:00:00.000Z';
   const setup = () => {
     const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-f15201-'));
@@ -771,14 +775,21 @@ test('F-152-01 closes aggregate authority across post-mint mutations, reads, fau
       proxy.recordImpactInputAggregate = (request) => { options.mutate?.({ stateRoot, dbPath, source, opening, eventDigest }); return store.recordImpactInputAggregate({ ...request, fault: options.fault }); };
       return assembleImpactEvaluatorInput({ stateRoot, store: proxy, target, target_t0: t0 });
     };
-    const counts = () => { const db = new DatabaseSync(dbPath); const value = { aggregates: db.prepare('SELECT COUNT(*) AS count FROM impact_input_aggregate').get().count, claims: db.prepare('SELECT COUNT(*) AS count FROM impact_input_aggregate_claim').get().count }; db.close(); return value; };
+    const counts = () => withFixtureDb(dbPath, (db) => ({ aggregates: db.prepare('SELECT COUNT(*) AS count FROM impact_input_aggregate').get().count, claims: db.prepare('SELECT COUNT(*) AS count FROM impact_input_aggregate_claim').get().count }));
     return { stateRoot, store, dbPath, source, opening, eventDigest, capture, aggregate, counts, cleanup: () => { store.close(); rmSync(stateRoot, { recursive: true, force: true }); } };
   };
   const unavailable = (mutate) => {
     const fixture = setup();
+    const intendedMutation = mutate;
+    let completedMutations = 0;
+    let mutationResult;
+    mutate = (context) => { mutationResult = intendedMutation(context); completedMutations += 1; };
     try {
       assert.deepEqual(fixture.aggregate({ mutate }), { outcome: 'blocked', reason: 'assembly_authority_unavailable' });
       assert.deepEqual(fixture.counts(), { aggregates: 0, claims: 0 });
+      // Assembler intentionally catches mutation errors; witness must stay outside that boundary.
+      assert.equal(completedMutations, 1, 'intended fixture mutation must complete, not merely fail closed');
+      if (mutationResult !== undefined) assert.equal(mutationResult.changes, 1, 'fixture SQL must mutate exactly one row');
     } finally { fixture.cleanup(); }
   };
   unavailable(({ stateRoot, source }) => rmSync(path.join(stateRoot, 'quality', 'rule-impact-input', `${source.input_digest}.json`)));
@@ -789,15 +800,16 @@ test('F-152-01 closes aggregate authority across post-mint mutations, reads, fau
       assert.deepEqual(fixture.counts(), { aggregates: 0, claims: 0 });
     } finally { fixture.cleanup(); }
   }
-  unavailable(({ dbPath, source }) => { const db = new DatabaseSync(dbPath); db.prepare('DELETE FROM impact_input_history WHERE input_id = ?').run(source.input_id); db.close(); });
-  unavailable(({ dbPath, source }) => { const db = new DatabaseSync(dbPath); db.prepare('DELETE FROM impact_publication_fanout WHERE exposure_id = ? AND publication_digest = ?').run(source.exposure_id, source.publication_digest); db.close(); });
-  unavailable(({ dbPath, source }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_target_index SET input_digest = ? WHERE input_id = ?').run('0'.repeat(64), source.input_id); db.close(); });
+  unavailable(({ dbPath, source }) => withFixtureDb(dbPath, (db) => db.prepare('DELETE FROM impact_input_history WHERE input_id = ?').run(source.input_id)));
+  // Deliberate parent corruption, matching the read-path scenario below; only this tampering connection bypasses FK checks.
+  unavailable(({ dbPath, source }) => withFixtureDb(dbPath, (db) => { db.exec('PRAGMA foreign_keys = OFF'); return db.prepare('DELETE FROM impact_publication_fanout WHERE exposure_id = ? AND publication_digest = ?').run(source.exposure_id, source.publication_digest); }));
+  unavailable(({ dbPath, source }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_target_index SET input_digest = ? WHERE input_id = ?').run('0'.repeat(64), source.input_id)));
   unavailable(({ stateRoot, opening }) => rmSync(path.join(stateRoot, 'quality', 'rule-impact-opening', `${sha256(Buffer.from(JSON.stringify(opening)))}.json`)));
-  unavailable(({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_lifecycle_opening SET opening_bytes = ?').run(Buffer.from('{}')); db.close(); });
-  unavailable(({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_lifecycle_event SET event_bytes = ?').run(Buffer.from('{}')); db.close(); });
-  unavailable(({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_lifecycle_event SET event_digest = ?').run('0'.repeat(64)); db.close(); });
-  unavailable(({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_contract_authority SET impact_contract_bytes = ?').run(Buffer.from('{}')); db.close(); });
-  unavailable(({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_contract_authority SET impact_contract_digest = ?').run('0'.repeat(64)); db.close(); });
+  unavailable(({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_lifecycle_opening SET opening_bytes = ?').run(Buffer.from('{}'))));
+  unavailable(({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_lifecycle_event SET event_bytes = ?').run(Buffer.from('{}'))));
+  unavailable(({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_lifecycle_event SET event_digest = ?').run('0'.repeat(64))));
+  unavailable(({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_contract_authority SET impact_contract_bytes = ?').run(Buffer.from('{}'))));
+  unavailable(({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_contract_authority SET impact_contract_digest = ?').run('0'.repeat(64))));
   for (const point of ['after_begin', 'after_blob_publication', 'before_index', 'before_commit']) {
     const fixture = setup();
     try {
@@ -811,20 +823,21 @@ test('F-152-01 closes aggregate authority across post-mint mutations, reads, fau
   }
   for (const mutate of [
     ({ stateRoot, source }) => writeFileSync(path.join(stateRoot, 'quality', 'rule-impact-input', `${source.input_digest}.json`), '{}'),
-    ({ dbPath, source }) => { const db = new DatabaseSync(dbPath); db.prepare('DELETE FROM impact_input_history WHERE input_id = ?').run(source.input_id); db.close(); },
-    ({ dbPath, source }) => { const db = new DatabaseSync(dbPath); db.exec('PRAGMA foreign_keys = OFF'); db.prepare('DELETE FROM impact_publication_fanout WHERE exposure_id = ? AND publication_digest = ?').run(source.exposure_id, source.publication_digest); db.close(); },
-    ({ dbPath, source }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_target_index SET input_digest = ? WHERE input_id = ?').run('0'.repeat(64), source.input_id); db.close(); },
+    ({ dbPath, source }) => withFixtureDb(dbPath, (db) => db.prepare('DELETE FROM impact_input_history WHERE input_id = ?').run(source.input_id)),
+    ({ dbPath, source }) => withFixtureDb(dbPath, (db) => { db.exec('PRAGMA foreign_keys = OFF'); return db.prepare('DELETE FROM impact_publication_fanout WHERE exposure_id = ? AND publication_digest = ?').run(source.exposure_id, source.publication_digest); }),
+    ({ dbPath, source }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_target_index SET input_digest = ? WHERE input_id = ?').run('0'.repeat(64), source.input_id)),
     ({ stateRoot, opening }) => rmSync(path.join(stateRoot, 'quality', 'rule-impact-opening', `${sha256(Buffer.from(JSON.stringify(opening)))}.json`)),
-    ({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_lifecycle_opening SET opening_bytes = ?').run(Buffer.from('{}')); db.close(); },
-    ({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_lifecycle_event SET event_bytes = ?').run(Buffer.from('{}')); db.close(); },
-    ({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_lifecycle_event SET event_digest = ?').run('0'.repeat(64)); db.close(); },
-    ({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_contract_authority SET impact_contract_bytes = ?').run(Buffer.from('{}')); db.close(); },
-    ({ dbPath }) => { const db = new DatabaseSync(dbPath); db.prepare('UPDATE impact_contract_authority SET impact_contract_digest = ?').run('0'.repeat(64)); db.close(); },
+    ({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_lifecycle_opening SET opening_bytes = ?').run(Buffer.from('{}'))),
+    ({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_lifecycle_event SET event_bytes = ?').run(Buffer.from('{}'))),
+    ({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_lifecycle_event SET event_digest = ?').run('0'.repeat(64))),
+    ({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_contract_authority SET impact_contract_bytes = ?').run(Buffer.from('{}'))),
+    ({ dbPath }) => withFixtureDb(dbPath, (db) => db.prepare('UPDATE impact_contract_authority SET impact_contract_digest = ?').run('0'.repeat(64))),
   ]) {
     const fixture = setup();
     try {
       const first = fixture.aggregate(); assert.equal(first.outcome, 'ready');
-      mutate({ stateRoot: fixture.stateRoot, dbPath: fixture.dbPath, source: fixture.source, opening: fixture.opening });
+      const mutationResult = mutate({ stateRoot: fixture.stateRoot, dbPath: fixture.dbPath, source: fixture.source, opening: fixture.opening });
+      if (mutationResult !== undefined) assert.equal(mutationResult.changes, 1, 'fixture SQL must mutate exactly one row');
       assert.deepEqual(fixture.store.readImpactInputAggregate({ measurement_input_id: first.measurement_input_id }), { outcome: 'unavailable' });
     } finally { fixture.cleanup(); }
   }
