@@ -16,7 +16,14 @@ function files(dir) {
 }
 
 test('Angular package exposes one adaptive base skill and two read-only capabilities', () => {
-  assert.match(skill, /^---\nname: angular-application\ndescription: .{80,1024}\n/m);
+  const rawSkill = skill;
+  for (const lineEnding of ['\n', '\r\n']) {
+    const fixtureSkill = rawSkill.replace(/\r?\n/g, lineEnding);
+    assert.equal(fixtureSkill.includes('\r\n'), lineEnding === '\r\n');
+    // Normalize only the structural text view; byte/size checks below stay raw.
+    const skill = fixtureSkill.replace(/\r\n/g, '\n');
+    assert.match(skill, /^---\nname: angular-application\ndescription: .{80,1024}\n/m);
+  }
   assert.ok(skill.split('\n').length <= 220);
   assert.ok(Buffer.byteLength(skill) <= 14 * 1024);
   assert.deepEqual(manifest.capabilities.map((item) => item.id), ['angular.source-check', 'angular.inspect']);

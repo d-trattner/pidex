@@ -48,9 +48,16 @@ test('source lock rejects changed, missing, extra, mirror-mismatched and nested 
 });
 
 test('real Git checkout preserves every locked byte with Windows-style autocrlf', () => {
+  for (const lineEnding of ['\n', '\r\n']) verifyCheckoutWithLineEnding(lineEnding);
+});
+
+function verifyCheckoutWithLineEnding(lineEnding) {
   const root = fixture();
   try {
     cpSync(path.join(repo, '.gitattributes'), path.join(root, '.gitattributes'));
+    const attributeText = readFileSync(path.join(root, '.gitattributes'), 'utf8').replace(/\r?\n/g, lineEnding);
+    writeFileSync(path.join(root, '.gitattributes'), attributeText);
+    assert.equal(attributeText.includes('\r\n'), lineEnding === '\r\n');
     writeFileSync(path.join(root, 'ordinary.txt'), 'first\nsecond\n');
     const config = path.join(root, 'empty-git-config'); writeFileSync(config, '');
     // Only this disposable repository is configured; no network, commits,
@@ -84,8 +91,9 @@ test('real Git checkout preserves every locked byte with Windows-style autocrlf'
     const full = path.join(root, entry);
     const attributesFile = path.join(root, '.gitattributes');
     const protectedAttributes = readFileSync(attributesFile, 'utf8');
-    writeFileSync(attributesFile, protectedAttributes.split('\n').filter(line => !line.endsWith(' -text')).join('\n'));
+    writeFileSync(attributesFile, protectedAttributes.split(/\r?\n/).filter(line => !line.endsWith(' -text')).join('\n'));
     git(['-c', 'core.autocrlf=false', 'add', '--', '.gitattributes']);
+    for (const line of git(['check-attr', 'text', '--', ...paths]).trim().split(/\r?\n/)) assert.match(line, /: text: unspecified$/);
     // Reproduce an old checkout including its clean CRLF index stat cache.
     git(['-c', 'core.autocrlf=true', 'checkout-index', '--all', '--force', '--index']);
     assert.ok(readFileSync(full, 'utf8').includes('\r\n'));
@@ -106,4 +114,4 @@ test('real Git checkout preserves every locked byte with Windows-style autocrlf'
     git(['diff', '--cached', '--quiet', tree, '--', entry], 1);
     assert.deepEqual(readFileSync(full), edited, 'staged edits are also detected');
   } finally { rmSync(root, { recursive: true, force: true }); }
-});
+}
