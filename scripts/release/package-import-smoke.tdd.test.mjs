@@ -40,10 +40,19 @@ function npmCliPath() {
   const candidates = [path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'), path.join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')];
   return candidates.find(existsSync) || (() => { throw new Error('npm CLI not found'); })();
 }
+function packageTemp(prefix) {
+  // Exercise special characters; POSIX also permits a colon in the working directory.
+  return mkdtempSync(path.join(os.tmpdir(), `${process.platform === 'win32' ? '' : 'C:'}${prefix} é #% `));
+}
 function pack(destination) {
   const result = spawnSync(process.execPath, [npmCliPath(), 'pack', '--json', '--pack-destination', destination], { cwd: root, encoding: 'utf8' });
   assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
   return JSON.parse(result.stdout)[0];
+}
+function runTar(args, cwd) {
+  assert.equal(path.basename(args[1]), args[1], 'tar archive must be a basename');
+  assert.doesNotMatch(args[1], /[:\\/]/, 'tar archive must not name a remote host or path');
+  return spawnSync('tar', args, { cwd, encoding: 'utf8' });
 }
 function relativeImports(file) {
   const source = readFileSync(path.join(root, file), 'utf8');
@@ -68,7 +77,7 @@ function runtimeClosure() {
 }
 
 test('published tarball contains exact Plan045 runtime import closure and baseline fails closed without install', async () => {
-  const temp = mkdtempSync(path.join(os.tmpdir(), 'pidex-package-import-'));
+  const temp = packageTemp('pidex-package-import');
   try {
     const report = pack(temp);
     const shipped = new Set(report.files.map((item) => item.path));
@@ -77,14 +86,15 @@ test('published tarball contains exact Plan045 runtime import closure and baseli
     assert.equal(shipped.has('state/lifecycle.sqlite'), false);
     assert.equal(shipped.has('.git/HEAD'), false);
 
-    const tarball = path.join(temp, report.filename);
-    const listed = spawnSync('tar', ['-tzf', tarball], { encoding: 'utf8' });
+    // Keep archive/destination arguments relative: GNU tar treats C: as a remote host.
+    const tarball = report.filename;
+    const listed = runTar(['-tzf', tarball], temp);
     assert.equal(listed.status, 0, listed.stderr);
     assert.equal(listed.stdout.includes('package/state/'), false);
 
     const baselineDir = path.join(temp, 'baseline');
     mkdirSync(baselineDir);
-    const extracted = spawnSync('tar', ['-xzf', tarball, '-C', baselineDir, '--strip-components=1'], { encoding: 'utf8' });
+    const extracted = runTar(['-xzf', tarball, '-C', 'baseline', '--strip-components=1'], temp);
     assert.equal(extracted.status, 0, extracted.stderr);
     const baselineModule = path.join(baselineDir, 'scripts/quality/rule-lifecycle.mjs');
     for (const file of plan046RuntimeFiles) await import(pathToFileURL(path.join(baselineDir, file)).href);
@@ -98,7 +108,7 @@ test('published tarball contains exact Plan045 runtime import closure and baseli
 });
 
 test('published tarball contains the complete Angular module and exactly one Angular skill entry', async () => {
-  const temp = mkdtempSync(path.join(os.tmpdir(), 'pidex-angular-package-'));
+  const temp = packageTemp('pidex-angular-package');
   try {
     const report = pack(temp);
     const shipped = new Set(report.files.map((item) => item.path));
@@ -116,7 +126,7 @@ test('published tarball contains the complete Angular module and exactly one Ang
     for (const removed of ['modules/pidex/angular/scripts/angular/verify.mjs', 'modules/pidex/angular/lib/managed-process.mjs', 'modules/pidex/angular/lib/nx-cli.mjs']) assert.equal(shipped.has(removed), false);
 
     const extractedDir = path.join(temp, 'extracted'); mkdirSync(extractedDir);
-    const extracted = spawnSync('tar', ['-xzf', path.join(temp, report.filename), '-C', extractedDir, '--strip-components=1'], { encoding: 'utf8' });
+    const extracted = runTar(['-xzf', report.filename, '-C', 'extracted', '--strip-components=1'], temp);
     assert.equal(extracted.status, 0, extracted.stderr);
     const sourceLock = await import(pathToFileURL(path.join(extractedDir, 'modules/pidex/angular/lib/source-lock.mjs')).href);
     assert.equal(sourceLock.verifyAngularSourceLock({ pidexRoot: extractedDir }).status, 'verified');
