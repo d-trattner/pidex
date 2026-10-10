@@ -11,6 +11,7 @@ const tmp=mkdtempSync(path.join(os.tmpdir(),'pidex-wiki-hygiene-'));
 try{mkdirSync(path.join(tmp,'wiki'),{recursive:true});writeFileSync(path.join(tmp,'wiki','index.md'),'# Index\n[missing](nope.md)\n','utf8');writeFileSync(path.join(tmp,'wiki','log.md'),'# Log\n','utf8');const cp=spawnSync(process.execPath,[script,'audit','--project',tmp,'--json-only'],{encoding:'utf8'});assert.equal(cp.status,0,cp.stderr||cp.stdout);const line=cp.stdout.split(/\r?\n/).find(l=>l.startsWith('PIDEX_WIKI_HYGIENE_RESULT='));assert.ok(line);const data=JSON.parse(line.slice('PIDEX_WIKI_HYGIENE_RESULT='.length));assert.equal(data.high,1);assert.ok(existsSync(data.report_json));const cad=spawnSync(process.execPath,[script,'cadence','--project',tmp,'--plan','plan-001','--pipeline-id','p','--terminal-event','pipeline_completed'],{encoding:'utf8'});assert.equal(cad.status,0,cad.stderr||cad.stdout);assert.ok(existsSync(path.join(tmp,'pidex','state','wiki-hygiene.json')))}finally{rmSync(tmp,{recursive:true,force:true})}
 // Exercise the real CLI. The narrow adapter models both existence and canonical
 // spelling for one existing alias; it is not a general Windows filesystem mock.
+// Native evidence: ordinary realpath preserves requested case; .native resolves it.
 // URI-reserved characters expose raw --import paths even on POSIX hosts.
 const fixtures = mkdtempSync(path.join(os.tmpdir(), 'pidex-wiki-identity é #%-'));
 const outcomes = [];
@@ -64,7 +65,7 @@ const seen = { exists: 0, canonical: 0 };
 const originalExists = fs.existsSync, originalRealpath = fs.realpathSync;
 const alias = (file) => typeof file === 'string' && path.resolve(file) === requested;
 fs.existsSync = function(file) { if (alias(file)) { seen.exists++; return originalExists(actual); } return originalExists(file); };
-fs.realpathSync = function(file, ...args) { if (alias(file)) { seen.canonical++; return originalRealpath(actual, ...args); } return originalRealpath(file, ...args); };
+fs.realpathSync = function(file, ...args) { if (alias(file)) return requested; return originalRealpath(file, ...args); };
 fs.realpathSync.native = function(file, ...args) { if (alias(file)) { seen.canonical++; return originalRealpath.native(actual, ...args); } return originalRealpath.native(file, ...args); };
 syncBuiltinESMExports();
 process.once('exit', () => fs.writeFileSync(${JSON.stringify(witness)}, JSON.stringify(seen)));
