@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { recordPipelineEvent, resolvePlanReviewAuthority } from '../../modules/pidex/analysis-metrics-history/lib/review-lifecycle.mjs';
 import { confirmPipelineCloseout } from '../../modules/pidex/analysis-metrics-history/scripts/pipeline/event.mjs';
 import { processMatches, signalExecutionChild } from './review-execution.mjs';
+import { pollReviewAuthority } from './test-support/poll-review-authority.mjs';
 
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -73,7 +74,7 @@ if(agent==='pidex-implementer'&&n===1){setInterval(()=>{},1000);}else{
   assert.equal(first.code, 0, first.stderr);
   assert.equal(resolvePlanReviewAuthority(authority).rows.findLast(r => r.event_type === 'review_outcome').metadata.outcome, 'CHANGES_REQUESTED');
   const interrupted = run('correction');
-  const accepted = await until(() => resolvePlanReviewAuthority(authority).rows.findLast(r => r.event_type === 'spawn_accepted' && r.metadata?.reviewMode === 'correction1'));
+  const accepted = await until(() => pollReviewAuthority(authority)?.rows.findLast(r => r.event_type === 'spawn_accepted' && r.metadata?.reviewMode === 'correction1'));
   assert.match(accepted.metadata.executionStartDigest, /^[a-f0-9]{64}$/);
   // Also ensure the fake worker entered its body before cutting the owner.
   await until(() => fs.existsSync(path.join(project, 'pidex-implementer.count')));
