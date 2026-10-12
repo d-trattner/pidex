@@ -112,6 +112,38 @@ function isCanonicalCandidate(relativePath) {
     || /^modules\/pidex\/[^/]+\/rules\/.+\.md$/.test(relativePath);
 }
 
+// Proves catalog equivalence, not a new accepted authority. Callers must still
+// compare the complete candidate descriptors/bytes with the stored projection.
+export function verifyUnchangedCanonicalRuleAncestor({ root, acceptedHead, currentHead, operationHook } = {}) {
+  if (![acceptedHead, currentHead].every(head => typeof head === 'string' && /^[a-f0-9]{40}$/.test(head))) return false;
+  try {
+    const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (realpathSync(git(['rev-parse', '--show-toplevel']).trim()) !== realpathSync(root)) return false;
+    if (git(['rev-parse', '--verify', 'HEAD^{commit}']).trim() !== currentHead) return false;
+    git(['merge-base', '--is-ancestor', acceptedHead, currentHead]);
+    const roster = head => git(['ls-tree', '-rz', '--full-tree', head]).split('\0').filter(Boolean).filter(record => {
+      const separator = record.indexOf('\t');
+      if (separator < 0) throw new Error('invalid_git_tree_record');
+      const file = record.slice(separator + 1);
+      return isCanonicalCandidate(file) || file === 'config/rule-baseline-manifest.json';
+    }).sort();
+    const before = roster(acceptedHead);
+    const after = roster(currentHead);
+    operationHook?.({ phase: 'after-ancestor-catalog-comparison' });
+    // Include index/worktree/untracked authority changes made during the proof.
+    const records = git(['status', '--porcelain=v1', '-z', '--untracked-files=all']).split('\0');
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      if (!record) continue;
+      const paths = [record.slice(3)];
+      if (/[RC]/.test(record.slice(0, 2)) && records[index + 1]) paths.push(records[++index]);
+      if (paths.some(file => isCanonicalCandidate(file) || file === 'config/rule-baseline-manifest.json')) return false;
+    }
+    return JSON.stringify(before) === JSON.stringify(after)
+      && git(['rev-parse', '--verify', 'HEAD^{commit}']).trim() === currentHead;
+  } catch { return false; }
+}
+
 function trackedCanonicalPaths(root, suppliedPaths, diagnostics) {
   let paths = suppliedPaths;
   if (paths === undefined) {

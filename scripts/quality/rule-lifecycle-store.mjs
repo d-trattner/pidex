@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { buildRuleRuntimeContext } from './rule-resolver.mjs';
-import { reconcileRuleInventory } from './rule-inventory.mjs';
+import { reconcileRuleInventory, verifyUnchangedCanonicalRuleAncestor } from './rule-inventory.mjs';
 import { consumeAcceptedRemoteReceipt, materializeVerifiedMirror, verifyAcceptedRemoteDescendantProof } from './rule-mirror-sync.mjs';
 import { bindInputChain, isImpactAggregateCapabilityMint, parseImpactEvaluationBytes, readImmutableFile, writeImmutableInput } from './rule-impact-results.mjs';
 import { candidateBytesDigest, canonicalRuleLearningCandidateBytes, candidateIdentityDigest, createRuleLearningEligibilityEnvelope, findingDigest, parseCanonicalRuleLearningFindingBytes, ruleLearningSupportDigest, validRuleLearningCandidate, validRuleLearningSupport, validateRuleLearningEligibilityEnvelope, validateRuleLearningFinding } from './rule-learning-contracts.mjs';
@@ -262,19 +262,36 @@ function baselineCandidates(entries) {
   return { accepted_head, manifest_digest, authority, entries: entries.map((entry) => ({ rule_id: entry.rule_id, rule_version: entry.version_hash, content_hash: entry.version_hash, accepted_commit: accepted_head, bytes: entry.bytes, tier: entry.descriptor.tier, scope_id: entry.descriptor.scope_id, protection_class: entry.descriptor.protection_class, source: baselineSource(entry), lifecycle_state: entry.descriptor.lifecycle_state, created_at: '2026-08-11T00:00:00.000Z', source_head: accepted_head, mirror_head: accepted_head, mirror_digest: entry.version_hash, source_authority: entry.source_authority, agent: entry.agent || entry.descriptor.agent, applicability: entry.applicability || entry.descriptor.applicability, phases: entry.phases || [], overrides_rule_id: entry.descriptor.overrides_rule_id, project_override_policy: entry.descriptor.project_override_policy, passive_rule_id: entry.descriptor.legacy_aliases.find((ruleId) => ruleId.startsWith('rule:')) || entry.rule_id })) };
 }
 
+function preserveUnchangedRuleAuthority(group, candidate, existing) {
+  if (!existing?.accepted_head || existing.accepted_head === candidate.accepted_head) return candidate;
+  const authority = existing.entries?.[0]?.source_authority;
+  if (existing.head?.head_kind !== 'current_project' || candidate.authority.kind !== 'git_head'
+      || authority?.kind !== 'git_head' || authority.verified !== true || authority.head !== existing.accepted_head
+      || !existing.entries.every(entry => canonical(entry.source_authority) === canonical(authority))
+      || !verifyUnchangedCanonicalRuleAncestor({ root: group.root, acceptedHead: existing.accepted_head, currentHead: candidate.accepted_head })) return candidate;
+  // Keep the accepted identity, never advance a projection or rewrite a cached
+  // runtime context for unrelated source commits. ensureBaselineProjection below
+  // still verifies every candidate byte/descriptor and store-owned field.
+  return baselineCandidates(group.entries.map(entry => ({ ...entry, source_authority: authority })));
+}
+
 /** Reconciles closed canonical inventory into first-use store baselines; existing accepted projections win. */
 export function bootstrapRuleInventoryProjections({ store, stateRoot, root, projectRoot = root, projectScopeId, repositories, gitTrackedPaths } = {}) {
   if (!store || typeof store.ensureBaselineProjection !== 'function' || typeof stateRoot !== 'string' || !repositories?.global || !repositories?.project || typeof projectScopeId !== 'string' || !/^[a-f0-9]{24,64}$/.test(projectScopeId)) throw new Error('RULE_INVENTORY_BOOTSTRAP_INVALID');
   const inventory = reconcileRuleInventory({ root, projectRoot, projectScopeId, gitTrackedPaths, immutableAuthority: true });
   if (!inventory.complete || inventory.entries.some((entry) => typeof entry.bytes !== 'string' || !entry.descriptor)) throw new Error('RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE');
   const groups = [
-    { repository: repositories.global, scope_id: null, entries: inventory.entries.filter((entry) => entry.descriptor.scope_id === null) },
-    { repository: repositories.project, scope_id: projectScopeId, entries: inventory.entries.filter((entry) => entry.descriptor.scope_id === projectScopeId) },
+    { root, repository: repositories.global, scope_id: null, entries: inventory.entries.filter((entry) => entry.descriptor.scope_id === null) },
+    { root: projectRoot, repository: repositories.project, scope_id: projectScopeId, entries: inventory.entries.filter((entry) => entry.descriptor.scope_id === projectScopeId) },
   ];
   let created = 0; const authority_descriptors = [];
   for (const group of groups) {
-    if (!group.entries.length) continue;
-    const candidate = baselineCandidates(group.entries);
+    const existing = store.readProjection({ repository: group.repository, scope_id: group.scope_id });
+    if (!group.entries.length) {
+      if (existing?.head?.head_kind === 'current_project' && existing.entries?.length) throw new Error('RULE_LIFECYCLE_BASELINE_CONFLICT');
+      continue;
+    }
+    const candidate = preserveUnchangedRuleAuthority(group, baselineCandidates(group.entries), existing);
     const result = store.ensureBaselineProjection({ repository: group.repository, scope_id: group.scope_id, accepted_head: candidate.accepted_head, head: baselineHead(group.repository, candidate.accepted_head, candidate.manifest_digest, candidate.authority), entries: candidate.entries });
     authority_descriptors.push(freeze({ repository: group.repository, scope_id: group.scope_id, accepted_head: result.projection.accepted_head, head: result.projection.head, entries: result.projection.entries }));
     if (group.entries.length) materializeVerifiedMirror({ stateRoot, repository: group.repository, scope_id: group.scope_id, accepted_head: candidate.accepted_head, members: candidate.entries.map((entry, index) => ({ rule_id: entry.rule_id, path: `${group.entries.find((source) => source.rule_id === entry.rule_id)?.source?.replace(/\.md$/, '')}-${index}.md`, content_hash: entry.content_hash, bytes: Buffer.from(entry.bytes) })) });

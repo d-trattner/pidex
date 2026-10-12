@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { reconcileRuleInventory } from './rule-inventory.mjs';
+import { reconcileRuleInventory, verifyUnchangedCanonicalRuleAncestor } from './rule-inventory.mjs';
 import { createRuleDescriptor } from './rule-identity.mjs';
 
 function tempRoot() {
@@ -35,6 +35,60 @@ function seedCompleteInventory(root) {
     ],
   }, null, 2));
 }
+
+function ancestorFixture(t) {
+  const root = tempRoot();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  seedCompleteInventory(root);
+  git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Test');
+  const commit = () => { git('add', '-A'); git('commit', '-m', 'fixture'); return git('rev-parse', 'HEAD'); };
+  const acceptedHead = commit();
+  write(root, 'application.json', '{}\n');
+  const currentHead = commit();
+  return { root, git, commit, acceptedHead, currentHead };
+}
+
+test('canonical ancestor proof accepts non-rule changes without asserting a new policy head', t => {
+  const f = ancestorFixture(t);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor(f), true);
+  assert.notEqual(f.currentHead, f.acceptedHead);
+  assert.equal(f.git('rev-parse', 'HEAD'), f.currentHead);
+});
+
+test('canonical ancestor proof refuses missing objects, malformed refs, reversed ancestry and wrong current identity', t => {
+  const f = ancestorFixture(t);
+  for (const overrides of [{ acceptedHead: 'f'.repeat(40) }, { acceptedHead: 'HEAD' }, { currentHead: 'HEAD' }, { acceptedHead: f.currentHead, currentHead: f.acceptedHead }, { currentHead: f.acceptedHead }]) {
+    assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, ...overrides }), false);
+  }
+});
+
+test('canonical ancestor proof refuses a subdirectory masquerading as the repository root', t => {
+  const f = ancestorFixture(t);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, root: path.join(f.root, 'rules') }), false);
+});
+
+test('canonical ancestor proof rejects HEAD movement during verification', t => {
+  const f = ancestorFixture(t);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, operationHook() { write(f.root, 'later.json', '{}\n'); f.commit(); } }), false);
+});
+
+test('canonical ancestor proof rejects dirty or newly untracked policy during verification', t => {
+  const f = ancestorFixture(t);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, operationHook() { write(f.root, 'rules/pidex-implementer/check.md', '# changed\n'); } }), false);
+  f.git('restore', 'rules/pidex-implementer/check.md');
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, operationHook() { write(f.root, 'rules/pidex-implementer/untracked.md', '# extra\n'); } }), false);
+});
+
+test('canonical ancestor proof includes the protected seed manifest and exact Git file modes', t => {
+  const f = ancestorFixture(t);
+  write(f.root, 'config/rule-baseline-manifest.json', '{}\n');
+  const manifestHead = f.commit();
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, currentHead: manifestHead }), false);
+  f.git('update-index', '--chmod=+x', 'agents/pidex-alpha.md');
+  f.git('commit', '-m', 'mode');
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, acceptedHead: manifestHead, currentHead: f.git('rev-parse', 'HEAD') }), false);
+});
 
 function reconcile(root) {
   return reconcileRuleInventory({

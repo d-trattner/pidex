@@ -513,6 +513,86 @@ test('CR-075-01 same-version reactivation closes prior epoch, opens append-only 
     db.close(); store.close();
   } finally { rmSync(stateRoot, { recursive: true, force: true }); }
 });
+function withUnchangedRuleBaseline(run) {
+  return withStore('pidex-rule-ancestor-', (store, stateRoot) => {
+    const root = path.join(stateRoot, 'source');
+    mkdirSync(path.join(root, 'modules/pidex/sample/rules'), { recursive: true });
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const write = (file, bytes) => { mkdirSync(path.dirname(path.join(root, file)), { recursive: true }); writeFileSync(path.join(root, file), bytes); };
+    write('modules/pidex/sample/rules/module.md', '# unchanged module rule\n');
+    write('modules/pidex/sample/module.json', JSON.stringify({ id: 'pidex.sample', agent_rules: [{ id: 'pidex.sample.module', path: 'rules/module.md' }] }));
+    write('pidex/rules/project.md', '# unchanged project rule\n');
+    git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Test');
+    const commit = () => { git('add', '-A'); git('commit', '-m', 'fixture'); return git('rev-parse', 'HEAD'); };
+    const accepted = commit();
+    const scope = 'a'.repeat(24);
+    const input = { store, stateRoot, root, projectRoot: root, projectScopeId: scope, repositories: { global: 'repo:ancestor-global', project: 'repo:ancestor-project' } };
+    const sources = [{ repository: input.repositories.global }, { repository: input.repositories.project, scope_id: scope }];
+    const first = bootstrapRuleInventoryProjections(input);
+    const prepare = descriptors => prepareLifecycleRuntimeContext({ store, pipeline_id: 'pipeline-unchanged-policy', repository: input.repositories.project, scope_id: scope, repositories: sources, authority_descriptors: descriptors, project_authority: { project_root: root }, run_identity: { run_id: 'pipeline-unchanged-policy' } });
+    const initial = prepare(first.authority_descriptors);
+    const context = store.getOrCreateRuntimeContext('pipeline-unchanged-policy', initial.input_digests, initial.createRuntimeContext);
+    const snapshot = () => {
+      const db = new DatabaseSync(path.join(stateRoot, 'quality/rule-lifecycle/lifecycle.sqlite'), { readOnly: true });
+      try { return Object.fromEntries(['effective_projection', 'lifecycle_head', 'lifecycle_event', 'activation_epoch', 'runtime_context'].map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()])); }
+      finally { db.close(); }
+    };
+    run({ store, root, git, write, commit, accepted, input, first, initial, context, prepare, snapshot });
+  });
+}
+
+test('unchanged canonical rules retain accepted authority, epochs and same-pipeline context across unrelated commits', withUnchangedRuleBaseline(f => {
+  const before = f.snapshot();
+  for (let i = 0; i < 2; i += 1) {
+    f.write(`application-${i}.json`, JSON.stringify({ dependency: i }));
+    assert.notEqual(f.commit(), f.accepted);
+    const next = bootstrapRuleInventoryProjections(f.input);
+    assert.equal(next.status, 'idempotent');
+    assert.deepEqual(next.authority_descriptors, f.first.authority_descriptors);
+    const prepared = f.prepare(next.authority_descriptors);
+    assert.deepEqual(prepared.input_digests, f.initial.input_digests);
+    assert.deepEqual(f.store.getOrCreateRuntimeContext('pipeline-unchanged-policy', prepared.input_digests, prepared.createRuntimeContext), f.context);
+    assert.deepEqual(f.snapshot(), before, 'no projection/head/epoch/event/context rewrite');
+  }
+}));
+
+for (const [name, change] of [
+  ['rule bytes', f => f.write('modules/pidex/sample/rules/module.md', '# different rule\n')],
+  ['module applicability', f => f.write('modules/pidex/sample/module.json', JSON.stringify({ id: 'pidex.sample', agent_rules: [{ id: 'pidex.sample.module', path: 'rules/module.md', agent: 'pidex-qa' }] }))],
+  ['added rule', f => f.write('pidex/rules/extra.md', '# new rule\n')],
+  ['removed rule', f => f.git('rm', 'pidex/rules/project.md')],
+  ['removed entire rule catalog', f => f.git('rm', '-r', 'pidex/rules', 'modules/pidex/sample')],
+  ['renamed rule', f => f.git('mv', 'pidex/rules/project.md', 'pidex/rules/renamed.md')],
+  ['rule mode', f => f.git('update-index', '--chmod=+x', 'pidex/rules/project.md')],
+  ['seed manifest', f => f.write('config/rule-baseline-manifest.json', '{}\n')],
+]) {
+  test(`unrelated commit preservation still rejects ${name} changes`, withUnchangedRuleBaseline(f => {
+    const before = f.snapshot();
+    change(f);
+    // Preserve an index-only mode change on hosts with core.fileMode=false.
+    if (name === 'rule mode') f.git('commit', '-m', 'mode fixture'); else f.commit();
+    assert.throws(() => bootstrapRuleInventoryProjections(f.input), /RULE_(?:LIFECYCLE_BASELINE_CONFLICT|INVENTORY_BOOTSTRAP_UNAVAILABLE)/);
+    assert.deepEqual(f.snapshot(), before);
+  }));
+}
+
+test('unchanged policy on an unrelated orphan commit cannot reuse accepted authority', withUnchangedRuleBaseline(f => {
+  const before = f.snapshot();
+  f.git('checkout', '--orphan', 'unrelated');
+  f.write('orphan-application.json', '{}\n');
+  assert.notEqual(f.commit(), f.accepted, 'orphan fixture must have a distinct commit identity');
+  assert.throws(() => bootstrapRuleInventoryProjections(f.input), /RULE_LIFECYCLE_BASELINE_CONFLICT/);
+  assert.deepEqual(f.snapshot(), before);
+}));
+
+test('dirty canonical input after unrelated commit cannot reuse accepted authority', withUnchangedRuleBaseline(f => {
+  const before = f.snapshot();
+  f.write('application.json', '{}\n'); f.commit();
+  f.write('pidex/rules/project.md', '# dirty rule\n');
+  assert.throws(() => bootstrapRuleInventoryProjections(f.input), /RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE/);
+  assert.deepEqual(f.snapshot(), before);
+}));
+
 test('CR-075-05 bootstraps closed global, project, and module inventory once without provider callbacks', () => {
   const stateRoot = mkdtempSync(path.join(os.tmpdir(), 'pidex-inventory-bootstrap-'));
   const root = mkdtempSync(path.join(os.tmpdir(), 'pidex-inventory-root-'));
