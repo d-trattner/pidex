@@ -563,7 +563,9 @@ for (const [name, change, expectedError] of [
   ['removed rule', f => f.git('rm', 'pidex/rules/project.md'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
   ['removed entire rule catalog', f => f.git('rm', '-r', 'pidex/rules', 'modules/pidex/sample'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
   ['renamed rule', f => f.git('mv', 'pidex/rules/project.md', 'pidex/rules/renamed.md'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
-  ['rule mode', f => f.git('update-index', '--chmod=+x', 'pidex/rules/project.md'), 'RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE'],
+  // Windows Git commonly has core.fileMode=false, so the committed tree-mode drift
+  // reaches the baseline-authority guard instead of the worktree inventory guard.
+  ['rule mode', f => f.git('update-index', '--chmod=+x', 'pidex/rules/project.md'), process.platform === 'win32' ? 'RULE_LIFECYCLE_BASELINE_CONFLICT' : 'RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE'],
   ['seed manifest', f => f.write('config/rule-baseline-manifest.json', '{}\n'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
 ]) {
   test(`unrelated commit preservation still rejects ${name} changes`, withUnchangedRuleBaseline(f => {
