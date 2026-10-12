@@ -114,13 +114,18 @@ function isCanonicalCandidate(relativePath) {
 
 // Proves catalog equivalence, not a new accepted authority. Callers must still
 // compare the complete candidate descriptors/bytes with the stored projection.
-export function verifyUnchangedCanonicalRuleAncestor({ root, acceptedHead, currentHead, operationHook } = {}) {
+export function verifyUnchangedCanonicalRuleAncestor({ root, acceptedHead, currentHead, acceptedTreeDigest, operationHook } = {}) {
   if (![acceptedHead, currentHead].every(head => typeof head === 'string' && /^[a-f0-9]{40}$/.test(head))) return false;
+  if (acceptedTreeDigest !== undefined && (typeof acceptedTreeDigest !== 'string' || !/^[a-f0-9]{64}$/.test(acceptedTreeDigest))) return false;
   try {
     const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
     if (realpathSync(git(['rev-parse', '--show-toplevel']).trim()) !== realpathSync(root)) return false;
     if (git(['rev-parse', '--verify', 'HEAD^{commit}']).trim() !== currentHead) return false;
     git(['merge-base', '--is-ancestor', acceptedHead, currentHead]);
+    if (acceptedTreeDigest !== undefined) {
+      const acceptedPaths = git(['ls-tree', '-rz', '--name-only', acceptedHead]).split('\0').filter(Boolean);
+      if (sha256(acceptedPaths.join('\0')) !== acceptedTreeDigest) return false;
+    }
     const roster = head => git(['ls-tree', '-rz', '--full-tree', head]).split('\0').filter(Boolean).filter(record => {
       const separator = record.indexOf('\t');
       if (separator < 0) throw new Error('invalid_git_tree_record');

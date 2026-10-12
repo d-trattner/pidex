@@ -537,7 +537,7 @@ function withUnchangedRuleBaseline(run) {
       try { return Object.fromEntries(['effective_projection', 'lifecycle_head', 'lifecycle_event', 'activation_epoch', 'runtime_context'].map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()])); }
       finally { db.close(); }
     };
-    run({ store, root, git, write, commit, accepted, input, first, initial, context, prepare, snapshot });
+    run({ store, stateRoot, root, git, write, commit, accepted, input, first, initial, context, prepare, snapshot });
   });
 }
 
@@ -572,6 +572,27 @@ for (const [name, change] of [
     // Preserve an index-only mode change on hosts with core.fileMode=false.
     if (name === 'rule mode') f.git('commit', '-m', 'mode fixture'); else f.commit();
     assert.throws(() => bootstrapRuleInventoryProjections(f.input), /RULE_(?:LIFECYCLE_BASELINE_CONFLICT|INVENTORY_BOOTSTRAP_UNAVAILABLE)/);
+    assert.deepEqual(f.snapshot(), before);
+  }));
+}
+
+for (const corruption of ['tree digest', 'extra authority field']) {
+  test(`unchanged policy does not trust corrupted stored ${corruption}`, withUnchangedRuleBaseline(f => {
+    const db = new DatabaseSync(path.join(f.stateRoot, 'quality/rule-lifecycle/lifecycle.sqlite'));
+    try {
+      const row = db.prepare("SELECT head_json, entries_json FROM effective_projection WHERE scope_id = ''").get();
+      const head = JSON.parse(row.head_json); const entries = JSON.parse(row.entries_json);
+      if (corruption === 'tree digest') {
+        head.tree_digest = 'f'.repeat(64);
+        for (const entry of entries) entry.source_authority.tree_digest = head.tree_digest;
+      } else {
+        for (const entry of entries) entry.source_authority.unverified_extra = true;
+      }
+      db.prepare("UPDATE effective_projection SET head_json = ?, entries_json = ? WHERE scope_id = ''").run(JSON.stringify(head), JSON.stringify(entries));
+    } finally { db.close(); }
+    f.write('application.json', '{}\n'); f.commit();
+    const before = f.snapshot();
+    assert.throws(() => bootstrapRuleInventoryProjections(f.input), /RULE_LIFECYCLE_BASELINE_CONFLICT/);
     assert.deepEqual(f.snapshot(), before);
   }));
 }

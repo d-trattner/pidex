@@ -56,6 +56,15 @@ test('canonical ancestor proof accepts non-rule changes without asserting a new 
   assert.equal(f.git('rev-parse', 'HEAD'), f.currentHead);
 });
 
+test('canonical ancestor proof independently verifies an asserted accepted Git tree digest', t => {
+  const f = ancestorFixture(t);
+  const paths = f.git('ls-tree', '-rz', '--name-only', f.acceptedHead).split('\0').filter(Boolean);
+  const acceptedTreeDigest = createHash('sha256').update(paths.join('\0')).digest('hex');
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, acceptedTreeDigest }), true);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, acceptedTreeDigest: 'f'.repeat(64) }), false);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, acceptedTreeDigest: 'invalid' }), false);
+});
+
 test('canonical ancestor proof refuses missing objects, malformed refs, reversed ancestry and wrong current identity', t => {
   const f = ancestorFixture(t);
   for (const overrides of [{ acceptedHead: 'f'.repeat(40) }, { acceptedHead: 'HEAD' }, { currentHead: 'HEAD' }, { acceptedHead: f.currentHead, currentHead: f.acceptedHead }, { currentHead: f.acceptedHead }]) {

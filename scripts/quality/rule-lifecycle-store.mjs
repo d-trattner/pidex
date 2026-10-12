@@ -264,11 +264,12 @@ function baselineCandidates(entries) {
 
 function preserveUnchangedRuleAuthority(group, candidate, existing) {
   if (!existing?.accepted_head || existing.accepted_head === candidate.accepted_head) return candidate;
-  const authority = existing.entries?.[0]?.source_authority;
+  const storedAuthority = existing.entries?.[0]?.source_authority;
+  const authority = { kind: 'git_head', verified: true, head: existing.accepted_head, tree_digest: storedAuthority?.tree_digest };
   if (existing.head?.head_kind !== 'current_project' || candidate.authority.kind !== 'git_head'
-      || authority?.kind !== 'git_head' || authority.verified !== true || authority.head !== existing.accepted_head
-      || !existing.entries.every(entry => canonical(entry.source_authority) === canonical(authority))
-      || !verifyUnchangedCanonicalRuleAncestor({ root: group.root, acceptedHead: existing.accepted_head, currentHead: candidate.accepted_head })) return candidate;
+      || typeof authority.tree_digest !== 'string' || !/^[a-f0-9]{64}$/.test(authority.tree_digest)
+      || !existing.entries.every(entry => entry.source_authority && canonical(entry.source_authority) === canonical(authority))
+      || !verifyUnchangedCanonicalRuleAncestor({ root: group.root, acceptedHead: existing.accepted_head, currentHead: candidate.accepted_head, acceptedTreeDigest: authority.tree_digest })) return candidate;
   // Keep the accepted identity, never advance a projection or rewrite a cached
   // runtime context for unrelated source commits. ensureBaselineProjection below
   // still verifies every candidate byte/descriptor and store-owned field.
