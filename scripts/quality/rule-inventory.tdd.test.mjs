@@ -77,6 +77,26 @@ test('canonical ancestor proof refuses a subdirectory masquerading as the reposi
   assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, root: path.join(f.root, 'rules') }), false);
 });
 
+test('canonical ancestor proof rejects shallow history even when both commits and ancestry are available', t => {
+  const source = ancestorFixture(t);
+  const clone = tempRoot();
+  t.after(() => rmSync(clone, { recursive: true, force: true }));
+  rmSync(clone, { recursive: true, force: true });
+  execFileSync('git', ['clone', '--quiet', '--depth', '2', `file://${source.root}`, clone]);
+  const git = (...args) => execFileSync('git', args, { cwd: clone, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  assert.equal(git('rev-parse', '--is-shallow-repository'), 'true');
+  assert.doesNotThrow(() => git('merge-base', '--is-ancestor', source.acceptedHead, source.currentHead));
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({ root: clone, acceptedHead: source.acceptedHead, currentHead: source.currentHead }), false);
+});
+
+test('canonical ancestor proof rejects history becoming shallow during verification', t => {
+  const f = ancestorFixture(t);
+  assert.equal(verifyUnchangedCanonicalRuleAncestor({
+    ...f,
+    operationHook() { write(f.root, '.git/shallow', `${f.acceptedHead}\n`); },
+  }), false);
+});
+
 test('canonical ancestor proof rejects HEAD movement during verification', t => {
   const f = ancestorFixture(t);
   assert.equal(verifyUnchangedCanonicalRuleAncestor({ ...f, operationHook() { write(f.root, 'later.json', '{}\n'); f.commit(); } }), false);

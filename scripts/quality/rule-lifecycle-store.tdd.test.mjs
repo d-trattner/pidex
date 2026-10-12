@@ -556,22 +556,26 @@ test('unchanged canonical rules retain accepted authority, epochs and same-pipel
   }
 }));
 
-for (const [name, change] of [
-  ['rule bytes', f => f.write('modules/pidex/sample/rules/module.md', '# different rule\n')],
-  ['module applicability', f => f.write('modules/pidex/sample/module.json', JSON.stringify({ id: 'pidex.sample', agent_rules: [{ id: 'pidex.sample.module', path: 'rules/module.md', agent: 'pidex-qa' }] }))],
-  ['added rule', f => f.write('pidex/rules/extra.md', '# new rule\n')],
-  ['removed rule', f => f.git('rm', 'pidex/rules/project.md')],
-  ['removed entire rule catalog', f => f.git('rm', '-r', 'pidex/rules', 'modules/pidex/sample')],
-  ['renamed rule', f => f.git('mv', 'pidex/rules/project.md', 'pidex/rules/renamed.md')],
-  ['rule mode', f => f.git('update-index', '--chmod=+x', 'pidex/rules/project.md')],
-  ['seed manifest', f => f.write('config/rule-baseline-manifest.json', '{}\n')],
+for (const [name, change, expectedError] of [
+  ['rule bytes', f => f.write('modules/pidex/sample/rules/module.md', '# different rule\n'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
+  ['module applicability', f => f.write('modules/pidex/sample/module.json', JSON.stringify({ id: 'pidex.sample', agent_rules: [{ id: 'pidex.sample.module', path: 'rules/module.md', agent: 'pidex-qa' }] })), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
+  ['added rule', f => f.write('pidex/rules/extra.md', '# new rule\n'), 'RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE'],
+  ['removed rule', f => f.git('rm', 'pidex/rules/project.md'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
+  ['removed entire rule catalog', f => f.git('rm', '-r', 'pidex/rules', 'modules/pidex/sample'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
+  ['renamed rule', f => f.git('mv', 'pidex/rules/project.md', 'pidex/rules/renamed.md'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
+  ['rule mode', f => f.git('update-index', '--chmod=+x', 'pidex/rules/project.md'), 'RULE_INVENTORY_BOOTSTRAP_UNAVAILABLE'],
+  ['seed manifest', f => f.write('config/rule-baseline-manifest.json', '{}\n'), 'RULE_LIFECYCLE_BASELINE_CONFLICT'],
 ]) {
   test(`unrelated commit preservation still rejects ${name} changes`, withUnchangedRuleBaseline(f => {
     const before = f.snapshot();
     change(f);
     // Preserve an index-only mode change on hosts with core.fileMode=false.
     if (name === 'rule mode') f.git('commit', '-m', 'mode fixture'); else f.commit();
-    assert.throws(() => bootstrapRuleInventoryProjections(f.input), /RULE_(?:LIFECYCLE_BASELINE_CONFLICT|INVENTORY_BOOTSTRAP_UNAVAILABLE)/);
+    assert.throws(
+      () => bootstrapRuleInventoryProjections(f.input),
+      error => error?.message === expectedError,
+      `${name} must fail at its exact inventory/baseline contract stage`,
+    );
     assert.deepEqual(f.snapshot(), before);
   }));
 }

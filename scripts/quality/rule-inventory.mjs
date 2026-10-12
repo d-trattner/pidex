@@ -120,6 +120,7 @@ export function verifyUnchangedCanonicalRuleAncestor({ root, acceptedHead, curre
   try {
     const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', timeout: 5000, maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
     if (realpathSync(git(['rev-parse', '--show-toplevel']).trim()) !== realpathSync(root)) return false;
+    if (git(['rev-parse', '--is-shallow-repository']).trim() !== 'false') return false;
     if (git(['rev-parse', '--verify', 'HEAD^{commit}']).trim() !== currentHead) return false;
     git(['merge-base', '--is-ancestor', acceptedHead, currentHead]);
     if (acceptedTreeDigest !== undefined) {
@@ -145,6 +146,7 @@ export function verifyUnchangedCanonicalRuleAncestor({ root, acceptedHead, curre
       if (paths.some(file => isCanonicalCandidate(file) || file === 'config/rule-baseline-manifest.json')) return false;
     }
     return JSON.stringify(before) === JSON.stringify(after)
+      && git(['rev-parse', '--is-shallow-repository']).trim() === 'false'
       && git(['rev-parse', '--verify', 'HEAD^{commit}']).trim() === currentHead;
   } catch { return false; }
 }
