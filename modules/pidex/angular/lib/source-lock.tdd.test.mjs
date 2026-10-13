@@ -48,10 +48,17 @@ test('source lock rejects changed, missing, extra, mirror-mismatched and nested 
 });
 
 test('real Git checkout preserves every locked byte with Windows-style autocrlf', () => {
-  for (const lineEnding of ['\n', '\r\n']) verifyCheckoutWithLineEnding(lineEnding);
+  // Each mode gets a fresh index/worktree. Reusing one index while switching
+  // autocrlf modes can leave platform-dependent conversion state under load.
+  for (const lineEnding of ['\n', '\r\n']) {
+    for (const autocrlf of ['true', 'input', 'false']) verifyCheckoutMode(lineEnding, autocrlf);
+  }
 });
 
-function verifyCheckoutWithLineEnding(lineEnding) {
+// Git worktree repair is intentionally not inferred from checkout-index/restore:
+// the blob-authoritative repair path has dedicated coverage in
+// scripts/maintenance/restore-angular-source-bytes.tdd.test.mjs.
+function withGitFixture(lineEnding, run) {
   const root = fixture();
   try {
     cpSync(path.join(repo, '.gitattributes'), path.join(root, '.gitattributes'));
@@ -75,43 +82,19 @@ function verifyCheckoutWithLineEnding(lineEnding) {
     const original = new Map(paths.map(file => [file, readFileSync(path.join(root, file))]));
     git(['init', '--quiet']);
     git(['-c', 'core.autocrlf=false', 'add', '--', '.']);
-    const attributes = git(['check-attr', 'text', '--', ...paths]).trim().split('\n');
+    const attributes = git(['check-attr', 'text', '--', ...paths]).trim().split(/\r?\n/);
     assert.equal(attributes.length, paths.length);
     for (const line of attributes) assert.match(line, /: text: unset$/);
-    for (const autocrlf of ['true', 'input', 'false']) {
-      for (const file of [...paths, 'ordinary.txt']) rmSync(path.join(root, file));
-      git(['-c', `core.autocrlf=${autocrlf}`, '-c', 'core.eol=crlf', 'checkout-index', '--all', '--force']);
-      if (autocrlf === 'true') assert.equal(readFileSync(path.join(root, 'ordinary.txt'), 'utf8'), 'first\r\nsecond\r\n', 'positive control really exercises CRLF conversion');
-      for (const file of paths) assert.deepEqual(readFileSync(path.join(root, file)), original.get(file), `${autocrlf}: ${file}`);
-      assert.equal(verifyAngularSourceLock({ pidexRoot: root }).status, 'verified');
-    }
-    // Exercise the documented repair against an immutable tree, without commits.
-    const tree = git(['write-tree']).trim();
-    const entry = 'skills/angular-application/references/official-angular/angular-developer.md';
-    const full = path.join(root, entry);
-    const attributesFile = path.join(root, '.gitattributes');
-    const protectedAttributes = readFileSync(attributesFile, 'utf8');
-    writeFileSync(attributesFile, protectedAttributes.split(/\r?\n/).filter(line => !line.endsWith(' -text')).join('\n'));
-    git(['-c', 'core.autocrlf=false', 'add', '--', '.gitattributes']);
-    for (const line of git(['check-attr', 'text', '--', ...paths]).trim().split(/\r?\n/)) assert.match(line, /: text: unspecified$/);
-    // Reproduce an old checkout including its clean CRLF index stat cache.
-    git(['-c', 'core.autocrlf=true', 'checkout-index', '--all', '--force', '--index']);
-    assert.ok(readFileSync(full, 'utf8').includes('\r\n'));
-    writeFileSync(attributesFile, protectedAttributes);
-    git(['-c', 'core.autocrlf=false', 'add', '--', '.gitattributes']);
-    assert.throws(() => verifyAngularSourceLock({ pidexRoot: root }), /ANGULAR_SOURCE_MEMBER_DIGEST/);
-    git(['diff', '--cached', '--quiet', tree, '--', ...paths]);
-    git(['diff', '--ignore-cr-at-eol', '--quiet', '--', ...paths]);
-    git(['-c', 'core.autocrlf=true', 'restore', `--source=${tree}`, '--worktree', '--', ...paths]);
-    for (const file of paths) assert.deepEqual(readFileSync(path.join(root, file)), original.get(file));
-    assert.equal(verifyAngularSourceLock({ pidexRoot: root }).status, 'verified');
-    assert.equal(git(['write-tree']).trim(), tree, 'repair must not change the index');
-    const edited = Buffer.concat([readFileSync(full), Buffer.from('local content edit\n')]);
-    writeFileSync(full, edited);
-    git(['diff', '--ignore-cr-at-eol', '--quiet', '--', entry], 1);
-    assert.deepEqual(readFileSync(full), edited, 'real worktree edits are detected, not restored');
-    git(['-c', 'core.autocrlf=false', 'add', '--', entry]);
-    git(['diff', '--cached', '--quiet', tree, '--', entry], 1);
-    assert.deepEqual(readFileSync(full), edited, 'staged edits are also detected');
+    run({ root, git, paths, original });
   } finally { rmSync(root, { recursive: true, force: true }); }
+}
+
+function verifyCheckoutMode(lineEnding, autocrlf) {
+  withGitFixture(lineEnding, ({ root, git, paths, original }) => {
+    for (const file of [...paths, 'ordinary.txt']) rmSync(path.join(root, file));
+    git(['-c', `core.autocrlf=${autocrlf}`, '-c', 'core.eol=crlf', 'checkout-index', '--all', '--force']);
+    if (autocrlf === 'true') assert.equal(readFileSync(path.join(root, 'ordinary.txt'), 'utf8'), 'first\r\nsecond\r\n', 'positive control really exercises CRLF conversion');
+    for (const file of paths) assert.deepEqual(readFileSync(path.join(root, file)), original.get(file), `${JSON.stringify(lineEnding)} ${autocrlf}: ${file}`);
+    assert.equal(verifyAngularSourceLock({ pidexRoot: root }).status, 'verified');
+  });
 }
