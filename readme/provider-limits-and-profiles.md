@@ -1,6 +1,6 @@
 # Provider Limits and Profiles
 
-PIDEX tracks provider-native Codex quota windows and uses profiles to switch complete agent-routing configurations. The catalog contains two Astra presets and three retained GPT-5.6 presets. Astra balanced is the selected **unreleased development default**, with bounded Linux host-direct live acceptance completed (including a disclosed orchestrator clarification). Local source integration is not a release or operational WorkingBaseline adoption. See [development status and validation limits](astra-development-status.md). The earlier GPT-5.6 evidence remains profile-specific. Spark was evaluated across the role matrix but is not routed by the current catalog.
+PIDEX tracks provider-native Codex quota windows and uses profiles to switch complete agent-routing configurations. PIDEX 0.6.0 ships three GPT-6 presets and three retained GPT-5.6 presets. GPT-6 Economy is the default; GPT-6 Balanced has bounded Linux host-direct live acceptance (including a disclosed orchestrator clarification), while GPT-6 Quality and Economy have no independent live pipeline acceptance. Release inclusion is not operational WorkingBaseline adoption. See [status and validation limits](astra-development-status.md). The earlier GPT-5.6 evidence remains profile-specific. Spark was evaluated across the role matrix but is not routed by the current catalog.
 
 ## Tracked quota families
 
@@ -94,7 +94,7 @@ GPT-6-only routing selected by the separate Economy policy after all-role screen
 - **Sol high:** designer.
 - **Sol medium:** DevOps.
 
-Economy keeps the95/90/80% deep/standard/routine quality floors but explicitly permits at most+1.5 critical misses per standard-role run and+0.5 per routine-role run; deep roles remain at zero. This admits Designer/Sol and Retrospective/Luna while rejecting QA/Luna's+4/run result. Critic and PI remain unresolved Astra fallbacks. The profile is the local development default but is not independently live-accepted, installed, released or published.
+Economy keeps the 95/90/80% deep/standard/routine quality floors but explicitly permits at most +1.5 critical misses per standard-role run and +0.5 per routine-role run; deep roles remain at zero. This admits Designer/Sol and Retrospective/Luna while rejecting QA/Luna's +4/run result. Critic and PI remain unresolved Astra fallbacks. The profile is the shipped default but is not independently live pipeline-accepted; release inclusion does not extend the separate GPT-6 Balanced qualification.
 
 ### Acceptance and rollback
 
@@ -166,7 +166,7 @@ Controlled real `/pd` fixture runs produced these practical recommendations:
 - Keep retired GPT-5.4/GPT-5.5 routing as historical benchmark evidence rather than selectable production profiles.
 - Compare profiles per task category and repeat runs before treating small differences as conclusive.
 
-Detailed fixture outputs, holdout tables, and routing-decision records remain in the local PIDEX project wiki and are intentionally not included in the public npm package. The profile descriptions and recommendations above document development source; the Astra changes remain unreleased.
+Detailed fixture outputs, holdout tables, and routing-decision records remain in the local PIDEX project wiki and are intentionally not included in the public npm package. The profile descriptions and recommendations above document the scoped evidence shipped with PIDEX 0.6.0.
 
 ## Estimate-only agent balances
 

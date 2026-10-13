@@ -2,14 +2,14 @@
 
 ## Unreleased
 
-## 0.6.0 - 2026-09-24
+## 0.6.0 - 2026-10-13
 
 ### Astra profiles and workflow stabilization
 
-Prepared as the `0.6.0` release candidate; a version declaration does not itself create a release tag, GitHub Release or npm publication.
+Released as `0.6.0` after complete Linux and native Windows public-readiness gates passed for the final release source.
 
 - Added `gpt-6-balanced` and `gpt-6-quality` manual profiles using `openai-codex/gpt-6-astra`; these replace the temporary `astra-balanced`/`astra-quality` filenames before publication. Retained all three GPT-5.6 presets for explicit selection/rollback. Profiles do not change the main Pi session model.
-- Added and selected `gpt-6-economy` as the local development default after all-role screening and independent holdouts: eight Astra, four Luna and two Sol routes, with no legacy model fallback. Designer/Sol and Retrospective/Luna explicitly accept bounded non-deep critical-miss regressions; QA remains Astra. This local selection is not an installation, push, release or publication.
+- Added and selected `gpt-6-economy` as the default after all-role screening and independent holdouts: eight Astra, four Luna and two Sol routes, with no legacy model fallback. Designer/Sol and Retrospective/Luna explicitly accept bounded non-deep critical-miss regressions; QA remains Astra. Profile selection does not alter an already running Pi session.
 - Made active-profile reporting reflect the actual routing configuration rather than alphabetical order or stale selection metadata.
 - Pinned the Project Pipeline image's Pi CLI to GPT-6-tested `0.87.1` instead of floating `latest`, with a build-time version assertion. Release preflight rejected the intermediate `0.85.1` pin because its package lacked GPT-6 Sol/Luna catalog bytes. Existing cached images require an explicit rebuild and existing project containers require separately confirmed replacement with their registered volumes preserved. Model-free image/lifecycle regression tests do not constitute Windows/Project Pipeline generation acceptance.
 - Added explicit working-baseline identities/acceptance/rollback, canonical review context and authenticated owner-loss recovery in the supported Linux host-direct Primary-Pi scope. Abort, uncertainty and scope drift remain holds.

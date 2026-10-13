@@ -14,7 +14,7 @@ Like many devs, I was initially driven by the excitement of creating things with
 
 ## Current status
 
-**v0.6.0 release candidate (2026-09-24):** GPT-6 profiles and the baseline/review/closeout/status stabilization are integrated into `master`, but the candidate has not yet been tagged or published. `gpt-6-economy` is the development default after all-role screening and repeated holdouts. The earlier bounded Linux host-direct acceptance used the routing now named `gpt-6-balanced`; `gpt-6-quality` and Economy have no independent live acceptance. See [Astra development status and validation limits](readme/astra-development-status.md) and [v0.6.0 changes](CHANGELOG.md#060---2026-09-24).
+**v0.6.0 (2026-10-13):** GPT-6 profiles and the baseline/review/closeout/status stabilization are included in this release. `gpt-6-economy` is the default after all-role screening and repeated holdouts. The earlier bounded Linux host-direct acceptance used the routing now named `gpt-6-balanced`; `gpt-6-quality` and Economy have no independent live pipeline acceptance. The final release gate passed all 127 configured command units and public package tails on both Linux and native Windows; broader native Windows support remains experimental. See [Astra status and validation limits](readme/astra-development-status.md) and [v0.6.0 changes](CHANGELOG.md#060---2026-10-13).
 
 PIDEX is an experimental direct-mode MVP. Linux/direct mode remains the primary supported path today. Local Docker Project Pipeline is validated for the current MVP on Linux and has focused native Windows Docker Desktop evidence, including automatic managed preview approval flows and host-side browser-smoke checks for Vite React UI fixtures.
 
@@ -34,7 +34,7 @@ More detailed documentation for complex features lives in [`readme/`](readme/):
 
 - [Dashboard](readme/dashboard.md)
 - [Provider limits and profiles](readme/provider-limits-and-profiles.md)
-- [Astra optimization: unreleased status and validation](readme/astra-development-status.md)
+- [Astra optimization: status and validation](readme/astra-development-status.md)
 - [Global Git security hook](readme/security-hooks.md)
 - [Wiki hygiene](readme/wiki-hygiene.md)
 - [Optional parallel agents](readme/parallel-agents.md)
@@ -94,7 +94,7 @@ See [Windows status](readme/windows.md) for support boundaries and the PowerShel
 
 ## Install
 
-PIDEX v0.5 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the experimental Windows bootstrap. Other runtime paths are not supported yet.
+PIDEX v0.6 requires the canonical runtime checkout at exactly `~/pidex` on Linux/WSL2, or `$HOME\pidex` for the experimental Windows bootstrap. Other runtime paths are not supported yet.
 
 ### Install modes
 

@@ -1,6 +1,6 @@
-# Astra optimization — v0.6.0 release-candidate status
+# Astra optimization — v0.6.0 status
 
-Status as of 2026-09-24: **implemented and integrated into `master`, with package metadata prepared for `0.6.0`, but not tagged or published**. The original stabilization/profile validation snapshot is `96065c6`; subsequent GPT-6 profile selection and release preparation retain the scoped qualifications below. A version declaration is not a release tag, GitHub Release or npm publication. See [v0.6.0 changes](../CHANGELOG.md#060---2026-09-24).
+Status as of 2026-10-13: **included in PIDEX 0.6.0**. The original stabilization/profile validation snapshot is `96065c6`; subsequent GPT-6 profile selection and release preparation retain the scoped qualifications below. The final release source passed all 127 configured command units and public package tails on Linux and native Windows. See [v0.6.0 changes](../CHANGELOG.md#060---2026-10-13).
 
 ## What changed
 
@@ -47,10 +47,10 @@ Evidence for the code snapshot above, before this documentation-only status upda
 
 Earlier failed attempts remain failed evidence; this successful run does not rewrite their holds. This does **not** independently accept Astra-quality, all configured roles in every scenario, Windows, hardened mode, Project Pipeline, secondary lanes, or the separate automatic learning/adoption workflow. Private run logs and fixture details are intentionally not part of public documentation.
 
-## Local development versus installation
+## Release versus installation
 
 A Git merge, runtime reload, operational baseline acceptance and release are separate actions.
 
 If Pi is already configured to load PIDEX directly from a local checkout, updating that checkout does not require republishing or reinstalling the package. Start a fresh Pi session and verify the loaded PIDEX root/stand before the next development task; an existing session may retain older modules. A separately installed package is not updated merely by merging a different source checkout.
 
-No new release or installation is implied by this status. Further paid tests and any deployment/publication require their own authorization.
+Release availability does not update an existing checkout, installed package, running Pi session, accepted WorkingBaseline or Project Sandbox automatically. Installation, runtime reload, operational baseline adoption and sandbox maintenance remain explicit operator actions.
